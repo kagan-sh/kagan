@@ -1,5 +1,5 @@
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::button::Button;
 use gpui_kit::component::{Sizable as _, h_flex};
 use gpui_kit::{
     AnyElement, Context, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -112,7 +112,7 @@ impl Kagan {
                 },
                 Button::new("activity-install-button")
                     .small()
-                    .ghost()
+                    .outline()
                     .max_w(px(INSTALL_MAX))
                     .tooltip(install.clone())
                     .label(install)
@@ -140,7 +140,7 @@ fn needs_part(needs: usize, focus: &FocusHandle, cx: &Context<Kagan>) -> Option<
             },
             Button::new("activity-needs-button")
                 .small()
-                .ghost()
+                .outline()
                 .label(format!("{needs} needs you"))
                 .text_color(Tone::Needs.color(cx))
                 .track_focus(focus)
@@ -177,7 +177,7 @@ fn update_part(focus: &FocusHandle, cx: &Context<Kagan>) -> Option<AnyElement> {
             },
             Button::new("activity-update-button")
                 .small()
-                .ghost()
+                .outline()
                 .label("Update available")
                 .text_color(cx.theme().muted_foreground)
                 .track_focus(focus)

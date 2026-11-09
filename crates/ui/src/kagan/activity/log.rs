@@ -1,5 +1,6 @@
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::component::{IconName, h_flex, v_flex};
+use gpui_kit::component::button::Button;
+use gpui_kit::component::{IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, ElementId, FocusHandle, InteractiveElement as _, IntoElement,
     ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, div, px,
@@ -7,7 +8,7 @@ use gpui_kit::{
 
 use super::ROW;
 use crate::kagan::ToggleActivityLog;
-use crate::kagan::layout::bar_button;
+use crate::kagan::controls;
 use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -60,6 +61,7 @@ pub(super) fn toggle(open: bool, focus: &FocusHandle, cx: &App) -> impl IntoElem
         "Show activity log"
     }
     .into();
+    let tip = controls::tip(&name, &ToggleActivityLog, cx);
     h_flex()
         .id("activity-toggle")
         .ui_observe_as(Facts {
@@ -73,18 +75,18 @@ pub(super) fn toggle(open: bool, focus: &FocusHandle, cx: &App) -> impl IntoElem
         })
         .flex_none()
         .child(
-            bar_button(
-                "activity-toggle",
-                name,
-                if open {
+            Button::new("activity-toggle-button")
+                .small()
+                .outline()
+                .icon(if open {
                     IconName::PanelBottomOpen
                 } else {
                     IconName::PanelBottom
-                },
-                false,
-                ToggleActivityLog,
-                cx,
-            )
-            .track_focus(focus),
+                })
+                .label("Activity log")
+                .accessibility_label(name)
+                .tooltip(tip)
+                .track_focus(focus)
+                .on_click(|_, window, cx| window.dispatch_action(Box::new(ToggleActivityLog), cx)),
         )
 }

@@ -1,5 +1,5 @@
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::button::Button;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Sizable as _, h_flex};
 use gpui_kit::{
@@ -79,7 +79,7 @@ pub(super) fn plugin_item(item: StatusItem, focus: &FocusHandle, cx: &App) -> An
     };
     let button = Button::new(SharedString::from(format!("{id}-button")))
         .small()
-        .ghost()
+        .outline()
         .max_w(px(PLUGIN_ITEM_MAX))
         .child(body)
         .track_focus(focus)
