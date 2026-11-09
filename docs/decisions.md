@@ -1,6 +1,6 @@
 # kagan decisions
 
-Checked 2026-10-05 against `main`. Terms follow [CONTEXT.md](CONTEXT.md). The shapes these decisions describe are in [architecture.md](architecture.md), [plugin-api.md](plugin-api.md), [self-extend.md](self-extend.md) and [look.md](look.md); this file is the record of what was chosen and why, so a later reader does not reopen a settled question.
+Checked 2026-10-05 against `main`. Terms follow [CONTEXT.md](CONTEXT.md). The shapes these decisions describe are in [architecture.md](architecture.md), [plugin-api.md](plugin-api.md), [self-extend.md](self-extend.md) and [look.md](look.md); this file is the record of what was chosen and why, so a later reader does not reopen a settled question. It does not state the current rule: the code and its tests do, and [AGENTS.md](../AGENTS.md) holds the rules for writing code. An entry that a later one replaces starts with "Superseded by N".
 
 Each entry is the decision, the reason it won, and what it rules out. Where the code is the authority, the path is named.
 

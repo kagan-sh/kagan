@@ -2,7 +2,15 @@
 
 If AGENTS.local.md exists, read it too: a maintainer's local rules.
 
-The design docs in `docs/` are the spec and win over this file: `CONTEXT.md` (terms), `architecture.md` (crate graph and runtime), `behaviour.md` (what each `Op` must do), `plugin-api.md`, and `look.md`. A change to what an `Op` does updates `docs/behaviour.md`; a non-obvious design decision goes in `docs/decisions.md`.
+## Order of truth
+
+When two sources disagree, the one higher on this list is right:
+
+1. **The code and its tests.** What an `Op` does, the crate graph, and what the window shows. A check runs against these.
+2. **The rules in this file.** A rule stays only if a check enforces it, or it names the review that enforces it (see Enforced).
+3. **The docs in `docs/`.** They explain the code and why it is shaped that way. A doc that disagrees with the code is a doc bug, unless the code is the bug.
+
+A change to what an `Op` does updates `docs/behaviour.md`. A non-obvious design choice gets an entry in `docs/decisions.md`; an entry records why, and the code holds the rule.
 
 At every step, make the best decision that will elevate all three: the user experience (UX), developer experience (DX), and agent experience (AX), without breaking or degrading anything.
 
@@ -32,7 +40,7 @@ Agent skills on these topics help, and are optional for contributors:
 
 The GPUI Kit coding and design skills are in the `skills/` folder of [gpui-kit](https://github.com/aorumbayev/gpui-kit).
 
-Where a skill disagrees with the spec, the spec wins. Known overrides:
+Where a skill disagrees with this file, this file wins. Known overrides:
 
 - No tokio in kagan's own code. Async runs on GPUI's executors (`cx.spawn`, `cx.background_spawn`); see decision 90.
 - Shared UI state lives in GPUI entities (`Entity<T>`, `cx.notify()`, events), not `Arc<Mutex<T>>`.
