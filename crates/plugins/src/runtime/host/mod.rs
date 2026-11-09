@@ -13,7 +13,7 @@ use gpui_kit::{
 };
 use gpui_shell::{LoadedApplication, ScriptView, ShellRuntime};
 use kg_core::{PluginRequest, Workspace};
-use kg_domain::{Event, OpError, OpResult, PluginId, ThemeFile};
+use kg_domain::{Event, OpError, OpResult, PluginId, PluginLog, ThemeFile};
 use serde_json::{Map, Value};
 
 use crate::ask::{Job, post};
@@ -314,6 +314,7 @@ fn dispatch(request: PluginRequest, cx: &mut App) -> Task<Result<OpResult>> {
             thread_id,
             project_id,
         } => cx.spawn(async move |cx| instruct(&host, &thread_id, &project_id, cx).await),
+        PluginRequest::Logs => cx.spawn(async move |cx| logs(&host, cx).await),
         PluginRequest::Plugin(op, requester) => {
             cx.spawn(async move |cx| ops::run(&host, op, requester, cx).await)
         }
@@ -568,4 +569,24 @@ impl PluginHost {
                 .update(cx, |_, window, _| window.remove_window());
         }
     }
+}
+
+async fn logs(host: &Entity<PluginHost>, cx: &mut AsyncApp) -> Result<OpResult> {
+    let (data_dir, ids) = host.read_with(cx, |host, _| {
+        (
+            host.data_dir.clone(),
+            host.records.keys().cloned().collect::<Vec<PluginId>>(),
+        )
+    });
+    let logs = cx
+        .background_spawn(async move {
+            ids.into_iter()
+                .map(|id| {
+                    let counts = crate::log::counts(&data_dir, &id);
+                    PluginLog { id, counts }
+                })
+                .collect()
+        })
+        .await;
+    Ok(OpResult::PluginLogs(logs))
 }

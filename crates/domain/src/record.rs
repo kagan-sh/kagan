@@ -416,3 +416,19 @@ pub struct Plugin {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
+
+/// What a plugin's log file holds, as its recent lines are counted.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LogCounts {
+    Missing,
+    Unreadable,
+    Counted { warn: u32, error: u32 },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginLog {
+    pub id: PluginId,
+    pub counts: LogCounts,
+}

@@ -3,10 +3,14 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use gpui_kit::{AppContext as _, AsyncApp, WeakEntity};
-use kg_domain::{DiagnosticsOp, OpError, OpResult, ThreadId, ThreadStatus};
+use kg_domain::{
+    DiagnosticsOp, EventKind, LogCounts, OpError, OpResult, Plugin, PluginLog, Thread, ThreadId,
+    ThreadStatus,
+};
 use kg_store::{ScreenRow, Store};
 use kg_terminal::SNAPSHOT_MAX;
 
+use crate::PluginRequest;
 use crate::end::End;
 use crate::host::database::Result;
 use crate::workspace::{Workspace, closed};
@@ -22,10 +26,11 @@ pub(crate) async fn export(
             (workspace.database.clone(), workspace.data_dir.clone())
         })
         .map_err(closed)?;
-    let report_dir = data_dir.clone();
-    let text = database
-        .call(move |store| report(store, &report_dir))
-        .await?;
+    let facts = database.call(|store| Facts::read(store)).await?;
+    let OpResult::PluginLogs(logs) = super::forward(this, PluginRequest::Logs, cx).await? else {
+        return Err(OpError::Failed("plugin host returned no logs".into()));
+    };
+    let text = render(&facts, &data_dir, &logs);
     let path = cx
         .background_spawn(async move {
             let path = match path {
@@ -40,12 +45,27 @@ pub(crate) async fn export(
     Ok(OpResult::Diagnostics { path })
 }
 
-fn report(store: &Store, data_dir: &Path) -> kg_store::Result<String> {
-    let schema = store.schema_version()?;
-    let threads = store.all_threads()?;
-    let endings = store.endings()?;
-    let screens = store.screens()?;
-    let plugins = store.plugins()?;
+struct Facts {
+    schema: i64,
+    threads: Vec<Thread>,
+    endings: Vec<(ThreadId, Vec<EventKind>)>,
+    screens: Vec<ScreenRow>,
+    plugins: Vec<Plugin>,
+}
+
+impl Facts {
+    fn read(store: &Store) -> kg_store::Result<Self> {
+        Ok(Self {
+            schema: store.schema_version()?,
+            threads: store.all_threads()?,
+            endings: store.endings()?,
+            screens: store.screens()?,
+            plugins: store.plugins()?,
+        })
+    }
+}
+
+fn render(facts: &Facts, data_dir: &Path, logs: &[PluginLog]) -> String {
     let mut out = String::new();
     // Writing to a String cannot fail.
     let _ = std::fmt::Write::write_fmt(
@@ -58,15 +78,16 @@ fn report(store: &Store, data_dir: &Path) -> kg_store::Result<String> {
              A program that was still running when kagan quit has no saved screen.\n\
              The snapshot bound is {bound} bytes for the whole screen and its history.\n\n",
             version = env!("CARGO_PKG_VERSION"),
+            schema = facts.schema,
             data = data_dir.display(),
             bound = SNAPSHOT_MAX,
         ),
     );
     out.push_str("threads\n");
-    if threads.is_empty() {
+    if facts.threads.is_empty() {
         out.push_str("none\n");
     }
-    for thread in &threads {
+    for thread in &facts.threads {
         // Writing to a String cannot fail.
         let _ = std::fmt::Write::write_fmt(
             &mut out,
@@ -76,7 +97,7 @@ fn report(store: &Store, data_dir: &Path) -> kg_store::Result<String> {
                 status = status_word(thread.status),
             ),
         );
-        match cause_of(&endings, &thread.id) {
+        match cause_of(&facts.endings, &thread.id) {
             Some(line) => {
                 out.push_str("  end: ");
                 out.push_str(&line);
@@ -86,15 +107,15 @@ fn report(store: &Store, data_dir: &Path) -> kg_store::Result<String> {
         }
         out.push_str("  ");
         out.push_str(&screen_line(
-            screens.iter().find(|row| row.thread_id == thread.id),
+            facts.screens.iter().find(|row| row.thread_id == thread.id),
         ));
         out.push('\n');
     }
     out.push_str("\nplugins\n");
-    if plugins.is_empty() {
+    if facts.plugins.is_empty() {
         out.push_str("none\n");
     }
-    for plugin in &plugins {
+    for plugin in &facts.plugins {
         let kind = source_kind(&plugin.source);
         let version = commit_version(plugin.commit.as_deref());
         // Writing to a String cannot fail.
@@ -108,12 +129,15 @@ fn report(store: &Store, data_dir: &Path) -> kg_store::Result<String> {
                 version = version,
             ),
         );
-        let log = crate::plugin_log_file(data_dir, &plugin.id);
+        let counts = logs
+            .iter()
+            .find(|log| log.id == plugin.id)
+            .map(|log| &log.counts);
         out.push_str("  log: ");
-        out.push_str(&log_counts(&log));
+        out.push_str(&log_line(counts));
         out.push('\n');
     }
-    Ok(out)
+    out
 }
 
 fn cause_of(endings: &[(ThreadId, Vec<kg_domain::EventKind>)], id: &ThreadId) -> Option<String> {
@@ -176,43 +200,13 @@ fn status_word(status: ThreadStatus) -> &'static str {
     }
 }
 
-fn log_counts(path: &Path) -> String {
-    let mut file = match std::fs::File::open(path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return "no log".into(),
-        Err(_) => return "could not read the log".into(),
-    };
-    let len = file.metadata().map_or(0, |data| data.len());
-    let start = len.saturating_sub(64 * 1024);
-    if start > 0 && std::io::Seek::seek(&mut file, std::io::SeekFrom::Start(start)).is_err() {
-        return "could not read the log".into();
-    }
-    let mut bytes = Vec::new();
-    if std::io::Read::read_to_end(&mut file, &mut bytes).is_err() {
-        return "could not read the log".into();
-    }
-    let text = String::from_utf8_lossy(&bytes);
-    let mut lines: Vec<&str> = text.lines().collect();
-    if start > 0 {
-        let skip = usize::from(!lines.is_empty());
-        lines.drain(..skip);
-    }
-    let mut warn = 0u32;
-    let mut error = 0u32;
-    for line in lines {
-        let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
-            continue;
-        };
-        match value.get("level").and_then(|item| item.as_str()) {
-            Some("warn") => warn = warn.saturating_add(1),
-            Some("error") => error = error.saturating_add(1),
-            _ => {}
-        }
-    }
-    if warn == 0 && error == 0 {
-        "no warn or error lines".into()
-    } else {
-        format!("{warn} warn, {error} error")
+fn log_line(counts: Option<&LogCounts>) -> String {
+    match counts {
+        None => "not read, no plugin host".into(),
+        Some(LogCounts::Missing) => "no log".into(),
+        Some(LogCounts::Unreadable) => "could not read the log".into(),
+        Some(LogCounts::Counted { warn: 0, error: 0 }) => "no warn or error lines".into(),
+        Some(LogCounts::Counted { warn, error }) => format!("{warn} warn, {error} error"),
     }
 }
 

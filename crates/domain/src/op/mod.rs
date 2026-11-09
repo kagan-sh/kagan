@@ -31,7 +31,7 @@ use serde_json::Value;
 
 use crate::{
     AgentTool, Environment, EnvironmentId, Event, IndexEntry, Listing, PendingInteraction, Plugin,
-    PreviewOp, ProgramList, Project, ProjectId, Sidebar, Thread, ThreadId,
+    PluginLog, PreviewOp, ProgramList, Project, ProjectId, Sidebar, Thread, ThreadId,
 };
 
 pub use browser::{BrowserControl, BrowserOp, BrowserSnapshot, BrowserView};
@@ -175,6 +175,7 @@ pub enum OpResult {
     },
     Files(Vec<PathBuf>),
     Plugins(Vec<Plugin>),
+    PluginLogs(Vec<PluginLog>),
     Indexes(Vec<String>),
     /// An index entry for a shared plugin, and the line a teammate runs
     Shared {

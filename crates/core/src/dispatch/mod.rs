@@ -260,6 +260,7 @@ pub(crate) async fn forward(
             "agent tool {name} is unavailable; no plugin host is loaded"
         ))),
         (None, PluginRequest::Instruct { .. }) => Ok(OpResult::Output(Some(String::new()))),
+        (None, PluginRequest::Logs) => Ok(OpResult::PluginLogs(Vec::new())),
         (None, PluginRequest::Keymap(KeymapOp::Get)) => {
             Ok(OpResult::Setting(serde_json::json!({})))
         }

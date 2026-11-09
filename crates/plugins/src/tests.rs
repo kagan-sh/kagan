@@ -1,6 +1,7 @@
 mod browser;
 mod call;
 mod contributions;
+mod diagnostics;
 mod files;
 mod host;
 mod index;

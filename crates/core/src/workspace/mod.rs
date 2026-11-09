@@ -111,6 +111,8 @@ pub enum PluginRequest {
         thread_id: ThreadId,
         project_id: ProjectId,
     },
+    /// The log counts of each installed plugin, for diagnostics.
+    Logs,
     Plugin(PluginOp, Option<Requester>),
     /// A shortcut of a plugin's command, named `<plugin-id>:<command>`
     Keymap(KeymapOp),

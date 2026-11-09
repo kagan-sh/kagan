@@ -1636,7 +1636,7 @@ fn assert_diagnostics_keeps_secrets_out(text: &str) {
     assert!(text.contains("version=a1b2c3d"), "{text}");
     assert!(text.contains("version=unknown"), "{text}");
     assert!(text.contains("version=none"), "{text}");
-    assert!(text.contains("1 warn, 1 error"), "{text}");
+    assert!(text.contains("log: not read, no plugin host"), "{text}");
     assert!(
         text.contains("screen: not kept, outside the geometry or 4 MiB bound"),
         "{text}"

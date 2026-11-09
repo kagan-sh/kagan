@@ -172,7 +172,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 
 ## Diagnostics
 
-`kg diagnostics export` writes one new local file. Omit `--path` and it goes under the data directory, in `diagnostics/`. A given path is refused when the parent folder is missing or the file already exists.
+`kg diagnostics export` writes one new local file. Omit `--path` and it goes under the data directory, in `diagnostics/`. A given path is refused when the parent folder is missing or the file already exists. Each plugin's warn and error counts come from the plugin host, which reads the last 64 KiB of its log; without a plugin host the line says `not read, no plugin host`.
 
 - **Changes**: creates that file. It names the kagan version, the schema version, and the data directory. Each thread gets its id, status, and structured cause, and whether a screen was kept. Each plugin gets its id, kind, version, and warn and error counts. Titles, end text, plugin sources, and plugin log messages are omitted. The file says a program that was still running when kagan quit has no saved screen.
 - **Refused when**: the file already exists, or the folder for `--path` does not exist — `invalid` [op/]. The thread actions menu has the same export. The ended line has that button when the program failed, was interrupted, or its screen was not kept in full. A clean stop or an exit 0 does not. There is no default shortcut.
