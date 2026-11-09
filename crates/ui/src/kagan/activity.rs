@@ -338,6 +338,7 @@ impl Kagan {
             .w_full()
             .h(height)
             .overflow_hidden()
+            .bg(cx.theme().background)
             .border_t_1()
             .border_color(cx.theme().border)
             .key_context("ActivityStrip")
