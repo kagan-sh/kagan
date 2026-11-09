@@ -10,11 +10,7 @@ use super::{claude_line, fake_agent, ran};
 use crate::workspace::recovery::{remember_resume, resume_threads, set_resume_threads};
 
 fn claude_config(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
-    let config = fixture.dir.path().join("claude");
-    fixture.workspace.update(cx, |workspace, _| {
-        workspace.homes.insert("CLAUDE_CONFIG_DIR", config.clone());
-    });
-    config
+    cx.read(|cx| fixture.workspace.read(cx).homes["CLAUDE_CONFIG_DIR"].clone())
 }
 
 /// What Claude Code leaves once something was said in the conversation.
@@ -356,11 +352,7 @@ fn person(rest: &str) -> Vec<String> {
 }
 
 fn cursor_config(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
-    let config = fixture.dir.path().join("cursor");
-    fixture.workspace.update(cx, |workspace, _| {
-        workspace.homes.insert("CURSOR_CONFIG_DIR", config.clone());
-    });
-    config
+    cx.read(|cx| fixture.workspace.read(cx).homes["CURSOR_CONFIG_DIR"].clone())
 }
 
 /// What Cursor Agent leaves for one conversation: `chats/<hash>/<id>/meta.json`, whose `cwd` is the folder.
@@ -377,11 +369,7 @@ fn wrote(config: &Path, folder: &Path, conversation: &str) {
 }
 
 fn codex_home(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
-    let home = fixture.dir.path().join("codex-home");
-    fixture.workspace.update(cx, |workspace, _| {
-        workspace.homes.insert("CODEX_HOME", home.clone());
-    });
-    home
+    cx.read(|cx| fixture.workspace.read(cx).homes["CODEX_HOME"].clone())
 }
 
 /// What Codex writes when a conversation begins: its first line names the folder and the UTC start.
@@ -632,11 +620,7 @@ async fn start_again_on_codex_starts_a_new_conversation_when_none_or_two_match(
 }
 
 fn kimi_home(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
-    let home = fixture.dir.path().join("kimi-home");
-    fixture.workspace.update(cx, |workspace, _| {
-        workspace.homes.insert("KIMI_CODE_HOME", home.clone());
-    });
-    home
+    cx.read(|cx| fixture.workspace.read(cx).homes["KIMI_CODE_HOME"].clone())
 }
 
 fn kimi_session(home: &Path, folder: &Path) -> String {

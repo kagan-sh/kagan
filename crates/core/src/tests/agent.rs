@@ -1014,11 +1014,6 @@ async fn kimi_reads_skills_from_the_folder_its_workspace_names(cx: &mut TestAppC
     let fixture = Fixture::new(cx).await;
     let home = fixture.dir.path().join("kimi-home");
     write_skill(&home.join("skills"), "from-home", "home body");
-    cx.update(|cx| {
-        Workspace::global(cx).update(cx, |workspace, _| {
-            workspace.homes.insert("KIMI_CODE_HOME", home.clone());
-        });
-    });
     let run = fixture.dir.path().join("kimi-home-run");
     let program = fake_agent(&run, "kimi");
     let (_id, _reap) = started(&fixture, program.to_str().unwrap(), cx).await;
