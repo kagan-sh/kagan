@@ -105,11 +105,18 @@ impl ListDelegate for Rows {
         _: &mut Window,
         cx: &mut Context<ListState<Self>>,
     ) -> impl IntoElement {
+        let text = format!(
+            "No program matches “{}”. Clear the search to see them all.",
+            self.query
+        );
         div()
+            .id("program-empty")
+            .ui_container()
             .p_2()
             .type_body(cx)
             .text_color(cx.theme().muted_foreground)
-            .child(format!("No program matches “{}”.", self.query))
+            .aria_label(text.clone())
+            .child(text)
     }
 }
 

@@ -184,18 +184,33 @@ impl Picker {
 impl Render for Picker {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
-        let body: AnyElement = if let Programs::Failed(message) = &self.state {
-            programs_failed(message, muted, cx)
-        } else {
-            let height = self.program_list_height(cx);
-            List::new(&self.list)
-                .h(height)
-                .max_h(height)
-                .into_any_element()
+        let body: AnyElement = match &self.state {
+            Programs::Failed(message) => programs_failed(message, muted, cx),
+            Programs::Loading => div()
+                .id("program-loading")
+                .ui_container()
+                .flex()
+                .items_center()
+                .h(gpui_kit::px(crate::theme::row_height(cx)))
+                .px_2()
+                .type_body(cx)
+                .text_color(muted)
+                .aria_label("Looking for programs…")
+                .child("Looking for programs…")
+                .into_any_element(),
+            Programs::Loaded => {
+                let height = self.program_list_height(cx);
+                List::new(&self.list)
+                    .h(height)
+                    .max_h(height)
+                    .into_any_element()
+            }
         };
         // Off while the custom command is open: its field shows the same reason beside it.
+        // Off with no match too: the list's own row says what to do.
         let custom = self.mode == Mode::Custom;
-        let reason = self.command(cx).err().filter(|_| !custom);
+        let matched = !self.list.read(cx).delegate().matches.is_empty();
+        let reason = self.command(cx).err().filter(|_| !custom && matched);
         let toggle = match self.mode {
             Mode::Custom => "Hide custom command",
             Mode::Catalog => "Custom command…",

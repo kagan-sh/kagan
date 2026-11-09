@@ -283,6 +283,21 @@ fn the_selected_row_is_marked_on_screen_and_in_words(cx: &mut TestAppContext) {
 
 #[cfg(unix)]
 #[gpui_kit::test]
+fn a_search_with_no_match_says_what_to_do_and_gives_no_second_reason(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let _bin = fixture_programs(cx, data.path(), &["codex"]);
+    start_in_plain_folder(cx, window, data.path());
+    search(cx, window, &kagan, "zzz");
+    wait_until(cx, |cx| label(cx, window, "program-empty").contains("zzz"));
+    assert_eq!(
+        label(cx, window, "program-empty"),
+        "No program matches “zzz”. Clear the search to see them all."
+    );
+    assert!(!shows(cx, window, "program-reason"));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
 fn a_known_agent_row_shows_its_version_and_a_shell_row_shows_its_command(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
     let bin = fixture_programs(cx, data.path(), &["codex"]);
