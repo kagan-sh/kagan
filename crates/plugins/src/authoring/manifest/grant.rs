@@ -28,6 +28,9 @@ pub(crate) struct Grant {
     /// The approved title of this plugin's activity strip item.
     #[serde(default)]
     pub(crate) status: Option<String>,
+    /// The approved command the strip item runs when the person clicks it.
+    #[serde(default)]
+    pub(crate) status_command: Option<String>,
 }
 
 impl Grant {
@@ -63,6 +66,11 @@ impl Grant {
                 .status
                 .as_ref()
                 .map(|status| status.title.clone()),
+            status_command: manifest
+                .ui
+                .status
+                .as_ref()
+                .and_then(|status| status.command.clone()),
         }
     }
 
@@ -139,6 +147,10 @@ impl Grant {
                 .map(|(id, every)| (id.clone(), *every))
                 .collect(),
             status: self.status.clone().filter(|_| other.status.is_some()),
+            status_command: self
+                .status_command
+                .clone()
+                .filter(|_| other.status_command.is_some()),
         }
     }
 
@@ -174,6 +186,7 @@ impl Grant {
                 .iter()
                 .all(|(id, every)| approved.schedules.get(id) == Some(every))
             && (self.status.is_none() || self.status == approved.status)
+            && (self.status_command.is_none() || self.status_command == approved.status_command)
     }
 
     /// The lines `approved` did not have; all lines when only details changed.
@@ -255,6 +268,9 @@ impl Grant {
             lines.push(format!(
                 "starts with kagan to show {title} in the activity strip"
             ));
+        }
+        if let Some(command) = &self.status_command {
+            lines.push(format!("clicking that line runs {command}"));
         }
         lines
     }

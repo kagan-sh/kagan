@@ -640,3 +640,61 @@ fn instruct_is_an_install_line_and_needs_approval_again() {
     assert!(base.within(&with));
     assert!(!with.within(&base));
 }
+
+#[test]
+fn a_status_command_must_be_an_always_command_the_plugin_declares() {
+    let dir = plugin_dir();
+    let mut value = sample_manifest();
+    let rejected = |value: &mut Value, status: Value, commands: Value| {
+        value["ui"] = json!({ "status": status });
+        value["commands"] = commands;
+        std::fs::write(dir.path().join(crate::manifest::FILE), value.to_string()).unwrap();
+        read_manifest(dir.path()).unwrap_err().to_string()
+    };
+    let undeclared = rejected(
+        &mut value,
+        json!({ "title": "Usage", "command": "usage.refresh" }),
+        json!([]),
+    );
+    assert!(
+        undeclared.contains("must name one of this plugin's commands"),
+        "{undeclared}"
+    );
+    let thread_only = rejected(
+        &mut value,
+        json!({ "title": "Usage", "command": "usage.refresh" }),
+        json!([{ "id": "usage.refresh", "title": "Refresh", "when": "thread" }]),
+    );
+    assert!(
+        thread_only.contains("with \"when\": \"always\""),
+        "{thread_only}"
+    );
+
+    value["commands"] = json!([{ "id": "usage.refresh", "title": "Refresh" }]);
+    value["ui"] = json!({ "status": { "title": "Usage", "command": "usage.refresh" } });
+    std::fs::write(dir.path().join(crate::manifest::FILE), value.to_string()).unwrap();
+    let read = read_manifest(dir.path()).unwrap();
+    assert_eq!(
+        read.ui
+            .status
+            .as_ref()
+            .and_then(|status| status.command.as_deref()),
+        Some("usage.refresh")
+    );
+    let grant = Grant::of(&read, dir.path());
+    assert_eq!(grant.status_command.as_deref(), Some("usage.refresh"));
+    assert!(
+        grant
+            .lines()
+            .iter()
+            .any(|line| line == "clicking that line runs usage.refresh"),
+        "{:?}",
+        grant.lines()
+    );
+
+    value["commands"] = json!([{ "id": "usage.refresh", "title": "Refresh" }, { "id": "usage.other", "title": "Other" }]);
+    value["ui"] = json!({ "status": { "title": "Usage", "command": "usage.other" } });
+    std::fs::write(dir.path().join(crate::manifest::FILE), value.to_string()).unwrap();
+    let changed = Grant::of(&read_manifest(dir.path()).unwrap(), dir.path());
+    assert!(!changed.within(&grant), "a changed command asks again");
+}

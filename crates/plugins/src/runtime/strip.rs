@@ -4,6 +4,7 @@ use gpui_kit::{App, AppContext as _, Context, Entity, Global};
 use gpui_shell::{HostArguments, HostError, HostValue};
 
 use crate::area::with_app;
+use crate::authoring::contributions::StatusContribution;
 use kg_domain::PluginId;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -34,6 +35,9 @@ pub struct StatusItem {
     pub title: String,
     pub text: String,
     pub tone: StatusTone,
+    pub tooltip: Option<String>,
+    /// The plugin's command the item runs when the person clicks it.
+    pub command: Option<String>,
 }
 
 pub struct PluginStrip {
@@ -80,11 +84,11 @@ const STATUS_CAP: usize = 120;
 
 pub(crate) fn set_status(
     plugin: &PluginId,
-    title: Option<&str>,
+    status: Option<&StatusContribution>,
     secrets: &crate::secret::Store,
     arguments: &HostArguments,
 ) -> Result<HostValue, HostError> {
-    let Some(title) = title else {
+    let Some(status) = status else {
         return Err(HostError::new(format!(
             "plugin {plugin} has no status item; declare ui.status in kagan.json"
         )));
@@ -98,12 +102,14 @@ pub(crate) fn set_status(
             ));
         }
     };
-    let tone = status_tone(arguments.get(1))?;
+    let options = status_options(plugin, secrets, arguments.get(1))?;
     let item = text.map(|text| crate::StatusItem {
         id: plugin.clone(),
-        title: title.to_owned(),
+        title: status.title.clone(),
         text,
-        tone,
+        tone: options.tone,
+        tooltip: options.tooltip,
+        command: status.command.clone(),
     });
     with_app(|cx| {
         let strip = crate::PluginStrip::global(cx)
@@ -149,27 +155,50 @@ pub(crate) fn forbidden_status_char(ch: char) -> bool {
         )
 }
 
-fn status_tone(options: Option<&HostValue>) -> Result<crate::StatusTone, HostError> {
+struct Options {
+    tone: crate::StatusTone,
+    tooltip: Option<String>,
+}
+
+fn status_options(
+    plugin: &PluginId,
+    secrets: &crate::secret::Store,
+    options: Option<&HostValue>,
+) -> Result<Options, HostError> {
+    let mut parsed = Options {
+        tone: crate::StatusTone::Quiet,
+        tooltip: None,
+    };
     let Some(options) = options.filter(|options| !options.is_null()) else {
-        return Ok(crate::StatusTone::Quiet);
+        return Ok(parsed);
     };
     let HostValue::Object(fields) = options else {
         return Err(HostError::new(
-            "setStatus options must be an object with only tone",
+            "setStatus options must be an object with only tone and tooltip",
         ));
     };
-    if fields.iter().any(|(key, _)| key != "tone") {
-        return Err(HostError::new(
-            "setStatus options take only tone, one of quiet, busy, needs or failed",
-        ));
+    for (key, value) in fields {
+        match key.as_str() {
+            "tone" => {
+                let HostValue::Str(name) = value else {
+                    return Err(tone_error());
+                };
+                parsed.tone = crate::StatusTone::parse(name).ok_or_else(tone_error)?;
+            }
+            "tooltip" => {
+                let HostValue::Str(text) = value else {
+                    return Err(HostError::new("tooltip must be a string"));
+                };
+                parsed.tooltip = Some(status_text(&secrets.redact(plugin, text))?);
+            }
+            _ => {
+                return Err(HostError::new(
+                    "setStatus options take only tone and tooltip",
+                ));
+            }
+        }
     }
-    let Some((_, value)) = fields.iter().find(|(key, _)| key == "tone") else {
-        return Ok(crate::StatusTone::Quiet);
-    };
-    let HostValue::Str(name) = value else {
-        return Err(tone_error());
-    };
-    crate::StatusTone::parse(name).ok_or_else(tone_error)
+    Ok(parsed)
 }
 
 fn tone_error() -> HostError {

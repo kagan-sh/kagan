@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::area::{awaited, from_host, to_host, with_app};
+use crate::authoring::contributions::StatusContribution;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -278,7 +279,7 @@ pub(crate) fn app<R>(
 pub(crate) fn extend(
     module: HostModule,
     plugin: &PluginId,
-    status: Option<&str>,
+    status: Option<&StatusContribution>,
     secrets: &crate::secret::Store,
 ) -> HostModule {
     let declarations = format!(
@@ -293,7 +294,7 @@ pub(crate) fn extend(
     let images = plugin.clone();
     let urls = plugin.clone();
     let statuses = plugin.clone();
-    let status_title = status.map(str::to_owned);
+    let status = status.cloned();
     let status_secrets = secrets.clone();
     module
         .async_function("openThread", open_thread)
@@ -308,12 +309,7 @@ pub(crate) fn extend(
             crate::clipboard::write(&images, arguments)
         })
         .function("setStatus", move |arguments| {
-            crate::strip::set_status(
-                &statuses,
-                status_title.as_deref(),
-                &status_secrets,
-                arguments,
-            )
+            crate::strip::set_status(&statuses, status.as_ref(), &status_secrets, arguments)
         })
 }
 
