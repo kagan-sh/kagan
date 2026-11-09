@@ -173,12 +173,13 @@ fn update_part(focus: &FocusHandle, cx: &Context<Kagan>) -> Option<AnyElement> {
                 disabled: false,
                 selected: None,
                 focus: None,
-                hint: None,
+                hint: Some(update::primary_label(cx).into()),
             },
             Button::new("activity-update-button")
                 .small()
                 .outline()
                 .label("Update available")
+                .tooltip(update::primary_label(cx))
                 .text_color(cx.theme().muted_foreground)
                 .track_focus(focus)
                 .on_click(|_, window, cx| update::primary(window, cx)),

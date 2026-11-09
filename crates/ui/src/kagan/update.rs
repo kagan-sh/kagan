@@ -43,26 +43,52 @@ pub(super) fn check(cx: &mut App) {
     .detach();
 }
 
-// The activity strip's Update button does what the notice's main button does for this install.
+const COPY: &str = "Copy command";
+const RESTART: &str = "Restart and install…";
+const NOTES: &str = "Release notes";
+
+// What the main update action is for this install: the activity strip's Update button and the
+// notice both use it, so they can't disagree.
+#[derive(Clone, Copy)]
+enum Primary {
+    Copy,
+    Restart,
+    Notes,
+}
+
+impl Primary {
+    fn of(kind: InstallKind) -> Self {
+        match kind {
+            InstallKind::Homebrew => Self::Copy,
+            kind if kind.replaces_itself() => Self::Restart,
+            _ => Self::Notes,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Copy => COPY,
+            Self::Restart => RESTART,
+            Self::Notes => NOTES,
+        }
+    }
+}
+
+pub(super) fn primary_label(cx: &App) -> &'static str {
+    Primary::of(Updater::global(cx).read(cx).kind()).label()
+}
+
 pub(super) fn primary(window: &mut Window, cx: &mut App) {
-    let (homebrew, replaces, notes) = {
-        let updater = Updater::global(cx).read(cx);
-        let notes = match updater.state() {
-            UpdateState::Available { notes, .. } => notes.clone(),
-            _ => String::new(),
-        };
-        (
-            matches!(updater.kind(), InstallKind::Homebrew),
-            updater.kind().replaces_itself(),
-            notes,
-        )
-    };
-    if homebrew {
-        copy_brew(cx);
-    } else if replaces {
-        ask(window, cx);
-    } else {
-        cx.open_url(&notes);
+    match Primary::of(Updater::global(cx).read(cx).kind()) {
+        Primary::Copy => copy_brew(cx),
+        Primary::Restart => ask(window, cx),
+        Primary::Notes => {
+            let notes = match Updater::global(cx).read(cx).state() {
+                UpdateState::Available { notes, .. } => notes.clone(),
+                _ => return,
+            };
+            cx.open_url(&notes);
+        }
     }
 }
 
@@ -146,11 +172,11 @@ fn actions(cx: &App) -> AnyElement {
     h_flex()
         .flex_wrap()
         .gap_1()
-        .child(button("update-notes", "Release notes", move |_, cx| {
+        .child(button("update-notes", NOTES, move |_, cx| {
             cx.open_url(&notes);
         }))
         .map(|row| match updater.kind() {
-            InstallKind::Homebrew => row.child(button("update-copy", "Copy command", |_, cx| {
+            InstallKind::Homebrew => row.child(button("update-copy", COPY, |_, cx| {
                 copy_brew(cx);
             })),
             kind if kind.replaces_itself() => row
@@ -163,13 +189,9 @@ fn actions(cx: &App) -> AnyElement {
                         },
                     ))
                 })
-                .child(button(
-                    "update-install",
-                    "Restart and install…",
-                    |window, cx| {
-                        ask(window, cx);
-                    },
-                )),
+                .child(button("update-install", RESTART, |window, cx| {
+                    ask(window, cx);
+                })),
             _ => row,
         })
         .into_any_element()
