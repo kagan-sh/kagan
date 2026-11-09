@@ -78,16 +78,22 @@ impl Process {
         let _ = self.child.kill();
     }
 
-    /// Waits up to `limit` for the child to exit, then kills the tree and returns `None`.
+    /// Waits up to `limit` for the child to exit, then kills the tree and returns `None`. When
+    /// `stop` returns true first, it kills the tree and fails.
     ///
     /// # Errors
-    /// When the child's status cannot be read.
-    pub fn wait_within(&mut self, limit: Duration) -> io::Result<Option<ExitStatus>> {
+    /// When the child's status cannot be read, or `stop` returns true (`Interrupted`).
+    pub fn wait_within(
+        &mut self,
+        limit: Duration,
+        stop: impl Fn() -> bool,
+    ) -> io::Result<Option<ExitStatus>> {
         poll_child(
             self,
             |process| process.child.try_status(),
             Process::kill,
             limit,
+            stop,
         )
     }
 }
@@ -103,11 +109,19 @@ pub(super) fn poll_child<T>(
     mut try_wait: impl FnMut(&mut T) -> io::Result<Option<ExitStatus>>,
     mut kill: impl FnMut(&mut T),
     limit: Duration,
+    stop: impl Fn() -> bool,
 ) -> io::Result<Option<ExitStatus>> {
     let started = Instant::now();
     loop {
         match try_wait(child)? {
             Some(status) => return Ok(Some(status)),
+            None if stop() => {
+                kill(child);
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "the program was stopped",
+                ));
+            }
             None if started.elapsed() > limit => {
                 kill(child);
                 return Ok(None);

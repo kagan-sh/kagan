@@ -141,7 +141,7 @@ pub(crate) fn versions(list: &mut ProgramList) {
         if let Some(path) = &program.path {
             let mut command = std::process::Command::new(path);
             command.arg("--version");
-            program.version = kg_process::capture_with_limit(command, VERSION_LIMIT)
+            program.version = kg_process::capture(command, VERSION_LIMIT, || false)
                 .ok()
                 .filter(|output| output.code == 0)
                 .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned());

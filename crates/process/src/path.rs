@@ -27,7 +27,7 @@ fn login_path() -> Option<OsString> {
     let shell = std::env::var_os("SHELL")?;
     let mut command = std::process::Command::new(shell);
     command.args(["-l", "-c", "printf %s \"$PATH\""]);
-    let output = crate::capture_with_limit(command, LOGIN_SHELL_TIMEOUT).ok()?;
+    let output = crate::capture(command, LOGIN_SHELL_TIMEOUT, || false).ok()?;
     (output.code == 0 && !output.stdout.is_empty()).then(|| OsString::from_vec(output.stdout))
 }
 

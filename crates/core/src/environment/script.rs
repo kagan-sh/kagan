@@ -350,7 +350,7 @@ enum Wait {
 }
 
 fn wait_child(process: &mut kg_process::Process, limit: Duration) -> Wait {
-    match process.wait_within(limit) {
+    match process.wait_within(limit, || false) {
         Ok(Some(status)) => Wait::Exited(status),
         Ok(None) => {
             let deadline = Instant::now() + Duration::from_secs(2);
