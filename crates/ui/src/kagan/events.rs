@@ -32,17 +32,16 @@ impl Kagan {
                 self.archive_thread(id, window, cx);
             }
             Event::ThreadActions(id) => {
-                // Selecting closes the narrow overlay, which holds this row, so keep it open.
-                let overlay = self.screen.drawn(Side::Left);
-                self.select(id.clone(), window, cx);
-                if overlay {
-                    self.open_overlay(Side::Left, Activation::Focus, window, cx);
-                }
-                if let Some(shown) = self.shown_open_thread(cx) {
-                    self.actions_menu = None;
-                    self.sidebar
-                        .update(cx, |sidebar, cx| sidebar.open_row_menu(&shown, window, cx));
-                }
+                let Some(thread) = self
+                    .record(id, cx)
+                    .filter(|thread| thread.archived_at.is_none())
+                    .cloned()
+                else {
+                    return;
+                };
+                self.actions_menu = None;
+                self.sidebar
+                    .update(cx, |sidebar, cx| sidebar.open_row_menu(&thread, window, cx));
             }
             Event::RemoveProject(id) => self.remove_project(id.clone(), cx),
             Event::Reorder { id, before } => {

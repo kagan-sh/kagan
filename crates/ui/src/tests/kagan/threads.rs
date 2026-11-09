@@ -546,20 +546,32 @@ fn archive_from_a_row_menu_archives_that_row(cx: &mut TestAppContext) {
     crate::tests::sidebar::layout::hover_row(cx, window, &format!("thread-{}", row.0));
     click(cx, window, &format!("thread-actions-{}", row.0));
     cx.run_until_parked();
+    assert_eq!(
+        cx.update(|cx| kagan.read(cx).shown_thread(cx)),
+        Some(other.clone())
+    );
     click(cx, window, "thread-archive");
     wait_until(cx, |cx| thread_record(cx, &row).archived_at.is_some());
-    assert_eq!(cx.update(|cx| kagan.read(cx).shown_thread(cx)), Some(other));
+    assert_eq!(
+        cx.update(|cx| kagan.read(cx).shown_thread(cx)),
+        Some(other.clone())
+    );
+    assert!(thread_record(cx, &other).archived_at.is_none());
 }
 
 #[gpui_kit::test]
 fn rename_from_a_row_menu_renames_that_row(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = open(cx);
+    let (kagan, window, _data) = open(cx);
     let row = run_shell(cx);
     let other = run_shell(cx);
     click(cx, window, &format!("thread-{}", other.0));
     crate::tests::sidebar::layout::hover_row(cx, window, &format!("thread-{}", row.0));
     click(cx, window, &format!("thread-actions-{}", row.0));
     click(cx, window, "thread-rename");
+    assert_eq!(
+        cx.update(|cx| kagan.read(cx).shown_thread(cx)),
+        Some(row.clone())
+    );
     cx.simulate_input(window, "Notes");
     cx.simulate_keystrokes(window, "enter");
     wait_until(cx, |cx| thread_record(cx, &row).title == "Notes");
@@ -568,7 +580,7 @@ fn rename_from_a_row_menu_renames_that_row(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn save_diagnostics_from_a_row_menu_writes_the_report(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open(cx);
+    let (kagan, window, data) = open(cx);
     let row = run_shell(cx);
     let other = run_shell(cx);
     click(cx, window, &format!("thread-{}", other.0));
@@ -583,6 +595,7 @@ fn save_diagnostics_from_a_row_menu_writes_the_report(cx: &mut TestAppContext) {
                 .any(|entry| entry.path().extension().is_some_and(|ext| ext == "txt"))
         })
     });
+    assert_eq!(cx.update(|cx| kagan.read(cx).shown_thread(cx)), Some(other));
 }
 
 #[gpui_kit::test]

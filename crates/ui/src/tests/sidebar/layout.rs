@@ -1197,14 +1197,15 @@ pub(crate) fn hover_row(cx: &mut TestAppContext, window: AnyWindowHandle, name: 
 }
 
 #[gpui_kit::test]
-fn the_thread_menu_stays_open_on_its_row(cx: &mut TestAppContext) {
+fn the_thread_menu_opens_without_showing_its_row(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);
     let thread = run_shell(cx);
+    let before = shown(cx, &kagan);
     hover_row(cx, window, &format!("thread-{thread}"));
     click(cx, window, &format!("thread-actions-{thread}"));
     cx.run_until_parked();
     assert!(shows(cx, window, "popup-menu"));
-    assert_eq!(shown(cx, &kagan), Some(thread));
+    assert_eq!(shown(cx, &kagan), before);
 }
 
 #[gpui_kit::test]
@@ -1248,7 +1249,7 @@ fn a_row_menu_acts_on_its_own_row_while_another_thread_is_shown(cx: &mut TestApp
     cx.run_until_parked();
     assert!(crate::tests::kagan::thread_record(cx, &row).pinned);
     assert!(!crate::tests::kagan::thread_record(cx, &shown_thread).pinned);
-    assert_eq!(shown(cx, &kagan), Some(row));
+    assert_eq!(shown(cx, &kagan), Some(shown_thread));
 }
 
 #[gpui_kit::test]
