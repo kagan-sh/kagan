@@ -7,7 +7,7 @@ use kg_domain::EnvironmentStatus;
 
 use super::{
     click, committed_repo, environment_of, git, head_commit, label, only_worktree, open,
-    set_program, shell, shown, shows, wait_until, worktree_dirs,
+    scroll_form_to_end, set_program, shell, shown, shows, wait_until, worktree_dirs,
 };
 
 pub(in crate::tests) fn disabled(
@@ -221,7 +221,7 @@ fn the_start_screen_can_show_the_pinned_setup_script(cx: &mut TestAppContext) {
     assert_eq!(label(cx, window, "setup-disclose"), "Show script");
     assert!(!shows(cx, window, "setup-body"));
     click(cx, window, "setup-disclose");
-    wait_until(cx, |cx| shows(cx, window, "setup-body"));
+    wait_until(cx, |cx| !label(cx, window, "setup-body").is_empty());
     let script = label(cx, window, "setup-body");
     assert!(script.contains("echo from-commit"), "{script}");
     assert!(!script.contains("from-worktree"), "{script}");
@@ -240,7 +240,7 @@ fn a_long_setup_script_is_capped(cx: &mut TestAppContext) {
     click(cx, window, &format!("project-new-{}", project.id.0));
     wait_until(cx, |cx| shows(cx, window, "setup-disclose"));
     click(cx, window, "setup-disclose");
-    wait_until(cx, |cx| shows(cx, window, "setup-body"));
+    wait_until(cx, |cx| !label(cx, window, "setup-body").is_empty());
     let script = label(cx, window, "setup-body");
     assert!(script.contains("echo line-0"), "{script}");
     assert!(script.contains("echo line-39"), "{script}");
@@ -280,20 +280,4 @@ fn a_changed_script_hides_retry_and_leaves_start(cx: &mut TestAppContext) {
     wait_until(cx, |cx| shows(cx, window, "setup-retry"));
     let fresh = only_worktree(data.path());
     assert_eq!(fresh, old);
-}
-
-// In a short window the setup controls sit below the fold, so a person scrolls the form to them.
-fn scroll_form_to_end(cx: &mut TestAppContext, window: AnyWindowHandle) {
-    cx.update_window(window, |_, window, cx| {
-        crate::ui_dispatch::scroll_within(
-            window,
-            &ElementId::Name("start-fields".into()),
-            None,
-            gpui_kit::ScrollDelta::Pixels(gpui_kit::point(gpui_kit::px(0.), gpui_kit::px(-1000.))),
-            cx,
-        )
-        .unwrap();
-    })
-    .unwrap();
-    cx.run_until_parked();
 }

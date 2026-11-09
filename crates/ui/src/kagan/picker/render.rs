@@ -206,6 +206,13 @@ impl Render for Picker {
                     .into_any_element()
             }
         };
+        let hidden = self
+            .list
+            .read(cx)
+            .delegate()
+            .matches
+            .len()
+            .saturating_sub(usize::from(LIST_ROWS));
         // Off while the custom command is open: its field shows the same reason beside it.
         // Off with no match too: the list's own row says what to do.
         let custom = self.mode == Mode::Custom;
@@ -239,6 +246,14 @@ impl Render for Picker {
                     .small(),
             ))
             .child(div().id("program-list").ui_container().child(body))
+            .when(hidden > 0, |this| {
+                this.child(note(
+                    "program-more",
+                    format!("{hidden} more. Type to search, or scroll."),
+                    muted,
+                    cx,
+                ))
+            })
             .when_some(reason, |this, reason| {
                 this.child(note("program-reason", reason, muted, cx))
             })

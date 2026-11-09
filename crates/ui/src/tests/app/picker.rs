@@ -676,24 +676,50 @@ fn assert_close(actual: f32, expected: f32, what: &str) {
 
 #[cfg(unix)]
 #[gpui_kit::test]
-fn a_short_result_is_one_row_and_a_long_one_shows_five(cx: &mut TestAppContext) {
+fn a_short_result_is_one_row_and_a_long_one_shows_eight(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
     fixture_programs(cx, data.path(), &ROW_NAMES);
     start_in_plain_folder(cx, window, data.path());
     let row = row_height(cx, window);
     let all = list_height(cx, window);
     search(cx, window, &kagan, "codex");
-    // Five rows show four more rows than the one row a search leaves.
+    // Eight rows show seven more rows than the one row a search leaves.
     assert_close(
         all - list_height(cx, window),
-        4. * row,
-        "five rows minus one",
+        7. * row,
+        "eight rows minus one",
     );
 }
 
 #[cfg(unix)]
 #[gpui_kit::test]
-fn larger_text_makes_the_rows_taller_and_the_five_row_cap_follows(cx: &mut TestAppContext) {
+fn a_list_longer_than_its_rows_says_how_many_more_there_are(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    fixture_programs(
+        cx,
+        data.path(),
+        &[
+            "claude",
+            "codex",
+            "gemini",
+            "opencode",
+            "cursor-agent",
+            "amp",
+            "copilot",
+            "kimi",
+        ],
+    );
+    start_in_plain_folder(cx, window, data.path());
+    wait_until(cx, |cx| shows(cx, window, "program-more"));
+    assert_eq!(
+        label(cx, window, "program-more"),
+        "1 more. Type to search, or scroll."
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn larger_text_makes_the_rows_taller_and_the_eight_row_cap_follows(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
     // kagan has no text-size setting, so larger text is the theme's base font size. It is set
     // before the picker opens, so the rows are measured once, at that size.
@@ -706,7 +732,7 @@ fn larger_text_makes_the_rows_taller_and_the_five_row_cap_follows(cx: &mut TestA
     search(cx, window, &kagan, "codex");
     assert_close(
         all - list_height(cx, window),
-        4. * row,
+        7. * row,
         "cap at larger text",
     );
 }

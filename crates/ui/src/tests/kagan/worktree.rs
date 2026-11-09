@@ -11,8 +11,8 @@ use kg_domain::{
 use crate::kagan::Kagan;
 
 use super::{
-    add_project, click, committed_repo, git, init_repo, label, open, shell, shows, thread_record,
-    wait_until,
+    add_project, click, committed_repo, git, init_repo, label, open, scroll_form_to_end, shell,
+    shows, thread_record, wait_until,
 };
 
 #[gpui_kit::test]
@@ -267,8 +267,10 @@ fn the_project_folder_can_check_out_another_local_branch(cx: &mut TestAppContext
     wait_until(cx, |cx| shows(cx, window, "folder-project"));
     click(cx, window, "folder-project");
     click(cx, window, "branch-from");
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "branch-checkout"));
     click(cx, window, "branch-checkout");
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "branch-pick-topic"));
     click(cx, window, "branch-pick-topic");
     wait_until(cx, |cx| {

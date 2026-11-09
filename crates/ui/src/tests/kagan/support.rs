@@ -304,3 +304,19 @@ pub(in crate::tests) fn wait_for_shell(
         std::thread::sleep(Duration::from_millis(20));
     }
 }
+
+// In a short window the controls below the fields sit below the fold, so a person scrolls the form to them.
+pub(in crate::tests) fn scroll_form_to_end(cx: &mut TestAppContext, window: AnyWindowHandle) {
+    cx.update_window(window, |_, window, cx| {
+        crate::ui_dispatch::scroll_within(
+            window,
+            &ElementId::Name("start-fields".into()),
+            None,
+            gpui_kit::ScrollDelta::Pixels(gpui_kit::point(gpui_kit::px(0.), gpui_kit::px(-1000.))),
+            cx,
+        )
+        .unwrap();
+    })
+    .unwrap();
+    cx.run_until_parked();
+}
