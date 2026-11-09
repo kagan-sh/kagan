@@ -26,7 +26,6 @@ actions!(
     ]
 );
 
-/// The keys a plugin row answers to while it has focus. Remove asks the person first.
 pub(crate) fn bindings() -> Vec<KeyBinding> {
     vec![
         KeyBinding::new("enter", TogglePluginDetails, Some("PluginRow")),
@@ -49,11 +48,8 @@ pub(super) struct Plugins {
     pub(super) focus: Option<PluginId>,
     pub(super) index: Entity<InputState>,
     pub(super) query: Entity<InputState>,
-    /// The last search: what the indexes list, and the indexes that could not be read.
     pub(super) found: Option<(Vec<Listing>, Vec<String>)>,
     load: Task<()>,
-    /// Every operation still running. One that waits for an approval must not be dropped when
-    /// another starts.
     ops: Vec<Task<()>>,
 }
 

@@ -30,17 +30,9 @@ pub(in crate::kagan) fn mount(
             Err(error) => (None, Some(mount_error(&error))),
         };
         return Slot {
-            id: declared.surface_id(),
-            plugin: declared.plugin.clone(),
-            contribution: declared.id.clone(),
-            title: declared.title.clone(),
-            details,
-            view: None,
-            _snapshot_watch: None,
             web,
             error,
-            generation: host.read(cx).generation(&declared.plugin).unwrap_or(0),
-            focus: cx.focus_handle(),
+            ..Slot::new(declared, details, cx)
         };
     }
     let mounted = host.update(cx, |host, cx| {
@@ -58,17 +50,10 @@ pub(in crate::kagan) fn mount(
         )
     });
     Slot {
-        id: declared.surface_id(),
-        plugin: declared.plugin.clone(),
-        contribution: declared.id.clone(),
-        title: declared.title.clone(),
-        details,
         view,
         _snapshot_watch: snapshot_watch,
-        web: None,
         error,
-        generation: host.read(cx).generation(&declared.plugin).unwrap_or(0),
-        focus: cx.focus_handle(),
+        ..Slot::new(declared, details, cx)
     }
 }
 
@@ -78,7 +63,7 @@ pub(super) fn matching_slot<'a>(
     right: &'a [Slot],
     declared: &Declared,
 ) -> Option<&'a Slot> {
-    let same = |slot: &&Slot| slot.contribution == declared.id && slot.plugin == declared.plugin;
+    let same = |slot: &&Slot| slot.is(declared);
     match declared.placement {
         SurfacePlacement::Left => tool.filter(same),
         SurfacePlacement::Center => page.filter(same),

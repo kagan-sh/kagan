@@ -10,14 +10,11 @@ use kg_domain::{Program, split_program};
 
 use super::{CloseCustomCommand, RetryPrograms, ToggleCustomCommand};
 
-/// The key context of the picker.
 pub(crate) const CONTEXT: &str = "ProgramPicker";
 
-/// Asks the window to start the chosen program.
 pub(crate) struct Start;
 pub(crate) struct Close;
 
-/// What the picker loads: the programs, or why they could not be found.
 #[derive(Default)]
 enum Programs {
     #[default]
@@ -26,7 +23,6 @@ enum Programs {
     Failed(String),
 }
 
-/// The most rows the list shows at once. Its height is that many measured rows.
 const LIST_ROWS: u16 = 5;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
@@ -36,7 +32,6 @@ enum Mode {
     Custom,
 }
 
-/// The picker's list: every program, the ones the search leaves, the search, and the selected row.
 #[derive(Default)]
 pub(super) struct Rows {
     all: Vec<Program>,
@@ -45,12 +40,10 @@ pub(super) struct Rows {
     query: String,
     loading: bool,
     mode: Mode,
-    /// One row's height as it was last painted, so the list can cap itself at `LIST_ROWS` rows.
     row_height: Option<Pixels>,
 }
 
 impl Rows {
-    /// Keeps the programs that match `query`, and selects the first of them.
     fn search(&mut self, query: &str) {
         // A change to the same text keeps the selection the person has made.
         if query == self.query {
@@ -60,7 +53,6 @@ impl Rows {
         self.filter();
     }
 
-    /// The matches for `query`, with the first one selected when there is one.
     fn filter(&mut self) {
         let needle = self.query.to_lowercase();
         self.matches = self
@@ -83,10 +75,7 @@ impl Rows {
 pub(crate) struct Picker {
     state: Programs,
     list: Entity<ListState<Rows>>,
-    /// The search above the list. The picker filters the list itself, so arrow keys and Enter
-    /// reach the list from here.
     search: Entity<InputState>,
-    /// The custom command is open, and its fields are what starts. Choosing a row closes it.
     mode: Mode,
     program: Entity<InputState>,
     arguments: Entity<InputState>,

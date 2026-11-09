@@ -1,12 +1,10 @@
 use gpui_kit::{Keystroke, Modifiers};
 use kg_domain::KeyPlatform;
 
-/// What a key sends to the program on this machine, or `None` when the key is the window's.
 pub(crate) fn bytes(keystroke: &Keystroke, app_cursor: bool) -> Option<String> {
     bytes_on(keystroke, app_cursor, KeyPlatform::host())
 }
 
-/// What a key sends to the program on `platform`.
 pub(crate) fn bytes_on(
     keystroke: &Keystroke,
     app_cursor: bool,
@@ -55,8 +53,8 @@ pub(crate) fn bytes_on(
     Some(meta(mods, &text))
 }
 
-/// Whether these modifiers type the character the keyboard made: Option on `macOS`, and `AltGr` on
-/// Windows, which reports it as Ctrl and Alt together.
+// Whether these modifiers type the character the keyboard made: Option on `macOS`, and `AltGr` on
+// Windows, which reports it as Ctrl and Alt together.
 fn types_text(mods: Modifiers, platform: KeyPlatform) -> bool {
     match platform {
         KeyPlatform::Mac => mods.alt && !mods.control,
@@ -65,8 +63,8 @@ fn types_text(mods: Modifiers, platform: KeyPlatform) -> bool {
     }
 }
 
-/// Copy, paste and scroll belong to the window. Off macOS, Ctrl+Shift takes the copy and paste
-/// chords, since a bare Ctrl chord goes to the program.
+// Copy, paste and scroll belong to the window. Off macOS, Ctrl+Shift takes the copy and paste
+// chords, since a bare Ctrl chord goes to the program.
 fn is_window_chord(key: &str, mods: Modifiers, platform: KeyPlatform) -> bool {
     let scroll = mods.shift && matches!(key, "pageup" | "pagedown");
     let copy_paste =

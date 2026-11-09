@@ -146,9 +146,7 @@ pub(crate) struct Kagan {
     surface_hold: bool,
     typing: bool,
     quiet: Task<()>,
-    /// The questions that were on screen when the person started typing. They stay up.
     on_screen: BTreeSet<PendingInteractionId>,
-    /// The person-only questions already seen, so a new one opens the panels once.
     announced: BTreeSet<PendingInteractionId>,
     typed_watch: Option<Subscription>,
     changes: Changes,
@@ -167,15 +165,12 @@ pub(crate) struct Kagan {
     _settings_watch: [Subscription; 3],
     panes: layout::Panes,
     left_overlay_focus: FocusHandle,
-    /// Enter on a project is waiting for the picker to load its program.
     start_on_load: Option<ProjectId>,
     settings_scroll: ScrollHandle,
     settings_approvals: usize,
     settings_drafts: settings::Drafts,
     keyboard: settings::Recorder,
-    /// Set while a sidebar change made on leaving Settings is still being delivered
     settling: bool,
-    /// A plugin's own settings view, with the plugin's load generation it was mounted from
     settings_views: BTreeMap<kg_domain::PluginId, (u64, Entity<gpui_shell::ScriptView>)>,
     columns: Entity<ResizableState>,
     window: AnyWindowHandle,

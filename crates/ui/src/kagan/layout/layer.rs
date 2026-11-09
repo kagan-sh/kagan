@@ -12,8 +12,6 @@ use crate::ui_registry::Facts;
 use super::{LEFT_OVERLAY, RAIL_WIDTH, key, left_scrim, save};
 
 impl Kagan {
-    /// The sidebar buttons and shortcuts do nothing in Settings, where the sidebars are fixed.
-    /// Showing a sidebar that has no room draws it over the center, as the right panels do.
     pub(in crate::kagan) fn toggle_sidebar(
         &mut self,
         _: &ToggleSidebar,
@@ -34,7 +32,6 @@ impl Kagan {
         }
     }
 
-    /// Shows the left sidebar beside the center when there is room, and over it when there is not.
     pub(in crate::kagan) fn show_left(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.room_panes(true, self.layout.right_open).left {
             self.force_sidebar(true, true, window, cx);
@@ -149,12 +146,10 @@ impl Kagan {
         self.open_overlay(Side::Right, Activation::Focus, window, cx);
     }
 
-    /// The center column is drawn. Full screen on the right replaces it.
     pub(in crate::kagan) fn center_drawn(&self) -> bool {
         !(self.right.fill == right::Fill::Window && self.panes.right)
     }
 
-    /// The right sidebar is on screen, as a column or as an overlay.
     pub(in crate::kagan) fn right_drawn(&self) -> bool {
         self.panes.right || (self.screen.drawn(Side::Right) && !self.in_settings())
     }

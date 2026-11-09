@@ -3,6 +3,7 @@ pub(crate) mod tests;
 use gpui_kit::{App, Context, WeakFocusHandle, Window};
 
 use super::{Kagan, Shown, archived, changes::Changes, layout::Panes, review, surface};
+use kg_domain::ThreadId;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Side {
@@ -91,6 +92,13 @@ impl Screen {
 
     pub(super) fn shown(&self) -> &Shown {
         &self.work
+    }
+
+    pub(super) fn covered_thread(&self, cx: &App) -> Option<ThreadId> {
+        match self.shown() {
+            Shown::Thread(view) => Some(view.read(cx).thread().clone()),
+            Shown::Nothing | Shown::Start(_) => None,
+        }
     }
 
     pub(super) fn open(&mut self, center: Center) {

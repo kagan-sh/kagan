@@ -1,5 +1,3 @@
-//! The row and group builders every settings page uses.
-
 use gpui_kit::component::switch::Switch;
 use gpui_kit::{AnyElement, App, ElementId, IntoElement, Role, SharedString, Window};
 use kg_core::Workspace;
@@ -8,27 +6,24 @@ use kg_domain::Op;
 use crate::kagan::controls::control;
 use crate::ui_registry::Facts;
 
-/// One row: a title, a muted line, and its control on the right.
 pub(super) struct Row {
     pub(super) id: SharedString,
     pub(super) title: SharedString,
     pub(super) note: SharedString,
     pub(super) note_content: Option<AnyElement>,
     pub(super) control: AnyElement,
-    /// A wide control stacks under the title
     pub(super) wide: bool,
+    pub(super) alias: Option<&'static str>,
+    pub(super) bare: bool,
 }
 
-/// A titled card of rows.
 pub(super) struct Group {
-    /// Names the group's container, so it can be found. Plugin groups are keyed by plugin id.
     pub(super) key: SharedString,
     pub(super) title: SharedString,
     pub(super) rows: Vec<Row>,
     pub(super) headed: bool,
 }
 
-/// One row, with its id, its title, its muted line, and its control.
 pub(super) fn row(id: &str, title: &str, note: &str, control: AnyElement) -> Row {
     Row {
         id: SharedString::from(format!("setting-row-{id}")),
@@ -37,6 +32,8 @@ pub(super) fn row(id: &str, title: &str, note: &str, control: AnyElement) -> Row
         note_content: None,
         control,
         wide: false,
+        alias: None,
+        bare: false,
     }
 }
 
@@ -53,7 +50,6 @@ pub(super) fn group(
     }
 }
 
-/// A switch that reports its new value. It takes the theme's colors.
 pub(super) fn switch(
     id: &str,
     title: &str,

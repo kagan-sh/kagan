@@ -1,6 +1,3 @@
-//! A plugin's settings page: its declared settings as rows, then its own view when it has one.
-//! A save reply is applied only when that save is still the latest and the plugin activation is still the one captured when the save started.
-
 use std::collections::{BTreeMap, BTreeSet};
 
 use gpui_kit::component::input::InputState;
@@ -55,7 +52,7 @@ pub(super) enum Change {
     Clear,
 }
 
-/// A secret's field starts empty and empties after each save: it never holds a saved value.
+// A secret's field starts empty and empties after each save: it never holds a saved value.
 pub(super) struct Secret {
     input: Entity<InputState>,
     _enter: Subscription,
@@ -209,7 +206,6 @@ fn sync_text(
     }
 }
 
-/// A plugin's declared settings, as one group named after the plugin.
 pub(super) fn groups(kagan: &Kagan, id: &PluginId, cx: &mut Context<Kagan>) -> Vec<Group> {
     let Some(host) = PluginHost::try_global(cx) else {
         return Vec::new();

@@ -1208,6 +1208,23 @@ fn the_thread_menu_stays_open_on_its_row(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn a_row_menu_acts_on_its_own_row_while_another_thread_is_shown(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let shown_thread = run_shell(cx);
+    let row = run_shell(cx);
+    click(cx, window, &format!("thread-{shown_thread}"));
+    assert_eq!(shown(cx, &kagan), Some(shown_thread.clone()));
+    hover_row(cx, window, &format!("thread-{row}"));
+    click(cx, window, &format!("thread-actions-{row}"));
+    cx.run_until_parked();
+    click(cx, window, "thread-pin");
+    cx.run_until_parked();
+    assert!(crate::tests::kagan::thread_record(cx, &row).pinned);
+    assert!(!crate::tests::kagan::thread_record(cx, &shown_thread).pinned);
+    assert_eq!(shown(cx, &kagan), Some(row));
+}
+
+#[gpui_kit::test]
 fn the_child_chevron_folds_without_selecting_its_parent(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);
     let parent = run_shell(cx);

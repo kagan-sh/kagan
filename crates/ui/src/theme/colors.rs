@@ -107,13 +107,11 @@ impl Tone {
     }
 }
 
-/// The `added` token: added lines and added counts. A theme without it uses `working`.
 pub(crate) fn added(cx: &App) -> Hsla {
     let state = ThemeState::global(cx);
     token_color(state.read(cx).palette.added())
 }
 
-/// A program's own colors are data; its defaults follow the theme.
 pub(crate) fn terminal_color(color: kg_core::Color, cx: &App) -> Hsla {
     let state = ThemeState::global(cx);
     let terminal = state.read(cx).palette.terminal();

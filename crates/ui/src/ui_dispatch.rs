@@ -94,8 +94,7 @@ pub(crate) fn scroll_within(
     Ok(())
 }
 
-/// Presses `from`, moves past GPUI's drag threshold, then onto `at` of `to` in steps, as a hand
-/// would. Without `hold` it also lets go there.
+// A drag starts only once the pointer moves past GPUI's drag threshold, so the steps go past it.
 pub(crate) fn drag_within(
     window: &mut Window,
     from: &ElementId,
@@ -140,7 +139,6 @@ pub(crate) fn drag_within(
     Ok(())
 }
 
-/// Lets go of a drag `drag_within` held, where the pointer is.
 pub(crate) fn drop_held(window: &mut Window, cx: &mut App) -> Result<(), OpError> {
     if !cx.has_active_drag() {
         return Err(OpError::Invalid(
@@ -152,8 +150,6 @@ pub(crate) fn drop_held(window: &mut Window, cx: &mut App) -> Result<(), OpError
     Ok(())
 }
 
-/// The point at the top quarter, middle, or bottom quarter of an element, where a plugin's drop
-/// handler reports that side.
 fn spot(
     window: &Window,
     id: &ElementId,

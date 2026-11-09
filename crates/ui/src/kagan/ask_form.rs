@@ -92,7 +92,6 @@ impl Kagan {
             .filter(|asked| !self.ask_hidden.contains(&asked.id))
     }
 
-    /// The thread whose terminal is the center. A review, a page, Archived or Settings covers it.
     pub(super) fn terminal_thread(&self, cx: &App) -> Option<kg_domain::ThreadId> {
         match self.screen.current() {
             Center::Work(Shown::Thread(view)) => Some(view.read(cx).thread().clone()),
@@ -176,7 +175,6 @@ impl Draft {
         self.error = None;
     }
 
-    /// The first field that cannot be sent, with its message.
     fn values(
         &self,
         fields: &[AskField],

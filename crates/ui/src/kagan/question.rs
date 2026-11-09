@@ -19,7 +19,6 @@ use super::ask_form::{self, Draft};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-/// A question waiting for the person: on a thread, or a standalone approval.
 pub(super) struct Question {
     thread: Option<ThreadId>,
     id: PendingInteractionId,

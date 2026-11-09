@@ -1,7 +1,3 @@
-//! Opt-in headless observation built exclusively on public GPUI APIs.
-//!
-//! Native accessibility properties are read automatically. Applications register
-//! identified GPUI elements with `.ui_container()`, without supplying test-only state.
 use gpui_kit::{
     App, Bounds, Element, ElementId, Entity, FocusHandle, Focusable as _, GlobalElementId, Hitbox,
     InspectorElementId, InteractiveElement, IntoElement, LayoutId, Pixels, Point, SharedString,
@@ -14,27 +10,18 @@ use std::{
     rc::{Rc, Weak},
 };
 
-/// Owned facts from the last paint of an observed element.
 #[derive(Clone)]
 pub(crate) struct ElementSnapshot {
     pub(crate) role: Option<gpui_kit::Role>,
     pub(crate) path: Vec<ElementId>,
-    /// The native accessibility value, not rendered text or pixels.
     pub(crate) value: Option<SharedString>,
     pub(crate) bounds: Bounds<Pixels>,
     pub(crate) clipped: Bounds<Pixels>,
     pub(crate) visible: bool,
-    /// Whether the tracked focus scope contains the current keyboard focus.
-    /// `None` means no focus binding was observed.
     pub(crate) focused: Option<bool>,
-    /// `None` means the native element does not expose a disabled flag.
-    /// Absence is not evidence that a control accepts input.
     pub(crate) disabled: Option<bool>,
-    /// Whether the view states the control is selected. Nothing native reports it.
     pub(crate) selected: Option<bool>,
-    /// The accessibility label; it can intentionally differ from visible text.
     pub(crate) label: Option<SharedString>,
-    /// The tooltip text the control shows on hover.
     pub(crate) hint: Option<SharedString>,
 }
 impl fmt::Debug for ElementSnapshot {
@@ -55,24 +42,17 @@ impl fmt::Debug for ElementSnapshot {
     }
 }
 
-/// What a control states about itself, for `kg ui`. Every field is required, so a control that
-/// leaves one out does not compile. A container has no facts; it uses `ui_container` instead.
 pub(crate) struct Facts {
     pub(crate) role: gpui_kit::Role,
     pub(crate) name: SharedString,
-    /// `None` when the control has no value.
     pub(crate) value: Option<SharedString>,
     pub(crate) disabled: bool,
-    /// `None` when the control cannot be selected.
     pub(crate) selected: Option<bool>,
-    /// `None` when the control takes no keyboard focus.
     pub(crate) focus: Option<FocusHandle>,
-    /// The tooltip text a person sees on hover. `None` when the control has none.
     pub(crate) hint: Option<SharedString>,
 }
 
 impl Facts {
-    /// A button that is enabled, unselected and has no focus of its own to report.
     pub(crate) fn button(name: impl Into<gpui_kit::SharedString>) -> Self {
         Self {
             role: gpui_kit::Role::Button,
@@ -125,8 +105,8 @@ pub(crate) struct Registration {
 }
 impl Drop for Registration {
     fn drop(&mut self) {
-        // The thread-local is gone once its thread exits; then nothing is left to remove.
         let _ = REGISTRY.try_with(|registry| {
+            // The thread-local is gone once its thread exits; then nothing is left to remove.
             if let Ok(mut registry) = registry.try_borrow_mut()
                 && let Some(entries) = registry.get_mut(&self.window)
             {
@@ -139,15 +119,12 @@ impl Drop for Registration {
     }
 }
 
-/// What a lookup found: nothing, the one element, or several that need a `within` to choose one.
 pub(crate) enum Located {
     Missing,
     One(ElementSnapshot),
-    /// Each match's path, outermost first, so the caller can name the one it wants.
     Ambiguous(Vec<String>),
 }
 
-/// The element with this id. With `within`, only elements inside an element with that id match.
 pub(crate) fn locate(window: &Window, id: &ElementId, within: Option<&ElementId>) -> Located {
     let matches: Vec<_> = snapshots(window)
         .into_iter()
@@ -176,7 +153,6 @@ pub(crate) fn locate(window: &Window, id: &ElementId, within: Option<&ElementId>
     }
 }
 
-/// The one element with this id, for the tests. Several matches are a test failure.
 #[cfg(test)]
 pub(crate) fn find(window: &Window, id: &ElementId) -> Option<ElementSnapshot> {
     match locate(window, id, None) {
@@ -186,8 +162,6 @@ pub(crate) fn find(window: &Window, id: &ElementId) -> Option<ElementSnapshot> {
     }
 }
 
-/// Every observed element, then every drag source and drop target a plugin script drew. A script's
-/// element states no facts, so it is found by its id and bounds alone.
 #[doc(hidden)]
 pub(crate) fn snapshots(window: &Window) -> Vec<ElementSnapshot> {
     let mut elements: Vec<ElementSnapshot> = REGISTRY.with(|registry| {
@@ -224,8 +198,8 @@ pub(crate) fn snapshots(window: &Window) -> Vec<ElementSnapshot> {
     elements
 }
 
-/// Transparent forwarding element. Its registration is owned by GPUI element
-/// state, so normal state cleanup and cached-view replay determine its lifetime.
+// Transparent forwarding element. Its registration is owned by GPUI element
+// state, so normal state cleanup and cached-view replay determine its lifetime.
 pub(crate) struct Observed<E> {
     inner: E,
     focus: Option<FocusHandle>,

@@ -30,6 +30,31 @@ pub(super) struct Slot {
     _snapshot_watch: Option<std::rc::Rc<gpui_kit::Subscription>>,
 }
 
+impl Slot {
+    pub(super) fn is(&self, declared: &Declared) -> bool {
+        self.plugin == declared.plugin && self.contribution == declared.id
+    }
+
+    pub(super) fn new(declared: &Declared, details: bool, cx: &mut App) -> Self {
+        Self {
+            id: declared.surface_id(),
+            plugin: declared.plugin.clone(),
+            contribution: declared.id.clone(),
+            title: declared.title.clone(),
+            details,
+            view: None,
+            _snapshot_watch: None,
+            web: None,
+            error: None,
+            generation: PluginHost::global(cx)
+                .read(cx)
+                .generation(&declared.plugin)
+                .unwrap_or(0),
+            focus: cx.focus_handle(),
+        }
+    }
+}
+
 struct Hold {
     tool: Option<Slot>,
     slots: Vec<Slot>,
@@ -179,9 +204,7 @@ fn drawn(placement: Placement) -> Option<SurfacePlacement> {
 fn reuse(slot: &Slot, declared: &Declared, cx: &App) -> bool {
     let generation =
         PluginHost::try_global(cx).and_then(|host| host.read(cx).generation(&declared.plugin));
-    slot.plugin == declared.plugin
-        && slot.contribution == declared.id
-        && generation == Some(slot.generation)
+    slot.is(declared) && generation == Some(slot.generation)
 }
 
 fn find_declared(plugin: &PluginId, id: &str, cx: &App) -> Option<Declared> {

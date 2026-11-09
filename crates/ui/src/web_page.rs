@@ -1,5 +1,3 @@
-//! One opener for the Browser and for a plugin page.
-
 use std::sync::{
     Arc,
     atomic::{AtomicU64, Ordering::Relaxed},
@@ -60,8 +58,7 @@ fn sweep_page_dirs(data: &std::path::Path) {
     for entry in entries.flatten() {
         let name = entry.file_name();
         if name.to_string_lossy().starts_with("page-") {
-            // Best effort: a folder still in use stays until a later cleanup.
-            let _ = std::fs::remove_dir_all(entry.path());
+            let _ = std::fs::remove_dir_all(entry.path()); // Best effort: a folder still in use stays until a later cleanup.
         }
     }
 }
@@ -92,7 +89,6 @@ impl WebPage {
         epoch
     }
 
-    /// Runs one host script in the page. Its reply arrives later, as JSON text.
     pub(crate) fn eval(
         &self,
         script: &str,
@@ -103,7 +99,7 @@ impl WebPage {
             .read(cx)
             .raw()
             .evaluate_script_with_callback(script, move |value| {
-                let _ = reply.try_send(Some(value));
+                let _ = reply.try_send(Some(value)); // The caller may have stopped waiting; then no one reads the reply.
             })
             .map_err(|error| error.to_string())
     }
@@ -112,7 +108,7 @@ impl WebPage {
         self.view.read(cx).raw().url().unwrap_or_default()
     }
 
-    /// Stops a page's `alert`, `confirm` and `prompt` from blocking the agent's command.
+    // Stops a page's `alert`, `confirm` and `prompt` from blocking the agent's command.
     #[cfg(target_os = "windows")]
     pub(crate) fn quiet_dialogs(&self, cx: &App) -> Result<(), String> {
         use wry::WebViewExtWindows as _;
@@ -216,7 +212,6 @@ fn open_view_with_loads(
     }
 }
 
-/// Tells `loads` when the page finishes loading, once per navigation.
 fn with_loads(
     builder: wry::WebViewBuilder<'_>,
     loads: Option<LoadSignal>,
@@ -227,7 +222,7 @@ fn with_loads(
     builder.with_on_page_load_handler(move |event, _| match event {
         wry::PageLoadEvent::Started => mark.started.store(mark.armed.load(Relaxed), Relaxed),
         wry::PageLoadEvent::Finished => {
-            let _ = loads.try_send(mark.started.load(Relaxed));
+            let _ = loads.try_send(mark.started.load(Relaxed)); // The watcher may have ended; then no one waits for the mark.
         }
     })
 }
@@ -258,8 +253,7 @@ fn open_windows(
     let mut view = match build_view(with_loads(builder, loads), window, cx) {
         Ok(view) => view,
         Err(error) => {
-            // Best effort: the storage folder is temporary, from this failed build.
-            let _ = std::fs::remove_dir_all(&storage);
+            let _ = std::fs::remove_dir_all(&storage); // Best effort: the storage folder is temporary, from this failed build.
             return Err(error);
         }
     };

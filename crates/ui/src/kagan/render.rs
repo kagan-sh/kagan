@@ -19,7 +19,6 @@ use gpui_kit::{
 use kg_domain::{Op, ThemeOp};
 
 impl Kagan {
-    /// Plugin views that are in this frame, so a native page can hide with its panel.
     pub(super) fn shown_plugin_views(&self, cx: &App) -> Vec<gpui_kit::EntityId> {
         let mut ids = Vec::new();
         let full = self.right.fill == right::Fill::Window && self.panes.right;
@@ -261,8 +260,6 @@ impl Kagan {
         }
     }
 }
-/// The key context of the window: its settings context, and what is on screen, so a plugin's
-/// command bound to `thread` or `project` fires only while that is shown.
 fn window_context(kagan: &Kagan, cx: &App) -> String {
     let mut context = if kagan.in_settings() {
         format!("{CONTEXT} {}", settings::CONTEXT)

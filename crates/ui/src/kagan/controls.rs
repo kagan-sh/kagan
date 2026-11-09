@@ -16,7 +16,6 @@ use crate::theme::{SpaceStep, TypeScale as _, space};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-/// A thread actions menu item `kg ui` can find and activate by id, named as it shows.
 pub(super) fn menu_item(id: &'static str, label: &'static str) -> impl IntoElement {
     control(
         id,
@@ -28,7 +27,6 @@ pub(super) fn menu_item(id: &'static str, label: &'static str) -> impl IntoEleme
     )
 }
 
-/// A control `kg ui` can find by id. Its facts are required: see `Facts`.
 pub(super) fn control(
     id: impl Into<gpui_kit::ElementId>,
     facts: Facts,
@@ -88,9 +86,9 @@ pub(super) fn note(
         .into_any_element()
 }
 
-/// The menu, under the button it is wrapped in: its top right corner sits on the button's bottom
-/// right corner. The zero-size holder is placed there, because an anchored child on its own sits at
-/// the button's top left.
+// The menu, under the button it is wrapped in: its top right corner sits on the button's bottom
+// right corner. The zero-size holder is placed there, because an anchored child on its own sits at
+// the button's top left.
 pub(super) fn menu_popup(
     menu: &Entity<PopupMenu>,
     layer: &'static str,
@@ -150,7 +148,6 @@ pub(super) fn keys_text<'a>(strokes: impl IntoIterator<Item = &'a Keystroke>) ->
         .join(" ")
 }
 
-/// A tooltip with the action's live key, so the label always matches the keymap.
 pub(super) fn tip(label: &str, action: &dyn Action, cx: &App) -> String {
     let keys = bound_keys(action, cx);
     if keys.is_empty() {
@@ -160,7 +157,6 @@ pub(super) fn tip(label: &str, action: &dyn Action, cx: &App) -> String {
     }
 }
 
-/// An outline button that focuses `focus` and then sends `action` to its handlers.
 pub(super) fn act<A: Action + Clone>(
     name: impl Into<String>,
     label: &'static str,
@@ -183,9 +179,8 @@ pub(super) fn act<A: Action + Clone>(
     .into_any_element()
 }
 
-/// A small outline button that sends its action to the handlers on `focus`'s element. A key
-/// press keeps focus on the button; a mouse press moves focus to `focus`, because a press does
-/// not focus a button.
+// A key press keeps focus on the button; a mouse press moves focus to `focus`, because a press
+// does not focus a button.
 pub(super) fn send<A: Action + Clone>(
     name: impl Into<String>,
     label: &'static str,
@@ -211,7 +206,6 @@ pub(super) fn send<A: Action + Clone>(
     .into_any_element()
 }
 
-/// Answers one named action for a plugin row or card. Its keys and its buttons both reach it.
 pub(super) fn answer<A: Action, E: InteractiveElement>(
     row: E,
     id: &PluginId,

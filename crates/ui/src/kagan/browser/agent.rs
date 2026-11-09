@@ -1,5 +1,3 @@
-//! The page a thread drives: one per window, one owner, and the snapshot it reads.
-
 use std::time::{Duration, Instant};
 
 use gpui_kit::{AnyWindowHandle, App, AppContext as _, AsyncApp, Context, Entity, Window};
@@ -15,11 +13,9 @@ const NO_SESSION: &str = "no browser session; run kg browser open <url> first";
 pub(super) const ENDED: &str = "the browser session ended";
 const IDLE_ENDED: &str = "the browser session ended after 30 idle minutes";
 const BAD_URL: &str = "type a web address, such as example.com";
-/// How long a drive may sit unused before its next command ends it.
 const IDLE: Duration = Duration::from_mins(30);
 const WAIT: Duration = Duration::from_secs(10);
 
-/// Runs one Browser verb for the window's page.
 pub(crate) async fn run(op: BrowserOp, cx: &mut AsyncApp) -> Result<OpResult, OpError> {
     let Some((handle, kagan)) = cx.update(|cx| crate::kagan::front(cx)) else {
         return Err(OpError::Failed(NEEDS_WINDOW.into()));
@@ -197,8 +193,7 @@ async fn act(
     })??;
     let script = super::act::script(&op).map_err(OpError::Invalid)?;
     let text = super::chrome::evaluate(&page, &script, handle, WAIT, cx).await?;
-    // The page's answer is checked for its shape here; its value is not used.
-    let _ = parse_info(&text)?;
+    parse_info(&text)?; // Checks the answer's shape; its value is not used.
     touch(kagan, handle, &page, cx)?;
     Ok(OpResult::Done)
 }
@@ -228,8 +223,7 @@ async fn wait_for_load(
     };
     cx.spawn(async move |cx| {
         cx.background_executor().timer(WAIT).await;
-        // The waiter may have stopped listening; then there is nothing to signal.
-        let _ = signal.try_send(epoch);
+        let _ = signal.try_send(epoch); // The waiter may have stopped listening; then there is nothing to signal.
     })
     .detach();
     while let Ok(got) = wait.recv().await {
@@ -249,7 +243,6 @@ fn touch(
 }
 
 impl Kagan {
-    /// The page this thread drives, after the idle rule and the ownership rule.
     fn require(
         &mut self,
         thread_id: &ThreadId,
@@ -280,7 +273,6 @@ impl Kagan {
             .ok_or_else(|| OpError::NotFound(ENDED.into()))
     }
 
-    /// Gives the page to this thread, or loads the URL in the page it already drives.
     fn begin_open(
         &mut self,
         thread_id: &ThreadId,
@@ -361,7 +353,6 @@ impl Kagan {
         Ok(page)
     }
 
-    /// The page as `open` and `status` report it.
     fn view(
         &mut self,
         thread_id: &ThreadId,
@@ -407,7 +398,6 @@ impl Kagan {
         Ok(())
     }
 
-    /// Ends control and leaves the page as the person's, with its address in the field.
     pub(super) fn end_agent(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(agent) = self.browser.agent.take() else {
             return;
@@ -424,7 +414,6 @@ impl Kagan {
         format!("thread {owner} is driving the browser; close it with kg browser close")
     }
 
-    /// Shows the right sidebar without moving the keyboard, which belongs to the person.
     fn show_right_quiet(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.right_drawn() {
             return;

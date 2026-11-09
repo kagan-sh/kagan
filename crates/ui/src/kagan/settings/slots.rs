@@ -9,7 +9,6 @@ use super::row::{Row, save};
 use crate::kagan::controls::control;
 use crate::ui_registry::Facts;
 
-/// Built-in, or each enabled plugin that offers to fill `slot`. Only this choice fills it.
 pub(super) fn row(kagan: &Kagan, slot: Slot, cx: &App) -> Row {
     let chosen = kagan
         .replaced

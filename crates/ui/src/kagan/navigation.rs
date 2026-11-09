@@ -1,8 +1,7 @@
-use gpui_kit::{App, AppContext as _, Context, Window, actions};
-use kg_core::Workspace;
-use kg_domain::{Op, WindowOp};
+use gpui_kit::{App, Context, Window, actions};
+use kg_domain::WindowOp;
 
-use super::{Kagan, Shown};
+use super::{Kagan, window};
 
 actions!(
     kagan,
@@ -23,60 +22,28 @@ actions!(
 );
 
 pub(super) fn bind(cx: &mut App) {
-    cx.on_action(|_: &NextThread, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::NextThread), cx).detach();
-    });
-    cx.on_action(|_: &PreviousThread, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::PreviousThread), cx).detach();
-    });
-    cx.on_action(|_: &NextThreadNeedingYou, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::NextThreadNeedingYou), cx).detach();
-    });
-    cx.on_action(|_: &Thread1, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::Thread { index: 1 }), cx).detach();
-    });
-    cx.on_action(|_: &Thread2, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::Thread { index: 2 }), cx).detach();
-    });
-    cx.on_action(|_: &Thread3, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::Thread { index: 3 }), cx).detach();
-    });
-    cx.on_action(|_: &Thread4, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::Thread { index: 4 }), cx).detach();
-    });
-    cx.on_action(|_: &Thread5, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::Thread { index: 5 }), cx).detach();
-    });
-    cx.on_action(|_: &Thread6, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::Thread { index: 6 }), cx).detach();
-    });
-    cx.on_action(|_: &Thread7, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::Thread { index: 7 }), cx).detach();
-    });
-    cx.on_action(|_: &Thread8, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::Thread { index: 8 }), cx).detach();
-    });
-    cx.on_action(|_: &Thread9, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::Thread { index: 9 }), cx).detach();
-    });
+    window::bind::<NextThread>(cx, WindowOp::NextThread);
+    window::bind::<PreviousThread>(cx, WindowOp::PreviousThread);
+    window::bind::<NextThreadNeedingYou>(cx, WindowOp::NextThreadNeedingYou);
+    window::bind::<Thread1>(cx, WindowOp::Thread { index: 1 });
+    window::bind::<Thread2>(cx, WindowOp::Thread { index: 2 });
+    window::bind::<Thread3>(cx, WindowOp::Thread { index: 3 });
+    window::bind::<Thread4>(cx, WindowOp::Thread { index: 4 });
+    window::bind::<Thread5>(cx, WindowOp::Thread { index: 5 });
+    window::bind::<Thread6>(cx, WindowOp::Thread { index: 6 });
+    window::bind::<Thread7>(cx, WindowOp::Thread { index: 7 });
+    window::bind::<Thread8>(cx, WindowOp::Thread { index: 8 });
+    window::bind::<Thread9>(cx, WindowOp::Thread { index: 9 });
 }
 
 pub(super) fn perform(op: WindowOp, cx: &mut App) {
-    let Some((handle, kagan)) = super::front(cx) else {
-        return;
-    };
-    let _ = cx.update_window(handle, |_, window, cx| {
-        kagan.update(cx, |this, cx| this.navigate(op, window, cx));
-    });
+    window::with_front(cx, |this, window, cx| this.navigate(op, window, cx));
 }
 
 impl Kagan {
     fn navigate(&mut self, op: WindowOp, window: &mut Window, cx: &mut Context<Self>) {
         let rows = self.sidebar.read(cx).thread_ids(&self.shows(cx), cx);
-        let covered = match self.screen.shown() {
-            Shown::Thread(view) => Some(view.read(cx).thread().clone()),
-            Shown::Nothing | Shown::Start(_) => None,
-        };
+        let covered = self.screen.covered_thread(cx);
         let shown = self.shown_thread(cx);
         let position = rows.iter().position(|id| Some(id) == covered.as_ref());
         let id = match op {

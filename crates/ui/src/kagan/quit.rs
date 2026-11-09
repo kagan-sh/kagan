@@ -227,8 +227,7 @@ fn dock_reply() -> usize {
     0
 }
 
-/// # Safety
-/// `AppKit` calls this on the main thread with the delegate and the application.
+// `AppKit` calls this on the main thread with the delegate and the application.
 #[cfg(target_os = "macos")]
 unsafe extern "C-unwind" fn application_should_terminate(
     _this: *mut objc2::runtime::AnyObject,

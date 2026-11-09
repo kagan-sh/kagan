@@ -1,5 +1,3 @@
-//! The scrolling settings page. Esc or Close returns to the window.
-
 use crate::theme::{SpaceStep, TypeScale as _, control_height, radius_md, space};
 
 mod indexes;
@@ -41,12 +39,10 @@ actions!(
 
 pub(super) const CONTEXT: &str = "KaganSettings";
 
-/// The context of a control the keyboard can reach: a menu entry, a theme card.
 pub(super) const ITEM: &str = "SettingsItem";
 
 const CLOSE: &str = "SettingsClose";
 
-/// Esc goes back. Enter and Space activate the focused control, and the arrows move focus.
 pub(crate) fn bindings() -> Vec<KeyBinding> {
     vec![
         KeyBinding::new("escape", CloseSettings, Some(CONTEXT)),
@@ -68,7 +64,6 @@ pub(super) struct Prefs {
     pub(super) notify: bool,
     pub(super) plugin_status: bool,
     pub(super) update_check: bool,
-    /// Whether the stored preferences have been read once.
     pub(super) loaded: bool,
 }
 
@@ -118,7 +113,6 @@ impl Kagan {
         }
     }
 
-    /// Opens Settings on the Installed page, where plugins are managed.
     pub(super) fn manage_plugins(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open_settings(window, cx);
         let kagan = cx.entity();
@@ -170,8 +164,6 @@ impl Kagan {
         cx.notify();
     }
 
-    /// Mounts a plugin's own settings view, when it declares one. A view is mounted again when
-    /// its plugin has loaded since, and dropped when the plugin declares none.
     fn mount_settings_view(&mut self, id: &PluginId, window: &mut Window, cx: &mut Context<Self>) {
         let Some(host) = PluginHost::try_global(cx) else {
             return;
@@ -213,7 +205,6 @@ impl Kagan {
         }
     }
 
-    /// Reads the sidebar layout and the preferences the window shows, at start and on each change.
     pub(super) fn load_settings(&mut self, cx: &mut Context<Self>) {
         Self::load_layout(cx);
         self.load_prefs(cx);
@@ -221,7 +212,6 @@ impl Kagan {
         self.load_terminal_size(cx);
     }
 
-    /// Reads the preferences the page shows, so a change from `kg` shows at once.
     pub(super) fn load_prefs(&self, cx: &mut Context<Self>) {
         let agent = super::layout::read::<bool>(kg_domain::prefs::AGENT_INTEGRATION, cx);
         let notify = super::layout::read::<bool>(kg_domain::prefs::NOTIFY, cx);
@@ -429,8 +419,6 @@ fn group_block(group: row::Group, cx: &App) -> AnyElement {
     }
 }
 
-/// One row of a card. A wide control, such as the theme cards, sits under its title instead of
-/// beside it, so the title keeps its width.
 fn row_element(
     row: row::Row,
     last: bool,
@@ -439,15 +427,9 @@ fn row_element(
     shortcut: bool,
     cx: &App,
 ) -> AnyElement {
-    let show_text = row.id != "setting-row-install-form";
+    let show_text = !row.bare;
     let noted = !row.note.is_empty();
-    let alias = if row.id == "setting-row-theme" {
-        Some("theme")
-    } else if row.id == "setting-row-mode" {
-        Some("mode")
-    } else {
-        None
-    };
+    let alias = row.alias;
     let note = row
         .note_content
         .unwrap_or_else(|| row.note.clone().into_any_element());

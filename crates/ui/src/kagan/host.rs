@@ -10,7 +10,6 @@ use kg_domain::{PluginId, SurfaceOp};
 use kg_plugins::{Follows, HostUi, HostUiEvent, PluginHost, RunCommand};
 
 impl Kagan {
-    /// Watches the plugin host, so a plugin turned off or updated changes its panel at once.
     pub(super) fn watch_plugins(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // The plugin host starts after the UI's own setup, so the key bindings for its commands are
         // installed here, once the host exists. Installing them again does nothing.
@@ -48,8 +47,6 @@ impl Kagan {
         }
     }
 
-    /// Tells the plugin host which thread and project the window shows. Plugin panels that follow
-    /// the thread read it from there.
     pub(super) fn tell_host(&self, window: &Window, cx: &mut App) {
         let Some(host) = HostUi::global(cx) else {
             return;
@@ -74,8 +71,6 @@ impl Kagan {
             host.set_context(handle, thread, project, focused, &follows, cx);
         });
     }
-    /// A plugin asked the window for something: a thread, a panel, or a toast. Each request gets
-    /// one reply, so the plugin's call returns the result instead of waiting on a dropped sender.
     pub(super) fn host_ui(
         &mut self,
         event: &HostUiEvent,
@@ -85,7 +80,7 @@ impl Kagan {
         match event {
             HostUiEvent::OpenThread { id, reply } => {
                 self.select(id.clone(), window, cx);
-                let _ = reply.try_send(Ok(()));
+                let _ = reply.try_send(Ok(())); // A caller that gave up reads no reply.
             }
             HostUiEvent::OpenPanel {
                 plugin,
@@ -105,17 +100,17 @@ impl Kagan {
                 );
                 match step {
                     Ok(SurfaceCommit::Ready(_)) => {
-                        let _ = reply.try_send(Ok(()));
+                        let _ = reply.try_send(Ok(())); // A caller that gave up reads no reply.
                     }
                     Ok(SurfaceCommit::Paint) => {
                         let kagan = cx.entity();
                         surface::schedule_settle(kagan, window, cx, move |settled| {
                             let _ = reply
-                                .try_send(settled.map(|_| ()).map_err(|error| error.to_string()));
+                                .try_send(settled.map(|_| ()).map_err(|error| error.to_string())); // A caller that gave up reads no reply.
                         });
                     }
                     Err(error) => {
-                        let _ = reply.try_send(Err(error.to_string()));
+                        let _ = reply.try_send(Err(error.to_string())); // A caller that gave up reads no reply.
                     }
                 }
             }
@@ -137,7 +132,7 @@ impl Kagan {
                     },
                     cx,
                 );
-                let _ = reply.try_send(Ok(()));
+                let _ = reply.try_send(Ok(())); // A caller that gave up reads no reply.
             }
             HostUiEvent::Comment {
                 plugin,
@@ -146,7 +141,7 @@ impl Kagan {
             } => {
                 let window = window.window_handle().window_id();
                 if let Some(saved) = self.plugin_comment(plugin, comment, window, cx) {
-                    let _ = reply.try_send(saved);
+                    let _ = reply.try_send(saved); // A caller that gave up reads no reply.
                 }
             }
             HostUiEvent::PostPage {
@@ -155,7 +150,7 @@ impl Kagan {
                 message,
                 reply,
             } => {
-                let _ = reply.try_send(web_panel::deliver(plugin, panel, message, cx));
+                let _ = reply.try_send(web_panel::deliver(plugin, panel, message, cx)); // A caller that gave up reads no reply.
             }
         }
     }
@@ -177,7 +172,6 @@ impl Kagan {
         }
     }
 
-    /// A plugin command bound to a key or a toast. It runs in the thread and project on screen.
     pub(super) fn run_command(
         &mut self,
         action: &RunCommand,

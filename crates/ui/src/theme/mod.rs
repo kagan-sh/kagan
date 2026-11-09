@@ -9,7 +9,6 @@ pub(crate) const MARK_ENDED: f32 = 8.;
 pub(crate) const MARK_IDLE: f32 = 4.;
 const REM_BASE: f32 = 16.;
 
-/// A spacing step, named as the theme file names it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SpaceStep {
     Xs,

@@ -171,7 +171,6 @@ pub(super) fn thread_scroll_index(row_order: &[String], id: &str) -> Option<usiz
     row_order.iter().position(|row| row == id)
 }
 
-// `shown` is none on a page or in the archive, where no thread row is selected.
 struct Scope<'a> {
     sidebar: &'a Sidebar,
     cx: &'a App,

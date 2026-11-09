@@ -81,15 +81,13 @@ fn publish(
         return;
     }
     let result = captured(window, path, true);
-    let _ = sender.try_send(result);
+    let _ = sender.try_send(result); // The caller may have stopped waiting; then no one reads the result.
 }
 
-/// Draws a fresh frame, then captures it.
-///
-/// A covered, minimized, or sleeping window stops its display link, so
-/// `on_next_frame` never runs. Capture the last presented buffer instead of
-/// waiting for a frame that will not come. If a visible window still does not
-/// present, capture that buffer rather than failing the screenshot.
+// A covered, minimized, or sleeping window stops its display link, so
+// `on_next_frame` never runs. Capture the last presented buffer instead of
+// waiting for a frame that will not come. If a visible window still does not
+// present, capture that buffer rather than failing the screenshot.
 async fn capture_after_present(
     index: u32,
     path: PathBuf,
@@ -140,7 +138,7 @@ async fn capture_after_present(
             let result = cx
                 .update_window(handle, |_, window, _| captured(window, &path, false))
                 .unwrap_or_else(|_| Err(closed()));
-            let _ = sender.try_send(result);
+            let _ = sender.try_send(result); // The caller may have stopped waiting; then no one reads the result.
         }
     })
     .detach();
@@ -296,9 +294,6 @@ mod macos {
         run(OsStr::new("screencapture"), number, path)
     }
 
-    /// Captures window `number` with `program` into a new file beside `path`, then moves it over
-    /// `path`. A destination that already holds an image is only replaced by a capture that wrote
-    /// one in this run.
     fn run(program: &OsStr, number: isize, path: &Path) -> Result<(), OpError> {
         let folder = match path.parent() {
             Some(parent) if !parent.as_os_str().is_empty() => parent,
@@ -316,8 +311,7 @@ mod macos {
             .map_err(|error| OpError::Failed(error.to_string()));
         let finished = output.and_then(|output| finish(&output, &staged, path));
         if finished.is_err() {
-            // Best effort: the staged file is temporary, and the error to report is `finished`.
-            let _ = std::fs::remove_file(&staged);
+            let _ = std::fs::remove_file(&staged); // Best effort: the staged file is temporary, and the error to report is `finished`.
         }
         finished
     }
@@ -335,7 +329,6 @@ mod macos {
         std::fs::rename(staged, path).map_err(OpError::from)
     }
 
-    /// The reason `screencapture` gave in its own words, or its exit status when it gave none.
     fn failure(stderr: &[u8], status: ExitStatus) -> String {
         let reason = String::from_utf8_lossy(stderr);
         let reason = reason.trim();
@@ -392,7 +385,7 @@ mod windows {
         // SAFETY: both handles are live and the bitmap is deleted below.
         let bitmap = unsafe { CreateCompatibleBitmap(hdc, width, height) };
         // SAFETY: both handles are live and the bitmap is compatible with the DC.
-        let _ = unsafe { SelectObject(mem_dc, HGDIOBJ(bitmap.0)) };
+        let _ = unsafe { SelectObject(mem_dc, HGDIOBJ(bitmap.0)) }; // Returns the old object, which is not needed.
         let printed =
             // SAFETY: `hwnd` is live and `mem_dc` is a compatible memory DC.
             unsafe { PrintWindow(hwnd, mem_dc, PRINT_WINDOW_FLAGS(PW_RENDERFULLCONTENT)) };
@@ -426,9 +419,9 @@ mod windows {
         };
         // SAFETY: each handle was created above and is released exactly once here.
         unsafe {
-            let _ = DeleteObject(HGDIOBJ(bitmap.0));
-            let _ = DeleteDC(mem_dc);
-            let _ = ReleaseDC(Some(hwnd), hdc);
+            let _ = DeleteObject(HGDIOBJ(bitmap.0)); // Cleanup: nothing to undo if it fails.
+            let _ = DeleteDC(mem_dc); // Cleanup: nothing to undo if it fails.
+            let _ = ReleaseDC(Some(hwnd), hdc); // Cleanup: nothing to undo if it fails.
         }
         printed
             .ok()

@@ -59,7 +59,6 @@ impl Kagan {
         });
     }
 
-    /// A drag ended: keep the widths the sidebars have now. Resizes in Settings are not kept.
     pub(in crate::kagan) fn resized(&mut self, cx: &mut Context<Self>) {
         if self.in_settings() || self.settling || self.hidden_by_width() {
             return;

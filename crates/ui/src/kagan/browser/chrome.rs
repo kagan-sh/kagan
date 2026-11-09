@@ -1,5 +1,3 @@
-//! Back, forward, reload, and open-in-the-system-browser for the Browser tab.
-
 use super::Kagan;
 use {
     crate::kagan::controls::control,
@@ -244,7 +242,7 @@ pub(super) async fn evaluate(
     .map_err(|_| OpError::NotFound(super::agent::ENDED.into()))??;
     cx.spawn(async move |cx| {
         cx.background_executor().timer(wait).await;
-        let _ = sender.try_send(None);
+        let _ = sender.try_send(None); // The waiter may have stopped listening; then there is nothing to tell.
     })
     .detach();
     match receiver.recv().await {

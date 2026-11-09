@@ -46,8 +46,6 @@ impl Kagan {
         thread.archived_at.is_none().then_some(thread)
     }
 
-    /// Opens the shown thread's actions menu with focus in it. The button and the shortcut both
-    /// come here. An archived thread, or no visibly shown thread, has no menu.
     pub(super) fn open_thread_actions(
         &mut self,
         _: &ThreadActions,
@@ -109,14 +107,12 @@ impl Kagan {
         cx.notify();
     }
 
-    // Closes both thread menus: the title's and a sidebar row's.
     pub(super) fn dismiss_thread_menus(&mut self, cx: &mut Context<Self>) {
         self.actions_menu = None;
         self.sidebar
             .update(cx, |sidebar, _| sidebar.close_row_menu());
     }
 
-    /// Closes the actions menu and gives focus back to the thread's terminal.
     pub(super) fn close_thread_actions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.actions_menu = None;
         self.focus_work(window, cx);
@@ -173,21 +169,17 @@ impl Kagan {
             _ = this.update(cx, |this, _| this.title_watch = None);
         })
         .detach();
-        let task = Workspace::dispatch(Op::Thread(ThreadOp::Rename { id, title }), cx);
-        let window = window.window_handle();
-        cx.spawn(async move |this, cx| {
-            let result = task.await;
-            _ = cx.update_window(window, |_, _, cx| {
-                _ = this.update(cx, |this, cx| {
-                    this.note = match result {
-                        Ok(_) => None,
-                        Err(error) => Some(format!("Could not rename the thread: {error}").into()),
-                    };
-                    cx.notify();
-                });
-            });
-        })
-        .detach();
+        self.run_then(
+            Op::Thread(ThreadOp::Rename { id, title }),
+            cx,
+            |this, result, _, cx| {
+                this.note = match result {
+                    Ok(_) => None,
+                    Err(error) => Some(format!("Could not rename the thread: {error}").into()),
+                };
+                cx.notify();
+            },
+        );
     }
 
     pub(super) fn close_rename(&mut self) {

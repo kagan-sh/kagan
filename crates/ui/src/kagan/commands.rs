@@ -1,5 +1,3 @@
-//! The command list: every window command, with its live key, and thread search.
-
 use std::rc::Rc;
 
 use crate::theme::TypeScale as _;
@@ -74,20 +72,15 @@ pub(super) fn perform(op: WindowOp, cx: &mut App) {
     if super::show(cx).is_err() {
         return;
     }
-    let Some((handle, kagan)) = super::front(cx) else {
-        return;
-    };
-    _ = cx.update_window(handle, |_, window, cx| {
-        kagan.update(cx, |this, cx| this.open_commands(mode, window, cx));
-    });
+    super::window::with_front(cx, |this, window, cx| this.open_commands(mode, window, cx));
 }
 
 pub(super) fn open_list(_: &OpenCommandList, _: &mut Window, cx: &mut App) {
-    Workspace::dispatch(Op::Window(WindowOp::CommandList), cx).detach();
+    super::window::dispatch(WindowOp::CommandList, cx);
 }
 
 pub(super) fn search_threads(_: &SearchThreads, _: &mut Window, cx: &mut App) {
-    Workspace::dispatch(Op::Window(WindowOp::SearchThreads), cx).detach();
+    super::window::dispatch(WindowOp::SearchThreads, cx);
 }
 
 pub(super) fn rail_button(cx: &App) -> impl IntoElement {
@@ -103,7 +96,7 @@ pub(super) fn rail_button(cx: &App) -> impl IntoElement {
             .accessibility_label("Command list")
             .tooltip(tip)
             .on_click(|_, _, cx| {
-                Workspace::dispatch(Op::Window(WindowOp::CommandList), cx).detach();
+                super::window::dispatch(WindowOp::CommandList, cx);
             }),
     )
 }
