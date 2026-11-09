@@ -271,7 +271,7 @@ fn git_with_ssh<'a>(
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
-fn git_command<'a>(
+pub(crate) fn git_command<'a>(
     cwd: Option<&Path>,
     args: impl IntoIterator<Item = &'a OsStr>,
     stop: &async_channel::Receiver<()>,
