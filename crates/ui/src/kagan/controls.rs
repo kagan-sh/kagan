@@ -124,20 +124,23 @@ pub(super) fn dispatch(
     move |_, window, cx| window.dispatch_action(action.boxed_clone(), cx)
 }
 
-pub(super) fn bound_keys(action: &dyn Action, cx: &App) -> String {
+pub(super) fn bound_strokes(action: &dyn Action, cx: &App) -> Vec<Keystroke> {
     cx.key_bindings()
         .borrow()
         .bindings()
         .find(|binding| binding.action().partial_eq(action))
         .map(|binding| {
-            keys_text(
-                binding
-                    .keystrokes()
-                    .iter()
-                    .map(gpui_kit::KeybindingKeystroke::inner),
-            )
+            binding
+                .keystrokes()
+                .iter()
+                .map(|stroke| stroke.inner().clone())
+                .collect()
         })
         .unwrap_or_default()
+}
+
+pub(super) fn bound_keys(action: &dyn Action, cx: &App) -> String {
+    keys_text(&bound_strokes(action, cx))
 }
 
 pub(super) fn keys_text<'a>(strokes: impl IntoIterator<Item = &'a Keystroke>) -> String {

@@ -128,13 +128,24 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.open_start(&project, window, cx);
+        self.load_branches(project, cx);
+    }
+
+    // Opens the new-thread screen for a project. It does not read the project's branches.
+    pub(super) fn open_start(
+        &mut self,
+        project: &ProjectId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.cancel_plugin_start();
         self.start_on_load = None;
         self.show_work(Shown::Start(project.clone()), window, cx);
         self.sidebar
             .update(cx, |sidebar, _| sidebar.choose(Some(project.clone())));
         self.start.reset();
-        self.load_branches(project, cx);
+        self.remember_worktree_root(cx);
         self.picker.update(cx, |picker, cx| picker.load(window, cx));
         self.picker
             .update(cx, |picker, cx| picker.focus(window, cx));

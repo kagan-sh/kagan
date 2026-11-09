@@ -105,11 +105,18 @@ impl ListDelegate for Rows {
         _: &mut Window,
         cx: &mut Context<ListState<Self>>,
     ) -> impl IntoElement {
+        let text = format!(
+            "No program matches “{}”. Clear the search to see them all.",
+            self.query
+        );
         div()
+            .id("program-empty")
+            .ui_container()
             .p_2()
             .type_body(cx)
             .text_color(cx.theme().muted_foreground)
-            .child(format!("No program matches “{}”.", self.query))
+            .aria_label(text.clone())
+            .child(text)
     }
 }
 
@@ -168,18 +175,39 @@ pub(super) fn custom_field(
         )
 }
 
-pub(super) fn status_line(program: &Program) -> String {
-    if program.installed() {
-        // Only the first line of a version: a row must stay one line tall.
-        program
-            .version
-            .as_deref()
-            .unwrap_or_default()
-            .lines()
-            .next()
-            .unwrap_or_default()
-            .to_owned()
-    } else {
-        "Not installed".to_owned()
+// The number alone: the first word that starts with a digit, without a build suffix or the
+// punctuation after it, so `codex-cli 0.16.0` shows `0.16.0` and `GitHub Copilot 1.0.10.` shows
+// `1.0.10`. The full first line is the tooltip.
+pub(super) struct Version {
+    pub(super) shown: String,
+    pub(super) full: Option<String>,
+}
+
+pub(super) fn version_of(program: &Program) -> Version {
+    if !program.installed() {
+        return Version {
+            shown: "Not installed".to_owned(),
+            full: None,
+        };
+    }
+    let line = program
+        .version
+        .as_deref()
+        .unwrap_or_default()
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim();
+    let number = line
+        .split_whitespace()
+        .find(|word| word.starts_with(|c: char| c.is_ascii_digit()))
+        .unwrap_or_default()
+        .split(['-', '+'])
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches(|c: char| !c.is_ascii_alphanumeric());
+    Version {
+        shown: number.to_owned(),
+        full: (!line.is_empty()).then(|| line.to_owned()),
     }
 }

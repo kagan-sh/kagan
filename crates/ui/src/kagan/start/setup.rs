@@ -1,13 +1,12 @@
 use crate::theme::TypeScale as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{Disableable as _, Sizable as _, v_flex};
+use gpui_kit::component::{Sizable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, div,
 };
-use kg_domain::OpError;
 
 use super::{StartFolder, setup_announcement, setup_script};
 use crate::kagan::Kagan;
@@ -36,7 +35,8 @@ impl Kagan {
                 Button::new("setup-disclose-button")
                     .small()
                     .ghost()
-                    .label(name)
+                    .px_0()
+                    .child(div().type_body(cx).child(name))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.start.setup_open = !this.start.setup_open;
                         cx.notify();
@@ -72,26 +72,8 @@ impl Kagan {
             .into_any_element()
     }
 
-    pub(super) fn setup_retry(&self, cx: &mut Context<Self>) -> AnyElement {
-        let name = "Retry setup in this worktree";
-        control(
-            "setup-retry",
-            Facts {
-                disabled: self.start.starting,
-                ..Facts::button(name)
-            },
-            Button::new("setup-retry-button")
-                .small()
-                .outline()
-                .label(name)
-                .disabled(self.start.starting)
-                .on_click(cx.listener(|this, _, window, cx| this.start(window, cx))),
-        )
-        .into_any_element()
-    }
-
     pub(super) fn setup_block(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if self.chosen_folder() != Some(StartFolder::Worktree) {
+        if self.start.reuse.is_some() || self.chosen_folder() != Some(StartFolder::Worktree) {
             return None;
         }
         let muted = cx.theme().muted_foreground;
@@ -105,9 +87,6 @@ impl Kagan {
         }
         if let Some(failure) = &self.start.setup_failure {
             rows.push(note("setup-failure", failure.to_string(), failed, cx));
-            if !matches!(failure, OpError::SetupChanged(_)) {
-                rows.push(self.setup_retry(cx));
-            }
         }
         (!rows.is_empty()).then(|| {
             v_flex()

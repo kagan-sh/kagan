@@ -48,8 +48,8 @@ pub(in crate::tests) use setup::commit_setup;
 pub(in crate::tests) use start::press_key;
 pub(in crate::tests) use support::{
     app_then, click, click_within, count_repaints, git, grid_text, host_grid, host_then, input,
-    pending, run_child, run_program, set_preference, setup, thread_record, thread_status,
-    wait_for_shell, wait_until,
+    pending, run_child, run_program, scroll_form_to_end, set_preference, setup, thread_record,
+    thread_status, wait_for_shell, wait_until,
 };
 pub(crate) use support::{open, run_shell};
 pub(in crate::tests) use surfaces::{

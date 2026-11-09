@@ -168,6 +168,17 @@ pub(crate) fn install_keys(cx: &mut App) {
         ),
         KeyBinding::new(
             "escape",
+            super::start::LeaveStart,
+            Some(super::start::START_CONTEXT),
+        ),
+        KeyBinding::new(
+            "enter",
+            super::start::StartThread,
+            Some(super::start::START_CONTEXT),
+        ),
+        KeyBinding::new("enter", NoAction, Some(super::start::CONTROLS_CONTEXT)),
+        KeyBinding::new(
+            "escape",
             super::ask_form::DismissAskPopup,
             Some(super::ask_form::CONTEXT),
         ),

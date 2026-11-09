@@ -34,7 +34,7 @@ impl Kagan {
         v_flex()
             .w_full()
             .gap_1()
-            .items_start()
+            .items_stretch()
             .child(control(
                 "branch-from",
                 Facts {
@@ -58,6 +58,7 @@ impl Kagan {
                                     .flex_1()
                                     .min_w_0()
                                     .text_ellipsis()
+                                    .type_body(cx)
                                     .child(label.clone()),
                             )
                             .child(Icon::new(IconName::ChevronDown).small().text_color(muted)),

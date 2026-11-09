@@ -71,6 +71,9 @@ impl Kagan {
     }
 
     pub(super) fn setup_ready(&self) -> bool {
+        if self.start.reuse.is_some() {
+            return true;
+        }
         match self.chosen_folder() {
             Some(StartFolder::Worktree) => self.start.setup.is_some(),
             Some(StartFolder::Project) | None => true,
@@ -90,6 +93,11 @@ impl Kagan {
     }
 
     pub(super) fn start_environment(&self, kind: ProjectKind, cx: &App) -> Option<EnvironmentSpec> {
+        if let Some(reuse) = &self.start.reuse {
+            return Some(EnvironmentSpec::Reuse {
+                environment_id: reuse.environment.clone(),
+            });
+        }
         match kind {
             ProjectKind::Personal => Some(EnvironmentSpec::Personal),
             ProjectKind::Standard => match self.chosen_folder()? {

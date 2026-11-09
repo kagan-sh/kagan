@@ -9,7 +9,7 @@ use crate::kagan::Kagan;
 use crate::tests::kagan::{add_project, click, label, open, shows, wait_until};
 #[cfg(unix)]
 use crate::tests::kagan::{
-    focused_of, role_of, selected_of, shown, thread_record, threads_in, value_of,
+    committed_repo, focused_of, role_of, selected_of, shown, thread_record, threads_in, value_of,
 };
 #[cfg(unix)]
 use gpui_kit::Entity;
@@ -26,13 +26,16 @@ use std::path::PathBuf;
 /// in a new folder under `data`. Each fake prints its own name and its arguments, so a thread's screen shows which
 /// program ran. Returns the folder.
 #[cfg(unix)]
-fn fixture_programs(cx: &mut TestAppContext, data: &Path, names: &[&str]) -> PathBuf {
+pub(crate) fn fixture_programs(cx: &mut TestAppContext, data: &Path, names: &[&str]) -> PathBuf {
     use std::os::unix::fs::PermissionsExt as _;
     let bin = data.join("programs");
     std::fs::create_dir_all(&bin).unwrap();
     for name in names.iter().copied().chain(["fixture-shell"]) {
         let path = bin.join(name);
-        std::fs::write(&path, format!("#!/bin/sh\necho \"FIXTURE {name} $*\"\n")).unwrap();
+        let script = format!(
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"{name} 1.2.3 (fixture build)\"; else echo \"FIXTURE {name} $*\"; fi\n"
+        );
+        std::fs::write(&path, script).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
     let shell = bin.join("fixture-shell");
@@ -278,6 +281,70 @@ fn the_selected_row_is_marked_on_screen_and_in_words(cx: &mut TestAppContext) {
     assert_eq!(label(cx, window, "program-codex"), "Codex");
 }
 
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_search_with_no_match_says_what_to_do_and_gives_no_second_reason(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let _bin = fixture_programs(cx, data.path(), &["codex"]);
+    start_in_plain_folder(cx, window, data.path());
+    search(cx, window, &kagan, "zzz");
+    wait_until(cx, |cx| label(cx, window, "program-empty").contains("zzz"));
+    assert_eq!(
+        label(cx, window, "program-empty"),
+        "No program matches “zzz”. Clear the search to see them all."
+    );
+    assert!(!shows(cx, window, "program-reason"));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_known_agent_row_shows_its_version_and_a_shell_row_shows_its_command(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let bin = fixture_programs(cx, data.path(), &["codex"]);
+    start_in_plain_folder(cx, window, data.path());
+    wait_until(cx, |cx| {
+        label(cx, window, "program-version-codex") == "1.2.3"
+    });
+    assert!(!shows(cx, window, "program-command-codex"));
+    let shell = bin.join("fixture-shell").display().to_string();
+    assert_eq!(
+        label(cx, window, &format!("program-command-{shell}")),
+        shell
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn the_start_title_stays_put_when_the_custom_command_opens(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let _bin = fixture_programs(cx, data.path(), &["codex"]);
+    start_in_plain_folder(cx, window, data.path());
+    let (_, closed_y, _, _) = bounds(cx, window, "start-prompt").unwrap();
+    click(cx, window, "custom-command-toggle");
+    wait_until(cx, |cx| shows(cx, window, "custom-program"));
+    let (_, open_y, _, _) = bounds(cx, window, "start-prompt").unwrap();
+    assert_close(open_y, closed_y, "the title");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn start_sits_under_the_last_field_and_on_screen_in_a_worktree(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let (_repo, project) = committed_repo(cx, data.path());
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "worktree-hint"));
+    let (_, hint_y, _, hint_height) = bounds(cx, window, "worktree-hint").unwrap();
+    let (_, start_y, _, start_height) = bounds(cx, window, "start").unwrap();
+    let gap = start_y - (hint_y + hint_height);
+    assert!((0. ..=24.).contains(&gap), "gap {gap}");
+    assert!(
+        start_y + start_height <= 720.,
+        "start ends at {}",
+        start_y + start_height
+    );
+    assert!(shows(cx, window, "start"));
+}
+
 #[gpui_kit::test]
 fn the_program_form_keeps_a_readable_width_and_reads_top_down(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
@@ -286,8 +353,8 @@ fn the_program_form_keeps_a_readable_width_and_reads_top_down(cx: &mut TestAppCo
         cx.simulate_window_resize(window, size(px(width), px(720.)));
         cx.run_until_parked();
         let (list_x, list_y, list_width, _) = bounds(cx, window, "program-list").unwrap();
-        // The form is capped at 32rem, so it never stretches across a wide window.
-        assert!(list_width <= 32. * 16. + 1., "list {list_width} at {width}");
+        // The form is capped at 40rem, so it never stretches across a wide window.
+        assert!(list_width <= 40. * 16. + 1., "list {list_width} at {width}");
         assert!(
             list_x + list_width <= width + 0.5,
             "list leaves the window at {width}"
@@ -609,24 +676,50 @@ fn assert_close(actual: f32, expected: f32, what: &str) {
 
 #[cfg(unix)]
 #[gpui_kit::test]
-fn a_short_result_is_one_row_and_a_long_one_shows_five(cx: &mut TestAppContext) {
+fn a_short_result_is_one_row_and_a_long_one_shows_eight(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
     fixture_programs(cx, data.path(), &ROW_NAMES);
     start_in_plain_folder(cx, window, data.path());
     let row = row_height(cx, window);
     let all = list_height(cx, window);
     search(cx, window, &kagan, "codex");
-    // Five rows show four more rows than the one row a search leaves.
+    // Eight rows show seven more rows than the one row a search leaves.
     assert_close(
         all - list_height(cx, window),
-        4. * row,
-        "five rows minus one",
+        7. * row,
+        "eight rows minus one",
     );
 }
 
 #[cfg(unix)]
 #[gpui_kit::test]
-fn larger_text_makes_the_rows_taller_and_the_five_row_cap_follows(cx: &mut TestAppContext) {
+fn a_list_longer_than_its_rows_says_how_many_more_there_are(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    fixture_programs(
+        cx,
+        data.path(),
+        &[
+            "claude",
+            "codex",
+            "gemini",
+            "opencode",
+            "cursor-agent",
+            "amp",
+            "copilot",
+            "kimi",
+        ],
+    );
+    start_in_plain_folder(cx, window, data.path());
+    wait_until(cx, |cx| shows(cx, window, "program-more"));
+    assert_eq!(
+        label(cx, window, "program-more"),
+        "1 more. Type to search, or scroll."
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn larger_text_makes_the_rows_taller_and_the_eight_row_cap_follows(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
     // kagan has no text-size setting, so larger text is the theme's base font size. It is set
     // before the picker opens, so the rows are measured once, at that size.
@@ -639,7 +732,7 @@ fn larger_text_makes_the_rows_taller_and_the_five_row_cap_follows(cx: &mut TestA
     search(cx, window, &kagan, "codex");
     assert_close(
         all - list_height(cx, window),
-        4. * row,
+        7. * row,
         "cap at larger text",
     );
 }
@@ -766,6 +859,103 @@ fn an_offscreen_default_program_is_visible_when_the_picker_opens(cx: &mut TestAp
     let row = format!("program-{shell}");
     wait_until(cx, |cx| shows(cx, window, &row));
     assert_eq!(selected_of(cx, window, &row), Some(true));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_version_shows_its_number_without_its_build_suffix_or_full_stop(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let bin = fixture_programs(cx, data.path(), &["codex", "copilot"]);
+    std::fs::write(
+        bin.join("codex"),
+        "#!/bin/sh\necho \"codex-cli 0.16.0-beta+build.7\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        bin.join("copilot"),
+        "#!/bin/sh\necho \"GitHub Copilot 1.0.10.\"\n",
+    )
+    .unwrap();
+    start_in_plain_folder(cx, window, data.path());
+    wait_until(cx, |cx| {
+        label(cx, window, "program-version-copilot") == "1.0.10"
+    });
+    assert_eq!(label(cx, window, "program-version-codex"), "0.16.0");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn the_custom_command_label_starts_on_the_program_names(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    fixture_programs(cx, data.path(), &["codex"]);
+    start_in_plain_folder(cx, window, data.path());
+    let (name_x, _, _, _) = bounds(cx, window, "program-name-codex").unwrap();
+    let (label_x, _, _, _) = bounds(cx, window, "custom-command-label").unwrap();
+    assert_close(label_x, name_x, "the custom command label");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn reopening_the_screen_closes_the_custom_command(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let _bin = fixture_programs(cx, data.path(), &["codex"]);
+    let project = start_in_plain_folder(cx, window, data.path());
+    click(cx, window, "custom-command-toggle");
+    wait_until(cx, |cx| shows(cx, window, "custom-program"));
+    click(cx, window, &format!("project-new-{}", project.0));
+    wait_until(cx, |cx| shows(cx, window, "program-search"));
+    assert!(!shows(cx, window, "custom-program"));
+}
+
+/// Whether the row sits fully inside the program list's visible rows.
+#[cfg(unix)]
+fn in_program_list(cx: &mut TestAppContext, window: AnyWindowHandle, row: &str) -> bool {
+    let (Some((_, y, _, height)), Some((_, list_y, _, list_height))) =
+        (bounds(cx, window, row), bounds(cx, window, "program-list"))
+    else {
+        return false;
+    };
+    y >= list_y && y + height <= list_y + list_height
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_selected_program_below_the_cap_is_in_view_on_every_open(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let bin = fixture_programs(cx, data.path(), &ROW_NAMES);
+    let shell = bin.join("fixture-shell").display().to_string();
+    let run = Run {
+        project_id: ProjectId("personal".into()),
+        program: shell.clone(),
+        title: None,
+        environment: EnvironmentSpec::Personal,
+        visibility: None,
+        parent_thread_id: None,
+        lifecycle_owner_thread_id: None,
+        metadata: None,
+    };
+    let started = cx.update(|cx| Workspace::dispatch(Op::Thread(ThreadOp::Run(run)), cx));
+    cx.foreground_executor().block_test(started).unwrap();
+    cx.run_until_parked();
+    let project = start_in_plain_folder(cx, window, data.path());
+    let row = format!("program-{shell}");
+    wait_until(cx, |cx| in_program_list(cx, window, &row));
+    // The person scrolls the list up, then leaves and comes back.
+    cx.update_window(window, |_, window, cx| {
+        crate::ui_dispatch::scroll_within(
+            window,
+            &ElementId::Name("program-list".into()),
+            None,
+            gpui_kit::ScrollDelta::Pixels(gpui_kit::point(gpui_kit::px(0.), gpui_kit::px(2000.))),
+            cx,
+        )
+        .unwrap();
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.simulate_keystrokes(window, "escape");
+    click(cx, window, &format!("project-new-{}", project.0));
+    wait_until(cx, |cx| in_program_list(cx, window, &row));
 }
 
 #[cfg(unix)]

@@ -65,7 +65,10 @@ impl Picker {
         }
     }
 
+    // Each opening of the screen starts with the program list, so a custom command stays closed.
+    // The search is kept, as the docs say.
     pub(crate) fn load(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.set_mode(Mode::Catalog, cx);
         self.state = Programs::Loading;
         self.list
             .update(cx, |list, _| list.delegate_mut().loading = true);
@@ -162,6 +165,7 @@ impl Picker {
             }
             let selected = rows.selected.map(IndexPath::new);
             state.set_selected_index(selected, window, cx);
+            state.scroll_to_selected_item(window, cx);
         });
     }
 

@@ -23,7 +23,7 @@ enum Programs {
     Failed(String),
 }
 
-const LIST_ROWS: u16 = 5;
+const LIST_ROWS: u16 = 8;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 enum Mode {

@@ -1,17 +1,17 @@
 use gpui_kit::component::input::InputState;
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext as _, AsyncApp, Entity, FocusHandle, Subscription, Task,
-    WeakEntity,
+    AnyWindowHandle, App, AppContext as _, AsyncApp, Context, Entity, FocusHandle, Subscription,
+    Task, WeakEntity, Window, actions,
 };
 use kg_core::Workspace;
 use kg_domain::{
-    BranchList, EnvironmentOp, Op, OpError, OpResult, PinnedSetup, ProjectId, ProjectKind,
-    SetupFile, ThreadId, ThreadOp,
+    BranchList, EnvironmentId, EnvironmentOp, EnvironmentStatus, Op, OpError, OpResult,
+    PinnedSetup, ProjectId, ProjectKind, SetupFile, ThreadId, ThreadOp,
 };
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use super::Kagan;
+use super::{Kagan, Shown};
 
 pub(super) const PLUGIN_PROMPT: &str = "Build a kagan plugin that ";
 const NO_AGENT: &str = "No agent is installed, so kagan cannot start a plugin thread. Install Claude Code or Codex, then try again.";
@@ -64,13 +64,58 @@ fn setup_script(setup: &PinnedSetup) -> Option<(&str, bool)> {
     (!setup.text.is_empty()).then_some((setup.text.as_str(), setup.truncated))
 }
 
+// A new thread that runs in the folder of an ended thread. Its folder is not chosen here.
+#[derive(Clone)]
+pub(super) struct Reuse {
+    project: ProjectId,
+    thread: ThreadId,
+    environment: EnvironmentId,
+    title: String,
+    name: String,
+    shown: String,
+}
+
+impl Reuse {
+    // The ended thread's folder, when core would run a new thread in it: the folder must exist,
+    // belong to the thread's project, and be ready.
+    pub(super) fn of(thread: &ThreadId, cx: &App) -> Option<Self> {
+        let workspace = Workspace::global(cx).read(cx);
+        let record = workspace.thread(thread)?.read(cx).record().clone();
+        let environment_id = record.environment_id.clone()?;
+        let environment = workspace.environment(&environment_id)?.read(cx).record();
+        if environment.project_id != record.project_id
+            || environment.status != EnvironmentStatus::Ready
+        {
+            return None;
+        }
+        let name = environment
+            .path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        Some(Self {
+            project: record.project_id,
+            thread: thread.clone(),
+            environment: environment_id,
+            title: record.title,
+            name,
+            shown: folder::shown_path(&environment.path),
+        })
+    }
+}
+
 #[derive(Default)]
 pub(super) struct StartState {
+    reuse: Option<Reuse>,
+    // The data folder's worktrees, as the line under "Runs in" shows it. Set once when the screen opens.
+    pub(super) worktree_root: String,
     folder: Option<StartFolder>,
     pick: BranchPick,
     intent: ProjectIntent,
     panel: Panel,
     pub(super) branch_focus: Option<FocusHandle>,
+    pub(super) segments_focus: Option<FocusHandle>,
+    pub(super) form_focus: Option<FocusHandle>,
     branch_query: Option<Entity<InputState>>,
     branch_watch: Option<Subscription>,
     branches: Branches,
@@ -89,6 +134,7 @@ pub(super) struct StartState {
 
 impl StartState {
     pub(super) fn reset(&mut self) {
+        self.reuse = None;
         self.folder = None;
         self.pick = BranchPick::Current;
         self.intent = ProjectIntent::Current;
@@ -101,6 +147,13 @@ impl StartState {
         self.setup = None;
         self.setup_open = false;
         self.setup_failure = None;
+    }
+}
+
+impl StartState {
+    // The ended thread the screen came from, so leaving the screen returns to it.
+    pub(super) fn take_reuse_thread(&mut self) -> Option<ThreadId> {
+        self.reuse.take().map(|reuse| reuse.thread)
     }
 }
 
@@ -211,3 +264,97 @@ mod render;
 mod setup;
 
 pub(super) use menu::{BRANCH_CONTEXT, CloseBranchMenu};
+
+pub(crate) const START_CONTEXT: &str = "NewThreadScreen";
+// The form's controls. Enter is theirs (a focused button activates itself), so this context
+// stops the screen's Enter binding from reaching them.
+pub(crate) const CONTROLS_CONTEXT: &str = "NewThreadControls";
+
+actions!(kagan, [LeaveStart, StartThread]);
+
+#[cfg(test)]
+impl Kagan {
+    pub(crate) fn focus_start_form(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(form) = &self.start.form_focus {
+            window.focus(form, cx);
+        }
+    }
+}
+
+impl Kagan {
+    // Enter starts the thread only when Start is enabled, the same test that draws it enabled.
+    pub(super) fn start_thread(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Shown::Start(project) = self.screen.shown() else {
+            return;
+        };
+        let kind = project_kind(project, cx);
+        if self.start_ready(kind, cx) {
+            self.start(window, cx);
+        }
+    }
+
+    pub(super) fn start_ready(&self, kind: Option<ProjectKind>, cx: &App) -> bool {
+        kind.is_some_and(|kind| self.start_environment(kind, cx).is_some())
+            && self.setup_ready()
+            && !self.start.starting
+            && self.picker.read(cx).command(cx).is_ok()
+    }
+
+    // Escape first closes an open branch menu, and leaves the screen only when none was open.
+    pub(super) fn escape_start(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.close_branch_menu(window, cx) {
+            cx.notify();
+            return;
+        }
+        self.leave_start(window, cx);
+    }
+
+    // Cancel leaves the screen, and a branch menu open over it closes with it.
+    pub(super) fn leave_start(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.close_branch_menu(window, cx);
+        if let Some(thread) = self.start.take_reuse_thread() {
+            self.select(thread, window, cx);
+            cx.notify();
+            return;
+        }
+        self.show_work(Shown::Nothing, window, cx);
+        window.focus(&self.focus, cx);
+        self.tell_host(window, cx);
+        cx.notify();
+    }
+
+    // The script failed and was not changed since, so Start runs the setup again.
+    pub(super) fn setup_retry_pending(&self) -> bool {
+        self.start
+            .setup_failure
+            .as_ref()
+            .is_some_and(|failure| !matches!(failure, OpError::SetupChanged(_)))
+    }
+
+    pub(super) fn start_heading(&self, project_name: &str) -> String {
+        match &self.start.reuse {
+            Some(reuse) => format!("New thread beside “{}”", reuse.title),
+            None => format!("New thread in {project_name}"),
+        }
+    }
+
+    pub(super) fn remember_worktree_root(&mut self, cx: &App) {
+        let root = Workspace::global(cx).read(cx).data_dir().join("worktrees");
+        self.start.worktree_root = folder::shown_path(&root);
+    }
+
+    pub(in crate::kagan) fn new_thread_here(
+        &mut self,
+        thread: &ThreadId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(reuse) = Reuse::of(thread, cx) else {
+            return;
+        };
+        // The folder is the only choice here, so the branches are not read.
+        self.open_start(&reuse.project, window, cx);
+        self.start.reuse = Some(reuse);
+        cx.notify();
+    }
+}
