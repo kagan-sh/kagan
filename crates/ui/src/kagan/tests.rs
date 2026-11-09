@@ -42,12 +42,13 @@ impl Kagan {
     }
 
     pub(crate) fn settings_view_mounted(&self, id: &kg_domain::PluginId) -> bool {
-        self.settings_views.contains_key(id)
+        self.slots.settings_views.contains_key(id)
     }
 
     /// The load generation a mounted settings view was made from, for the tests.
     pub(crate) fn settings_view_generation(&self, id: &kg_domain::PluginId) -> Option<u64> {
-        self.settings_views
+        self.slots
+            .settings_views
             .get(id)
             .map(|(generation, _)| *generation)
     }

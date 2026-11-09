@@ -64,15 +64,14 @@ pub(crate) use window::{
     front, show, show_plugin_settings, show_preview, show_settings, start_plugin, watch_waiting,
 };
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use crate::terminal::TerminalView;
 use gpui_kit::component::input::InputState;
-use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::resizable::ResizableState;
 use gpui_kit::{
-    AnyWindowHandle, App, ElementId, Entity, FocusHandle, ScrollHandle, SharedString, Subscription,
-    Task, Window, actions,
+    AnyWindowHandle, App, ElementId, Entity, FocusHandle, SharedString, Subscription, Task, Window,
+    actions,
 };
 use kg_domain::{PendingInteractionId, ProjectId, Thread, ThreadId};
 
@@ -142,8 +141,7 @@ pub(crate) struct Kagan {
     plugin_prompt_notice: Option<ThreadId>,
     focus: FocusHandle,
     surface_close_focus: FocusHandle,
-    // While a surface open or close waits for its frame, sidebar and collapse preferences stay as they were.
-    surface_hold: bool,
+    slots: surface::SlotState,
     typing: bool,
     quiet: Task<()>,
     on_screen: BTreeSet<PendingInteractionId>,
@@ -153,12 +151,8 @@ pub(crate) struct Kagan {
     details: details::Details,
     tabs: tabs::Tabs,
     review_drafts: review::Drafts,
-    replaced: replace::Replaced,
     plugins: Plugins,
     right: right::Sidebar,
-    tool: Option<surface::Slot>,
-    surface_check: Option<surface::Check>,
-    surface_epoch: u64,
     layout: Layout,
     viewport: gpui_kit::Pixels,
     prefs: Entity<settings::Prefs>,
@@ -166,33 +160,22 @@ pub(crate) struct Kagan {
     panes: layout::Panes,
     left_overlay_focus: FocusHandle,
     start_on_load: Option<ProjectId>,
-    settings_scroll: ScrollHandle,
-    settings_approvals: usize,
-    settings_drafts: settings::Drafts,
-    keyboard: settings::Recorder,
+    settings: settings::SettingsState,
     settling: bool,
-    settings_views: BTreeMap<kg_domain::PluginId, (u64, Entity<gpui_shell::ScriptView>)>,
     columns: Entity<ResizableState>,
     window: AnyWindowHandle,
-    actions_menu: Option<(Entity<PopupMenu>, Subscription)>,
+    title: shown::TitleState,
     open_thread: Option<Thread>,
     retired_load: Task<()>,
     archive_query: Entity<InputState>,
     _archive_watch: Subscription,
     browser: browser::Browser,
-    title_input: Option<Entity<InputState>>,
-    title_watch: Option<Subscription>,
     _subscriptions: [Subscription; 5],
     _sidebar_watch: [Subscription; 2],
     _appearance: Subscription,
     _theme_paint: Subscription,
     _theme_notice: Subscription,
-    plugin_watch: Option<Subscription>,
-    host_events: Vec<Subscription>,
-    overlays: Vec<overlays::Overlay>,
-    ask_drafts: BTreeMap<PendingInteractionId, ask_form::Draft>,
-    ask_hidden: BTreeSet<PendingInteractionId>,
-    ask_popup: Option<FocusHandle>,
+    asks: ask_form::AskState,
     toast: Option<Toast>,
     toast_epoch: u64,
     activity: activity::Strip,

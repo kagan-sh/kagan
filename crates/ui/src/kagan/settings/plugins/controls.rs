@@ -40,7 +40,8 @@ pub(super) fn secret_field(
         {
             let (scope, plugin, key) = (scope.clone(), plugin.clone(), key.clone());
             kagan
-                .settings_drafts
+                .settings
+                .drafts
                 .begin(scope, plugin, key, text, None, cx);
         }
     });

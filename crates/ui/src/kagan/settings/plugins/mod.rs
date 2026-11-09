@@ -241,7 +241,8 @@ fn plugin_row(
 ) -> Option<Row> {
     let scope = format!("{}/{key}", id.0);
     let fault = kagan
-        .settings_drafts
+        .settings
+        .drafts
         .fault
         .get(&scope)
         .map(|fault| fault.message.clone())
@@ -267,7 +268,7 @@ fn plugin_row(
             )
         }
         Setting::String { title, .. } | Setting::Number { title, .. } => {
-            let field = kagan.settings_drafts.text.get(&scope)?.field.clone();
+            let field = kagan.settings.drafts.text.get(&scope)?.field.clone();
             let (note, control) = string_control(title, &scope, &field, cx);
             (title, note, control)
         }
@@ -290,7 +291,7 @@ fn plugin_row(
             (title, note, control)
         }
         Setting::Secret { title } => {
-            let input = kagan.settings_drafts.secret.get(&scope)?.input.clone();
+            let input = kagan.settings.drafts.secret.get(&scope)?.input.clone();
             let warning =
                 PluginHost::try_global(cx).and_then(|host| host.read(cx).secret_warning());
             let note = Some(fault).filter(|fault| !fault.is_empty()).or(warning);
@@ -320,7 +321,8 @@ pub(super) fn save_value(
 ) {
     let _ = kagan.update(cx, |kagan, cx| {
         kagan
-            .settings_drafts
+            .settings
+            .drafts
             .begin(scope, plugin, key, change, None, cx);
     });
 }
@@ -393,7 +395,7 @@ impl Drafts {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             let _ = this.update(cx, |kagan, cx| {
-                kagan.settings_drafts.land(scope, request, result, cx);
+                kagan.settings.drafts.land(scope, request, result, cx);
             });
         })
         .detach();

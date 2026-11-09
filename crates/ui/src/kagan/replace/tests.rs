@@ -4,11 +4,12 @@ use kg_domain::Slot;
 use crate::kagan::Kagan;
 
 pub(crate) fn filled(kagan: &Kagan, slot: Slot) -> bool {
-    kagan.replaced.mounted.contains_key(&slot)
+    kagan.slots.replaced.mounted.contains_key(&slot)
 }
 
 pub(crate) fn holds_focus(kagan: &Kagan, slot: Slot, window: &Window, cx: &App) -> bool {
     kagan
+        .slots
         .replaced
         .mounted
         .get(&slot)

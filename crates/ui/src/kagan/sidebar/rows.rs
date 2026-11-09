@@ -292,7 +292,12 @@ pub(super) fn row_line(
         Kind::Thread { id, .. } => sidebar.menu_for(id),
         Kind::Project { .. } => None,
     };
-    row_face(row, id, focus, focused, inset, popup, cx)
+    let indent = thread_indent(&row.kind);
+    div()
+        .w_full()
+        .when_some(indent, |wrap, depth| wrap.pl(px(depth)))
+        .child(row_face(row, id, focus, focused, inset, popup, cx))
+        .into_any_element()
 }
 
 pub(super) fn row_face(
@@ -332,10 +337,8 @@ pub(super) fn row_face(
         .max_h(px(height))
         .flex_shrink_0()
         .when(inset, |line| line.px(px(space(SpaceStep::Sm, cx))))
-        .when_some(thread_indent(&kind), |line, depth| {
-            line.ml(px(depth))
-                .border_l_1()
-                .border_color(cx.theme().border)
+        .when(thread_indent(&kind).is_some(), |line| {
+            line.border_l_1().border_color(cx.theme().border)
         })
         .gap(px(space(SpaceStep::Sm, cx)))
         .flex()

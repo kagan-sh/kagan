@@ -124,7 +124,7 @@ impl Kagan {
             return;
         }
         *shown = open;
-        if !self.surface_hold {
+        if !self.slots.surface_hold {
             save(&key(name), open, cx);
         }
         self.apply_layout(next, window, cx);

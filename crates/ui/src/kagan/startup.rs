@@ -1,15 +1,13 @@
 use super::{Changes, Kagan, Layout, Plugins, Shown, TITLE, window::release_window};
 use super::{
-    activity, archived, attention, browser, changes, details, layout, picker, replace, review,
-    right, screen, settings, sidebar, start, surface, tabs,
+    activity, archived, attention, browser, changes, details, layout, picker, review, right,
+    screen, settings, shown, sidebar, start, surface, tabs,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::resizable::{ResizablePanelEvent, ResizableState};
-use gpui_kit::{
-    AnyElement, AppContext as _, Context, Entity, ScrollHandle, Subscription, Task, Window,
-};
+use gpui_kit::{AnyElement, AppContext as _, Context, Entity, Subscription, Task, Window};
 use kg_core::{Updater, Workspace, WorkspaceEvent};
 use kg_domain::ProjectId;
 
@@ -45,7 +43,7 @@ impl Kagan {
             plugin_prompt_notice: None,
             focus: cx.focus_handle(),
             surface_close_focus: cx.focus_handle().tab_stop(true),
-            surface_hold: false,
+            slots: surface::SlotState::default(),
             typing: false,
             quiet: Task::ready(()),
             on_screen: BTreeSet::new(),
@@ -55,12 +53,8 @@ impl Kagan {
             details: details::Details::default(),
             tabs: tabs::Tabs::default(),
             review_drafts: review::Drafts::default(),
-            replaced: replace::Replaced::default(),
             plugins: Plugins::new(window, cx),
             right: right::Sidebar::new(cx),
-            tool: None,
-            surface_check: None,
-            surface_epoch: 0,
             layout: Layout::default(),
             viewport: window.viewport_size().width,
             prefs: prefs.clone(),
@@ -71,33 +65,22 @@ impl Kagan {
             },
             left_overlay_focus: cx.focus_handle().tab_stop(true),
             start_on_load: None,
-            settings_scroll: ScrollHandle::new(),
-            settings_approvals: 0,
-            settings_drafts: settings::Drafts::default(),
-            keyboard: settings::Recorder::default(),
-            settings_views: BTreeMap::new(),
+            settings: settings::SettingsState::default(),
             settling: false,
             columns,
             window: window.window_handle(),
-            actions_menu: None,
+            title: shown::TitleState::default(),
             open_thread: None,
             retired_load: Task::ready(()),
             _archive_watch: archived::watch(&archive_query, cx),
             archive_query,
             browser: browser::Browser::new(window, cx),
-            title_input: None,
-            title_watch: None,
             _subscriptions: subscriptions,
             _sidebar_watch: sidebar_watch,
             _appearance: crate::theme::watch_system(window, cx),
             _theme_paint: Self::theme_paint(cx),
             _theme_notice: Self::theme_notice(cx),
-            plugin_watch: None,
-            host_events: Vec::new(),
-            overlays: Vec::new(),
-            ask_drafts: std::collections::BTreeMap::new(),
-            ask_hidden: std::collections::BTreeSet::new(),
-            ask_popup: None,
+            asks: super::ask_form::AskState::default(),
             toast: None,
             toast_epoch: 0,
             activity: activity::Strip::new(cx.focus_handle().tab_stop(true)),
@@ -144,11 +127,12 @@ impl Kagan {
 
     pub(super) fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let approvals = Workspace::global(cx).read(cx).approvals().count();
-        if self.in_settings() && approvals > self.settings_approvals {
-            self.settings_scroll
+        if self.in_settings() && approvals > self.settings.approvals {
+            self.settings
+                .scroll
                 .scroll_to_top_of_item(super::settings::QUESTIONS_ITEM);
         }
-        self.settings_approvals = approvals;
+        self.settings.approvals = approvals;
         self.announce_questions(window, cx);
         let listing = Workspace::global(cx).read(cx).sidebar(cx);
         let footer = sidebar::archived_footer(&Workspace::global(cx).read(cx).thread_records(cx));

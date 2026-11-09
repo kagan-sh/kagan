@@ -12,6 +12,7 @@ use kg_domain::{PluginId, Project, ProjectId, ProjectKind, Thread, ThreadId};
 mod brand_menu;
 mod order;
 
+use super::shown::{ThreadPick, thread_menu};
 use super::surface::OpenSurface;
 use order::Place;
 
@@ -63,10 +64,7 @@ pub(super) enum Event {
         id: ProjectId,
         before: Option<ProjectId>,
     },
-    RowPin(ThreadId),
-    RowArchive(ThreadId),
-    RowRename(ThreadId),
-    RowSaveDiagnostics(ThreadId),
+    RowPick(ThreadId, ThreadPick),
     RowMenuClosed,
     OpenSurface(OpenSurface),
     ClosePage,
@@ -321,24 +319,16 @@ impl Sidebar {
             return;
         }
         let sidebar = cx.entity().downgrade();
-        let shown = thread.id.clone();
-        let pin = if thread.pinned { "Unpin" } else { "Pin" };
-        let rows = [
-            ("thread-pin", pin, Event::RowPin as fn(ThreadId) -> Event),
-            ("thread-archive", "Archive", Event::RowArchive),
-            ("thread-rename", "Rename…", Event::RowRename),
-            (
-                "save-diagnostics",
-                "Save diagnostics",
-                Event::RowSaveDiagnostics,
-            ),
-        ];
-        let menu = PopupMenu::build(window, cx, move |menu, _, _| {
-            rows.into_iter().fold(menu, |menu, (id, label, event)| {
-                menu.item(entry(&sidebar, id, label, event, &shown))
-                    .separator()
-            })
-        });
+        let id = thread.id.clone();
+        let menu = thread_menu(
+            thread,
+            move |pick, _, cx| {
+                _ = sidebar.update(cx, |_, cx| cx.emit(Event::RowPick(id.clone(), pick)));
+            },
+            |menu| menu,
+            window,
+            cx,
+        );
         let dismiss = cx.subscribe_in(&menu, window, |this, _, _: &DismissEvent, _, cx| {
             this.row_menu = None;
             cx.emit(Event::RowMenuClosed);
@@ -424,7 +414,6 @@ mod rail;
 mod rows;
 
 use list::{sidebar_rows, thread_scroll_index};
-use marks::entry;
 
 pub(super) use list::list;
 pub(super) use rail::{archived_footer, rail};

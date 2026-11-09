@@ -11,6 +11,7 @@ use crate::ui_registry::Facts;
 
 pub(super) fn row(kagan: &Kagan, slot: Slot, cx: &App) -> Row {
     let chosen = kagan
+        .slots
         .replaced
         .chosen(slot)
         .map_or(SlotChoice::Kagan, |id| SlotChoice::Plugin(id.clone()));

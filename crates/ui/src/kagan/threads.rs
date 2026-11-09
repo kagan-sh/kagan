@@ -1,7 +1,8 @@
 use super::screen;
+use super::shown::ThreadPick;
 use super::{
-    ArchiveThread, Kagan, NewThread, RestoreThread, SaveDiagnostics, Shown, StartAgain, StopThread,
-    TogglePinned, toast::Toast,
+    ArchiveThread, Kagan, NewThread, RenameThread, RestoreThread, SaveDiagnostics, Shown,
+    StartAgain, StopThread, TogglePinned, toast::Toast,
 };
 use std::collections::BTreeSet;
 
@@ -267,10 +268,13 @@ impl Kagan {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(thread) = self
-            .shown_thread(cx)
-            .and_then(|id| self.record(&id, cx).cloned())
-        else {
+        if let Some(id) = self.shown_thread(cx) {
+            self.set_pinned(&id, cx);
+        }
+    }
+
+    fn set_pinned(&self, id: &ThreadId, cx: &mut Context<Self>) {
+        let Some(thread) = self.record(id, cx).cloned() else {
             return;
         };
         let pin = ThreadOp::SetPinned {
@@ -278,6 +282,26 @@ impl Kagan {
             pinned: !thread.pinned,
         };
         self.run(Op::Thread(pin), "change the pin", cx);
+    }
+
+    pub(super) fn thread_pick(
+        &mut self,
+        id: &ThreadId,
+        pick: ThreadPick,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match pick {
+            ThreadPick::Pin => self.set_pinned(id, cx),
+            ThreadPick::Archive => self.archive_thread(id, window, cx),
+            ThreadPick::Rename => {
+                if self.shown_thread(cx).as_ref() != Some(id) {
+                    self.select(id.clone(), window, cx);
+                }
+                self.begin_rename(&RenameThread, window, cx);
+            }
+            ThreadPick::SaveDiagnostics => self.save_diagnostics(&SaveDiagnostics, window, cx),
+        }
     }
 
     pub(crate) fn restore(&mut self, _: &mut Window, cx: &mut Context<Self>) {
@@ -305,10 +329,18 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(thread) = self
-            .shown_thread(cx)
-            .and_then(|id| self.record(&id, cx).cloned())
-        else {
+        if let Some(id) = self.shown_thread(cx) {
+            self.archive_thread(&id, window, cx);
+        }
+    }
+
+    pub(super) fn archive_thread(
+        &mut self,
+        id: &ThreadId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(thread) = self.record(id, cx).cloned() else {
             return;
         };
         let confirm = Workspace::dispatch(
@@ -329,7 +361,7 @@ impl Kagan {
             );
             _ = cx.update_window(handle, |_, window, cx| {
                 if ask {
-                    confirm_archive(this, thread, text, window, cx);
+                    confirm_archive(this, thread.id, thread.title, text, window, cx);
                 } else {
                     _ = this.update(cx, |this, cx| this.archive_now(&thread, window, cx));
                 }
@@ -346,15 +378,22 @@ impl Kagan {
     ) {
         let id = thread.id.clone();
         let leaving = archived_with(&Workspace::global(cx).read(cx).thread_records(cx), &id);
-        let next = self.next_thread(&id, &leaving, cx);
+        let shown_leaves = self
+            .shown_thread(cx)
+            .is_some_and(|shown| leaving.contains(&shown));
+        let next = shown_leaves
+            .then(|| self.next_thread(&id, &leaving, cx))
+            .flatten();
         self.dismiss_thread_menus(cx);
-        self.close_rename();
-        if let Some(next) = next {
-            self.select(next, window, cx);
-        } else {
-            self.cancel_plugin_start();
-            self.show_work(Shown::Nothing, window, cx);
-            window.focus(&self.focus, cx);
+        if shown_leaves {
+            self.close_rename();
+            if let Some(next) = next {
+                self.select(next, window, cx);
+            } else {
+                self.cancel_plugin_start();
+                self.show_work(Shown::Nothing, window, cx);
+                window.focus(&self.focus, cx);
+            }
         }
         self.show_toast(
             Toast {
@@ -452,21 +491,24 @@ pub(super) fn archived_with(threads: &[Thread], id: &ThreadId) -> Vec<ThreadId> 
 
 fn confirm_archive(
     kagan: gpui_kit::WeakEntity<Kagan>,
-    thread: Thread,
+    id: ThreadId,
+    title: String,
     text: String,
     window: &mut Window,
     cx: &mut App,
 ) {
     window.open_alert_dialog(cx, move |dialog, _, _| {
         let kagan = kagan.clone();
-        let archived = thread.clone();
+        let id = id.clone();
         dialog
-            .title(format!("Archive “{}”?", thread.title))
+            .title(format!("Archive “{title}”?"))
             .description(text.clone())
             .ok_text("Archive")
             .on_ok(move |_, window, cx| {
                 _ = kagan.update(cx, |kagan, cx| {
-                    kagan.archive_now(&archived, window, cx);
+                    if let Some(thread) = kagan.record(&id, cx).cloned() {
+                        kagan.archive_now(&thread, window, cx);
+                    }
                 });
                 true
             })
