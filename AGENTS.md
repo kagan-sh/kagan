@@ -34,7 +34,7 @@ How each tool finds these files, from its docs:
 
 ## Build and test
 
-- Rust 1.98 is pinned. macOS links with `ld64.lld`, so run `brew install lld` first; Linux and Windows prerequisites are in `book/src/start.md`.
+- Rust 1.99 is pinned. macOS links with `ld64.lld`, so run `brew install lld` first; Linux and Windows prerequisites are in `book/src/start.md`.
 - `cargo t` is the alias for the pinned nextest (`cargo bin cargo-nextest run`; install `cargo-run-bin` once). Run `cargo t --workspace --locked`; one crate or test with `cargo t -p kg-core <filter>`.
 - Before a pull request, run: `cargo fmt --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo t --workspace --locked`.
 

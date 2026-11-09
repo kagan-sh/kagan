@@ -95,6 +95,8 @@ windows-sys = { version = "=0.61.2", features = [
 unreachable_pub = "warn"
 
 [workspace.lints.clippy]
+# Its fix writes `assert_eq!(x, [] as [T; 0])`, which reads worse than `assert!(x.is_empty())`.
+assert_is_empty = "allow"
 cognitive_complexity = "warn"
 dbg_macro = "deny"
 expect_used = "deny"
