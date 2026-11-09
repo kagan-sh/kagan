@@ -168,18 +168,27 @@ pub(super) fn custom_field(
         )
 }
 
-pub(super) fn status_line(program: &Program) -> String {
+// The shown token is the first word that starts with a digit, such as `0.16.0` in
+// `codex-cli 0.16.0`. The full first line is the tooltip.
+pub(super) fn status_line(program: &Program) -> (String, Option<String>) {
     if program.installed() {
-        // Only the first line of a version: a row must stay one line tall.
-        program
+        let line = program
             .version
             .as_deref()
             .unwrap_or_default()
             .lines()
             .next()
             .unwrap_or_default()
-            .to_owned()
+            .trim();
+        let token = line
+            .split_whitespace()
+            .find(|word| word.starts_with(|c: char| c.is_ascii_digit()))
+            .unwrap_or_default();
+        (
+            token.to_owned(),
+            (!line.is_empty()).then(|| line.to_owned()),
+        )
     } else {
-        "Not installed".to_owned()
+        ("Not installed".to_owned(), None)
     }
 }

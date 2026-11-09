@@ -32,7 +32,10 @@ fn fixture_programs(cx: &mut TestAppContext, data: &Path, names: &[&str]) -> Pat
     std::fs::create_dir_all(&bin).unwrap();
     for name in names.iter().copied().chain(["fixture-shell"]) {
         let path = bin.join(name);
-        std::fs::write(&path, format!("#!/bin/sh\necho \"FIXTURE {name} $*\"\n")).unwrap();
+        let script = format!(
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"{name} 1.2.3 (fixture build)\"; else echo \"FIXTURE {name} $*\"; fi\n"
+        );
+        std::fs::write(&path, script).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
     let shell = bin.join("fixture-shell");
@@ -276,6 +279,23 @@ fn the_selected_row_is_marked_on_screen_and_in_words(cx: &mut TestAppContext) {
         label(cx, window, &format!("program-name-{shell}")) == "Shell, selected"
     });
     assert_eq!(label(cx, window, "program-codex"), "Codex");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_known_agent_row_shows_its_version_and_a_shell_row_shows_its_command(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let bin = fixture_programs(cx, data.path(), &["codex"]);
+    start_in_plain_folder(cx, window, data.path());
+    wait_until(cx, |cx| {
+        label(cx, window, "program-version-codex") == "1.2.3"
+    });
+    assert!(!shows(cx, window, "program-command-codex"));
+    let shell = bin.join("fixture-shell").display().to_string();
+    assert_eq!(
+        label(cx, window, &format!("program-command-{shell}")),
+        shell
+    );
 }
 
 #[gpui_kit::test]

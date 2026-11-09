@@ -3,17 +3,19 @@ use gpui_kit::base::actions::{SelectDown, SelectUp};
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Input;
-use gpui_kit::component::list::List;
+use gpui_kit::component::list::{List, ListState};
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
-    Render, RenderOnce, Role, StatefulInteractiveElement as _, Styled as _, Window, div,
+    Pixels, Render, RenderOnce, Role, StatefulInteractiveElement as _, Styled as _, WeakEntity,
+    Window, div,
 };
 use kg_domain::ProgramSource;
 
 use super::list::{ProgramRow, status_line};
-use super::{CONTEXT, Close, LIST_ROWS, Mode, Picker, Programs};
+use super::{CONTEXT, Close, LIST_ROWS, Mode, Picker, Programs, Rows};
 use super::{CloseCustomCommand, RetryPrograms, ToggleCustomCommand};
 use crate::kagan::controls::{control, dispatch, note};
 use crate::ui_observe::UiObserveExt as _;
@@ -22,12 +24,10 @@ use crate::ui_registry::Facts;
 impl RenderOnce for ProgramRow {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
-        let icon = match self.program.source {
-            ProgramSource::Known => None,
-            ProgramSource::Shell => Some(IconName::SquareTerminal),
-            ProgramSource::Recent => Some(IconName::Undo),
-        };
-        let status = status_line(&self.program);
+        // A known agent's command is implied by its name, so only a shell or a recent program shows it.
+        let command = (!matches!(self.program.source, ProgramSource::Known))
+            .then(|| self.program.command.clone());
+        let (version, full_version) = status_line(&self.program);
         // The selected row says so in words too, not only by its fill.
         let name = if self.selected {
             format!("{}, selected", self.program.label)
@@ -37,35 +37,8 @@ impl RenderOnce for ProgramRow {
         let (list, first) = (self.list, self.first);
         div()
             .on_children_prepainted(move |bounds, window, cx| {
-                let Some(row) = bounds.first().filter(|_| first) else {
-                    return;
-                };
-                let height = row.size.height;
-                // A collapsed pass reports no height. Keeping it would lock the list shut.
-                if height.as_f32() <= 1. {
-                    return;
-                }
-                let changed = list
-                    .update(cx, |state, cx| {
-                        let rows = state.delegate_mut();
-                        if rows.row_height == Some(height) {
-                            return false;
-                        }
-                        rows.row_height = Some(height);
-                        if state
-                            .selected_index()
-                            .is_some_and(|index| index.row >= usize::from(LIST_ROWS))
-                        {
-                            state.scroll_to_selected_item(window, cx);
-                        }
-                        cx.notify();
-                        true
-                    })
-                    .unwrap_or(false);
-                if changed {
-                    // The cap is read on the next frame. Painting cannot start one, so the window
-                    // is refreshed once this paint is done.
-                    cx.refresh_windows();
+                if let Some(row) = bounds.first().filter(|_| first) {
+                    record_row_height(&list, row.size.height, window, cx);
                 }
             })
             .child(
@@ -86,9 +59,6 @@ impl RenderOnce for ProgramRow {
                                 h_flex()
                                     .items_center()
                                     .gap_2()
-                                    .child(div().w_4().children(
-                                        icon.map(|icon| Icon::new(icon).small().text_color(muted)),
-                                    ))
                                     .child(
                                         div()
                                             .id(format!("program-name-{}", self.program.command))
@@ -100,28 +70,74 @@ impl RenderOnce for ProgramRow {
                                             .aria_label(name)
                                             .child(self.program.label),
                                     )
+                                    .child(div().flex_1().min_w_0().children(command.map(
+                                        |command| {
+                                            div()
+                                                .id(format!("program-command-{command}"))
+                                                .ui_container()
+                                                .type_small(cx)
+                                                .text_color(muted)
+                                                .whitespace_nowrap()
+                                                .text_ellipsis()
+                                                .aria_label(command.clone())
+                                                .child(command)
+                                        },
+                                    )))
                                     .child(
                                         div()
-                                            .flex_1()
-                                            .min_w_0()
-                                            .type_small(cx)
-                                            .text_color(muted)
-                                            .text_ellipsis()
-                                            .child(self.program.command),
-                                    )
-                                    .child(
-                                        div()
-                                            .max_w(gpui_kit::px(100.))
+                                            .id(format!("program-version-{}", self.program.command))
+                                            .flex_shrink_0()
                                             .type_caption(cx)
                                             .font_family(cx.theme().mono_font_family.clone())
                                             .text_color(muted)
                                             .whitespace_nowrap()
-                                            .text_ellipsis()
-                                            .child(status),
+                                            .when_some(full_version, |tag, full| {
+                                                tag.tooltip(move |window, cx| {
+                                                    Tooltip::new(full.clone()).build(window, cx)
+                                                })
+                                            })
+                                            .ui_container()
+                                            .aria_label(version.clone())
+                                            .child(version),
                                     ),
                             ),
                     ),
             )
+    }
+}
+
+// The first row's height is every row's height, so the list's cap is read in rows.
+fn record_row_height(
+    list: &WeakEntity<ListState<Rows>>,
+    height: Pixels,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    // A collapsed pass reports no height. Keeping it would lock the list shut.
+    if height.as_f32() <= 1. {
+        return;
+    }
+    let changed = list
+        .update(cx, |state, cx| {
+            let rows = state.delegate_mut();
+            if rows.row_height == Some(height) {
+                return false;
+            }
+            rows.row_height = Some(height);
+            if state
+                .selected_index()
+                .is_some_and(|index| index.row >= usize::from(LIST_ROWS))
+            {
+                state.scroll_to_selected_item(window, cx);
+            }
+            cx.notify();
+            true
+        })
+        .unwrap_or(false);
+    if changed {
+        // The cap is read on the next frame. Painting cannot start one, so the window
+        // is refreshed once this paint is done.
+        cx.refresh_windows();
     }
 }
 
