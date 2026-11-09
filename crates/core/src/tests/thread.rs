@@ -1247,3 +1247,59 @@ async fn a_new_run_forgets_the_saved_screen_of_the_last_one(cx: &mut TestAppCont
         .read_with(cx, |workspace, _| workspace.runs[&id].saved);
     assert!(!saved);
 }
+
+#[gpui_kit::test]
+async fn unarchive_waits_for_an_archived_lifecycle_owner(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Thread(owner) = op(fixture.run(program()), cx).await.unwrap() else {
+        panic!()
+    };
+    let OpResult::Thread(dependent) = op(
+        Op::Thread(ThreadOp::Run(Run {
+            project_id: fixture.project.clone(),
+            program: program().into(),
+            title: None,
+            environment: EnvironmentSpec::ProjectDefault,
+            visibility: None,
+            parent_thread_id: None,
+            lifecycle_owner_thread_id: Some(owner.id.clone()),
+            metadata: None,
+        })),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!()
+    };
+    op(
+        Op::Thread(ThreadOp::Archive {
+            id: owner.id.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert!(thread(&dependent.id, cx).await.archived_at.is_some());
+    assert_eq!(
+        op(
+            Op::Thread(ThreadOp::Unarchive {
+                id: dependent.id.clone()
+            }),
+            cx
+        )
+        .await,
+        Err(OpError::Invalid(
+            "unarchive the lifecycle owner first".into()
+        ))
+    );
+    assert!(thread(&dependent.id, cx).await.archived_at.is_some());
+    op(
+        Op::Thread(ThreadOp::Unarchive {
+            id: owner.id.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert!(thread(&dependent.id, cx).await.archived_at.is_some());
+}
