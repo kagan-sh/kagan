@@ -101,6 +101,8 @@ actions!(
         RestoreThread,
         ToggleSidebar,
         ToggleRightSidebar,
+        ToggleActivityLog,
+        CloseActivityLog,
         DismissRightOverlay,
         DismissLeftOverlay,
         OpenSettings,

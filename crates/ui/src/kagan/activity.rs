@@ -4,9 +4,8 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    App, Context, FocusHandle, InteractiveElement as _, IntoElement, KeyDownEvent,
-    ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _,
-    Subscription, Window, px,
+    App, Context, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _, Role,
+    SharedString, Styled as _, Subscription, Window, px,
 };
 use kg_core::{Updater, Workspace};
 use kg_domain::{Event, EventKind, ThreadId, UpdateState};
@@ -31,8 +30,10 @@ const PLUGIN_WIDTH: f32 = 720.;
 const PLUGIN_ITEM_MAX: f32 = 200.;
 const PLUGIN_ITEMS: usize = 4;
 
+pub(super) const CONTEXT: &str = "ActivityStrip";
+
 pub(super) struct Strip {
-    focus: FocusHandle,
+    toggle_focus: FocusHandle,
     open: bool,
     next: u64,
     lines: VecDeque<(u64, SharedString)>,
@@ -41,9 +42,9 @@ pub(super) struct Strip {
 }
 
 impl Strip {
-    pub(super) fn new(focus: FocusHandle) -> Self {
+    pub(super) fn new(toggle_focus: FocusHandle) -> Self {
         Self {
-            focus,
+            toggle_focus,
             open: false,
             next: 0,
             lines: VecDeque::new(),
@@ -172,17 +173,18 @@ impl Kagan {
             .count()
     }
 
-    fn clicked_strip(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.activity.open() {
-            window.focus(&self.activity.focus, cx);
-        }
+    #[cfg(test)]
+    pub(crate) fn activity_toggle_focus(&self) -> FocusHandle {
+        self.activity.toggle_focus.clone()
+    }
+
+    pub(super) fn toggle_log(&mut self, cx: &mut Context<Self>) {
         self.activity.toggle();
         cx.notify();
     }
 
-    // Enter and Space arrive as the click GPUI makes on a focused element.
-    fn strip_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
-        if event.keystroke.key == "escape" && self.activity.open() {
+    pub(super) fn close_log(&mut self, cx: &mut Context<Self>) {
+        if self.activity.open() {
             self.activity.close();
             cx.notify();
         }
@@ -227,7 +229,7 @@ impl Kagan {
                 value: None,
                 disabled: false,
                 selected: None,
-                focus: Some(self.activity.focus.clone()),
+                focus: None,
                 hint: None,
             })
             .flex_none()
@@ -237,12 +239,7 @@ impl Kagan {
             .bg(cx.theme().background)
             .border_t_1()
             .border_color(cx.theme().border)
-            .key_context("ActivityStrip")
-            .focus_visible(|strip| strip.border_1().border_color(cx.theme().ring))
-            .on_click(cx.listener(|this, _, window, cx| this.clicked_strip(window, cx)))
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                this.strip_key(event, cx);
-            }))
+            .key_context(CONTEXT)
             .child(summary_row)
             .when(open, |strip| strip.child(log))
     }

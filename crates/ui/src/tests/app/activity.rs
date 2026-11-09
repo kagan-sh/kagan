@@ -209,7 +209,7 @@ fn the_strip_starts_closed_and_quiet_at_the_bottom(cx: &mut TestAppContext) {
         value_of(cx, window, "activity-summary").as_deref(),
         Some("Quiet")
     );
-    assert_eq!(selected_of(cx, window, "activity-summary"), Some(false));
+    assert_eq!(selected_of(cx, window, "activity-toggle"), Some(false));
     assert!(!shows(cx, window, "activity-log"));
     assert!(!shows(cx, window, "activity-needs"));
     assert!(!shows(cx, window, "activity-update"));
@@ -236,7 +236,7 @@ fn the_strip_starts_closed_and_quiet_at_the_bottom(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn the_open_strip_sits_under_the_center_and_inside_the_window(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
-    click(cx, window, "activity-summary");
+    click(cx, window, "activity-toggle");
     let (_, center_y, _, center_height) = bounds_of(cx, window, "center");
     let (_, strip_y, _, strip_height) = bounds_of(cx, window, "activity-strip");
     let viewport_height = cx
@@ -257,9 +257,23 @@ fn the_open_strip_sits_under_the_center_and_inside_the_window(cx: &mut TestAppCo
 }
 
 #[gpui_kit::test]
+fn the_summary_text_is_status_and_the_log_button_is_the_only_toggle(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    assert_eq!(
+        role_of(cx, window, "activity-summary"),
+        Some(gpui_kit::Role::Status)
+    );
+    assert_eq!(
+        role_of(cx, window, "activity-toggle"),
+        Some(gpui_kit::Role::Button)
+    );
+    assert!(!shows(cx, window, "activity-log"));
+}
+
+#[gpui_kit::test]
 fn the_open_log_says_nothing_has_happened_yet(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
-    click(cx, window, "activity-summary");
+    click(cx, window, "activity-toggle");
     assert!(shows(cx, window, "activity-empty"));
     assert_eq!(
         label(cx, window, "activity-empty"),
@@ -281,7 +295,7 @@ fn a_busy_agent_shows_in_the_summary_and_as_a_log_line(cx: &mut TestAppContext) 
         terminal_focused(cx, window, &kagan),
         "a turn moved the keyboard"
     );
-    assert_eq!(focused_of(cx, window, "activity-strip"), Some(false));
+    assert_ne!(focused_of(cx, window, "activity-strip"), Some(true));
 
     assert!(!shows(cx, window, "activity-update"));
     offer_update(cx, data.path());
@@ -296,7 +310,7 @@ fn a_busy_agent_shows_in_the_summary_and_as_a_log_line(cx: &mut TestAppContext) 
         "Not now silenced the center notice but not the strip"
     );
 
-    click(cx, window, "activity-summary");
+    click(cx, window, "activity-toggle");
     let title = thread_record(cx, &id).title;
     assert_eq!(
         label(cx, window, "activity-row-0"),
@@ -343,32 +357,29 @@ fn a_waiting_question_shows_and_its_click_opens_the_next_thread_needing_you(
 }
 
 #[gpui_kit::test]
-fn a_click_or_the_keyboard_opens_the_log_and_escape_closes_it(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = open(cx);
+fn the_log_button_opens_the_log_and_escape_closes_it(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
 
-    click(cx, window, "activity-summary");
+    click(cx, window, "activity-toggle");
     assert!(shows(cx, window, "activity-log"));
-    assert_eq!(selected_of(cx, window, "activity-summary"), Some(true));
-    assert_eq!(focused_of(cx, window, "activity-strip"), Some(true));
+    assert_eq!(selected_of(cx, window, "activity-toggle"), Some(true));
+    assert_ne!(
+        focused_of(cx, window, "activity-strip"),
+        Some(true),
+        "the strip never takes the keyboard"
+    );
     let height = height_of(cx, window, "activity-strip");
     assert!((height - 168.).abs() < 0.5, "the open strip is {height}");
 
-    crate::tests::kagan::press_key(cx, window, "space");
-    assert!(!shows(cx, window, "activity-log"));
-    assert_eq!(selected_of(cx, window, "activity-summary"), Some(false));
-    assert_eq!(
-        focused_of(cx, window, "activity-strip"),
-        Some(true),
-        "the keyboard toggle kept the strip"
-    );
-
-    crate::tests::kagan::press_key(cx, window, "enter");
-    assert!(shows(cx, window, "activity-log"));
-
+    // A person's click focuses the toggle; the test click does not, so focus it the same way.
+    let focus = cx.update(|cx| kagan.read(cx).activity_toggle_focus());
+    cx.update_window(window, |_, window, cx| window.focus(&focus, cx))
+        .unwrap();
     crate::tests::kagan::press_key(cx, window, "escape");
     assert!(!shows(cx, window, "activity-log"));
+    assert_eq!(selected_of(cx, window, "activity-toggle"), Some(false));
 }
 
 #[gpui_kit::test]
@@ -406,7 +417,7 @@ fn a_plugin_install_shows_its_source_and_a_log_line(cx: &mut TestAppContext) {
     });
     assert!(shows(cx, window, "activity-install"));
 
-    click(cx, window, "activity-summary");
+    click(cx, window, "activity-toggle");
     assert_eq!(
         label(cx, window, "activity-row-0"),
         format!("Installing {source}")
@@ -434,7 +445,7 @@ fn the_open_strip_keeps_its_log_across_a_thread_switch(cx: &mut TestAppContext) 
     let (_kagan, window, _data) = open(cx);
     let first = run_program(cx, &busy_program());
     click(cx, window, &format!("thread-{}", first.0));
-    click(cx, window, "activity-summary");
+    click(cx, window, "activity-toggle");
     wait_until(cx, |cx| shows(cx, window, "activity-row-0"));
 
     let second = run_shell(cx);
@@ -455,7 +466,7 @@ fn a_plugin_status_item_is_one_text_line_in_the_strip(cx: &mut TestAppContext) {
     assert_eq!(label(cx, window, STATUS_ITEM), "Usage");
     assert_eq!(value_of(cx, window, STATUS_ITEM).as_deref(), Some("42%"));
     assert_eq!(focused_of(cx, window, STATUS_ITEM), None);
-    assert_eq!(focused_of(cx, window, "activity-strip"), Some(false));
+    assert_ne!(focused_of(cx, window, "activity-strip"), Some(true));
 }
 
 #[gpui_kit::test]
@@ -597,7 +608,7 @@ fn a_question_does_not_take_the_keyboard_or_open_the_strip(cx: &mut TestAppConte
         terminal_focused(cx, window, &kagan),
         "the question moved the keyboard"
     );
-    assert_eq!(focused_of(cx, window, "activity-strip"), Some(false));
+    assert_ne!(focused_of(cx, window, "activity-strip"), Some(true));
     assert!(!shows(cx, window, "activity-log"));
     drop(asked);
 }

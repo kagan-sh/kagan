@@ -1,7 +1,7 @@
 use super::ask_form;
 use super::{
-    AddProject, CONTEXT, DismissLeftOverlay, DismissRightOverlay, Kagan, NewTheme, OpenThemes,
-    Shown, commands, settings, web_panel,
+    AddProject, CONTEXT, CloseActivityLog, DismissLeftOverlay, DismissRightOverlay, Kagan,
+    NewTheme, OpenThemes, Shown, ToggleActivityLog, commands, settings, web_panel,
 };
 use super::{archived, layout, overlays, right, screen, surface, update};
 use crate::theme::{SpaceStep, TypeScale as _, space};
@@ -107,6 +107,8 @@ impl Render for Kagan {
             .on_action(cx.listener(Self::restore_thread))
             .on_action(cx.listener(Self::toggle_sidebar))
             .on_action(cx.listener(Self::toggle_right))
+            .on_action(cx.listener(|this, _: &ToggleActivityLog, _, cx| this.toggle_log(cx)))
+            .on_action(cx.listener(|this, _: &CloseActivityLog, _, cx| this.close_log(cx)))
             .on_action(cx.listener(Self::bigger))
             .on_action(cx.listener(Self::smaller))
             .on_action(cx.listener(Self::actual_size))

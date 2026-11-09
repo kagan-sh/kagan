@@ -134,7 +134,7 @@ fn toggle(
     div().id(id).occlude().ui_observe_as(facts).child(button)
 }
 
-fn bar_button(
+pub(super) fn bar_button(
     id: &str,
     name: SharedString,
     icon: IconName,

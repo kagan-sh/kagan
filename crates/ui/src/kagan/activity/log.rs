@@ -1,13 +1,16 @@
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::component::{h_flex, v_flex};
+use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, div, px,
+    AnyElement, App, ElementId, FocusHandle, InteractiveElement as _, IntoElement,
+    ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, div, px,
 };
 
 use super::ROW;
+use crate::kagan::ToggleActivityLog;
+use crate::kagan::layout::bar_button;
 use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
+use crate::ui_registry::Facts;
 
 pub(super) fn strip_log(rows: Vec<(u64, SharedString)>, cx: &App) -> impl IntoElement + use<> {
     let rows: Vec<AnyElement> = if rows.is_empty() {
@@ -48,4 +51,40 @@ pub(super) fn strip_log(rows: Vec<(u64, SharedString)>, cx: &App) -> impl IntoEl
         .min_h_0()
         .px_3()
         .children(rows)
+}
+
+pub(super) fn toggle(open: bool, focus: &FocusHandle, cx: &App) -> impl IntoElement + use<> {
+    let name: SharedString = if open {
+        "Hide activity log"
+    } else {
+        "Show activity log"
+    }
+    .into();
+    h_flex()
+        .id("activity-toggle")
+        .ui_observe_as(Facts {
+            role: Role::Button,
+            name: name.clone(),
+            value: Some(if open { "shown" } else { "hidden" }.into()),
+            disabled: false,
+            selected: Some(open),
+            focus: Some(focus.clone()),
+            hint: None,
+        })
+        .flex_none()
+        .child(
+            bar_button(
+                "activity-toggle",
+                name,
+                if open {
+                    IconName::PanelBottomOpen
+                } else {
+                    IconName::PanelBottom
+                },
+                false,
+                ToggleActivityLog,
+                cx,
+            )
+            .tab_stop(false),
+        )
 }

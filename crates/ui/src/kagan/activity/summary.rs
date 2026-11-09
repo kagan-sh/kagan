@@ -8,6 +8,7 @@ use kg_core::Updater;
 use kg_domain::UpdateState;
 use kg_plugins::StatusItem;
 
+use super::log;
 use super::plugins::plugin_item;
 use super::{DOT, HEIGHT, Kagan};
 use crate::theme::{Tone, TypeScale as _};
@@ -36,20 +37,13 @@ impl Kagan {
         let head = h_flex()
             .id("activity-summary")
             .ui_observe_as(Facts {
-                role: Role::Button,
+                role: Role::Status,
                 name: "Activity".into(),
                 value: Some(summary.clone()),
                 disabled: false,
-                selected: Some(open),
+                selected: None,
                 focus: None,
-                hint: Some(
-                    if open {
-                        "Hide what the workspace is doing"
-                    } else {
-                        "Show what the workspace is doing"
-                    }
-                    .into(),
-                ),
+                hint: None,
             })
             .flex_1()
             .min_w(px(120.))
@@ -82,6 +76,7 @@ impl Kagan {
             .children(update_part(cx))
             .children(install_part)
             .children(plugins.into_iter().map(|item| plugin_item(item, cx)))
+            .child(log::toggle(open, &self.activity.toggle_focus, cx))
     }
 }
 
