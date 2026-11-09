@@ -105,3 +105,31 @@ fn a_screen_outside_the_bound_is_not_returned() {
     assert_eq!(tall.history_dropped, 0);
     assert!((1..=500).contains(&tall.rows));
 }
+
+#[test]
+fn only_screens_archived_at_or_before_the_cutoff_are_dropped() {
+    let mut store = store();
+    let ids = ["thr_old", "thr_late", "thr_live"].map(|name| ThreadId(name.into()));
+    for id in &ids {
+        store.put_thread(&thread(&id.0, 1)).unwrap();
+        let started = store
+            .append_events(id, Timestamp(1), [EventKind::Started])
+            .unwrap();
+        assert!(
+            store
+                .put_screen(&screen_row(id, started[0].seq, b"screen"))
+                .unwrap()
+        );
+    }
+    store.archive_thread(&ids[0], Timestamp(5)).unwrap();
+    store.archive_thread(&ids[1], Timestamp(9)).unwrap();
+    store.delete_archived_screens(5).unwrap();
+    let mut kept: Vec<String> = store
+        .screens()
+        .unwrap()
+        .into_iter()
+        .map(|row| row.thread_id.0)
+        .collect();
+    kept.sort();
+    assert_eq!(kept, ["thr_late", "thr_live"]);
+}

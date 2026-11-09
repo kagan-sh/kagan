@@ -65,6 +65,16 @@ impl super::Store {
         Ok(())
     }
 
+    /// Drops the screens of every thread archived at or before `archived_before`.
+    pub fn delete_archived_screens(&self, archived_before: i64) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM terminal_screens WHERE thread_id IN \
+             (SELECT id FROM threads WHERE archived_at <= ?1)",
+            [archived_before],
+        )?;
+        Ok(())
+    }
+
     /// Screens whose run is still the latest `Started`. A row outside the bound comes back with an
     /// empty replay and `screen_kept` clear, so a reader never builds a terminal from it.
     pub fn screens(&self) -> Result<Vec<ScreenRow>> {

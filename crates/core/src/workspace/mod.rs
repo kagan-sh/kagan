@@ -225,7 +225,8 @@ impl Workspace {
                             };
                             let task = workspace.update(cx, |workspace, _| {
                                 let (reply, receive) = async_channel::bounded(1);
-                                // A full queue already holds a sweep; a closed one means the workspace is going.
+                                // The next sweep waits for this reply, so sweeps never pile up.
+                                // A closed queue means the workspace is going.
                                 let _ = workspace.requests.try_send((Request::Sweep, reply));
                                 receive
                             });
