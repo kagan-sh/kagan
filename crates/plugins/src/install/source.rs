@@ -8,7 +8,7 @@ use std::time::Duration;
 use futures::FutureExt as _;
 use serde::Deserialize;
 
-use kg_domain::{OpError, PluginId};
+use kg_domain::{GIT_SOURCE, OpError, PluginId};
 use kg_process::Process;
 use tempfile::TempDir;
 
@@ -26,7 +26,7 @@ pub(crate) enum Source {
 
 impl Source {
     pub(crate) fn parse(text: &str) -> Result<Self> {
-        match text.strip_prefix("git:") {
+        match text.strip_prefix(GIT_SOURCE) {
             Some(rest) => {
                 if rest.chars().any(char::is_control) {
                     return Err(OpError::Invalid(

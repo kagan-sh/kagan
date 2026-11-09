@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use gpui_kit::{AppContext as _, AsyncApp, Entity};
 use kg_core::{Requester, Workspace};
-use kg_domain::{Op, OpError, OpResult, Plugin, PluginId, ThreadId, ThreadOp};
+use kg_domain::{Op, OpError, OpResult, Plugin, PluginId, ThreadId, ThreadOp, is_git_source};
 
 use crate::manifest::Grant;
 use crate::source::{Fetched, Source, checkout, fetch};
@@ -73,7 +73,7 @@ pub(in crate::runtime::ops) async fn install(
     let plugins = kg_core::plugins_dir(&data_dir);
     let (stop, stopped) = async_channel::bounded::<()>(1);
     let by_name = crate::index::names_an_index(&source);
-    if by_name || source.starts_with("git:") {
+    if by_name || is_git_source(&source) {
         *stops.borrow_mut() = Some(stop);
         host.update(cx, |_, cx| cx.notify());
     }

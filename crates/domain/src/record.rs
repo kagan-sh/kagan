@@ -9,6 +9,14 @@ use crate::{
     EnvironmentId, PendingInteractionId, PluginId, ProjectId, SectionId, ThreadId, Timestamp,
 };
 
+/// The start of a plugin source that is a git address: `git:<url>@<ref>`.
+pub const GIT_SOURCE: &str = "git:";
+
+#[must_use]
+pub fn is_git_source(source: &str) -> bool {
+    source.starts_with(GIT_SOURCE)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectKind {

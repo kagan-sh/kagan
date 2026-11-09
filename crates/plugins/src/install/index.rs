@@ -4,7 +4,7 @@ use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 use gpui_kit::{AppContext as _, AsyncApp, Entity};
-use kg_domain::{IndexEntry, IndexOp, Listing, OpError, OpResult};
+use kg_domain::{GIT_SOURCE, IndexEntry, IndexOp, Listing, OpError, OpResult, is_git_source};
 
 use crate::manifest::inside;
 use crate::source::{Index, Source, clone, git};
@@ -112,14 +112,14 @@ pub(crate) fn public(url: &str) -> String {
 #[must_use]
 pub fn shown(location: &str) -> String {
     match Source::parse(location) {
-        Ok(Source::Git { url, reference }) => format!("git:{}@{reference}", public(&url)),
+        Ok(Source::Git { url, reference }) => format!("{GIT_SOURCE}{}@{reference}", public(&url)),
         _ => location.to_owned(),
     }
 }
 
 /// A source that is neither `git:` nor an absolute path names a plugin in the indexes.
 pub(crate) fn names_an_index(source: &str) -> bool {
-    !source.starts_with("git:") && Path::new(source).is_relative()
+    !is_git_source(source) && Path::new(source).is_relative()
 }
 
 /// Why the saved index list cannot be read.

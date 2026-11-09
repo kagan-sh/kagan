@@ -1,7 +1,7 @@
 use std::ffi::OsStr;
 use std::path::Path;
 
-use kg_domain::{IndexEntry, OpError, OpResult};
+use kg_domain::{GIT_SOURCE, IndexEntry, OpError, OpResult};
 
 use crate::source::git;
 use crate::{Result, discover};
@@ -53,7 +53,7 @@ pub(crate) fn share(
         .ok()
         .filter(|relative| !relative.as_os_str().is_empty())
         .map(|relative| relative.to_string_lossy().replace('\\', "/"));
-    let source = format!("git:{url}@{commit}");
+    let source = format!("{GIT_SOURCE}{url}@{commit}");
     let name = manifest
         .id
         .0

@@ -8,7 +8,7 @@ use gpui_kit::{
     Styled as _, Window, div,
 };
 use kg_core::Workspace;
-use kg_domain::{Op, PluginId, PluginOp};
+use kg_domain::{Op, PluginId, PluginOp, is_git_source};
 use kg_plugins::{PluginHost, PluginStatus};
 
 use super::Kagan;
@@ -235,10 +235,6 @@ fn plugin_rows(
         }
     }
     rows
-}
-
-fn is_git_source(source: &str) -> bool {
-    source.starts_with("git:")
 }
 
 fn addition_note(status: &PluginStatus, cx: &mut Context<Kagan>) -> String {

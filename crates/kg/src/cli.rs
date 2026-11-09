@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use kg_domain::{
     BrowserOp, BrowserSnapshot, ConfigOp, Op, OpError, OpResult, PluginOp, PreviewKind, TEXT_MAX,
-    ThreadOp, UiSnapshot,
+    ThreadOp, UiSnapshot, is_git_source,
 };
 
 use crate::socket::Client;
@@ -488,7 +488,7 @@ pub(crate) fn paths(mut op: Op) -> Result<Op, OpError> {
                     kg_domain::IndexOp::Add { location: source }
                     | kg_domain::IndexOp::Remove { location: source },
             },
-        ) if !source.starts_with("git:") && Path::new(source.as_str()).exists() => {
+        ) if !is_git_source(source) && Path::new(source.as_str()).exists() => {
             let mut path = PathBuf::from(&*source);
             absolute(&mut path);
             *source = path

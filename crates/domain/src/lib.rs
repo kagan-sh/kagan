@@ -45,9 +45,10 @@ pub use program::{
 };
 pub use record::{
     ASK_TEXT_MAX_CHARS, AgentTool, AskField, Environment, EnvironmentProvider, EnvironmentStatus,
-    Found, IndexEntry, InteractionOption, Listing, LogCounts, OptionRole, PendingInteraction,
-    Plugin, PluginLog, Project, ProjectKind, Section, Sidebar, Snippet, Thread, ThreadMark,
-    ThreadStatus, Visibility, archive_span, newest_first, order_sidebar_projects, owned_thread_ids,
+    Found, GIT_SOURCE, IndexEntry, InteractionOption, Listing, LogCounts, OptionRole,
+    PendingInteraction, Plugin, PluginLog, Project, ProjectKind, Section, Sidebar, Snippet, Thread,
+    ThreadMark, ThreadStatus, Visibility, archive_span, is_git_source, newest_first,
+    order_sidebar_projects, owned_thread_ids,
 };
 pub use theme::{
     Color, Highlight, Look, MAX_THEME_BYTES, Palette, Radius, Space, TerminalColors, ThemeFile,
