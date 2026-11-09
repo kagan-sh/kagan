@@ -245,7 +245,8 @@ impl TextField {
         let scope = format!("{}/{key}", plugin.0);
         let request = kagan.update(cx, |kagan, cx| {
             kagan
-                .settings_drafts
+                .settings
+                .drafts
                 .begin(scope, plugin, key, change, Some(baseline), cx)
         });
         self.request = request.ok();
@@ -392,7 +393,7 @@ pub(super) fn revert(field: &Entity<TextField>, window: &mut Window, cx: &mut Ap
         let scope = format!("{}/{}", field.plugin.0, field.key);
         let kagan = field.kagan.clone();
         let _ = kagan.update(cx, |kagan, _| {
-            forget_queued(&mut kagan.settings_drafts, &scope);
+            forget_queued(&mut kagan.settings.drafts, &scope);
         });
         let committed = field.committed.clone();
         field.input.set_value(committed, window, cx);

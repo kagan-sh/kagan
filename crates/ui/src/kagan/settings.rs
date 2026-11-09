@@ -16,8 +16,8 @@ use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, Hsla, InteractiveElement as _,
-    IntoElement, KeyBinding, ParentElement as _, StatefulInteractiveElement as _, Styled as _,
-    Subscription, Window, actions, div, px, rems,
+    IntoElement, KeyBinding, ParentElement as _, ScrollHandle, StatefulInteractiveElement as _,
+    Styled as _, Subscription, Window, actions, div, px, rems,
 };
 use kg_core::{Approval, Workspace};
 use kg_domain::PluginId;
@@ -67,6 +67,14 @@ pub(super) struct Prefs {
     pub(super) loaded: bool,
 }
 
+#[derive(Default)]
+pub(super) struct SettingsState {
+    pub(super) scroll: ScrollHandle,
+    pub(super) approvals: usize,
+    pub(super) drafts: Drafts,
+    pub(super) keyboard: Recorder,
+}
+
 pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
     cx.new(|_| Prefs {
         agent_integration: true,
@@ -107,7 +115,7 @@ impl Kagan {
         self.dismiss_thread_menus(cx);
         window.focus(&self.focus, cx);
         self.sync_panels_keeping_widths(window, cx);
-        plugins::sync(&mut self.settings_drafts, window, cx);
+        plugins::sync(&mut self.settings.drafts, window, cx);
         for (id, _) in pages::plugin_entries(cx) {
             self.mount_settings_view(&id, window, cx);
         }
@@ -118,7 +126,8 @@ impl Kagan {
         let kagan = cx.entity();
         window.defer(cx, move |_, cx| {
             kagan.update(cx, |this, cx| {
-                this.settings_scroll
+                this.settings
+                    .scroll
                     .scroll_to_top_of_item(5 + keyboard::count(cx));
                 cx.notify();
             });
@@ -147,7 +156,7 @@ impl Kagan {
     }
 
     pub(super) fn reconcile_plugin_views(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        plugins::sync(&mut self.settings_drafts, window, cx);
+        plugins::sync(&mut self.settings.drafts, window, cx);
         let entries = pages::plugin_entries(cx);
         let host = PluginHost::try_global(cx);
         self.settings_views.retain(|id, (generation, _)| {
@@ -317,12 +326,12 @@ pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) 
                 .items_center()
                 .p(px(space(SpaceStep::Xl, cx)))
                 .gap(px(space(SpaceStep::Xl, cx)))
-                .track_scroll(&kagan.settings_scroll)
+                .track_scroll(&kagan.settings.scroll)
                 .overflow_y_scroll()
                 .children(items.map(|item| div().w_full().max_w(rems(39.5)).child(item)))
                 .ui_container(),
         )
-        .vertical_scrollbar(&kagan.settings_scroll)
+        .vertical_scrollbar(&kagan.settings.scroll)
         .into_any_element()
 }
 

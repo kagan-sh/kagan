@@ -70,8 +70,8 @@ use crate::terminal::TerminalView;
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::resizable::ResizableState;
 use gpui_kit::{
-    AnyWindowHandle, App, ElementId, Entity, FocusHandle, ScrollHandle, SharedString, Subscription,
-    Task, Window, actions,
+    AnyWindowHandle, App, ElementId, Entity, FocusHandle, SharedString, Subscription, Task, Window,
+    actions,
 };
 use kg_domain::{PendingInteractionId, ProjectId, Thread, ThreadId};
 
@@ -165,10 +165,7 @@ pub(crate) struct Kagan {
     panes: layout::Panes,
     left_overlay_focus: FocusHandle,
     start_on_load: Option<ProjectId>,
-    settings_scroll: ScrollHandle,
-    settings_approvals: usize,
-    settings_drafts: settings::Drafts,
-    keyboard: settings::Recorder,
+    settings: settings::SettingsState,
     settling: bool,
     settings_views: BTreeMap<kg_domain::PluginId, (u64, Entity<gpui_shell::ScriptView>)>,
     columns: Entity<ResizableState>,

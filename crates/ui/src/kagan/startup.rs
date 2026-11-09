@@ -7,9 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::resizable::{ResizablePanelEvent, ResizableState};
-use gpui_kit::{
-    AnyElement, AppContext as _, Context, Entity, ScrollHandle, Subscription, Task, Window,
-};
+use gpui_kit::{AnyElement, AppContext as _, Context, Entity, Subscription, Task, Window};
 use kg_core::{Updater, Workspace, WorkspaceEvent};
 use kg_domain::ProjectId;
 
@@ -71,10 +69,7 @@ impl Kagan {
             },
             left_overlay_focus: cx.focus_handle().tab_stop(true),
             start_on_load: None,
-            settings_scroll: ScrollHandle::new(),
-            settings_approvals: 0,
-            settings_drafts: settings::Drafts::default(),
-            keyboard: settings::Recorder::default(),
+            settings: settings::SettingsState::default(),
             settings_views: BTreeMap::new(),
             settling: false,
             columns,
@@ -142,10 +137,10 @@ impl Kagan {
 
     pub(super) fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let approvals = Workspace::global(cx).read(cx).approvals().count();
-        if self.in_settings() && approvals > self.settings_approvals {
-            self.settings_scroll.scroll_to_top_of_item(1);
+        if self.in_settings() && approvals > self.settings.approvals {
+            self.settings.scroll.scroll_to_top_of_item(1);
         }
-        self.settings_approvals = approvals;
+        self.settings.approvals = approvals;
         self.announce_questions(window, cx);
         let listing = Workspace::global(cx).read(cx).sidebar(cx);
         let footer = sidebar::archived_footer(&Workspace::global(cx).read(cx).thread_records(cx));

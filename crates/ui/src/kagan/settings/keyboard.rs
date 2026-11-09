@@ -192,6 +192,7 @@ fn shortcut_row(
             .map(|refused| format!("{} also wants this key.", label(labels, &refused.action))),
     );
     if let Some((_, fault)) = kagan
+        .settings
         .keyboard
         .fault
         .as_ref()
@@ -200,6 +201,7 @@ fn shortcut_row(
         notes.push(fault.clone());
     }
     let recording = kagan
+        .settings
         .keyboard
         .recording
         .as_ref()
@@ -242,7 +244,7 @@ fn controls(
         cx,
         move |this, window, cx| {
             if recording {
-                this.keyboard.recording = None;
+                this.settings.keyboard.recording = None;
                 cx.notify();
             } else {
                 this.begin_shortcut(record.clone(), window, cx);
@@ -388,7 +390,7 @@ impl Kagan {
                 cx.stop_propagation();
             }
         });
-        self.keyboard = Recorder {
+        self.settings.keyboard = Recorder {
             recording: Some((action, intercept)),
             fault: None,
         };
@@ -397,7 +399,7 @@ impl Kagan {
 
     // A key pressed after Settings closed some other way still reaches the window.
     fn finish_shortcut(&mut self, key: &Keystroke, cx: &mut Context<Self>) -> bool {
-        let Some((action, _)) = self.keyboard.recording.take() else {
+        let Some((action, _)) = self.settings.keyboard.recording.take() else {
             return false;
         };
         cx.notify();
@@ -409,7 +411,7 @@ impl Kagan {
             if for_window(key) {
                 self.save_shortcut(action, Some(text), cx);
             } else {
-                self.keyboard.fault = Some((action, PROGRAM_KEY.to_owned()));
+                self.settings.keyboard.fault = Some((action, PROGRAM_KEY.to_owned()));
             }
         }
         true
@@ -426,7 +428,7 @@ impl Kagan {
                 action: action.clone(),
             },
         };
-        self.keyboard.fault = None;
+        self.settings.keyboard.fault = None;
         let saved = Workspace::dispatch(Op::Keymap(op), cx);
         cx.spawn(async move |this, cx| {
             let result = saved.await;
@@ -439,7 +441,7 @@ impl Kagan {
                     Ok(_) => return,
                     Err(error) => error.to_string(),
                 };
-                this.keyboard.fault = Some((action, message));
+                this.settings.keyboard.fault = Some((action, message));
                 cx.notify();
             })
             .ok();
@@ -448,6 +450,6 @@ impl Kagan {
     }
 
     pub(super) fn stop_recording(&mut self) {
-        self.keyboard = Recorder::default();
+        self.settings.keyboard = Recorder::default();
     }
 }
