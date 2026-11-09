@@ -670,6 +670,16 @@ fn a_status_command_must_be_an_always_command_the_plugin_declares() {
         "{thread_only}"
     );
 
+    let bidi = rejected(
+        &mut value,
+        json!({ "title": "Usage", "command": "usage.refresh" }),
+        json!([{ "id": "usage.refresh", "title": "Refresh\u{202E}usage" }]),
+    );
+    assert!(
+        bidi.contains("must name one of this plugin's commands"),
+        "{bidi}"
+    );
+
     value["commands"] = json!([{ "id": "usage.refresh", "title": "Refresh" }]);
     value["ui"] = json!({ "status": { "title": "Usage", "command": "usage.refresh" } });
     std::fs::write(dir.path().join(crate::manifest::FILE), value.to_string()).unwrap();
@@ -682,12 +692,18 @@ fn a_status_command_must_be_an_always_command_the_plugin_declares() {
         Some("usage.refresh")
     );
     let grant = Grant::of(&read, dir.path());
-    assert_eq!(grant.status_command.as_deref(), Some("usage.refresh"));
+    assert_eq!(
+        grant
+            .status_command
+            .as_ref()
+            .map(|command| command.id.as_str()),
+        Some("usage.refresh")
+    );
     assert!(
         grant
             .lines()
             .iter()
-            .any(|line| line == "clicking that line runs usage.refresh"),
+            .any(|line| line == "clicking that line runs Refresh"),
         "{:?}",
         grant.lines()
     );

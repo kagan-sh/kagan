@@ -307,8 +307,15 @@ impl Manifest {
         else {
             return Ok(());
         };
+        let plain = |text: &str| !text.chars().any(crate::strip::forbidden_status_char);
         match self.commands.iter().find(|command| command.id == id) {
-            Some(command) if command.when == crate::commands::CommandWhen::Always => Ok(()),
+            Some(command)
+                if command.when == crate::commands::CommandWhen::Always
+                    && plain(&command.id)
+                    && plain(&command.title) =>
+            {
+                Ok(())
+            }
             _ => Err(Error::StatusCommand(id.to_owned())),
         }
     }

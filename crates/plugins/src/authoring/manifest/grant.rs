@@ -7,6 +7,13 @@ use super::fetch::{Clipboard, Env, Fetch, FetchKind, Method, Powers};
 use super::{Manifest, Setting};
 
 /// The approved form of [`Powers`], and the whole of what a plugin may do.
+/// The command a click on the strip line runs, as the install screen names it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct StatusCommand {
+    pub(crate) id: String,
+    pub(crate) title: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Grant {
     #[serde(default)]
@@ -30,7 +37,7 @@ pub(crate) struct Grant {
     pub(crate) status: Option<String>,
     /// The approved command the strip item runs when the person clicks it.
     #[serde(default)]
-    pub(crate) status_command: Option<String>,
+    pub(crate) status_command: Option<StatusCommand>,
 }
 
 impl Grant {
@@ -70,7 +77,12 @@ impl Grant {
                 .ui
                 .status
                 .as_ref()
-                .and_then(|status| status.command.clone()),
+                .and_then(|status| status.command.as_deref())
+                .and_then(|id| manifest.commands.iter().find(|command| command.id == id))
+                .map(|command| StatusCommand {
+                    id: command.id.clone(),
+                    title: command.title.clone(),
+                }),
         }
     }
 
@@ -270,7 +282,7 @@ impl Grant {
             ));
         }
         if let Some(command) = &self.status_command {
-            lines.push(format!("clicking that line runs {command}"));
+            lines.push(format!("clicking that line runs {}", command.title));
         }
         lines
     }

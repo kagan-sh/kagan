@@ -144,7 +144,7 @@ export default class Plugin extends View {{
                 "powers": {},
                 "folders": {},
                 "status": title,
-                "status_command": command,
+                "status_command": command.map(|id| serde_json::json!({ "id": id, "title": "Refresh usage" })),
             }),
             error: None,
         })
