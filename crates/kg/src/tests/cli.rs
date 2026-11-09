@@ -406,12 +406,14 @@ fn a_missing_id_names_the_variable_that_would_fill_it() {
                 (&["project", "get"][..], "KG_PROJECT_ID"),
                 (&["environment", "get"][..], "KG_ENVIRONMENT_ID"),
             ] {
-                let Err(error) =
-                    Cli::try_parse_from(std::iter::once("kg").chain(args.iter().copied()))
-                else {
+                let argv: Vec<String> = std::iter::once("kg")
+                    .chain(args.iter().copied())
+                    .map(String::from)
+                    .collect();
+                let Err(error) = Cli::try_parse_from(argv.clone()) else {
                     panic!("{args:?} parsed without an id");
                 };
-                let value: Value = serde_json::from_str(&json_error(&error)).unwrap();
+                let value: Value = serde_json::from_str(&json_error(&error, &argv)).unwrap();
                 assert_eq!(value["error"]["kind"], "invalid");
                 assert!(
                     value["error"]["message"]
@@ -424,10 +426,11 @@ fn a_missing_id_names_the_variable_that_would_fill_it() {
                 );
                 assert!(value.get("ok").is_none());
             }
-            let Err(error) = Cli::try_parse_from(["kg", "thread", "run"]) else {
+            let argv = ["kg", "thread", "run"].map(String::from);
+            let Err(error) = Cli::try_parse_from(argv.clone()) else {
                 panic!("thread run parsed without its arguments");
             };
-            let value: Value = serde_json::from_str(&json_error(&error)).unwrap();
+            let value: Value = serde_json::from_str(&json_error(&error, &argv)).unwrap();
             assert!(value["error"].get("hint").is_none(), "{value}");
         }
         _ => {

@@ -17,7 +17,7 @@ mod tests;
 use std::{ffi::OsString, io, process::ExitCode};
 
 use clap::error::{ContextKind, ContextValue, ErrorKind};
-use clap::{Parser, Subcommand};
+use clap::{Arg, CommandFactory, Parser, Subcommand};
 use kg_domain::{Op, OpError, PluginOp, ProjectId, ThreadId, invalid_json};
 
 use crate::socket::Client;
@@ -82,56 +82,50 @@ fn plugin_cli(arguments: Vec<OsString>) -> Result<Op, OpError> {
     }))
 }
 
-fn id_hint(error: &clap::Error) -> Option<String> {
+fn id_hint(error: &clap::Error, argv: &[String]) -> Option<String> {
     if error.kind() != ErrorKind::MissingRequiredArgument {
         return None;
     }
     let ContextValue::Strings(missing) = error.get(ContextKind::InvalidArg)? else {
         return None;
     };
-    let usage = match error.get(ContextKind::Usage) {
-        Some(ContextValue::StyledStr(text)) => text.to_string(),
-        Some(ContextValue::String(text)) => text.clone(),
-        _ => String::new(),
-    };
-    let mut variable = None;
-    for arg in missing {
-        let next = id_variable(arg, &usage)?;
-        if variable.is_some() && variable != Some(next) {
-            return None;
-        }
-        variable = Some(next);
-    }
-    variable.map(|name| format!("set {name}, or pass the id"))
-}
-
-fn id_variable(arg: &str, usage: &str) -> Option<&'static str> {
-    let name = arg.to_ascii_lowercase();
-    if name.contains("thread") {
-        return Some("KG_THREAD_ID");
-    }
-    if name.contains("project") {
-        return Some("KG_PROJECT_ID");
-    }
-    if name.contains("environment") {
-        return Some("KG_ENVIRONMENT_ID");
-    }
-    if name != "<id>" {
+    let command = named_command(argv);
+    let variables = missing
+        .iter()
+        .map(|shown| {
+            command
+                .get_arguments()
+                .find(|arg| arg.to_string() == *shown)
+                .and_then(Arg::get_env)
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let [variable] = variables.as_slice() else {
         return None;
-    }
-    for word in usage.split_whitespace() {
-        match word.trim_matches(|c: char| !c.is_ascii_alphanumeric()) {
-            "thread" => return Some("KG_THREAD_ID"),
-            "project" => return Some("KG_PROJECT_ID"),
-            "environment" => return Some("KG_ENVIRONMENT_ID"),
-            _ => {}
-        }
-    }
-    None
+    };
+    Some(format!(
+        "set {}, or pass the id",
+        variable.to_string_lossy()
+    ))
 }
 
-fn json_error(error: &clap::Error) -> String {
-    invalid_json(&error.to_string(), id_hint(error).as_deref().unwrap_or(""))
+/// The command the arguments name: the subcommands read from the front, skipping flags.
+fn named_command(argv: &[String]) -> clap::Command {
+    let mut command = Cli::command();
+    command.build();
+    for word in argv.iter().skip(1).filter(|word| !word.starts_with('-')) {
+        match command.find_subcommand(word).cloned() {
+            Some(next) => command = next,
+            None => break,
+        }
+    }
+    command
+}
+
+fn json_error(error: &clap::Error, argv: &[String]) -> String {
+    invalid_json(
+        &error.to_string(),
+        id_hint(error, argv).as_deref().unwrap_or(""),
+    )
 }
 
 fn main() -> ExitCode {
@@ -147,7 +141,10 @@ fn main() -> ExitCode {
         }
         Err(error) => {
             if std::env::args_os().any(|argument| argument == "--json") {
-                println!("{}", json_error(&error));
+                let argv: Vec<String> = std::env::args_os()
+                    .map(|word| word.to_string_lossy().into_owned())
+                    .collect();
+                println!("{}", json_error(&error, &argv));
             } else {
                 eprint!("{error}");
                 if error.kind() == ErrorKind::MissingRequiredArgument
