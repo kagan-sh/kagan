@@ -128,6 +128,7 @@ impl Kagan {
     }
 
     pub(super) fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.start.busy = start::FolderUse::of(self.compute_busy(cx));
         let approvals = Workspace::global(cx).read(cx).approvals().count();
         if self.in_settings() && approvals > self.settings.approvals {
             self.settings

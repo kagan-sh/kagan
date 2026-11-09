@@ -8,7 +8,7 @@ use kg_domain::{
 };
 
 use crate::Workspace;
-use crate::host::database::Result;
+use crate::host::database::{Database, Result};
 use crate::workspace::{closed, missing, time};
 
 use super::{git, personal, script};
@@ -18,6 +18,24 @@ const GRACE: i64 = 10_000;
 pub(crate) struct Retirement {
     pub(crate) environment: Environment,
     pub(crate) project: PathBuf,
+}
+
+/// Writes only when a thread is past the grace, so an idle workspace does no screen work.
+async fn drop_archived_screens(
+    database: &Database,
+    records: &[kg_domain::Thread],
+    archived_before: i64,
+) -> Result<()> {
+    if records.iter().any(|record| {
+        record
+            .archived_at
+            .is_some_and(|archived| archived.0 <= archived_before)
+    }) {
+        database
+            .call(move |store| store.delete_archived_screens(archived_before))
+            .await?;
+    }
+    Ok(())
 }
 
 pub(crate) async fn sweep(
@@ -113,9 +131,7 @@ pub(crate) async fn sweep(
             });
         }
     }
-    database
-        .call(move |store| store.delete_archived_screens(archived_before))
-        .await?;
+    drop_archived_screens(&database, &records, archived_before).await?;
     Ok((changed, retirements))
 }
 
