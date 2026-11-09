@@ -327,7 +327,6 @@ pub(super) fn row_face(
         .aria_label(row.label.clone())
         .aria_selected(row.selected)
         .h(px(height))
-        .w_full()
         .min_h(px(height))
         .max_h(px(height))
         .flex_shrink_0()

@@ -1208,6 +1208,33 @@ fn the_thread_menu_stays_open_on_its_row(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn a_nested_row_keeps_its_actions_inside_the_narrow_sidebar(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    set_preference(cx, "main.left-width", json!(200));
+    let parent = run_shell(cx);
+    let child = run_child(cx, &parent);
+    let grandchild = run_child(cx, &child);
+    cx.run_until_parked();
+    let (sidebar_x, sidebar_w) = span(cx, window, "sidebar-pane").expect("sidebar-pane");
+    let right = sidebar_x + sidebar_w;
+    for thread in [&child, &grandchild] {
+        hover_row(cx, window, &format!("thread-{thread}"));
+        cx.run_until_parked();
+        for control in [
+            format!("thread-archive-{thread}"),
+            format!("thread-actions-{thread}"),
+        ] {
+            let (x, w) = span(cx, window, &control).expect("row control");
+            assert!(
+                x + w <= right + 0.5,
+                "{control} ends at {} past the sidebar edge {right}",
+                x + w
+            );
+        }
+    }
+}
+
+#[gpui_kit::test]
 fn a_row_menu_acts_on_its_own_row_while_another_thread_is_shown(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);
     let shown_thread = run_shell(cx);
