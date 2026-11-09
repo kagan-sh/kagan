@@ -63,8 +63,25 @@ fn install_status(data: &std::path::Path) {
 }
 
 fn install_status_plugin(data: &std::path::Path, id: &str, title: &str, text: &str) {
+    install_status_plugin_with(data, id, title, None, text);
+}
+
+// `command` is one of the plugin's own commands, run when the strip line is clicked.
+fn install_status_plugin_with(
+    data: &std::path::Path,
+    id: &str,
+    title: &str,
+    command: Option<&str>,
+    text: &str,
+) {
     let root = data.join(id.rsplit('.').next().unwrap_or(id));
     std::fs::create_dir(&root).unwrap();
+    let mut status = serde_json::json!({ "title": title });
+    let mut commands = serde_json::json!([]);
+    if let Some(command) = command {
+        status["command"] = command.into();
+        commands = serde_json::json!([{ "id": command, "title": "Refresh usage" }]);
+    }
     let manifest = serde_json::json!({
         "id": id,
         "name": "Status",
@@ -73,7 +90,8 @@ fn install_status_plugin(data: &std::path::Path, id: &str, title: &str, text: &s
         "entry": "main.js",
         "instructions": "Show a line in the activity strip.",
         "powers": {},
-        "ui": { "status": { "title": title } },
+        "commands": commands,
+        "ui": { "status": status },
         "tools": [{
             "name": "status",
             "description": "Change the status line",
@@ -119,7 +137,12 @@ export default class Plugin extends View {{
             root,
             commit: None,
             enabled: true,
-            approved: serde_json::json!({"powers": {}, "folders": {}, "status": title}),
+            approved: serde_json::json!({
+                "powers": {},
+                "folders": {},
+                "status": title,
+                "status_command": command,
+            }),
             error: None,
         })
         .unwrap();
@@ -628,4 +651,25 @@ fn the_update_button_is_a_button_and_does_not_open_the_log(cx: &mut TestAppConte
     );
     click(cx, window, "activity-update");
     assert!(!shows(cx, window, "activity-log"));
+}
+
+#[gpui_kit::test]
+fn clicking_a_status_line_with_a_command_runs_that_command(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
+        install_status_plugin_with(data, STATUS, "Usage", Some("usage.refresh"), "42%");
+    });
+    wait_until(cx, |cx| shows(cx, window, STATUS_ITEM));
+    assert_eq!(
+        role_of(cx, window, STATUS_ITEM),
+        Some(gpui_kit::Role::Button)
+    );
+    assert_eq!(label(cx, window, STATUS_ITEM), "Usage");
+    assert_eq!(value_of(cx, window, STATUS_ITEM).as_deref(), Some("42%"));
+
+    click(cx, window, STATUS_ITEM);
+    click(cx, window, "activity-toggle");
+    assert_eq!(
+        label(cx, window, "activity-row-0"),
+        format!("{STATUS}: ran a command")
+    );
 }
