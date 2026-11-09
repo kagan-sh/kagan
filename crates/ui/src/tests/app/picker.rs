@@ -26,7 +26,7 @@ use std::path::PathBuf;
 /// in a new folder under `data`. Each fake prints its own name and its arguments, so a thread's screen shows which
 /// program ran. Returns the folder.
 #[cfg(unix)]
-fn fixture_programs(cx: &mut TestAppContext, data: &Path, names: &[&str]) -> PathBuf {
+pub(crate) fn fixture_programs(cx: &mut TestAppContext, data: &Path, names: &[&str]) -> PathBuf {
     use std::os::unix::fs::PermissionsExt as _;
     let bin = data.join("programs");
     std::fs::create_dir_all(&bin).unwrap();

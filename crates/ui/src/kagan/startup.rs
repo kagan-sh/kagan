@@ -113,6 +113,7 @@ impl Kagan {
     fn started(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.start.branch_focus = Some(cx.focus_handle().tab_stop(true));
         self.start.segments_focus = Some(cx.focus_handle().tab_stop(false));
+        self.start.form_focus = Some(cx.focus_handle().tab_stop(false));
         self.load_settings(cx);
         self.activity
             .update_state(Updater::global(cx).read(cx).state());
@@ -233,7 +234,7 @@ fn listen(
             },
         ),
         cx.subscribe_in(picker, window, |this, _, _: &picker::Start, window, cx| {
-            this.start(window, cx);
+            this.start_thread(window, cx);
         }),
         cx.subscribe_in(picker, window, |this, _, _: &picker::Close, window, cx| {
             this.escape_start(window, cx);

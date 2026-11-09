@@ -1,7 +1,9 @@
 use crate::theme::TypeScale as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::{Disableable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, Window, div, rems,
@@ -10,9 +12,9 @@ use kg_core::Workspace;
 use kg_domain::{Op, OpResult, ProjectId, ProjectKind, ProjectOp};
 use std::path::PathBuf;
 
-use super::{LeaveStart, START_CONTEXT, project_kind};
+use super::{CONTROLS_CONTEXT, LeaveStart, START_CONTEXT, StartThread, project_kind};
 use crate::kagan::Kagan;
-use crate::kagan::controls::{control, note};
+use crate::kagan::controls::{bound_strokes, control, keys_text, note};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 impl Kagan {
@@ -29,10 +31,7 @@ impl Kagan {
             .map_or_else(String::new, |project| project.name.clone());
         let kind = project_kind(project, cx);
         let heading = self.start_heading(&name);
-        let ready = kind.is_some_and(|kind| self.start_environment(kind, cx).is_some())
-            && self.setup_ready()
-            && !self.start.starting
-            && self.picker.read(cx).command(cx).is_ok();
+        let ready = self.start_ready(kind, cx);
         // The column is as tall as the window, less its top offset, so the fields scroll inside it
         // and the actions stay its last child, under the fields.
         v_flex()
@@ -40,8 +39,14 @@ impl Kagan {
             .size_full()
             .items_center()
             .key_context(START_CONTEXT)
+            .when_some(self.start.form_focus.clone(), |form, focus| {
+                form.track_focus(&focus).tab_stop(false)
+            })
             .on_action(cx.listener(|this, _: &LeaveStart, window, cx| {
                 this.escape_start(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &StartThread, window, cx| {
+                this.start_thread(window, cx);
             }))
             .child(
                 v_flex()
@@ -52,6 +57,7 @@ impl Kagan {
                     .pt_16()
                     .px_4()
                     .pb_4()
+                    .key_context(CONTROLS_CONTEXT)
                     .child(
                         v_flex()
                             .id("start-fields")
@@ -109,6 +115,7 @@ impl Kagan {
     ) -> AnyElement {
         let muted = cx.theme().muted_foreground;
         let retry = self.setup_retry_pending();
+        let keys = bound_strokes(&StartThread, cx);
         let label = if retry { "Retry setup" } else { "Start" };
         // Start waits for the branch's setup script, so say so while it is missing.
         let reason = if retry {
@@ -142,7 +149,15 @@ impl Kagan {
                         .gap_2()
                         .items_center()
                         .child(div().type_body(cx).child(label))
-                        .child(div().opacity(0.7).type_caption(cx).child("Enter")),
+                        .child(
+                            div()
+                                .id("start-key")
+                                .ui_container()
+                                .aria_label(keys_text(&keys))
+                                .flex()
+                                .gap_1()
+                                .children(keys.into_iter().map(Kbd::new)),
+                        ),
                 )
                 .on_click(cx.listener(|this, _, window, cx| this.start(window, cx))),
         );

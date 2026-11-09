@@ -2,19 +2,23 @@ use super::chord;
 use crate::kagan::screen_read;
 
 use gpui_kit::InputEvent as _;
+use gpui_kit::component::kbd::Kbd;
 use gpui_kit::{
-    AnyWindowHandle, AppContext as _, ElementId, TestAppContext, WindowBounds, px, size,
+    AnyWindowHandle, AppContext as _, ElementId, Entity, TestAppContext, WindowBounds, px, size,
 };
 use kg_core::Workspace;
 use kg_domain::{EnvironmentProvider, ProjectId, ThreadId, ThreadStatus};
 
-use crate::kagan::{NewThread, StopThread};
+use crate::kagan::{Kagan, NewThread, StopThread};
 
+use super::setup::disabled;
 use super::{
     add_project, click, commit_setup, committed_repo, environment_of, label, open, run_shell,
     scroll_form_to_end, selected_of, set_program, setup, shell, shown, shows, thread_status,
     wait_until,
 };
+#[cfg(unix)]
+use crate::tests::app::picker::{fixture_programs, start_in_plain_folder};
 
 #[gpui_kit::test]
 fn stop_ends_the_program(cx: &mut TestAppContext) {
@@ -213,6 +217,105 @@ fn tab_visits_each_control_of_the_form_in_order_then_escape_leaves(cx: &mut Test
         cx.update(|cx| screen_read::start_project(kagan.read(cx)))
             .is_none()
     });
+}
+
+fn thread_count(cx: &mut TestAppContext) -> usize {
+    cx.update(|cx| Workspace::global(cx).read(cx).thread_records(cx).len())
+}
+
+fn tab_to(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) {
+    for _ in 0..12 {
+        if choice_focused(cx, window, name) == Some(true) {
+            return;
+        }
+        press_key(cx, window, "tab");
+    }
+    panic!("Tab never reached {name}");
+}
+
+// A git folder with Shell chosen, so Start is ready.
+fn open_git_form(cx: &mut TestAppContext) -> (Entity<Kagan>, AnyWindowHandle, tempfile::TempDir) {
+    let (kagan, window, data) = open(cx);
+    let (_repo, project) = committed_repo(cx, data.path());
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "start-cancel"));
+    set_program(cx, window, &kagan, shell());
+    wait_until(cx, |cx| disabled(cx, window, "start") == Some(false));
+    (kagan, window, data)
+}
+
+// A plain folder with a fake Claude installed. Its program runs in a plain folder, and the first
+// installed program is the one Start runs, so Start is ready.
+#[cfg(unix)]
+fn open_plain_form(cx: &mut TestAppContext) -> (Entity<Kagan>, AnyWindowHandle, tempfile::TempDir) {
+    let (kagan, window, data) = open(cx);
+    fixture_programs(cx, data.path(), &["claude"]);
+    start_in_plain_folder(cx, window, data.path());
+    wait_until(cx, |cx| disabled(cx, window, "start") == Some(false));
+    (kagan, window, data)
+}
+
+#[gpui_kit::test]
+fn enter_on_a_focused_cancel_leaves_and_starts_no_thread(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open_git_form(cx);
+    click(cx, window, "program-search");
+    tab_to(cx, window, "start-cancel-button");
+    let before = thread_count(cx);
+    press_key(cx, window, "enter");
+    wait_until(cx, |cx| {
+        cx.update(|cx| screen_read::start_project(kagan.read(cx)))
+            .is_none()
+    });
+    cx.run_until_parked();
+    assert_eq!(thread_count(cx), before);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn enter_in_the_program_search_starts_exactly_one_thread(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open_plain_form(cx);
+    click(cx, window, "program-search");
+    press_key(cx, window, "enter");
+    wait_until(cx, |cx| shown(cx, &kagan).is_some());
+    cx.run_until_parked();
+    assert_eq!(thread_count(cx), 1);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn enter_on_the_form_itself_starts_one_thread(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open_plain_form(cx);
+    cx.update_window(window, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| kagan.focus_start_form(window, cx));
+    })
+    .unwrap();
+    press_key(cx, window, "enter");
+    wait_until(cx, |cx| shown(cx, &kagan).is_some());
+    cx.run_until_parked();
+    assert_eq!(thread_count(cx), 1);
+}
+
+#[gpui_kit::test]
+fn enter_in_the_branch_search_picks_a_branch_and_starts_nothing(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open_git_form(cx);
+    click(cx, window, "branch-from");
+    wait_until(cx, |cx| shows(cx, window, "branch-search"));
+    press_key(cx, window, "enter");
+    cx.run_until_parked();
+    assert_eq!(thread_count(cx), 0);
+    assert!(
+        cx.update(|cx| screen_read::start_project(kagan.read(cx)))
+            .is_some()
+    );
+}
+
+#[gpui_kit::test]
+fn the_start_key_badge_shows_the_key_that_starts_the_thread(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_git_form(cx);
+    assert_eq!(
+        label(cx, window, "start-key"),
+        Kbd::format(&kg_core::parse_key("enter").unwrap())
+    );
 }
 
 fn end_shell_thread(cx: &mut TestAppContext, window: AnyWindowHandle) -> ThreadId {

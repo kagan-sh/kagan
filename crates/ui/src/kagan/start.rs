@@ -118,6 +118,7 @@ pub(super) struct StartState {
     panel: Panel,
     pub(super) branch_focus: Option<FocusHandle>,
     pub(super) segments_focus: Option<FocusHandle>,
+    pub(super) form_focus: Option<FocusHandle>,
     branch_query: Option<Entity<InputState>>,
     branch_watch: Option<Subscription>,
     branches: Branches,
@@ -272,10 +273,40 @@ mod setup;
 pub(super) use menu::{BRANCH_CONTEXT, CloseBranchMenu};
 
 pub(crate) const START_CONTEXT: &str = "NewThreadScreen";
+// The form's controls. Enter is theirs (a focused button activates itself), so this context
+// stops the screen's Enter binding from reaching them.
+pub(crate) const CONTROLS_CONTEXT: &str = "NewThreadControls";
 
-actions!(kagan, [LeaveStart]);
+actions!(kagan, [LeaveStart, StartThread]);
+
+#[cfg(test)]
+impl Kagan {
+    pub(crate) fn focus_start_form(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(form) = &self.start.form_focus {
+            window.focus(form, cx);
+        }
+    }
+}
 
 impl Kagan {
+    // Enter starts the thread only when Start is enabled, the same test that draws it enabled.
+    pub(super) fn start_thread(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Shown::Start(project) = self.screen.shown() else {
+            return;
+        };
+        let kind = project_kind(project, cx);
+        if self.start_ready(kind, cx) {
+            self.start(window, cx);
+        }
+    }
+
+    pub(super) fn start_ready(&self, kind: Option<ProjectKind>, cx: &App) -> bool {
+        kind.is_some_and(|kind| self.start_environment(kind, cx).is_some())
+            && self.setup_ready()
+            && !self.start.starting
+            && self.picker.read(cx).command(cx).is_ok()
+    }
+
     // Escape first closes an open branch menu, and leaves the screen only when none was open.
     pub(super) fn escape_start(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.close_branch_menu(window, cx) {
