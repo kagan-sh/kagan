@@ -133,6 +133,7 @@ impl Kagan {
         self.sidebar
             .update(cx, |sidebar, _| sidebar.choose(Some(project.clone())));
         self.start.reset();
+        self.remember_worktree_root(cx);
         self.load_branches(project, cx);
         self.picker.update(cx, |picker, cx| picker.load(window, cx));
         self.picker

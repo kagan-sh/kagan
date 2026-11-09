@@ -156,20 +156,13 @@ fn the_runs_in_sentence_says_where_each_choice_writes(cx: &mut TestAppContext) {
     click(cx, window, &format!("project-new-{}", project.id.0));
     wait_until(cx, |cx| shows(cx, window, "worktree-hint"));
     let hint = label(cx, window, "worktree-hint");
-    assert!(
-        hint.starts_with("A new folder on its own branch from "),
-        "{hint}"
-    );
-    assert!(hint.contains("/worktrees. "), "{hint}");
-    assert!(
-        hint.ends_with("Your project folder stays as it is."),
-        "{hint}"
-    );
+    assert!(hint.starts_with("New folder on a branch from "), "{hint}");
+    assert!(hint.ends_with("/worktrees."), "{hint}");
     click(cx, window, "folder-project");
     wait_until(cx, |cx| shows(cx, window, "project-hint"));
     assert_eq!(
         label(cx, window, "project-hint"),
-        "Runs in your project folder. Changes land in that folder."
+        "Changes land in the project folder."
     );
 }
 

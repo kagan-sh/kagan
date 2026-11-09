@@ -77,6 +77,8 @@ pub(super) struct Reuse {
 #[derive(Default)]
 pub(super) struct StartState {
     reuse: Option<Reuse>,
+    // The data folder's worktrees, as the line under "Runs in" shows it. Set once when the screen opens.
+    pub(super) worktree_root: String,
     folder: Option<StartFolder>,
     pick: BranchPick,
     intent: ProjectIntent,
@@ -236,6 +238,11 @@ mod setup;
 pub(super) use menu::{BRANCH_CONTEXT, CloseBranchMenu};
 
 impl Kagan {
+    pub(super) fn remember_worktree_root(&mut self, cx: &App) {
+        let root = Workspace::global(cx).read(cx).data_dir().join("worktrees");
+        self.start.worktree_root = folder::shown_path(&root);
+    }
+
     pub(in crate::kagan) fn new_thread_here(
         &mut self,
         thread: &ThreadId,

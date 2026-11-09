@@ -1,11 +1,14 @@
 use crate::theme::TypeScale as _;
+use crate::ui_observe::UiObserveExt as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::Button;
-use gpui_kit::component::{Disableable as _, Sizable as _, v_flex};
+use gpui_kit::component::tooltip::Tooltip;
+use gpui_kit::component::{Disableable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     Action, AnyElement, App, Context, IntoElement, ParentElement as _, Role, SharedString,
     Styled as _, div,
 };
+use gpui_kit::{InteractiveElement as _, StatefulInteractiveElement as _};
 
 use super::{BranchPick, Branches, Reuse, StartFolder, base_label};
 use crate::kagan::controls::{Selected, control, dispatch, note};
@@ -16,7 +19,7 @@ use kg_domain::{BranchList, ProjectKind};
 use std::path::{Path, PathBuf};
 
 // The home folder reads as `~`, the way a person says it. Other folders keep their full path.
-fn shown_path(path: &Path) -> String {
+pub(super) fn shown_path(path: &Path) -> String {
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from);
@@ -77,11 +80,13 @@ impl Kagan {
         }
         let chosen = self.chosen_folder();
         let hint = if chosen == Some(StartFolder::Worktree) {
-            ("worktree-hint", self.worktree_hint(branches, cx))
+            self.worktree_hint(branches, cx)
         } else {
-            (
+            note(
                 "project-hint",
-                "Runs in your project folder. Changes land in that folder.".to_owned(),
+                "Changes land in the project folder.",
+                muted,
+                cx,
             )
         };
         v_flex()
@@ -90,20 +95,42 @@ impl Kagan {
             .child(div().type_caption(cx).text_color(muted).child("Runs in"))
             .child(self.folder_toggles(chosen, cx))
             .child(self.branch_control(branches, cx))
-            .child(note(hint.0, hint.1, muted, cx))
+            .child(hint)
             .into_any_element()
     }
 
-    fn worktree_hint(&self, branches: &BranchList, cx: &App) -> String {
+    // One line. The folder is cut from its start, so its end stays visible, and a tooltip has the rest.
+    fn worktree_hint(&self, branches: &BranchList, cx: &App) -> AnyElement {
         let base = match &self.start.pick {
             BranchPick::Current => base_label(branches),
             BranchPick::Named(name) | BranchPick::NewFrom(name) => name.clone(),
         };
-        let root = Workspace::global(cx).read(cx).data_dir().join("worktrees");
-        format!(
-            "A new folder on its own branch from {base}, under {}. Your project folder stays as it is.",
-            shown_path(&root)
-        )
+        let root = self.start.worktree_root.clone();
+        let full = format!("New folder on a branch from {base}, in {root}.");
+        let tip = root.clone();
+        h_flex()
+            .id("worktree-hint")
+            .ui_container()
+            .w_full()
+            .min_w_0()
+            .whitespace_nowrap()
+            .type_small(cx)
+            .text_color(cx.theme().muted_foreground)
+            .aria_label(full)
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .child(format!("New folder on a branch from {base}, in ")),
+            )
+            .child(
+                div()
+                    .id("worktree-root")
+                    .min_w_0()
+                    .text_ellipsis_start()
+                    .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+                    .child(format!("{root}.")),
+            )
+            .into_any_element()
     }
 
     // The folder of the ended thread is the only choice, so one line says where the run writes.
