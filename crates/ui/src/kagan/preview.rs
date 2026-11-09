@@ -1,5 +1,4 @@
-use std::io::Read as _;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use gpui_kit::{
@@ -14,9 +13,6 @@ use kg_domain::{
 use super::Kagan;
 
 mod render;
-
-const IMAGE_LIMIT: u64 = 8 * 1024 * 1024;
-const PIXEL_LIMIT: u64 = 40_000_000;
 
 pub(super) struct Preview {
     thread: Option<ThreadId>,
@@ -215,7 +211,7 @@ impl Kagan {
             None => None,
         };
         let read = cx.background_spawn(async move {
-            read_image(root.as_deref(), &absolute)
+            kg_core::preview_image(root.as_deref(), &absolute)
                 .map(|bytes| Arc::new(Image::from_bytes(image_format(format), bytes)))
         });
         let load = cx.spawn(async move |this, cx| {
@@ -246,30 +242,6 @@ impl Kagan {
     }
 }
 
-fn read_image(root: Option<&Path>, absolute: &Path) -> Option<Vec<u8>> {
-    let absolute = std::fs::canonicalize(absolute).ok()?;
-    if let Some(root) = root {
-        let root = std::fs::canonicalize(root).ok()?;
-        if !absolute.starts_with(root) {
-            return None;
-        }
-    }
-    if !std::fs::metadata(&absolute).ok()?.is_file() {
-        return None;
-    }
-    let file = std::fs::File::open(&absolute).ok()?;
-    let mut bytes = Vec::new();
-    file.take(IMAGE_LIMIT + 1).read_to_end(&mut bytes).ok()?;
-    if bytes.len() as u64 > IMAGE_LIMIT {
-        return None;
-    }
-    let (width, height) = kg_core::image_size(&bytes)?;
-    if u64::from(width) * u64::from(height) > PIXEL_LIMIT {
-        return None;
-    }
-    Some(bytes)
-}
-
 fn environment_path(thread: &ThreadId, cx: &App) -> Option<PathBuf> {
     let workspace = Workspace::global(cx).read(cx);
     let id = workspace
@@ -297,6 +269,3 @@ impl Preview {
         self.focus.clone()
     }
 }
-
-#[cfg(test)]
-mod tests;
