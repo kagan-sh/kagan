@@ -80,7 +80,7 @@ kg plugin use threads kagan
 
 `kagan` is the built-in version. kagan always keeps the rail, New thread, Questions, and the review buttons. Only kagan sends your review comments to the agent.
 
-A plugin can put one short status line at the right of the [activity strip](window.md#activity-strip). You cannot click it. Turn **Plugin status** off in Settings → Appearance to hide every line, or turn that plugin off in Installed. [Build a plugin](build-plugin.md#status-line) shows the manifest.
+A plugin can put one short status line at the right of the [activity strip](window.md#activity-strip). A line with a command is a button that runs that command. Otherwise you cannot click it. Turn **Plugin status** off in Settings → Appearance to hide every line, or turn that plugin off in Installed. [Build a plugin](build-plugin.md#status-line) shows the manifest.
 
 A plugin can also add a theme. [Themes](themes.md#themes-from-plugins).
 

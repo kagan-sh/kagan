@@ -31,6 +31,7 @@ Quit (Cmd+Q) and Close (Cmd+W) are only on macOS. On Linux and Windows, Ctrl+Shi
 | Cmd+Alt+J | Next thread that needs you |
 | Cmd+Shift+L | Move the keyboard focus to the left sidebar |
 | Cmd+B and Cmd+Backslash | Show or hide the left or right sidebar |
+| Cmd+Shift+E | Show or hide the activity log at the bottom of the window |
 | Cmd+Shift+A | Command list |
 | Cmd+Alt+F | Search threads |
 | Cmd+Enter | Send review |
