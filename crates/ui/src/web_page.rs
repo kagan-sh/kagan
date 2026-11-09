@@ -314,6 +314,7 @@ fn restrain(view: &gpui_webview::WebView, cx: &App) {
 }
 
 // A per-plugin `WKWebsiteDataStore` needs macOS 14 or later. Older versions keep the page private.
+#[cfg(target_os = "macos")]
 pub(crate) const STORE_NEEDS_MACOS: &str = "Saving page data needs macOS 14 or later.";
 
 #[cfg(target_os = "macos")]

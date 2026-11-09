@@ -111,6 +111,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
 }
 
 type Set = Arc<dyn Fn(&mut Props) + Send + Sync>;
+type Kept = Result<(Option<[u8; 16]>, Option<String>), String>;
 
 struct Props {
     url: Option<String>,
@@ -225,14 +226,14 @@ fn place(id: &str, url: &str, store: bool, window: &mut Window, cx: &mut App) ->
     let keep = store.then(|| {
         let host = kg_plugins::PluginHost::global(cx).read(cx);
         if !host.allows_page_store(&plugin) {
-            return Ok(None);
+            return Ok((None, None));
         }
         if crate::web_page::macos_major() < 14 {
-            return Err(crate::web_page::STORE_NEEDS_MACOS.to_owned());
+            return Ok((None, Some(crate::web_page::STORE_NEEDS_MACOS.to_owned())));
         }
         let data = host.plugin_data(&plugin);
         kg_plugins::keep_store(&data, id)
-            .map(Some)
+            .map(|store| (Some(store), None))
             .map_err(|error| error.to_string())
     });
     #[cfg(not(target_os = "macos"))]
@@ -267,7 +268,7 @@ fn owned(
     id: &str,
     url: &str,
     hosts: &[String],
-    keep: Option<Result<Option<[u8; 16]>, String>>,
+    keep: Option<Kept>,
     window: &mut Window,
     cx: &mut App,
 ) -> Shown {
@@ -289,25 +290,6 @@ fn owned(
             noted(reason)
         }
         Gate::Open => match keep {
-            Some(Err(message)) if message == crate::web_page::STORE_NEEDS_MACOS => {
-                let mut shown = open_owned(
-                    Open {
-                        owner: owner.clone(),
-                        id,
-                        url,
-                        hosts,
-                        store: None,
-                        index,
-                    },
-                    window,
-                    cx,
-                );
-                shown.note = Some(message.clone());
-                if let Some(index) = find(cx, owner.entity_id(), id) {
-                    cx.default_global::<Pages>().pages[index].note = Some(message);
-                }
-                shown
-            }
             Some(Err(message)) => {
                 if let Some(index) = index {
                     conceal_at(cx, index);
@@ -316,8 +298,8 @@ fn owned(
                 noted(&message)
             }
             other => {
-                let store = other.and_then(Result::ok).flatten();
-                open_owned(
+                let (store, note) = other.and_then(Result::ok).unwrap_or((None, None));
+                let mut shown = open_owned(
                     Open {
                         owner: owner.clone(),
                         id,
@@ -328,7 +310,14 @@ fn owned(
                     },
                     window,
                     cx,
-                )
+                );
+                if let Some(note) = note {
+                    shown.note = Some(note.clone());
+                    if let Some(index) = find(cx, owner.entity_id(), id) {
+                        cx.default_global::<Pages>().pages[index].note = Some(note);
+                    }
+                }
+                shown
             }
         },
     }
