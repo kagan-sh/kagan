@@ -164,6 +164,7 @@ impl HostUi {
 
     /// The thread and project a window's plugin context names, or `None` when the window is not
     /// known to the host.
+    #[cfg(any(test, feature = "test"))]
     #[must_use]
     pub fn window_thread(&self, window: WindowId) -> Option<(Option<ThreadId>, Option<ProjectId>)> {
         self.windows
