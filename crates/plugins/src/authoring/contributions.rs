@@ -70,6 +70,9 @@ pub(crate) enum Error {
 pub struct StatusContribution {
     /// The label shown before the line, and the screen-reader name.
     pub title: String,
+    /// One of this plugin's commands, run when the person clicks the line. It must be `always`.
+    #[serde(default)]
+    pub command: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

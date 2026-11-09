@@ -17,9 +17,13 @@ export function writeClipboardPng(pngBase64: string): void;
 /**
  * Sets this plugin's one line in the activity strip, or hides it with null.
  * Plain text, one line, at most 120 characters. `tone` is quiet, busy, needs or failed.
- * Needs `ui.status` in kagan.json.
+ * `tooltip` is plain text shown when the line is hovered. Needs `ui.status` in kagan.json;
+ * clicking the line runs the command that `ui.status.command` names.
  */
 export function setStatus(
   text: string | null,
-  options?: { tone?: "quiet" | "busy" | "needs" | "failed" },
+  options?: {
+    tone?: "quiet" | "busy" | "needs" | "failed";
+    tooltip?: string;
+  },
 ): void;

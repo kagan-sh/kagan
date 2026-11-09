@@ -1,13 +1,17 @@
-use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, TestAppContext, px, size};
+use gpui_kit::{
+    AnyWindowHandle, AppContext as _, ElementId, FocusHandle, TestAppContext, px, size,
+};
 use kg_core::{Target, Updater, Workspace};
 use kg_domain::{
     InteractionOption, Op, OpResult, Plugin, PluginId, PluginOp, ThreadId, ThreadOp, UpdateState,
+    WindowOp,
 };
 
+use crate::kagan::ActivityPart;
 use crate::kagan::screen_read;
 use crate::tests::kagan::{
-    click, focused_of, label, open, open_with_plugins_then, role_of, run_shell, selected_of, shown,
-    shows, thread_record, value_of, wait_until,
+    click, focused_of, label, open, open_with_plugins_then, role_of, run_shell, shown, shows,
+    thread_record, value_of, wait_until,
 };
 
 #[cfg(unix)]
@@ -63,8 +67,25 @@ fn install_status(data: &std::path::Path) {
 }
 
 fn install_status_plugin(data: &std::path::Path, id: &str, title: &str, text: &str) {
+    install_status_plugin_with(data, id, title, None, text);
+}
+
+// `command` is one of the plugin's own commands, run when the strip line is clicked.
+fn install_status_plugin_with(
+    data: &std::path::Path,
+    id: &str,
+    title: &str,
+    command: Option<&str>,
+    text: &str,
+) {
     let root = data.join(id.rsplit('.').next().unwrap_or(id));
     std::fs::create_dir(&root).unwrap();
+    let mut status = serde_json::json!({ "title": title });
+    let mut commands = serde_json::json!([]);
+    if let Some(command) = command {
+        status["command"] = command.into();
+        commands = serde_json::json!([{ "id": command, "title": "Refresh usage" }]);
+    }
     let manifest = serde_json::json!({
         "id": id,
         "name": "Status",
@@ -73,7 +94,8 @@ fn install_status_plugin(data: &std::path::Path, id: &str, title: &str, text: &s
         "entry": "main.js",
         "instructions": "Show a line in the activity strip.",
         "powers": {},
-        "ui": { "status": { "title": title } },
+        "commands": commands,
+        "ui": { "status": status },
         "tools": [{
             "name": "status",
             "description": "Change the status line",
@@ -119,7 +141,12 @@ export default class Plugin extends View {{
             root,
             commit: None,
             enabled: true,
-            approved: serde_json::json!({"powers": {}, "folders": {}, "status": title}),
+            approved: serde_json::json!({
+                "powers": {},
+                "folders": {},
+                "status": title,
+                "status_command": command.map(|id| serde_json::json!({ "id": id, "title": "Refresh usage" })),
+            }),
             skills: Vec::new(),
             error: None,
         })
@@ -192,6 +219,27 @@ fn offer_update(cx: &mut TestAppContext, dir: &std::path::Path) {
     cx.run_until_parked();
 }
 
+// The strip never takes the keyboard on its own: no control of it holds focus.
+fn assert_strip_holds_no_keyboard(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    kagan: &gpui_kit::Entity<crate::kagan::Kagan>,
+) {
+    for (id, part) in [
+        ("activity-needs", ActivityPart::Needs),
+        ("activity-update", ActivityPart::Update),
+        ("activity-install", ActivityPart::Install),
+        ("activity-toggle", ActivityPart::Log),
+    ] {
+        let focus = cx.update(|cx| kagan.read(cx).activity_focus(part));
+        let held = cx
+            .update_window(window, |_, window, _| focus.is_focused(window))
+            .unwrap();
+        assert!(!held, "{id} holds the keyboard");
+        assert_ne!(focused_of(cx, window, id), Some(true), "{id} shows focus");
+    }
+}
+
 fn terminal_focused(
     cx: &mut TestAppContext,
     window: AnyWindowHandle,
@@ -211,7 +259,10 @@ fn the_strip_starts_closed_and_quiet_at_the_bottom(cx: &mut TestAppContext) {
         value_of(cx, window, "activity-summary").as_deref(),
         Some("Quiet")
     );
-    assert_eq!(selected_of(cx, window, "activity-summary"), Some(false));
+    assert_eq!(
+        value_of(cx, window, "activity-toggle").as_deref(),
+        Some("hidden")
+    );
     assert!(!shows(cx, window, "activity-log"));
     assert!(!shows(cx, window, "activity-needs"));
     assert!(!shows(cx, window, "activity-update"));
@@ -236,9 +287,59 @@ fn the_strip_starts_closed_and_quiet_at_the_bottom(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn the_open_strip_sits_under_the_center_and_inside_the_window(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "activity-toggle");
+    assert_open_strip_clears_center(cx, window);
+}
+
+#[gpui_kit::test]
+fn the_open_strip_clears_the_center_at_the_minimum_height(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    cx.simulate_window_resize(window, size(px(1120.), px(360.)));
+    cx.run_until_parked();
+    click(cx, window, "activity-toggle");
+    assert_open_strip_clears_center(cx, window);
+}
+
+fn assert_open_strip_clears_center(cx: &mut TestAppContext, window: AnyWindowHandle) {
+    let (_, center_y, _, center_height) = bounds_of(cx, window, "center");
+    let (_, strip_y, _, strip_height) = bounds_of(cx, window, "activity-strip");
+    let viewport_height = cx
+        .update_window(window, |_, window, _| {
+            f32::from(window.viewport_size().height)
+        })
+        .unwrap();
+    assert!(
+        center_y + center_height <= strip_y + 0.5,
+        "the center ends at {} but the strip starts at {strip_y}",
+        center_y + center_height
+    );
+    assert!(
+        (strip_y + strip_height - viewport_height).abs() < 0.5,
+        "the open strip ends at {} of {viewport_height}",
+        strip_y + strip_height
+    );
+}
+
+#[gpui_kit::test]
+fn the_summary_text_is_status_and_the_log_button_is_the_only_toggle(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    assert_eq!(
+        role_of(cx, window, "activity-summary"),
+        Some(gpui_kit::Role::Status)
+    );
+    assert_eq!(
+        role_of(cx, window, "activity-toggle"),
+        Some(gpui_kit::Role::Button)
+    );
+    assert!(!shows(cx, window, "activity-log"));
+}
+
+#[gpui_kit::test]
 fn the_open_log_says_nothing_has_happened_yet(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
-    click(cx, window, "activity-summary");
+    click(cx, window, "activity-toggle");
     assert!(shows(cx, window, "activity-empty"));
     assert_eq!(
         label(cx, window, "activity-empty"),
@@ -260,7 +361,7 @@ fn a_busy_agent_shows_in_the_summary_and_as_a_log_line(cx: &mut TestAppContext) 
         terminal_focused(cx, window, &kagan),
         "a turn moved the keyboard"
     );
-    assert_eq!(focused_of(cx, window, "activity-strip"), Some(false));
+    assert_strip_holds_no_keyboard(cx, window, &kagan);
 
     assert!(!shows(cx, window, "activity-update"));
     offer_update(cx, data.path());
@@ -275,7 +376,7 @@ fn a_busy_agent_shows_in_the_summary_and_as_a_log_line(cx: &mut TestAppContext) 
         "Not now silenced the center notice but not the strip"
     );
 
-    click(cx, window, "activity-summary");
+    click(cx, window, "activity-toggle");
     let title = thread_record(cx, &id).title;
     assert_eq!(
         label(cx, window, "activity-row-0"),
@@ -322,44 +423,43 @@ fn a_waiting_question_shows_and_its_click_opens_the_next_thread_needing_you(
 }
 
 #[gpui_kit::test]
-fn a_click_or_the_keyboard_opens_the_log_and_escape_closes_it(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = open(cx);
+fn the_log_button_opens_the_log_and_escape_closes_it(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
 
-    click(cx, window, "activity-summary");
+    click(cx, window, "activity-toggle");
     assert!(shows(cx, window, "activity-log"));
-    assert_eq!(selected_of(cx, window, "activity-summary"), Some(true));
-    assert_eq!(focused_of(cx, window, "activity-strip"), Some(true));
+    assert_eq!(
+        value_of(cx, window, "activity-toggle").as_deref(),
+        Some("shown")
+    );
+    assert_strip_holds_no_keyboard(cx, window, &kagan);
     let height = height_of(cx, window, "activity-strip");
     assert!((height - 168.).abs() < 0.5, "the open strip is {height}");
 
-    crate::tests::kagan::press_key(cx, window, "space");
-    assert!(!shows(cx, window, "activity-log"));
-    assert_eq!(selected_of(cx, window, "activity-summary"), Some(false));
-    assert_eq!(
-        focused_of(cx, window, "activity-strip"),
-        Some(true),
-        "the keyboard toggle kept the strip"
-    );
-
-    crate::tests::kagan::press_key(cx, window, "enter");
-    assert!(shows(cx, window, "activity-log"));
-
+    // A person's click focuses the toggle; the test click does not, so focus it the same way.
+    let focus = cx.update(|cx| kagan.read(cx).activity_focus(ActivityPart::Log));
+    cx.update_window(window, |_, window, cx| window.focus(&focus, cx))
+        .unwrap();
     crate::tests::kagan::press_key(cx, window, "escape");
     assert!(!shows(cx, window, "activity-log"));
+    assert_eq!(
+        value_of(cx, window, "activity-toggle").as_deref(),
+        Some("hidden")
+    );
 }
 
-#[gpui_kit::test]
-fn a_plugin_install_shows_its_source_and_a_log_line(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open_with_plugins_then(cx, |_| {});
-    cx.run_until_parked();
-    let folder = data.path().join("widget");
+// Starts an install of a new plugin folder. The install waits for the person's OK.
+fn start_install(
+    cx: &mut TestAppContext,
+    folder: &std::path::Path,
+) -> gpui_kit::Task<Result<OpResult, kg_domain::OpError>> {
     let created = cx.update(|cx| {
         Workspace::dispatch(
             Op::Plugin(PluginOp::New {
                 name: "widget".into(),
-                dir: Some(folder.clone()),
+                dir: Some(folder.to_path_buf()),
             }),
             cx,
         )
@@ -368,27 +468,54 @@ fn a_plugin_install_shows_its_source_and_a_log_line(cx: &mut TestAppContext) {
         cx.foreground_executor().block_test(created),
         Ok(OpResult::Files(_))
     ));
-
     let source = folder.display().to_string();
-    let install = cx.update(|cx| {
+    cx.update(|cx| {
         Workspace::dispatch(
             Op::Plugin(PluginOp::Install {
-                source: source.clone(),
+                source,
                 plugin: None,
                 thread_id: None,
             }),
             cx,
         )
-    });
+    })
+}
+
+fn assert_log_toggle_inside(cx: &mut TestAppContext, window: AnyWindowHandle) {
+    let (x, _, width, _) = bounds_of(cx, window, "activity-toggle");
+    let viewport_width = cx
+        .update_window(window, |_, window, _| {
+            f32::from(window.viewport_size().width)
+        })
+        .unwrap();
+    assert!(
+        x >= 0. && x + width <= viewport_width + 0.5,
+        "the log toggle spans {x}..{} of {viewport_width}",
+        x + width
+    );
+}
+
+#[gpui_kit::test]
+fn a_plugin_install_shows_its_source_and_a_log_line(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open_with_plugins_then(cx, |_| {});
+    cx.run_until_parked();
+    let folder = data.path().join("widget");
+    let install = start_install(cx, &folder);
+    let source = folder.display().to_string();
     wait_until(cx, |cx| {
         cx.update(|cx| Workspace::global(cx).read(cx).approvals().count()) == 1
     });
     assert!(shows(cx, window, "activity-install"));
 
-    click(cx, window, "activity-summary");
+    click(cx, window, "activity-toggle");
     assert_eq!(
         label(cx, window, "activity-row-0"),
         format!("Installing {source}")
+    );
+    click(cx, window, "activity-install");
+    assert!(
+        cx.update(|cx| screen_read::in_settings(kagan.read(cx))),
+        "the Installing button opens Settings"
     );
 
     let approval = cx
@@ -413,7 +540,7 @@ fn the_open_strip_keeps_its_log_across_a_thread_switch(cx: &mut TestAppContext) 
     let (_kagan, window, _data) = open(cx);
     let first = run_program(cx, &busy_program());
     click(cx, window, &format!("thread-{}", first.0));
-    click(cx, window, "activity-summary");
+    click(cx, window, "activity-toggle");
     wait_until(cx, |cx| shows(cx, window, "activity-row-0"));
 
     let second = run_shell(cx);
@@ -425,7 +552,7 @@ fn the_open_strip_keeps_its_log_across_a_thread_switch(cx: &mut TestAppContext) 
 
 #[gpui_kit::test]
 fn a_plugin_status_item_is_one_text_line_in_the_strip(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = open_with_plugins_then(cx, install_status);
+    let (kagan, window, _data) = open_with_plugins_then(cx, install_status);
     wait_until(cx, |cx| shows(cx, window, STATUS_ITEM));
     assert_eq!(
         role_of(cx, window, STATUS_ITEM),
@@ -434,7 +561,7 @@ fn a_plugin_status_item_is_one_text_line_in_the_strip(cx: &mut TestAppContext) {
     assert_eq!(label(cx, window, STATUS_ITEM), "Usage");
     assert_eq!(value_of(cx, window, STATUS_ITEM).as_deref(), Some("42%"));
     assert_eq!(focused_of(cx, window, STATUS_ITEM), None);
-    assert_eq!(focused_of(cx, window, "activity-strip"), Some(false));
+    assert_strip_holds_no_keyboard(cx, window, &kagan);
 }
 
 #[gpui_kit::test]
@@ -576,7 +703,220 @@ fn a_question_does_not_take_the_keyboard_or_open_the_strip(cx: &mut TestAppConte
         terminal_focused(cx, window, &kagan),
         "the question moved the keyboard"
     );
-    assert_eq!(focused_of(cx, window, "activity-strip"), Some(false));
+    assert_strip_holds_no_keyboard(cx, window, &kagan);
     assert!(!shows(cx, window, "activity-log"));
     drop(asked);
+}
+
+#[gpui_kit::test]
+fn the_update_button_is_a_button_and_does_not_open_the_log(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    offer_update(cx, data.path());
+    assert_eq!(
+        role_of(cx, window, "activity-update"),
+        Some(gpui_kit::Role::Button)
+    );
+    click(cx, window, "activity-update");
+    assert!(!shows(cx, window, "activity-log"));
+}
+
+#[gpui_kit::test]
+fn clicking_a_status_line_with_a_command_runs_that_command(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
+        install_status_plugin_with(data, STATUS, "Usage", Some("usage.refresh"), "42%");
+    });
+    wait_until(cx, |cx| shows(cx, window, STATUS_ITEM));
+    assert_eq!(
+        role_of(cx, window, STATUS_ITEM),
+        Some(gpui_kit::Role::Button)
+    );
+    assert_eq!(label(cx, window, STATUS_ITEM), "Usage");
+    assert_eq!(value_of(cx, window, STATUS_ITEM).as_deref(), Some("42%"));
+    let hint = cx
+        .update_window(window, |_, window, _| {
+            crate::ui_registry::find(window, &ElementId::Name(STATUS_ITEM.to_owned().into()))
+                .and_then(|element| element.hint.map(|hint| hint.to_string()))
+        })
+        .unwrap()
+        .unwrap_or_default();
+    assert!(
+        hint.contains("Refresh usage"),
+        "the button says what it runs: {hint:?}"
+    );
+
+    click(cx, window, STATUS_ITEM);
+    click(cx, window, "activity-toggle");
+    assert_eq!(
+        label(cx, window, "activity-row-0"),
+        format!("{STATUS}: ran a command")
+    );
+}
+
+#[gpui_kit::test]
+fn each_strip_control_is_one_tab_stop_in_tab_order(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open_with_plugins_then(cx, |data| {
+        install_status_plugin_with(data, STATUS, "Usage", Some("usage.refresh"), "42%");
+    });
+    wait_until(cx, |cx| shows(cx, window, STATUS_ITEM));
+    offer_update(cx, data.path());
+    let waiting = run_shell(cx);
+    let _asked = raise(cx, &waiting, "First?");
+    assert!(shows(cx, window, "activity-needs"));
+    assert!(shows(cx, window, "activity-update"));
+
+    let plugin = PluginId(STATUS.into());
+    let handles: Vec<(&str, FocusHandle)> = vec![
+        (
+            "needs",
+            cx.update(|cx| kagan.read(cx).activity_focus(ActivityPart::Needs)),
+        ),
+        (
+            "update",
+            cx.update(|cx| kagan.read(cx).activity_focus(ActivityPart::Update)),
+        ),
+        (
+            "plugin",
+            cx.update(|cx| kagan.read(cx).activity_plugin_focus(&plugin))
+                .expect("the plugin item has a focus handle"),
+        ),
+        (
+            "toggle",
+            cx.update(|cx| kagan.read(cx).activity_focus(ActivityPart::Log)),
+        ),
+    ];
+    let names = ["needs", "update", "plugin", "toggle"];
+
+    let mut seen: Vec<&str> = Vec::new();
+    for _ in 0..600 {
+        crate::tests::kagan::press_key(cx, window, "tab");
+        let now = cx
+            .update_window(window, |_, window, _| {
+                handles
+                    .iter()
+                    .find(|(_, focus)| focus.is_focused(window))
+                    .map(|(name, _)| *name)
+            })
+            .unwrap();
+        seen.push(now.unwrap_or("-"));
+    }
+    let start = seen
+        .iter()
+        .position(|name| *name == "needs")
+        .expect("Tab reaches the needs-you button");
+    let end = start
+        + 1
+        + seen[start + 1..]
+            .iter()
+            .position(|name| *name == "needs")
+            .expect("Tab comes back to the needs-you button");
+    let cycle = &seen[start..end];
+    for name in names {
+        let count = cycle.iter().filter(|seen| **seen == name).count();
+        assert_eq!(count, 1, "{name} is {count} Tab stops in {cycle:?}");
+    }
+    let order: Vec<usize> = names
+        .iter()
+        .map(|name| cycle.iter().position(|seen| seen == name).unwrap())
+        .collect();
+    assert!(order.windows(2).all(|pair| pair[0] < pair[1]), "{cycle:?}");
+
+    let toggle = handles[3].1.clone();
+    cx.update_window(window, |_, window, cx| window.focus(&toggle, cx))
+        .unwrap();
+    crate::tests::kagan::press_key(cx, window, "enter");
+    assert!(shows(cx, window, "activity-log"), "Enter opens the log");
+}
+
+#[gpui_kit::test]
+fn the_activity_log_op_shows_and_hides_the_log(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let toggle = |cx: &mut TestAppContext| {
+        let task = cx.update(|cx| Workspace::dispatch(Op::Window(WindowOp::ToggleActivityLog), cx));
+        cx.foreground_executor().block_test(task).unwrap();
+        cx.run_until_parked();
+    };
+    toggle(cx);
+    assert!(shows(cx, window, "activity-log"));
+    assert_eq!(
+        value_of(cx, window, "activity-toggle").as_deref(),
+        Some("shown")
+    );
+    toggle(cx);
+    assert!(!shows(cx, window, "activity-log"));
+}
+
+#[gpui_kit::test]
+fn long_plugin_command_items_keep_the_log_toggle_inside_the_window(cx: &mut TestAppContext) {
+    let long = "word ".repeat(24);
+    let long = long.trim_end();
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
+        for n in 1..=4 {
+            let command = format!("usage.refresh{n}");
+            install_status_plugin_with(
+                data,
+                &format!("dev.test.long{n}"),
+                "Usage",
+                Some(&command),
+                long,
+            );
+        }
+    });
+    cx.simulate_window_resize(window, size(px(720.), px(800.)));
+    cx.run_until_parked();
+    wait_until(cx, |cx| shows(cx, window, "activity-plugin-dev.test.long1"));
+    assert_log_toggle_inside(cx, window);
+}
+
+#[gpui_kit::test]
+fn a_long_install_source_keeps_the_log_toggle_inside_the_window(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open_with_plugins_then(cx, |_| {});
+    cx.run_until_parked();
+    let folder = data.path().join("w".repeat(150));
+    let _install = start_install(cx, &folder);
+    wait_until(cx, |cx| {
+        cx.update(|cx| Workspace::global(cx).read(cx).approvals().count()) == 1
+    });
+    cx.simulate_window_resize(window, size(px(528.), px(720.)));
+    cx.run_until_parked();
+    assert!(shows(cx, window, "activity-install"));
+    assert_log_toggle_inside(cx, window);
+}
+
+#[gpui_kit::test]
+fn plugin_items_past_the_four_show_as_a_count(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
+        for number in 1..=5 {
+            install_status_plugin(
+                data,
+                &format!("dev.test.count{number}"),
+                &format!("Usage {number}"),
+                "x",
+            );
+        }
+    });
+    cx.simulate_window_resize(window, size(px(720.), px(800.)));
+    cx.run_until_parked();
+    wait_until(cx, |cx| {
+        shows(cx, window, "activity-plugin-dev.test.count4")
+    });
+    assert_eq!(
+        value_of(cx, window, "activity-plugins-more").as_deref(),
+        Some("1")
+    );
+}
+
+#[gpui_kit::test]
+fn a_narrow_window_says_how_many_plugin_items_it_hides(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
+        install_status_plugin(data, "dev.test.narrow1", "Usage 1", "x");
+        install_status_plugin(data, "dev.test.narrow2", "Usage 2", "x");
+    });
+    cx.simulate_window_resize(window, size(px(528.), px(800.)));
+    cx.run_until_parked();
+    wait_until(cx, |cx| shows(cx, window, "activity-plugins-more"));
+    assert_eq!(
+        value_of(cx, window, "activity-plugins-more").as_deref(),
+        Some("2")
+    );
+    assert!(!shows(cx, window, "activity-plugin-dev.test.narrow1"));
 }

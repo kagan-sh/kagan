@@ -11,6 +11,10 @@ pub(crate) fn start_project(kagan: &Kagan) -> Option<ProjectId> {
     }
 }
 
+pub(crate) fn in_settings(kagan: &Kagan) -> bool {
+    kagan.in_settings()
+}
+
 pub(crate) fn terminal_focused(kagan: &Kagan, window: &Window, cx: &App) -> bool {
     match kagan.screen.shown() {
         Shown::Thread(view) => view.read(cx).focused(window),

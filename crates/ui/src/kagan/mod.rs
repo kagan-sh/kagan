@@ -2,6 +2,8 @@ use changes::Changes;
 use layout::Layout;
 use plugin_actions::Plugins;
 mod activity;
+#[cfg(test)]
+pub(crate) use activity::Part as ActivityPart;
 mod archived;
 mod ask_form;
 pub(crate) mod attention;
@@ -100,6 +102,8 @@ actions!(
         RestoreThread,
         ToggleSidebar,
         ToggleRightSidebar,
+        ToggleActivityLog,
+        CloseActivityLog,
         DismissRightOverlay,
         DismissLeftOverlay,
         OpenSettings,

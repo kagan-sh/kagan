@@ -23,8 +23,8 @@ pub(crate) struct Bound<'a> {
 pub(crate) struct Values {
     pub settings: Rc<RefCell<Map<String, Value>>>,
     pub secrets: crate::secret::Store,
-    /// The approved title of this plugin's activity strip item.
-    pub status: Option<String>,
+    /// The declared activity strip item, if the plugin has one.
+    pub status: Option<crate::authoring::contributions::StatusContribution>,
 }
 
 pub(crate) enum Gate {
@@ -105,7 +105,7 @@ pub(crate) fn modules(
         (Gate::Always, crate::page::module(id)),
         (
             Gate::Always,
-            crate::ui_host::extend(host(id, values), id, status.as_deref(), &secrets),
+            crate::ui_host::extend(host(id, values), id, status.as_ref(), &secrets),
         ),
         (Gate::Area(Area::Process), process),
         (Gate::Area(Area::Threads), crate::threads::module(id)),

@@ -44,6 +44,10 @@ pub(crate) enum Error {
     Entry(String),
     #[error("commands need unique nonempty ids and titles")]
     Commands,
+    #[error(
+        "ui.status command {0:?} must name one of this plugin's commands, with \"when\": \"always\""
+    )]
+    StatusCommand(String),
     #[error("a header command needs when thread")]
     HeaderCommand,
     #[error("a menu command needs when thread")]
@@ -253,6 +257,7 @@ impl Manifest {
         self.check_entry(root)?;
         self.check_skills(root)?;
         self.check_commands()?;
+        self.check_status_command()?;
         self.check_hotkeys()?;
         self.check_events()?;
         self.check_schedules()?;
@@ -291,6 +296,28 @@ impl Manifest {
             return Err(Error::Entry(self.entry.clone()));
         }
         Ok(())
+    }
+
+    fn check_status_command(&self) -> Result<(), Error> {
+        let Some(id) = self
+            .ui
+            .status
+            .as_ref()
+            .and_then(|status| status.command.as_deref())
+        else {
+            return Ok(());
+        };
+        let plain = |text: &str| !text.chars().any(crate::strip::forbidden_status_char);
+        match self.commands.iter().find(|command| command.id == id) {
+            Some(command)
+                if command.when == crate::commands::CommandWhen::Always
+                    && plain(&command.id)
+                    && plain(&command.title) =>
+            {
+                Ok(())
+            }
+            _ => Err(Error::StatusCommand(id.to_owned())),
+        }
     }
 
     fn check_commands(&self) -> Result<(), Error> {

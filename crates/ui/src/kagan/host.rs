@@ -17,9 +17,15 @@ impl Kagan {
         if self.slots.plugin_watch.is_none()
             && let Some(strip) = kg_plugins::PluginStrip::global(cx)
         {
+            let ids = plugin_ids(strip.read(cx));
+            self.sync_plugin_focus(&ids, cx);
             self.slots
                 .host_events
-                .push(cx.observe(&strip, |_, _, cx| cx.notify()));
+                .push(cx.observe(&strip, |this, strip, cx| {
+                    let ids = plugin_ids(strip.read(cx));
+                    this.sync_plugin_focus(&ids, cx);
+                    cx.notify();
+                }));
         }
         if self.slots.plugin_watch.is_some() {
             return;
@@ -201,4 +207,8 @@ impl Kagan {
         })
         .detach();
     }
+}
+
+fn plugin_ids(strip: &kg_plugins::PluginStrip) -> Vec<PluginId> {
+    strip.items().map(|item| item.id.clone()).collect()
 }

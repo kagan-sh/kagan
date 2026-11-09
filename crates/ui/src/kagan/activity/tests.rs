@@ -1,7 +1,7 @@
 use super::*;
 
 fn strip(cx: &mut gpui_kit::TestAppContext) -> Strip {
-    Strip::new(cx.update(|cx| cx.focus_handle()))
+    cx.update(Strip::new)
 }
 
 #[gpui_kit::test]

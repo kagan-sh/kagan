@@ -158,6 +158,11 @@ pub(crate) fn install_keys(cx: &mut App) {
         KeyBinding::new("escape", CloseCustomCommand, Some(super::picker::CONTEXT)),
         KeyBinding::new(
             "escape",
+            super::CloseActivityLog,
+            Some(super::activity::CONTEXT),
+        ),
+        KeyBinding::new(
+            "escape",
             super::start::CloseBranchMenu,
             Some(super::start::BRANCH_CONTEXT),
         ),

@@ -83,7 +83,7 @@ impl Kagan {
             asks: super::ask_form::AskState::default(),
             toast: None,
             toast_epoch: 0,
-            activity: activity::Strip::new(cx.focus_handle().tab_stop(true)),
+            activity: activity::Strip::new(cx),
             _update_watch: activity::watch(cx),
             _release: cx.on_release(release_window),
             _poll: changes::poll_open_changes(cx),

@@ -347,12 +347,7 @@ impl Active {
             area::Values {
                 settings: self.settings.clone(),
                 secrets: secrets.clone(),
-                status: self
-                    .manifest
-                    .ui
-                    .status
-                    .as_ref()
-                    .map(|status| status.title.clone()),
+                status: self.manifest.ui.status.clone(),
             },
             jobs,
             Some(&bound),
