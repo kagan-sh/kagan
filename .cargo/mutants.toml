@@ -15,4 +15,6 @@ exclude_re = [
     # `highlight` returns early for "text" or an empty source. Without it, `highlight_cached` gives
     # the same empty result for "text", so the early return only saves a parse.
     'syntax\.rs:\d+:\d+: replace \|\| with && in highlight\b',
+    # The limit compares two clock readings; > and >= differ only within the same nanosecond.
+    'process\.rs:\d+:\d+: replace > with >= in Process::wait_within',
 ]
