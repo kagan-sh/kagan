@@ -156,7 +156,6 @@ fn open_at(
 
 // Points every program's folder into the test's folder, so no test reads the person's own.
 fn insert_homes(homes: &mut BTreeMap<&'static str, PathBuf>, dir: &Path) {
-    homes.insert("BB_DATA_DIR", dir.join("bb"));
     homes.insert("CLAUDE_CONFIG_DIR", dir.join("claude"));
     homes.insert("CODEX_HOME", dir.join("codex-home"));
     homes.insert("KIMI_CODE_HOME", dir.join("kimi-home"));

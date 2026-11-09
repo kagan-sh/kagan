@@ -1,6 +1,6 @@
 use super::{Fixture, op};
 use gpui_kit::TestAppContext;
-use kg_domain::{Op, OpError, OpResult, Skill, SkillOp, SkillSource};
+use kg_domain::{Op, OpError, OpResult, Skill, SkillOp};
 use std::path::Path;
 
 fn write_skill(root: &Path, name: &str) {
@@ -28,32 +28,20 @@ async fn listed(fixture: &Fixture, cx: &mut TestAppContext) -> Vec<Skill> {
 }
 
 #[gpui_kit::test]
-async fn list_includes_the_bb_skills_as_external(cx: &mut TestAppContext) {
+async fn bb_folders_are_not_read(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     write_skill(&fixture.dir.path().join("bb/skills"), "bb-only");
     write_skill(&fixture.dir.path().join(".bb/skills"), "bb-project");
     let skills = listed(&fixture, cx).await;
-    let external: Vec<_> = skills
-        .iter()
-        .filter(|skill| skill.source == SkillSource::External)
-        .map(|skill| skill.name.as_str())
-        .collect();
-    assert_eq!(external, ["bb-only", "bb-project"]);
-}
-
-#[gpui_kit::test]
-async fn remove_refuses_a_bb_skill(cx: &mut TestAppContext) {
-    let fixture = Fixture::new(cx).await;
-    write_skill(&fixture.dir.path().join("bb/skills"), "bb-only");
-    let result = op(
-        Op::Skill(SkillOp::Remove {
-            name: "bb-only".into(),
-            project_id: Some(fixture.project.clone()),
-        }),
-        cx,
-    )
-    .await;
-    assert!(matches!(result, Err(OpError::Invalid(_))), "{result:?}");
+    assert!(
+        skills.iter().all(|skill| !skill.name.starts_with("bb-")),
+        "{skills:?}"
+    );
+    let text = "---\nname: bb-only\ndescription: Edited.\n---\n\nNew body.\n";
+    assert!(matches!(
+        update(&fixture, "bb-only", text, cx).await,
+        Err(OpError::NotFound(_))
+    ));
     assert!(
         fixture
             .dir
@@ -91,17 +79,6 @@ async fn update_replaces_a_user_skill_text(cx: &mut TestAppContext) {
     ));
     let written = std::fs::read_to_string(fixture.dir.path().join("skills/mine/SKILL.md")).unwrap();
     assert_eq!(written, text);
-}
-
-#[gpui_kit::test]
-async fn update_refuses_a_bb_skill(cx: &mut TestAppContext) {
-    let fixture = Fixture::new(cx).await;
-    write_skill(&fixture.dir.path().join("bb/skills"), "bb-only");
-    let text = "---\nname: bb-only\ndescription: Edited.\n---\n\nNew body.\n";
-    assert!(matches!(
-        update(&fixture, "bb-only", text, cx).await,
-        Err(OpError::Invalid(_))
-    ));
 }
 
 #[gpui_kit::test]

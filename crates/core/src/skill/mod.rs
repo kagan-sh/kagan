@@ -74,71 +74,15 @@ pub(crate) fn reserved(name: &str) -> bool {
     name.starts_with("kg-")
 }
 
-// The person's BB skills and the project folder's `.bb/skills` count as external: they are listed,
-// but a kagan skill with the same name wins.
-async fn with_external(
-    this: &WeakEntity<Workspace>,
-    mut resolved: Catalog,
-    folder: Option<PathBuf>,
-    cx: &mut AsyncApp,
-) -> Result<Catalog> {
-    let bb = this
-        .update(cx, |workspace, _| workspace.home("BB_DATA_DIR", ".bb"))
-        .map_err(closed)?;
-    cx.background_spawn(async move {
-        let mut external = Catalog::default();
-        if let Some(bb) = bb {
-            external.folder(&bb.join("skills"), SkillSource::External);
-        }
-        if let Some(folder) = folder {
-            external.folder(&folder.join(".bb/skills"), SkillSource::External);
-        }
-        resolved.errors.extend(external.errors);
-        for (name, loaded) in external.skills {
-            if reserved(&name) {
-                continue;
-            }
-            resolved.skills.entry(name).or_insert(loaded);
-        }
-        Ok(resolved)
-    })
-    .await
-}
-
-fn project_folder(
-    this: &WeakEntity<Workspace>,
-    project_id: Option<&ProjectId>,
-    cx: &mut AsyncApp,
-) -> Result<Option<PathBuf>> {
-    let Some(id) = project_id else {
-        return Ok(None);
-    };
-    this.update(cx, |workspace, cx| {
-        workspace
-            .projects
-            .get(id)
-            .map(|entity| Some(entity.read(cx).record.path.clone()))
-            .ok_or_else(|| missing("project", id))
-    })
-    .map_err(closed)?
-}
-
 static MIRROR: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub(crate) async fn mirror(
     this: &WeakEntity<Workspace>,
     agent: PathBuf,
-    folder: PathBuf,
     project_id: ProjectId,
     cx: &mut AsyncApp,
 ) -> Result<(PathBuf, Vec<String>, Vec<String>)> {
-    let resolved = with_external(
-        this,
-        catalog(this, Some(project_id), cx).await?,
-        Some(folder),
-        cx,
-    )
-    .await?;
+    let resolved = catalog(this, Some(project_id), cx).await?;
     cx.background_spawn(async move {
         let names = resolved.skills.keys().cloned().collect();
         let errors = resolved.errors.clone();
@@ -215,14 +159,7 @@ pub(crate) async fn run(
         | SkillOp::Update { project_id, .. }
         | SkillOp::Remove { project_id, .. } => project_id.clone(),
     };
-    let folder = project_folder(this, project_id.as_ref(), cx)?;
-    let mut catalog = with_external(
-        this,
-        catalog(this, project_id.clone(), cx).await?,
-        folder,
-        cx,
-    )
-    .await?;
+    let mut catalog = catalog(this, project_id.clone(), cx).await?;
     match op {
         SkillOp::List { .. } => Ok(OpResult::Skills {
             skills: catalog
