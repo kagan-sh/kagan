@@ -75,7 +75,7 @@ async fn open(this: &WeakEntity<Workspace>, id: ThreadId, cx: &mut AsyncApp) -> 
     let shell = crate::host::program::login_shell(
         crate::host::program::program_environment_of(this, cx).as_ref(),
     );
-    let mut env = super::agent::variables(this, &record, cx)?;
+    let mut env = super::agent::variables(this, &record, cx).await?;
     if let Some(locale) = cx
         .background_spawn(async { super::terminal::utf8_locale() })
         .await

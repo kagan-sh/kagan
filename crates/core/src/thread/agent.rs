@@ -223,7 +223,7 @@ pub(super) enum Known {
 }
 
 /// The `KG_*` variables and the PATH with `kg` on it, which every terminal of the thread gets.
-pub(super) fn variables(
+pub(super) async fn variables(
     this: &WeakEntity<Workspace>,
     record: &kg_domain::Thread,
     cx: &mut AsyncApp,
@@ -233,13 +233,15 @@ pub(super) fn variables(
             (workspace.cli.clone(), workspace.socket.clone())
         })
         .map_err(closed)?;
+    // The first call waits for the login shell, so it runs off the window's thread.
+    let path = cx.background_spawn(async { kg_process::user_path() }).await;
     Ok(environment(
         record.id.0.as_str(),
         record.project_id.0.as_str(),
         record.environment_id.as_ref().map(|id| id.0.as_str()),
         &cli,
         socket.as_deref(),
-        kg_process::user_path().as_ref(),
+        path.as_ref(),
     ))
 }
 
@@ -251,7 +253,7 @@ pub(crate) async fn integrate(
     start: Start,
     cx: &mut AsyncApp,
 ) -> Result<Integration> {
-    let env = variables(this, record, cx)?;
+    let env = variables(this, record, cx).await?;
     let (cli, data_dir, database, socket) = this
         .update(cx, |workspace, _| {
             (
