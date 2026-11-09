@@ -214,11 +214,27 @@ pub(super) struct EnvVar {
     previous: Option<std::ffi::OsString>,
 }
 
+thread_local! {
+    static HELD: std::cell::RefCell<Vec<&'static str>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+// Removes the thread, project and environment ids this shell passed in, so a test that did not
+// set one with `set_env` parses the same inside a kagan thread as anywhere else.
+pub(super) fn drop_inherited_ids() {
+    for key in ["KG_THREAD_ID", "KG_PROJECT_ID", "KG_ENVIRONMENT_ID"] {
+        if !HELD.with_borrow(|held| held.contains(&key)) {
+            // SAFETY: nextest runs each test in its own process, so this test owns its variables.
+            unsafe { std::env::remove_var(key) };
+        }
+    }
+}
+
 pub(super) fn set_env(key: &'static str, value: &std::ffi::OsStr) -> EnvVar {
     let previous = std::env::var_os(key);
     // SAFETY: nextest runs each test in its own process, so this test owns these
     // process-global variables while the guard is alive and restores them on drop.
     unsafe { std::env::set_var(key, value) };
+    HELD.with_borrow_mut(|held| held.push(key));
     EnvVar { key, previous }
 }
 
@@ -232,6 +248,7 @@ fn unset_env(key: &'static str) -> EnvVar {
 
 impl Drop for EnvVar {
     fn drop(&mut self) {
+        HELD.with_borrow_mut(|held| held.retain(|key| *key != self.key));
         // SAFETY: nextest runs each test in its own process, so nothing else reads this
         // variable while the guard restores it.
         unsafe {

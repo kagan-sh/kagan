@@ -9,9 +9,10 @@ use serde_json::{Value, json};
 
 use crate::{Cli, Command, json_error};
 
-use super::socket::set_env;
+use super::socket::{drop_inherited_ids, set_env};
 
 pub(super) fn parse(args: &[&str]) -> Op {
+    drop_inherited_ids();
     match Cli::try_parse_from(std::iter::once("kg").chain(args.iter().copied()))
         .unwrap()
         .command
