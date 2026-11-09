@@ -194,3 +194,24 @@ fn a_theme_picks_its_own_highlight_for_each_mode() {
         "a mode without its own syntax keeps the default"
     );
 }
+
+#[test]
+fn each_thread_state_draws_its_own_shape() {
+    let shapes: Vec<_> = [
+        Tone::Busy,
+        Tone::Needs,
+        Tone::Failed,
+        Tone::Done,
+        Tone::Idle,
+        Tone::Ended,
+    ]
+    .into_iter()
+    .map(Tone::shape)
+    .collect();
+    for (index, shape) in shapes.iter().enumerate() {
+        assert!(
+            !shapes[..index].contains(shape),
+            "{shape:?} is drawn for two thread states"
+        );
+    }
+}

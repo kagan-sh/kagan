@@ -23,11 +23,11 @@ kagan forgets a removed project and its threads. Your folder stays. You cannot r
 | Mark | Meaning |
 | --- | --- |
 | Spinner | The program is busy |
-| Amber ring | The thread needs you |
-| Red fill | The thread failed |
-| Filled square | The program finished while you looked at a different thread |
+| Circle with ! | The thread needs you |
+| Octagon with × | The thread failed |
+| Check | The program finished while you looked at a different thread |
 | Small dot | The program runs and waits |
-| Hollow square | The program ended |
+| Dash | The program ended |
 | Pin | You pinned the thread |
 
 **Archived** at the bottom lists archived threads. **Restore** brings one back. Its program stays stopped.
