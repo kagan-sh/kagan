@@ -46,12 +46,11 @@ pub(crate) fn data_dir_of(
     home: Option<OsString>,
     profile: Option<OsString>,
 ) -> Result<PathBuf> {
-    let set = |value: Option<OsString>| value.filter(|value| !value.is_empty());
-    if let Some(dir) = set(data) {
+    if let Some(dir) = socket::non_empty(data) {
         return Ok(PathBuf::from(dir));
     }
-    let home = set(home)
-        .or_else(|| set(profile))
+    let home = socket::non_empty(home)
+        .or_else(|| socket::non_empty(profile))
         .context("HOME or USERPROFILE is not set")?;
     Ok(Path::new(&home).join(".kagan"))
 }
