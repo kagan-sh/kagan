@@ -6,7 +6,7 @@ status: `kg status`.
 
 guide: `kg guide`.
 
-skill: `kg skill list`, `kg skill show`, `kg skill files`, `kg skill new`, `kg skill add`, `kg skill remove`.
+skill: `kg skill open`, `kg skill list`, `kg skill show`, `kg skill files`, `kg skill new`, `kg skill add`, `kg skill update`, `kg skill remove`.
 
 open: `kg open`.
 
