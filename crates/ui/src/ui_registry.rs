@@ -90,10 +90,16 @@ impl Facts {
     }
 }
 
-// Each Window owns a distinct Arc<WindowTextSystem>, stable even during initial
-// drawing before the Window itself is boxed. Its identity distinguishes equal
-// WindowIds in different Apps. Entries never own a Window or a view.
-type WindowKey = usize;
+// A window's id is unique within its App. The text system's address tells Apps apart, since
+// two Apps in one test can hand out equal ids. Entries never own a Window or a view.
+type WindowKey = (usize, gpui_kit::WindowId);
+
+fn window_key(window: &Window) -> WindowKey {
+    (
+        std::ptr::from_ref::<gpui_kit::WindowTextSystem>(window.text_system()) as usize,
+        window.window_handle().window_id(),
+    )
+}
 type Registry = HashMap<WindowKey, HashMap<GlobalElementId, Weak<Registration>>>;
 thread_local! { static REGISTRY: RefCell<Registry> = RefCell::new(HashMap::new()); }
 
@@ -167,7 +173,7 @@ pub(crate) fn snapshots(window: &Window) -> Vec<ElementSnapshot> {
     let mut elements: Vec<ElementSnapshot> = REGISTRY.with(|registry| {
         registry
             .borrow()
-            .get(&(std::sync::Arc::as_ptr(window.text_system()) as usize))
+            .get(&window_key(window))
             .map(|entries| {
                 entries
                     .values()
@@ -295,7 +301,7 @@ impl<E: Element<PrepaintState = Option<Hitbox>> + InteractiveElement> Element fo
             window.with_element_state(global_id, |state: Option<Rc<Registration>>, window| {
                 let registration = state.unwrap_or_else(|| {
                     Rc::new(Registration {
-                        window: std::sync::Arc::as_ptr(window.text_system()) as usize,
+                        window: window_key(window),
                         global_id: global_id.clone(),
                         facts: RefCell::new(facts.clone()),
                     })
