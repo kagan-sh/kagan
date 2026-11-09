@@ -275,12 +275,18 @@ pub(crate) const START_CONTEXT: &str = "NewThreadScreen";
 actions!(kagan, [LeaveStart]);
 
 impl Kagan {
-    // Escape and Cancel both leave the screen here. A branch menu open over it closes first.
-    pub(super) fn leave_start(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    // Escape first closes an open branch menu, and leaves the screen only when none was open.
+    pub(super) fn escape_start(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.close_branch_menu(window, cx) {
             cx.notify();
             return;
         }
+        self.leave_start(window, cx);
+    }
+
+    // Cancel leaves the screen, and a branch menu open over it closes with it.
+    pub(super) fn leave_start(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.close_branch_menu(window, cx);
         if let Some(thread) = self.start.take_reuse_thread() {
             self.select(thread, window, cx);
             cx.notify();

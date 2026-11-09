@@ -13,7 +13,6 @@ use std::path::PathBuf;
 use super::{LeaveStart, START_CONTEXT, project_kind};
 use crate::kagan::Kagan;
 use crate::kagan::controls::{control, note};
-use crate::kagan::picker::Close;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 impl Kagan {
@@ -41,7 +40,7 @@ impl Kagan {
             .items_center()
             .key_context(START_CONTEXT)
             .on_action(cx.listener(|this, _: &LeaveStart, window, cx| {
-                this.leave_start(window, cx);
+                this.escape_start(window, cx);
             }))
             .child(
                 v_flex()
@@ -124,9 +123,7 @@ impl Kagan {
                 .small()
                 .outline()
                 .child(div().type_body(cx).child("Cancel"))
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.picker.update(cx, |_, cx| cx.emit(Close));
-                })),
+                .on_click(cx.listener(|this, _, window, cx| this.leave_start(window, cx))),
         );
         let start = control(
             "start",

@@ -235,7 +235,7 @@ fn listen(
             this.start(window, cx);
         }),
         cx.subscribe_in(picker, window, |this, _, _: &picker::Close, window, cx| {
-            this.leave_start(window, cx);
+            this.escape_start(window, cx);
         }),
         cx.observe_in(picker, window, |this, picker, window, cx| {
             if this.start_on_load.is_some() && picker.read(cx).command(cx).is_ok() {

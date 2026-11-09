@@ -12,7 +12,8 @@ use crate::kagan::{NewThread, StopThread};
 
 use super::{
     add_project, click, commit_setup, committed_repo, environment_of, label, open, run_shell,
-    selected_of, set_program, setup, shell, shown, shows, thread_status, wait_until,
+    scroll_form_to_end, selected_of, set_program, setup, shell, shown, shows, thread_status,
+    wait_until,
 };
 
 #[gpui_kit::test]
@@ -260,6 +261,23 @@ fn escape_leaves_the_new_thread_screen_from_a_choice(cx: &mut TestAppContext) {
         Some(true)
     );
     press_key(cx, window, "escape");
+    wait_until(cx, |cx| {
+        cx.update(|cx| screen_read::start_project(kagan.read(cx)))
+            .is_none()
+    });
+}
+
+#[gpui_kit::test]
+fn cancel_leaves_the_screen_with_the_branch_menu_open(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let (_repo, project) = committed_repo(cx, data.path());
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "folder-project"));
+    click(cx, window, "folder-project");
+    click(cx, window, "branch-from");
+    scroll_form_to_end(cx, window);
+    wait_until(cx, |cx| shows(cx, window, "branch-checkout"));
+    click(cx, window, "start-cancel");
     wait_until(cx, |cx| {
         cx.update(|cx| screen_read::start_project(kagan.read(cx)))
             .is_none()
