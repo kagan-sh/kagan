@@ -27,10 +27,21 @@ async fn child(
     quiet: bool,
     cx: &mut TestAppContext,
 ) -> (ThreadId, Reap) {
+    titled_child(fixture, program, parent, None, quiet, cx).await
+}
+
+async fn titled_child(
+    fixture: &Fixture,
+    program: &str,
+    parent: &ThreadId,
+    title: Option<&str>,
+    quiet: bool,
+    cx: &mut TestAppContext,
+) -> (ThreadId, Reap) {
     let request = Op::Thread(ThreadOp::Run(Run {
         project_id: fixture.project.clone(),
         program: program.into(),
-        title: None,
+        title: title.map(str::to_owned),
         environment: EnvironmentSpec::ProjectDefault,
         visibility: None,
         parent_thread_id: Some(parent.clone()),
@@ -321,4 +332,25 @@ async fn a_wait_for_the_child_exit_drops_the_line_it_already_told_the_parent(
     wait_until_idle(&fixture, &parent, cx);
     let sent = sent_to(&parent, cx).await;
     assert!(sent.is_empty(), "{sent:?}");
+}
+
+#[gpui_kit::test]
+async fn a_child_title_stays_out_of_the_parent_line(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (parent, _parent_run) = started(&fixture, SLEEP, cx).await;
+    let program = finishing(fixture.dir.path(), "finish");
+    let (child_id, _child_run) = titled_child(
+        &fixture,
+        &program,
+        &parent,
+        Some("x\" ; $(echo hi) ; \""),
+        false,
+        cx,
+    )
+    .await;
+    wait_for_waiting(&child_id, 1, cx).await;
+    let sent = sent_to(&parent, cx).await;
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert!(!sent[0].contains("echo hi"), "{}", sent[0]);
+    assert!(sent[0].contains(&child_id.to_string()), "{}", sent[0]);
 }

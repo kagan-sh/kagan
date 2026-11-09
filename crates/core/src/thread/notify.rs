@@ -134,10 +134,7 @@ fn tell(workspace: &mut Workspace, child: &ThreadId, what: &str, cx: &mut Contex
     let Some(parent) = parent else {
         return;
     };
-    let line = format!(
-        "[kagan] child {child} \"{}\" {what}. Read it: kg thread screen {child}",
-        record.title
-    );
+    let line = format!("[kagan] child {child} {what}. Read it: kg thread screen {child}");
     workspace.run_mut(&parent).notes.insert(child.clone(), line);
     schedule(workspace, &parent, cx);
 }
