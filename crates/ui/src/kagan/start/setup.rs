@@ -36,7 +36,7 @@ impl Kagan {
                     .small()
                     .ghost()
                     .px_0()
-                    .label(name)
+                    .child(div().type_body(cx).child(name))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.start.setup_open = !this.start.setup_open;
                         cx.notify();

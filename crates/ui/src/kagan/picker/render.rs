@@ -167,6 +167,7 @@ fn custom_toggle(toggle: &'static str, custom: bool, cx: &App) -> AnyElement {
                             .id("custom-command-label")
                             .ui_container()
                             .px_2()
+                            .type_body(cx)
                             .aria_label(toggle)
                             .child(toggle),
                     )

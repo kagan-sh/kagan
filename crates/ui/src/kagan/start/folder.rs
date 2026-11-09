@@ -162,6 +162,7 @@ impl Kagan {
             let on = chosen == Some(folder);
             let selected = if on { Selected::Yes } else { Selected::No };
             crate::kagan::controls::segment(button, selected, cx)
+                .type_body(cx)
                 .disabled(starting)
                 .tooltip(name.clone())
                 .child(control(

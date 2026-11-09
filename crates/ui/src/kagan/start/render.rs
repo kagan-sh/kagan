@@ -109,7 +109,7 @@ impl Kagan {
             Button::new("start-cancel-button")
                 .small()
                 .outline()
-                .label("Cancel")
+                .child(div().type_body(cx).child("Cancel"))
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.picker.update(cx, |_, cx| cx.emit(Close));
                 })),
@@ -129,7 +129,7 @@ impl Kagan {
                     h_flex()
                         .gap_2()
                         .items_center()
-                        .child(label)
+                        .child(div().type_body(cx).child(label))
                         .child(div().opacity(0.7).type_caption(cx).child("Enter")),
                 )
                 .on_click(cx.listener(|this, _, window, cx| this.start(window, cx))),
