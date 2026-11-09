@@ -82,6 +82,10 @@ jobs:
       - run: typos --config .config/typos.toml
       - name: Glossary
         run: sh scripts/glossary-check.sh
+      - name: Decision numbers
+        run: sh scripts/decisions-check.sh
+      - name: Test env reads
+        run: sh scripts/test-env-check.sh
       - name: View colors
         run: |
           sh scripts/view-colors.sh
@@ -130,10 +134,6 @@ jobs:
       - run: cargo shear
       - name: Crate boundaries
         run: sh scripts/crate-boundaries.sh
-      - name: Decision numbers
-        run: sh scripts/decisions-check.sh
-      - name: Test env reads
-        run: sh scripts/test-env-check.sh
 
   linux-clippy:
     needs: [scope, checks]
