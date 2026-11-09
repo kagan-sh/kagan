@@ -4,7 +4,7 @@ use std::time::Duration;
 use gpui_shell::{HostArguments, HostError, HostModule};
 use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
 use rusqlite::types::{Value as SqlValue, ValueRef};
-use rusqlite::{Connection, TransactionBehavior, params_from_iter};
+use rusqlite::{Connection, params_from_iter};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -63,18 +63,18 @@ pub(crate) fn module(path: &Path) -> HostModule {
 }
 
 fn open(path: &Path) -> Result<Connection, HostError> {
-    let connection = Connection::open(path).map_err(error)?;
+    let mut connection = Connection::open(path).map_err(error)?;
     connection
         .busy_timeout(Duration::from_secs(5))
         .map_err(error)?;
     connection
         .pragma_update(None, "foreign_keys", true)
         .map_err(error)?;
-    authorize(&connection, false)?;
+    authorize(&mut connection, false)?;
     Ok(connection)
 }
 
-fn authorize(connection: &Connection, transactions: bool) -> Result<(), HostError> {
+fn authorize(connection: &mut Connection, transactions: bool) -> Result<(), HostError> {
     connection
         .authorizer(Some(move |context: AuthContext<'_>| match context.action {
             // A parameterized ATTACH is Unknown in rusqlite because its filename is absent.
@@ -96,12 +96,7 @@ fn authorize(connection: &Connection, transactions: bool) -> Result<(), HostErro
 fn execute(path: &Path, request: Request) -> Result<Value, HostError> {
     let mut connection = open(path)?;
     match request {
-        Request::Migrate(statements) => {
-            authorize(&connection, true)?;
-            let transaction = connection
-                .transaction_with_behavior(TransactionBehavior::Immediate)
-                .map_err(error)?;
-            authorize(&transaction, false)?;
+        Request::Migrate(statements) => in_transaction(&mut connection, |transaction| {
             transaction.execute_batch("CREATE TABLE IF NOT EXISTS _kagan_migrations (position INTEGER PRIMARY KEY, sql TEXT NOT NULL)").map_err(error)?;
             let applied = {
                 let mut query = transaction
@@ -127,21 +122,15 @@ fn execute(path: &Path, request: Request) -> Result<Value, HostError> {
                     )
                     .map_err(error)?;
             }
-            authorize(&transaction, true)?;
-            transaction.commit().map_err(error)?;
             Ok(Value::Null)
-        }
+        }),
         Request::Query(statement) => {
             let params = parameters(statement.params)?;
             let mut query = connection.prepare(&statement.sql).map_err(error)?;
             if !query.readonly() {
                 return Err(HostError::new("query requires a read-only statement"));
             }
-            let columns = query
-                .column_names()
-                .into_iter()
-                .map(str::to_owned)
-                .collect::<Vec<_>>();
+            let columns = query.column_names().map(str::to_owned).collect::<Vec<_>>();
             let mut rows = query.query(params_from_iter(params)).map_err(error)?;
             let mut result = Vec::new();
             while let Some(row) = rows.next().map_err(error)? {
@@ -166,18 +155,36 @@ fn execute(path: &Path, request: Request) -> Result<Value, HostError> {
             let changes = run(&connection, statement)?;
             Ok(json!({ "changes": changes, "lastId": connection.last_insert_rowid() }))
         }
-        Request::Transaction(statements) => {
-            authorize(&connection, true)?;
-            let transaction = connection
-                .transaction_with_behavior(TransactionBehavior::Immediate)
-                .map_err(error)?;
-            authorize(&transaction, false)?;
+        Request::Transaction(statements) => in_transaction(&mut connection, |transaction| {
             for statement in statements {
-                run(&transaction, statement)?;
+                run(transaction, statement)?;
             }
-            authorize(&transaction, true)?;
-            transaction.commit().map_err(error)?;
             Ok(Value::Null)
+        }),
+    }
+}
+
+// rusqlite's authorizer needs `&mut Connection`, which a `Transaction` cannot give, so the
+// transaction is opened by statement: the plugin's own statements may not begin or end one.
+fn in_transaction(
+    connection: &mut Connection,
+    work: impl FnOnce(&Connection) -> Result<Value, HostError>,
+) -> Result<Value, HostError> {
+    authorize(connection, true)?;
+    connection.execute_batch("BEGIN IMMEDIATE").map_err(error)?;
+    authorize(connection, false)?;
+    let result = work(connection);
+    authorize(connection, true)?;
+    match result {
+        Ok(value) => {
+            connection.execute_batch("COMMIT").map_err(error)?;
+            Ok(value)
+        }
+        Err(failure) => {
+            // The connection closes when this call returns, and SQLite rolls back an open
+            // transaction on close, so a failed ROLLBACK loses nothing.
+            let _ = connection.execute_batch("ROLLBACK");
+            Err(failure)
         }
     }
 }

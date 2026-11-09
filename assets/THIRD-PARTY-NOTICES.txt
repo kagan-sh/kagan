@@ -1,5 +1,5 @@
 Third-party notices for the kg binary.
-cargo-lock 385dfb113efb5daafddee8fbc4d69f89a91ea49cd5e1a308dc07df993ba0ab27
+cargo-lock b7402d3c993bc526e7b2ccc6f844cbf4670242db09b1be2e993703f408b501c4
 
 kagan itself is Apache-2.0. See LICENSE.
 
@@ -17233,8 +17233,8 @@ THE SOFTWARE.
 
 ================================================================================
 MIT
-libsqlite3-sys 0.38.2
-rusqlite 0.40.2
+libsqlite3-sys 0.39.1
+rusqlite 0.41.0
 
 Copyright (c) 2014 The rusqlite developers
 
