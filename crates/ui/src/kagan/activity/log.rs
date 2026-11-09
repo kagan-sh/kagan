@@ -55,21 +55,17 @@ pub(super) fn strip_log(rows: Vec<(u64, SharedString)>, cx: &App) -> impl IntoEl
 }
 
 pub(super) fn toggle(open: bool, focus: &FocusHandle, cx: &App) -> impl IntoElement + use<> {
-    let name: SharedString = if open {
-        "Hide activity log"
-    } else {
-        "Show activity log"
-    }
-    .into();
+    let name: SharedString = "Activity log".into();
     let tip = controls::tip(&name, &ToggleActivityLog, cx);
     h_flex()
         .id("activity-toggle")
+        .occlude()
         .ui_observe_as(Facts {
             role: Role::Button,
             name: name.clone(),
             value: Some(if open { "shown" } else { "hidden" }.into()),
             disabled: false,
-            selected: Some(open),
+            selected: None,
             focus: Some(focus.clone()),
             hint: None,
         })

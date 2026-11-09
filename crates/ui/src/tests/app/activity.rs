@@ -10,8 +10,8 @@ use kg_domain::{
 use crate::kagan::ActivityPart;
 use crate::kagan::screen_read;
 use crate::tests::kagan::{
-    click, focused_of, label, open, open_with_plugins_then, role_of, run_shell, selected_of, shown,
-    shows, thread_record, value_of, wait_until,
+    click, focused_of, label, open, open_with_plugins_then, role_of, run_shell, shown, shows,
+    thread_record, value_of, wait_until,
 };
 
 #[cfg(unix)]
@@ -257,7 +257,10 @@ fn the_strip_starts_closed_and_quiet_at_the_bottom(cx: &mut TestAppContext) {
         value_of(cx, window, "activity-summary").as_deref(),
         Some("Quiet")
     );
-    assert_eq!(selected_of(cx, window, "activity-toggle"), Some(false));
+    assert_eq!(
+        value_of(cx, window, "activity-toggle").as_deref(),
+        Some("hidden")
+    );
     assert!(!shows(cx, window, "activity-log"));
     assert!(!shows(cx, window, "activity-needs"));
     assert!(!shows(cx, window, "activity-update"));
@@ -425,7 +428,10 @@ fn the_log_button_opens_the_log_and_escape_closes_it(cx: &mut TestAppContext) {
 
     click(cx, window, "activity-toggle");
     assert!(shows(cx, window, "activity-log"));
-    assert_eq!(selected_of(cx, window, "activity-toggle"), Some(true));
+    assert_eq!(
+        value_of(cx, window, "activity-toggle").as_deref(),
+        Some("shown")
+    );
     assert_strip_holds_no_keyboard(cx, window, &kagan);
     let height = height_of(cx, window, "activity-strip");
     assert!((height - 168.).abs() < 0.5, "the open strip is {height}");
@@ -436,7 +442,10 @@ fn the_log_button_opens_the_log_and_escape_closes_it(cx: &mut TestAppContext) {
         .unwrap();
     crate::tests::kagan::press_key(cx, window, "escape");
     assert!(!shows(cx, window, "activity-log"));
-    assert_eq!(selected_of(cx, window, "activity-toggle"), Some(false));
+    assert_eq!(
+        value_of(cx, window, "activity-toggle").as_deref(),
+        Some("hidden")
+    );
 }
 
 // Starts an install of a new plugin folder. The install waits for the person's OK.
@@ -826,7 +835,10 @@ fn the_activity_log_op_shows_and_hides_the_log(cx: &mut TestAppContext) {
     };
     toggle(cx);
     assert!(shows(cx, window, "activity-log"));
-    assert_eq!(selected_of(cx, window, "activity-toggle"), Some(true));
+    assert_eq!(
+        value_of(cx, window, "activity-toggle").as_deref(),
+        Some("shown")
+    );
     toggle(cx);
     assert!(!shows(cx, window, "activity-log"));
 }
