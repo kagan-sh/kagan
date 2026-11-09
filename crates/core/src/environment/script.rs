@@ -4,7 +4,7 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use kg_domain::{Environment, EnvironmentStatus, OpError, PinnedSetup};
+use kg_domain::{Environment, EnvironmentStatus, OpError, PinnedSetup, SetupFile};
 
 use super::Provisioned;
 use crate::host::database::Result;
@@ -27,15 +27,14 @@ pub(crate) fn pinned_setup(root: &Path, rev: &str) -> Option<PinnedSetup> {
         return None;
     }
     let file = listed(root, &commit, SETUP).ok().flatten();
-    let (mode, text, truncated) = match file {
-        Some(file) if matches!(file.mode.as_str(), "100644" | "100755") => {
+    let mode = file.as_ref().and_then(|file| setup_file(&file.mode));
+    let (text, truncated) = match (mode, file) {
+        (Some(SetupFile::Script), Some(file)) => {
             let raw =
                 crate::host::git::git(root, &["cat-file", "blob", &file.blob]).unwrap_or_default();
-            let (text, truncated) = shown_text(&raw);
-            (Some(file.mode), text, truncated)
+            shown_text(&raw)
         }
-        Some(file) => (Some(file.mode), String::new(), false),
-        None => (None, String::new(), false),
+        _ => (String::new(), false),
     };
     Some(PinnedSetup {
         commit,
@@ -43,6 +42,14 @@ pub(crate) fn pinned_setup(root: &Path, rev: &str) -> Option<PinnedSetup> {
         text,
         truncated,
     })
+}
+
+fn setup_file(mode: &str) -> Option<SetupFile> {
+    match mode {
+        "120000" => Some(SetupFile::Link),
+        "100644" | "100755" => Some(SetupFile::Script),
+        _ => None,
+    }
 }
 
 fn shown_text(raw: &str) -> (String, bool) {

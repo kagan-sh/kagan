@@ -6,7 +6,7 @@ use gpui_kit::{
 use kg_core::Workspace;
 use kg_domain::{
     BranchList, EnvironmentOp, Op, OpError, OpResult, PinnedSetup, ProjectId, ProjectKind,
-    ThreadId, ThreadOp,
+    SetupFile, ThreadId, ThreadOp,
 };
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -54,13 +54,10 @@ enum Branches {
 }
 
 fn setup_announcement(setup: &PinnedSetup) -> Option<&'static str> {
-    match setup.mode.as_deref() {
-        Some("120000") => Some(".kagan/setup is a link, so kagan will not run it."),
-        Some("100644" | "100755") => {
-            Some("Runs .kagan/setup in the new worktree before the program starts.")
-        }
-        _ => None,
-    }
+    setup.mode.map(|mode| match mode {
+        SetupFile::Link => ".kagan/setup is a link, so kagan will not run it.",
+        SetupFile::Script => "Runs .kagan/setup in the new worktree before the program starts.",
+    })
 }
 
 fn setup_script(setup: &PinnedSetup) -> Option<(&str, bool)> {

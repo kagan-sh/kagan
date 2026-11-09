@@ -206,7 +206,7 @@ An environment is the folder a thread works in, plus a status (`creating`, `prov
 ### `Get`, `Branches`, `Setup`
 
 - **Allowed when**: the id is known [book:cli]. `Branches` and `Setup` take a project [book:cli]. `Get` takes an environment [book:cli].
-- **Shows**: `Get` the environment, including the removal reason when git refused to delete the worktree [book:cli] [decision 28]. `Branches` the local branch names, which one is current, and why the project folder cannot change branches [book:cli] [decision 170]. `Setup` the commit a revision names, and the setup script at it: its file mode, or none when the commit has no setup file, its text cut to 40 lines and 2,000 characters, and whether it was cut. None overall when the revision does not name a commit (decision 184). `changes`, `pull-request` and `open` were removed as unused (decision 36).
+- **Shows**: `Get` the environment, including the removal reason when git refused to delete the worktree [book:cli] [decision 28]. `Branches` the local branch names, which one is current, and why the project folder cannot change branches [book:cli] [decision 170]. `Setup` the commit a revision names, and the setup script at it: its kind (`link` or `script`), or none when the commit has no setup file or its file mode is not one kagan knows, its text cut to 40 lines and 2,000 characters, and whether it was cut. None overall when the revision does not name a commit (decision 184). `changes`, `pull-request` and `open` were removed as unused (decision 36).
 - **Refused when**: a missing id — `not-found` [op/]. A revision that starts with `-` — `invalid` [op/].
 
 ### `Restore`

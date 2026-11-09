@@ -41,6 +41,7 @@ pub use diagnostics::DiagnosticsOp;
 pub use diff::{DiffOp, DiffQuery, DiffScope};
 pub use environment::{
     BranchList, EnvironmentOp, EnvironmentSpec, FOLDER_IN_USE, PinnedSetup, ProjectBranch,
+    SetupFile,
 };
 pub use guide::GuideChapter;
 pub use index::IndexOp;

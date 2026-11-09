@@ -136,10 +136,42 @@ async fn the_start_screen_reads_the_setup_script_at_a_revision(cx: &mut TestAppC
     let OpResult::Setup(Some(setup)) = op(Op::Environment(read), cx).await.unwrap() else {
         panic!("setup")
     };
-    assert_eq!(setup.mode.as_deref(), Some("100644"));
+    assert_eq!(setup.mode, Some(SetupFile::Script));
     assert_eq!(setup.text, "touch setup-ran");
     assert!(!setup.truncated);
     assert_eq!(setup.commit.len(), 40);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn the_start_screen_reads_a_setup_link_as_a_link(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = repo_dir(&fixture);
+    empty_repo(&repo);
+    std::fs::create_dir_all(repo.join(".kagan")).unwrap();
+    std::os::unix::fs::symlink("touch-nothing", repo.join(".kagan/setup")).unwrap();
+    git_in(&repo, &["add", "--", ".kagan/setup"]);
+    git_in(
+        &repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.test",
+            "commit",
+            "-qm",
+            "link",
+        ],
+    );
+    let read = EnvironmentOp::Setup {
+        project_id: fixture.project.clone(),
+        rev: "HEAD".into(),
+    };
+    let OpResult::Setup(Some(setup)) = op(Op::Environment(read), cx).await.unwrap() else {
+        panic!("setup")
+    };
+    assert_eq!(setup.mode, Some(SetupFile::Link));
+    assert_eq!(setup.text, "");
 }
 
 #[cfg(unix)]
