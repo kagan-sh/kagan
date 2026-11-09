@@ -1,15 +1,25 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
+use gpui_kit::assets::IconName;
 use gpui_kit::component::highlighter::{HighlightTheme, HighlightThemeStyle};
-use gpui_kit::component::{ActiveTheme as _, Theme, ThemeConfig, ThemeConfigColors, ThemeMode};
+use gpui_kit::component::{
+    ActiveTheme as _, Icon, Theme, ThemeConfig, ThemeConfigColors, ThemeMode,
+};
 use gpui_kit::{App, Hsla, SharedString, rgb};
 use kg_domain::{Color, ThemeFile, Thread, ThreadStatus};
 
 use super::ThemeState;
 use super::palette::palette;
 use super::terminal;
-use crate::theme::{MARK_ENDED, MARK_FAILED, MARK_IDLE, MARK_RING, REM_BASE, token_color};
+use crate::theme::{MARK_IDLE, REM_BASE, token_color};
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Shape {
+    Spinner,
+    Dot,
+    Glyph(IconName),
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Tone {
     Busy,
@@ -71,37 +81,35 @@ impl Tone {
         })
     }
 
+    pub(crate) fn shape(self) -> Shape {
+        match self {
+            Self::Busy => Shape::Spinner,
+            Self::Needs => Shape::Glyph(IconName::CircleAlert),
+            Self::Failed => Shape::Glyph(IconName::OctagonX),
+            Self::Done => Shape::Glyph(IconName::Check),
+            Self::Idle => Shape::Dot,
+            Self::Ended => Shape::Glyph(IconName::Minus),
+        }
+    }
+
     pub(crate) fn mark(self, cx: &App) -> gpui_kit::AnyElement {
         use gpui_kit::component::Sizable as _;
         use gpui_kit::component::spinner::Spinner;
-        use gpui_kit::{IntoElement, Styled as _, div, px};
+        use gpui_kit::{IntoElement, ParentElement as _, Styled as _, div, px};
         let color = self.color(cx);
-        match self {
-            Self::Busy => Spinner::new()
+        match self.shape() {
+            Shape::Spinner => Spinner::new()
                 .xsmall()
                 .color(cx.theme().foreground)
                 .into_any_element(),
-            Self::Needs => div()
-                .size(px(MARK_RING))
-                .rounded_full()
-                .border_1()
-                .border_color(color)
-                .into_any_element(),
-            Self::Failed => div()
-                .size(px(MARK_FAILED))
-                .rounded_full()
-                .bg(color)
-                .into_any_element(),
-            Self::Done => div().size(px(MARK_ENDED)).bg(color).into_any_element(),
-            Self::Idle => div()
+            Shape::Dot => div()
                 .size(px(MARK_IDLE))
                 .rounded_full()
                 .bg(color)
                 .into_any_element(),
-            Self::Ended => div()
-                .size(px(MARK_ENDED))
-                .border_1()
-                .border_color(color)
+            Shape::Glyph(glyph) => div()
+                .text_color(color)
+                .child(Icon::new(glyph).small())
                 .into_any_element(),
         }
     }

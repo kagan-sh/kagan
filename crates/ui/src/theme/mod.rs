@@ -3,9 +3,6 @@ use kg_domain::Color;
 
 mod terminal;
 
-pub(crate) const MARK_RING: f32 = 8.;
-pub(crate) const MARK_FAILED: f32 = 8.;
-pub(crate) const MARK_ENDED: f32 = 8.;
 pub(crate) const MARK_IDLE: f32 = 4.;
 const REM_BASE: f32 = 16.;
 

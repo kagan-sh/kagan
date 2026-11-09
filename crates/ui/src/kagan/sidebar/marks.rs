@@ -3,6 +3,7 @@ use std::path::Component;
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -323,14 +324,17 @@ pub(super) fn row_text(
 }
 
 pub(super) fn thread_marks(id: &ThreadId, tone: Tone, cx: &mut App) -> AnyElement {
+    let word = tone.word();
     div()
         .id(ElementId::Name(format!("thread-mark-{id}").into()))
         .ui_container()
-        .w_4()
+        .size_4()
         .flex()
         .flex_shrink_0()
         .justify_center()
-        .aria_label(tone.word())
+        .items_center()
+        .aria_label(word)
+        .tooltip(move |window, cx| Tooltip::new(word).build(window, cx))
         .child(tone.mark(cx))
         .into_any_element()
 }
