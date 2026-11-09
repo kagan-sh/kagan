@@ -1,8 +1,9 @@
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::component::h_flex;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::{Sizable as _, h_flex};
 use gpui_kit::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, Role,
-    SharedString, StatefulInteractiveElement as _, Styled as _, div, px,
+    SharedString, Styled as _, div, px,
 };
 use kg_core::Updater;
 use kg_domain::UpdateState;
@@ -11,6 +12,9 @@ use kg_plugins::StatusItem;
 use super::log;
 use super::plugins::plugin_item;
 use super::{DOT, HEIGHT, Kagan};
+use crate::kagan::controls::control;
+use crate::kagan::navigation::NextThreadNeedingYou;
+use crate::kagan::update;
 use crate::theme::{Tone, TypeScale as _};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -51,18 +55,6 @@ impl Kagan {
             .gap_2()
             .child(dot)
             .child(div().min_w_0().text_ellipsis().child(summary));
-        let install_part = self.activity.install.clone().map(|install| {
-            div()
-                .id("activity-install")
-                .ui_container()
-                .flex_shrink_1()
-                .max_w(px(240.))
-                .min_w_0()
-                .text_ellipsis()
-                .type_small(cx)
-                .text_color(cx.theme().muted_foreground)
-                .child(install)
-        });
         h_flex()
             .h(px(HEIGHT))
             .flex_none()
@@ -74,25 +66,42 @@ impl Kagan {
             .child(head)
             .children(needs_part(needs, cx))
             .children(update_part(cx))
-            .children(install_part)
+            .children(self.install_part(cx))
             .children(plugins.into_iter().map(|item| plugin_item(item, cx)))
             .child(log::toggle(open, &self.activity.toggle_focus, cx))
     }
+
+    fn install_part(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let install: SharedString = self.activity.install.clone()?;
+        Some(
+            control(
+                "activity-install",
+                Facts {
+                    role: Role::Button,
+                    name: install.clone(),
+                    value: None,
+                    disabled: false,
+                    selected: None,
+                    focus: None,
+                    hint: Some("Show the installed plugins in Settings".into()),
+                },
+                Button::new("activity-install-button")
+                    .small()
+                    .ghost()
+                    .label(install)
+                    .text_color(cx.theme().muted_foreground)
+                    .on_click(cx.listener(|this, _, window, cx| this.manage_plugins(window, cx))),
+            )
+            .into_any_element(),
+        )
+    }
 }
 
-fn needs_part(needs: usize, cx: &mut Context<Kagan>) -> Option<AnyElement> {
+fn needs_part(needs: usize, cx: &Context<Kagan>) -> Option<AnyElement> {
     (needs > 0).then(|| {
-        div()
-            .id("activity-needs")
-            .flex_none()
-            .type_small(cx)
-            .text_color(Tone::Needs.color(cx))
-            .on_click(cx.listener(|_, _, window, cx| {
-                cx.stop_propagation();
-                window
-                    .dispatch_action(Box::new(crate::kagan::navigation::NextThreadNeedingYou), cx);
-            }))
-            .ui_observe_as(Facts {
+        control(
+            "activity-needs",
+            Facts {
                 role: Role::Button,
                 name: "Needs you".into(),
                 value: Some(needs.to_string().into()),
@@ -100,31 +109,50 @@ fn needs_part(needs: usize, cx: &mut Context<Kagan>) -> Option<AnyElement> {
                 selected: None,
                 focus: None,
                 hint: Some("Go to the next thread that needs you".into()),
-            })
-            .child(format!("{needs} needs you"))
-            .into_any_element()
+            },
+            Button::new("activity-needs-button")
+                .small()
+                .ghost()
+                .label(format!("{needs} needs you"))
+                .text_color(Tone::Needs.color(cx))
+                .on_click(|_, window, cx| {
+                    window.dispatch_action(Box::new(NextThreadNeedingYou), cx);
+                }),
+        )
+        .into_any_element()
     })
 }
 
-fn update_part(cx: &mut Context<Kagan>) -> Option<AnyElement> {
+fn update_part(cx: &Context<Kagan>) -> Option<AnyElement> {
     let available = {
         let updater = Updater::global(cx);
         let updater = updater.read(cx);
         match updater.state() {
             UpdateState::Available { version, .. } => {
-                crate::kagan::update::hidden(cx).as_deref() != Some(version.as_str())
+                update::hidden(cx).as_deref() != Some(version.as_str())
             }
             _ => false,
         }
     };
     available.then(|| {
-        div()
-            .id("activity-update")
-            .ui_container()
-            .flex_none()
-            .type_small(cx)
-            .text_color(cx.theme().muted_foreground)
-            .child("Update available")
-            .into_any_element()
+        control(
+            "activity-update",
+            Facts {
+                role: Role::Button,
+                name: "Update available".into(),
+                value: None,
+                disabled: false,
+                selected: None,
+                focus: None,
+                hint: None,
+            },
+            Button::new("activity-update-button")
+                .small()
+                .ghost()
+                .label("Update available")
+                .text_color(cx.theme().muted_foreground)
+                .on_click(|_, window, cx| update::primary(window, cx)),
+        )
+        .into_any_element()
     })
 }

@@ -43,6 +43,34 @@ pub(super) fn check(cx: &mut App) {
     .detach();
 }
 
+// The activity strip's Update button does what the notice's main button does for this install.
+pub(super) fn primary(window: &mut Window, cx: &mut App) {
+    let (homebrew, replaces, notes) = {
+        let updater = Updater::global(cx).read(cx);
+        let notes = match updater.state() {
+            UpdateState::Available { notes, .. } => notes.clone(),
+            _ => String::new(),
+        };
+        (
+            matches!(updater.kind(), InstallKind::Homebrew),
+            updater.kind().replaces_itself(),
+            notes,
+        )
+    };
+    if homebrew {
+        copy_brew(cx);
+    } else if replaces {
+        ask(window, cx);
+    } else {
+        cx.open_url(&notes);
+    }
+}
+
+fn copy_brew(cx: &mut App) {
+    cx.write_to_clipboard(ClipboardItem::new_string(BREW.into()));
+    say("Copied.".into(), cx);
+}
+
 fn say(message: String, cx: &mut App) {
     if let Some((_, kagan)) = super::front(cx) {
         kagan.update(cx, |kagan, cx| kagan.show_toast(Toast::said(message), cx));
@@ -123,8 +151,7 @@ fn actions(cx: &App) -> AnyElement {
         }))
         .map(|row| match updater.kind() {
             InstallKind::Homebrew => row.child(button("update-copy", "Copy command", |_, cx| {
-                cx.write_to_clipboard(ClipboardItem::new_string(BREW.into()));
-                say("Copied.".into(), cx);
+                copy_brew(cx);
             })),
             kind if kind.replaces_itself() => row
                 .when(!ready, |row| {

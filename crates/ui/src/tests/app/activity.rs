@@ -384,7 +384,7 @@ fn the_log_button_opens_the_log_and_escape_closes_it(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn a_plugin_install_shows_its_source_and_a_log_line(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open_with_plugins_then(cx, |_| {});
+    let (kagan, window, data) = open_with_plugins_then(cx, |_| {});
     cx.run_until_parked();
     let folder = data.path().join("widget");
     let created = cx.update(|cx| {
@@ -421,6 +421,11 @@ fn a_plugin_install_shows_its_source_and_a_log_line(cx: &mut TestAppContext) {
     assert_eq!(
         label(cx, window, "activity-row-0"),
         format!("Installing {source}")
+    );
+    click(cx, window, "activity-install");
+    assert!(
+        cx.update(|cx| screen_read::in_settings(kagan.read(cx))),
+        "the Installing button opens Settings"
     );
 
     let approval = cx
@@ -611,4 +616,16 @@ fn a_question_does_not_take_the_keyboard_or_open_the_strip(cx: &mut TestAppConte
     assert_ne!(focused_of(cx, window, "activity-strip"), Some(true));
     assert!(!shows(cx, window, "activity-log"));
     drop(asked);
+}
+
+#[gpui_kit::test]
+fn the_update_button_is_a_button_and_does_not_open_the_log(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    offer_update(cx, data.path());
+    assert_eq!(
+        role_of(cx, window, "activity-update"),
+        Some(gpui_kit::Role::Button)
+    );
+    click(cx, window, "activity-update");
+    assert!(!shows(cx, window, "activity-log"));
 }
