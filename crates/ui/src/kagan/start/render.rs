@@ -94,9 +94,15 @@ impl Kagan {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let muted = cx.theme().muted_foreground;
+        let retry = self.setup_retry_pending();
+        let label = if retry { "Retry setup" } else { "Start" };
         // Start waits for the branch's setup script, so say so while it is missing.
-        let reason = (kind.is_some() && !self.setup_ready())
-            .then_some("Start is off until kagan reads this branch’s setup script.");
+        let reason = if retry {
+            Some("Fix .kagan/setup, then retry.")
+        } else {
+            (kind.is_some() && !self.setup_ready())
+                .then_some("Start is off until kagan reads this branch’s setup script.")
+        };
         let cancel = control(
             "start-cancel",
             Facts::button("Cancel"),
@@ -112,7 +118,7 @@ impl Kagan {
             "start",
             Facts {
                 disabled: !ready,
-                ..Facts::button("Start")
+                ..Facts::button(label)
             },
             Button::new("start-button-control")
                 .primary()
@@ -123,7 +129,7 @@ impl Kagan {
                     h_flex()
                         .gap_2()
                         .items_center()
-                        .child("Start")
+                        .child(label)
                         .child(div().opacity(0.7).type_caption(cx).child("Enter")),
                 )
                 .on_click(cx.listener(|this, _, window, cx| this.start(window, cx))),

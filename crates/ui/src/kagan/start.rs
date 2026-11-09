@@ -259,6 +259,14 @@ impl Kagan {
         cx.notify();
     }
 
+    // The script failed and was not changed since, so Start runs the setup again.
+    pub(super) fn setup_retry_pending(&self) -> bool {
+        self.start
+            .setup_failure
+            .as_deref()
+            .is_some_and(|failure| !script_changed(failure))
+    }
+
     pub(super) fn remember_worktree_root(&mut self, cx: &App) {
         let root = Workspace::global(cx).read(cx).data_dir().join("worktrees");
         self.start.worktree_root = folder::shown_path(&root);
