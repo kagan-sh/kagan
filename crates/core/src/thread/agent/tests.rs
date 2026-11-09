@@ -87,15 +87,15 @@ fn a_word_after_a_double_dash_is_the_subcommand_word() {
 }
 
 #[test]
-fn every_program_kagan_treats_by_name_is_in_the_picker_list() {
-    for name in ["claude", "codex", "cursor-agent", "kimi", "opencode", "pi"] {
-        assert!(known(Path::new(name)).is_some(), "{name} has no agent kind");
-        assert!(
-            kg_domain::KNOWN_PROGRAMS
-                .iter()
-                .any(|(command, _)| *command == name),
-            "{name} is missing from KNOWN_PROGRAMS"
-        );
+fn every_agent_kind_has_a_name_in_the_picker_list() {
+    for (_, kind) in AGENTS {
+        let listed = AGENTS.iter().any(|(name, other)| {
+            std::mem::discriminant(other) == std::mem::discriminant(kind)
+                && kg_domain::KNOWN_PROGRAMS
+                    .iter()
+                    .any(|(command, _)| command == name)
+        });
+        assert!(listed, "an agent kind has no name in KNOWN_PROGRAMS");
     }
     assert!(known(Path::new("agent")).is_some());
 }

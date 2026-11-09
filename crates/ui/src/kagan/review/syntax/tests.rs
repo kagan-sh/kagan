@@ -363,3 +363,24 @@ fn makefiles_and_cmake_lists_get_their_own_language() {
     assert_eq!(language_of("src/GNUmakefile"), "make");
     assert_eq!(language_of("CMakeLists.txt"), "cmake");
 }
+
+#[test]
+fn hunks_longer_than_the_file_do_not_panic() {
+    let hunks = vec![
+        DiffHunk {
+            old_start: 1,
+            new_start: 1,
+            lines: vec![
+                line_of(DiffLineKind::Add, None, Some(1), "a"),
+                line_of(DiffLineKind::Add, None, Some(2), "b"),
+                line_of(DiffLineKind::Add, None, Some(3), "c"),
+            ],
+        },
+        DiffHunk {
+            old_start: 1,
+            new_start: 10,
+            lines: vec![line_of(DiffLineKind::Context, Some(1), Some(10), "z")],
+        },
+    ];
+    captures(&view("src/lib.rs", Some("a\n"), hunks), "src/lib.rs", None);
+}

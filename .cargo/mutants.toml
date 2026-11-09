@@ -12,4 +12,7 @@ exclude_globs = [
 exclude_re = [
     # Required by gpui-kit Collapsible for SidebarItem; nothing reads it.
     'sidebar\.rs:\d+:\d+: replace <impl Collapsible for Row>::is_collapsed -> bool with true',
+    # `highlight` returns early for "text" or an empty source. Without it, `highlight_cached` gives
+    # the same empty result for "text", so the early return only saves a parse.
+    'syntax\.rs:\d+:\d+: replace \|\| with && in highlight\b',
 ]

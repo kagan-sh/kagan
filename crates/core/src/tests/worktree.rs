@@ -1158,3 +1158,43 @@ async fn a_retry_after_the_setup_file_changes_drops_the_worktree(cx: &mut TestAp
     assert_eq!(fresh[0].path, old_path);
     assert!(fresh[0].path.exists());
 }
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn set_base_stores_a_branch_of_the_repository_and_refuses_another(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = repo_dir(&fixture);
+    empty_repo(&repo);
+    git_in(&repo, &["branch", "-M", "main"]);
+    let OpResult::Thread(started) = op(worktree_run(&fixture, Some("notes"), None), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("thread")
+    };
+    let id = started.environment_id.clone().unwrap();
+    let set_base = |id: EnvironmentId, base: &str| {
+        Op::Environment(EnvironmentOp::SetBase {
+            id,
+            base: base.to_owned(),
+        })
+    };
+    let OpResult::Environment(saved) = op(set_base(id.clone(), "main"), cx).await.unwrap() else {
+        panic!("environment")
+    };
+    assert_eq!(saved.base_branch.as_deref(), Some("main"));
+    assert_eq!(
+        environment_of(&id, cx).await.base_branch.as_deref(),
+        Some("main")
+    );
+    assert_eq!(
+        op(set_base(id.clone(), "nope"), cx).await,
+        Err(OpError::Invalid(
+            "base branch nope is not in this repository".into()
+        ))
+    );
+    assert!(matches!(
+        op(set_base(EnvironmentId("env_missing".into()), "main"), cx).await,
+        Err(OpError::NotFound(_))
+    ));
+}

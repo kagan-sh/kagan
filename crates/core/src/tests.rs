@@ -28,7 +28,8 @@ mod update;
 mod workspace;
 mod worktree;
 
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use gpui_kit::{Entity, TestAppContext};
 
@@ -92,7 +93,7 @@ impl Fixture {
             .unwrap();
         cx.update(|cx| {
             workspace.update(cx, |workspace, _| {
-                workspace.homes.insert("BB_DATA_DIR", dir.path().join("bb"));
+                insert_homes(&mut workspace.homes, dir.path());
             });
         });
         Self {
@@ -132,7 +133,7 @@ impl Fixture {
             .unwrap();
         cx.update(|cx| {
             workspace.update(cx, |workspace, _| {
-                workspace.homes.insert("BB_DATA_DIR", dir.path().join("bb"));
+                insert_homes(&mut workspace.homes, dir.path());
             });
         });
         Self {
@@ -155,6 +156,15 @@ impl Fixture {
             metadata: None,
         }))
     }
+}
+
+/// Points every program's folder into the test's folder, so no test reads the person's own.
+fn insert_homes(homes: &mut BTreeMap<&'static str, PathBuf>, dir: &Path) {
+    homes.insert("BB_DATA_DIR", dir.join("bb"));
+    homes.insert("CLAUDE_CONFIG_DIR", dir.join("claude"));
+    homes.insert("CODEX_HOME", dir.join("codex-home"));
+    homes.insert("KIMI_CODE_HOME", dir.join("kimi-home"));
+    homes.insert("CURSOR_CONFIG_DIR", dir.join("cursor"));
 }
 
 fn program() -> &'static str {
