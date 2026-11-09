@@ -423,16 +423,16 @@ fn the_log_button_opens_the_log_and_escape_closes_it(cx: &mut TestAppContext) {
     assert_eq!(selected_of(cx, window, "activity-toggle"), Some(false));
 }
 
-#[gpui_kit::test]
-fn a_plugin_install_shows_its_source_and_a_log_line(cx: &mut TestAppContext) {
-    let (kagan, window, data) = open_with_plugins_then(cx, |_| {});
-    cx.run_until_parked();
-    let folder = data.path().join("widget");
+// Starts an install of a new plugin folder. The install waits for the person's OK.
+fn start_install(
+    cx: &mut TestAppContext,
+    folder: &std::path::Path,
+) -> gpui_kit::Task<Result<OpResult, kg_domain::OpError>> {
     let created = cx.update(|cx| {
         Workspace::dispatch(
             Op::Plugin(PluginOp::New {
                 name: "widget".into(),
-                dir: Some(folder.clone()),
+                dir: Some(folder.to_path_buf()),
             }),
             cx,
         )
@@ -441,18 +441,40 @@ fn a_plugin_install_shows_its_source_and_a_log_line(cx: &mut TestAppContext) {
         cx.foreground_executor().block_test(created),
         Ok(OpResult::Files(_))
     ));
-
     let source = folder.display().to_string();
-    let install = cx.update(|cx| {
+    cx.update(|cx| {
         Workspace::dispatch(
             Op::Plugin(PluginOp::Install {
-                source: source.clone(),
+                source,
                 plugin: None,
                 thread_id: None,
             }),
             cx,
         )
-    });
+    })
+}
+
+fn assert_log_toggle_inside(cx: &mut TestAppContext, window: AnyWindowHandle) {
+    let (x, _, width, _) = bounds_of(cx, window, "activity-toggle");
+    let viewport_width = cx
+        .update_window(window, |_, window, _| {
+            f32::from(window.viewport_size().width)
+        })
+        .unwrap();
+    assert!(
+        x >= 0. && x + width <= viewport_width + 0.5,
+        "the log toggle spans {x}..{} of {viewport_width}",
+        x + width
+    );
+}
+
+#[gpui_kit::test]
+fn a_plugin_install_shows_its_source_and_a_log_line(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open_with_plugins_then(cx, |_| {});
+    cx.run_until_parked();
+    let folder = data.path().join("widget");
+    let install = start_install(cx, &folder);
+    let source = folder.display().to_string();
     wait_until(cx, |cx| {
         cx.update(|cx| Workspace::global(cx).read(cx).approvals().count()) == 1
     });
@@ -770,4 +792,41 @@ fn the_activity_log_op_shows_and_hides_the_log(cx: &mut TestAppContext) {
     assert_eq!(selected_of(cx, window, "activity-toggle"), Some(true));
     toggle(cx);
     assert!(!shows(cx, window, "activity-log"));
+}
+
+#[gpui_kit::test]
+fn long_plugin_command_items_keep_the_log_toggle_inside_the_window(cx: &mut TestAppContext) {
+    let long = "word ".repeat(24);
+    let long = long.trim_end();
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
+        for n in 1..=4 {
+            let command = format!("usage.refresh{n}");
+            install_status_plugin_with(
+                data,
+                &format!("dev.test.long{n}"),
+                "Usage",
+                Some(&command),
+                long,
+            );
+        }
+    });
+    cx.simulate_window_resize(window, size(px(720.), px(800.)));
+    cx.run_until_parked();
+    wait_until(cx, |cx| shows(cx, window, "activity-plugin-dev.test.long1"));
+    assert_log_toggle_inside(cx, window);
+}
+
+#[gpui_kit::test]
+fn a_long_install_source_keeps_the_log_toggle_inside_the_window(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open_with_plugins_then(cx, |_| {});
+    cx.run_until_parked();
+    let folder = data.path().join("w".repeat(150));
+    let _install = start_install(cx, &folder);
+    wait_until(cx, |cx| {
+        cx.update(|cx| Workspace::global(cx).read(cx).approvals().count()) == 1
+    });
+    cx.simulate_window_resize(window, size(px(528.), px(720.)));
+    cx.run_until_parked();
+    assert!(shows(cx, window, "activity-install"));
+    assert_log_toggle_inside(cx, window);
 }

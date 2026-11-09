@@ -22,6 +22,7 @@ pub(super) fn plugin_item(item: StatusItem, focus: &FocusHandle, cx: &App) -> An
         StatusTone::Failed => Tone::Failed.color(cx),
     };
     let body = h_flex()
+        .min_w_0()
         .items_center()
         .gap_1()
         .child(
@@ -79,6 +80,7 @@ pub(super) fn plugin_item(item: StatusItem, focus: &FocusHandle, cx: &App) -> An
     let button = Button::new(SharedString::from(format!("{id}-button")))
         .small()
         .ghost()
+        .max_w(px(PLUGIN_ITEM_MAX))
         .child(body)
         .track_focus(focus)
         .on_click(move |_, window, cx| {

@@ -12,6 +12,8 @@ use kg_plugins::StatusItem;
 use super::log;
 use super::plugins::plugin_item;
 use super::{DOT, HEIGHT, Kagan};
+
+const INSTALL_MAX: f32 = 240.;
 use crate::kagan::controls::control;
 use crate::kagan::navigation::NextThreadNeedingYou;
 use crate::kagan::update;
@@ -75,13 +77,21 @@ impl Kagan {
             .type_small(cx)
             .text_color(cx.theme().muted_foreground)
             .child(head)
-            .children(needs_part(needs, &needs_focus, cx))
-            .children(update_part(&update_focus, cx))
-            .children(self.install_part(&install_focus, cx))
-            .children(
-                plugins
-                    .into_iter()
-                    .map(|(item, focus)| plugin_item(item, &focus, cx)),
+            .child(
+                h_flex()
+                    .flex_shrink_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .items_center()
+                    .gap_3()
+                    .children(needs_part(needs, &needs_focus, cx))
+                    .children(update_part(&update_focus, cx))
+                    .children(self.install_part(&install_focus, cx))
+                    .children(
+                        plugins
+                            .into_iter()
+                            .map(|(item, focus)| plugin_item(item, &focus, cx)),
+                    ),
             )
             .child(log::toggle(open, &toggle_focus, cx))
     }
@@ -103,6 +113,8 @@ impl Kagan {
                 Button::new("activity-install-button")
                     .small()
                     .ghost()
+                    .max_w(px(INSTALL_MAX))
+                    .tooltip(install.clone())
                     .label(install)
                     .text_color(cx.theme().muted_foreground)
                     .track_focus(focus)
