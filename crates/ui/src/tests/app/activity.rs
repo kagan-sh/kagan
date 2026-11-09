@@ -120,6 +120,7 @@ export default class Plugin extends View {{
             commit: None,
             enabled: true,
             approved: serde_json::json!({"powers": {}, "folders": {}, "status": title}),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();
@@ -164,6 +165,7 @@ export default class Plugin extends View {
             commit: None,
             enabled: true,
             approved: serde_json::json!({"powers": {}, "folders": {}, "status": "Push"}),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();

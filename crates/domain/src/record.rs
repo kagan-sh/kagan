@@ -409,7 +409,26 @@ pub struct Plugin {
     pub commit: Option<String>,
     pub enabled: bool,
     pub approved: Value,
+    /// The skill folders the manifest names, relative to `root`. Stored with the record.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skills: Vec<PathBuf>,
     /// Why the plugin did not start. Filled when plugins are listed; never stored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+/// What a plugin's log file holds, as its recent lines are counted.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LogCounts {
+    Missing,
+    Unreadable,
+    Counted { warn: u32, error: u32 },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginLog {
+    pub id: PluginId,
+    pub counts: LogCounts,
 }

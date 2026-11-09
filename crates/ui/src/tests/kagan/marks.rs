@@ -272,6 +272,7 @@ pub(in crate::tests) fn install_navigator(data: &Path) {
             approved: serde_json::json!({
                 "powers": { "areas": ["threads"] }, "downloads": {}, "folders": {}
             }),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();

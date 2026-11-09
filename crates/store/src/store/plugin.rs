@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use kg_domain::{Plugin, PluginId};
 use rusqlite::{OptionalExtension as _, params};
@@ -11,8 +11,8 @@ use crate::column::{Json, Text};
 impl super::Store {
     pub fn insert_plugin(&self, plugin: &Plugin) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO plugins (id, root, source, commit_id, enabled, approved)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO plugins (id, root, source, commit_id, enabled, approved, skills)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 Text(&plugin.id),
                 Text(&plugin.root),
@@ -20,9 +20,18 @@ impl super::Store {
                 plugin.commit,
                 plugin.enabled,
                 Json(&plugin.approved),
+                Json(&plugin.skills),
             ],
         )?;
         Ok(())
+    }
+
+    pub fn set_plugin_skills(&self, id: &PluginId, skills: &[PathBuf]) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE plugins SET skills = ?1 WHERE id = ?2",
+            params![Json(skills), Text(id)],
+        )?;
+        found(changed, "plugin", id)
     }
 
     pub fn set_plugin_enabled(&self, id: &PluginId, enabled: bool) -> Result<()> {
@@ -48,10 +57,19 @@ impl super::Store {
         source: &str,
         commit: &Option<String>,
         approved: &Value,
+        skills: &[PathBuf],
     ) -> Result<()> {
         let changed = self.conn.execute(
-            "UPDATE plugins SET root = ?1, source = ?2, commit_id = ?3, approved = ?4 WHERE id = ?5",
-            params![Text(root), source, commit, Json(approved), Text(id)],
+            "UPDATE plugins SET root = ?1, source = ?2, commit_id = ?3, approved = ?4, skills = ?5 \
+             WHERE id = ?6",
+            params![
+                Text(root),
+                source,
+                commit,
+                Json(approved),
+                Json(skills),
+                Text(id)
+            ],
         )?;
         found(changed, "plugin", id)
     }
@@ -69,7 +87,7 @@ impl super::Store {
 
     pub fn plugins(&self) -> Result<Vec<Plugin>> {
         let mut statement = self.conn.prepare(
-            "SELECT id, root, source, commit_id, enabled, approved FROM plugins ORDER BY id",
+            "SELECT id, root, source, commit_id, enabled, approved, skills FROM plugins ORDER BY id",
         )?;
         let plugins = statement
             .query_map([], |row| {
@@ -80,6 +98,7 @@ impl super::Store {
                     commit: row.get("commit_id")?,
                     enabled: row.get("enabled")?,
                     approved: row.get::<_, Json<_>>("approved")?.0,
+                    skills: row.get::<_, Json<_>>("skills")?.0,
                     error: None,
                 })
             })?

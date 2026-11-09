@@ -348,6 +348,7 @@ fn a_cli_command_two_plugins_declare_is_refused(cx: &mut TestAppContext) {
             root,
             commit: None,
             enabled: true,
+            skills: Vec::new(),
             error: None,
         }
     };

@@ -13,7 +13,7 @@ use gpui_kit::{
 };
 use gpui_shell::{LoadedApplication, ScriptView, ShellRuntime};
 use kg_core::{PluginRequest, Workspace};
-use kg_domain::{Event, OpError, OpResult, PluginId, ThemeFile};
+use kg_domain::{Event, OpError, OpResult, PluginId, PluginLog, ThemeFile};
 use serde_json::{Map, Value};
 
 use crate::ask::{Job, post};
@@ -104,13 +104,28 @@ async fn boot(
     let records = records.await?;
     let known: BTreeSet<_> = records.iter().map(|record| record.id.clone()).collect();
     web_store::retry_orphan_stores(&data_dir, &known, cx).await;
-    for record in records {
+    for mut record in records {
         let root = record.root.clone();
         let data = data_dir.clone();
         if let Ok(manifest) = cx
             .background_spawn(async move { manifest::read(&root, &data) })
             .await
         {
+            if record.skills != manifest.skills {
+                let (id, skills) = (record.id.clone(), manifest.skills.clone());
+                let workspace = cx.update(|cx| Workspace::global(cx));
+                match workspace
+                    .read_with(cx, |workspace, _| {
+                        workspace.set_plugin_skills(id, skills.clone())
+                    })
+                    .await
+                {
+                    Ok(()) => record.skills = skills,
+                    Err(error) => host.update(cx, |host, _| {
+                        host.warnings.insert(record.id.clone(), error.to_string());
+                    }),
+                }
+            }
             host.update(cx, |host, _| {
                 host.identities
                     .insert(manifest.id.clone(), (manifest.name, manifest.version));
@@ -299,6 +314,7 @@ fn dispatch(request: PluginRequest, cx: &mut App) -> Task<Result<OpResult>> {
             thread_id,
             project_id,
         } => cx.spawn(async move |cx| instruct(&host, &thread_id, &project_id, cx).await),
+        PluginRequest::Logs => cx.spawn(async move |cx| logs(&host, cx).await),
         PluginRequest::Plugin(op, requester) => {
             cx.spawn(async move |cx| ops::run(&host, op, requester, cx).await)
         }
@@ -553,4 +569,24 @@ impl PluginHost {
                 .update(cx, |_, window, _| window.remove_window());
         }
     }
+}
+
+async fn logs(host: &Entity<PluginHost>, cx: &mut AsyncApp) -> Result<OpResult> {
+    let (data_dir, ids) = host.read_with(cx, |host, _| {
+        (
+            host.data_dir.clone(),
+            host.records.keys().cloned().collect::<Vec<PluginId>>(),
+        )
+    });
+    let logs = cx
+        .background_spawn(async move {
+            ids.into_iter()
+                .map(|id| {
+                    let counts = crate::log::counts(&data_dir, &id);
+                    PluginLog { id, counts }
+                })
+                .collect()
+        })
+        .await;
+    Ok(OpResult::PluginLogs(logs))
 }
