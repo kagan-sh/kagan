@@ -178,13 +178,11 @@ fn old_text(file: &str, hunks: &[DiffHunk]) -> String {
     let mut at = 0usize;
     for hunk in hunks {
         let start = usize::try_from(hunk.new_start.saturating_sub(1)).unwrap_or(at);
-        if at < start {
-            let end = start.min(lines.len());
-            for range in &lines[at..end] {
-                parts.push(&file[range.clone()]);
-            }
-            at = end;
+        let end = start.min(lines.len());
+        for range in lines.get(at..end).unwrap_or_default() {
+            parts.push(&file[range.clone()]);
         }
+        at = at.max(end);
         for line in &hunk.lines {
             match line.kind {
                 DiffLineKind::Remove => parts.push(&line.text),
@@ -196,10 +194,8 @@ fn old_text(file: &str, hunks: &[DiffHunk]) -> String {
             }
         }
     }
-    if at < lines.len() {
-        for range in &lines[at..] {
-            parts.push(&file[range.clone()]);
-        }
+    for range in lines.get(at..).unwrap_or_default() {
+        parts.push(&file[range.clone()]);
     }
     parts.join("\n")
 }
