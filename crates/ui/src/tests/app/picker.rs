@@ -890,7 +890,7 @@ fn the_custom_command_label_starts_on_the_program_names(cx: &mut TestAppContext)
     fixture_programs(cx, data.path(), &["codex"]);
     start_in_plain_folder(cx, window, data.path());
     let (name_x, _, _, _) = bounds(cx, window, "program-name-codex").unwrap();
-    let (label_x, _, _, _) = bounds(cx, window, "custom-command-label").unwrap();
+    let (label_x, _, _, _) = bounds(cx, window, "custom-command-text").unwrap();
     assert_close(label_x, name_x, "the custom command label");
 }
 

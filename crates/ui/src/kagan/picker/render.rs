@@ -166,7 +166,8 @@ fn custom_toggle(toggle: &'static str, custom: bool, cx: &App) -> AnyElement {
                             .ui_container()
                             .type_body(cx)
                             .aria_label(toggle)
-                            .child(toggle),
+                            // The test measures the text, so padding on the label moves it.
+                            .child(div().id("custom-command-text").ui_container().child(toggle)),
                     )
                     .child(
                         div().pr_2().child(
