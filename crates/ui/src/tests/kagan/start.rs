@@ -162,7 +162,8 @@ fn the_runs_in_sentence_says_where_each_choice_writes(cx: &mut TestAppContext) {
     wait_until(cx, |cx| shows(cx, window, "worktree-hint"));
     let hint = label(cx, window, "worktree-hint");
     assert!(hint.starts_with("New folder on a branch from "), "{hint}");
-    assert!(hint.ends_with("/worktrees."), "{hint}");
+    let tail = format!("{}worktrees.", std::path::MAIN_SEPARATOR);
+    assert!(hint.ends_with(&tail), "{hint}");
     click(cx, window, "folder-project");
     wait_until(cx, |cx| shows(cx, window, "project-hint"));
     assert_eq!(
@@ -197,21 +198,19 @@ const FORM_STOPS: [&str; 6] = [
 
 #[gpui_kit::test]
 fn tab_visits_each_control_of_the_form_in_order_then_escape_leaves(cx: &mut TestAppContext) {
-    let (kagan, window, data) = open(cx);
-    let (_repo, project) = committed_repo(cx, data.path());
-    click(cx, window, &format!("project-new-{}", project.id.0));
-    wait_until(cx, |cx| shows(cx, window, "start-cancel"));
+    let (kagan, window, _data) = open_git_form(cx);
     click(cx, window, "program-search");
+    // Shell is a custom command, so its two text fields sit between the toggle and the folder.
     let mut order = Vec::new();
-    for _ in FORM_STOPS {
+    for _ in 0..FORM_STOPS.len() + 2 {
         press_key(cx, window, "tab");
-        order.push(
+        order.extend(
             FORM_STOPS
                 .into_iter()
                 .find(|name| choice_focused(cx, window, name) == Some(true)),
         );
     }
-    assert_eq!(order, FORM_STOPS.map(Some).to_vec());
+    assert_eq!(order, FORM_STOPS.to_vec());
     press_key(cx, window, "escape");
     wait_until(cx, |cx| {
         cx.update(|cx| screen_read::start_project(kagan.read(cx)))
