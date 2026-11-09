@@ -187,7 +187,7 @@ impl Kagan {
                 .iter()
                 .any(|status| status.id == plugin)
         {
-            host.read(cx).report(&plugin, &line);
+            host.read(cx).report(&plugin, &line, cx);
         }
         self.note = Some(format!("{line} ({plugin})").into());
     }

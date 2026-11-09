@@ -1,4 +1,4 @@
-use gpui_kit::{Context, Entity};
+use gpui_kit::{App, Context, Entity};
 use gpui_shell::ScriptView;
 use kg_domain::{OpError, PluginId};
 
@@ -133,8 +133,9 @@ impl PluginHost {
 
     /// Writes a line to the plugin's log: something kagan did with the plugin's request, such as
     /// refusing a key the window already uses.
-    pub fn report(&self, plugin: &PluginId, message: &str) {
-        self.secrets.note(plugin, crate::Level::Warn, message);
+    pub fn report(&self, plugin: &PluginId, message: &str, cx: &App) {
+        self.secrets
+            .note_later(plugin, crate::Level::Warn, message, cx);
     }
 
     /// Bytes of page payloads still held for `next()` on this plugin.
