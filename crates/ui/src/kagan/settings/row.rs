@@ -1,6 +1,6 @@
+use crate::kagan::dispatch;
 use gpui_kit::component::switch::Switch;
 use gpui_kit::{AnyElement, App, ElementId, IntoElement, Role, SharedString, Window};
-use kg_core::Workspace;
 use kg_domain::Op;
 
 use crate::kagan::controls::control;
@@ -81,5 +81,5 @@ pub(super) fn switch(
 }
 
 pub(super) fn save(op: Op, cx: &mut App) {
-    Workspace::dispatch(op, cx).detach();
+    dispatch::logged(op, cx);
 }

@@ -1,10 +1,11 @@
-use gpui_kit::{App, AppContext as _, Task};
+use gpui_kit::{App, AppContext as _, AsyncApp, Task, WeakEntity};
 use kg_domain::ThreadId;
+use kg_store::ScreenRow;
 
 use crate::host::database::Result;
-use crate::workspace::clock::missing;
+use crate::workspace::clock::{closed, missing};
 
-use super::Workspace;
+use super::{Workspace, WorkspaceEvent};
 
 impl Workspace {
     fn end(&self, id: &ThreadId) -> Option<&crate::end::End> {
@@ -54,22 +55,77 @@ impl Workspace {
             })
     }
 }
-pub(super) fn remember(workspace: &mut Workspace, screens: Vec<kg_store::ScreenRow>) {
+/// Records each saved screen and returns the kept ones that nothing shows yet.
+pub(super) fn remember(workspace: &mut Workspace, screens: Vec<ScreenRow>) -> Vec<ScreenRow> {
+    let mut unshown = Vec::new();
     for screen in screens {
-        let id = screen.thread_id.clone();
-        let run = workspace.run_mut(&id);
+        let run = workspace.run_mut(&screen.thread_id);
         run.started_seq = Some(screen.started_seq);
         run.saved = true;
         run.loss = crate::end::Loss::from_kept(screen.screen_kept, screen.history_dropped);
         if screen.screen_kept && run.shown.is_none() {
-            match kg_terminal::Finished::restore(screen.cols, screen.rows, &screen.replay) {
-                Some(finished) => run.shown = Some(crate::thread::Shown::Ended(finished)),
-                None => {
-                    eprintln!(
-                        "kg: saved screen for {id} was outside the bound and was not restored"
-                    );
-                }
-            }
+            unshown.push(screen);
         }
     }
+    unshown
+}
+
+/// Reads the replay of each unshown screen and restores it on the background executor. A run
+/// that began or got a screen in the meantime keeps what it has.
+pub(super) async fn restore_unshown(
+    this: &WeakEntity<Workspace>,
+    screens: Vec<ScreenRow>,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    if screens.is_empty() {
+        return Ok(());
+    }
+    let database = crate::workspace::database(this, cx)?;
+    let replays = database
+        .call(move |store| {
+            let mut replays = Vec::new();
+            for screen in screens {
+                if let Some(replay) = store.screen_replay(&screen.thread_id)? {
+                    replays.push((screen, replay));
+                }
+            }
+            Ok(replays)
+        })
+        .await?;
+    let restored = cx
+        .background_executor()
+        .spawn(async move {
+            replays
+                .into_iter()
+                .filter_map(|(screen, replay)| {
+                    let finished =
+                        kg_terminal::Finished::restore(screen.cols, screen.rows, &replay);
+                    if finished.is_none() {
+                        eprintln!(
+                            "kg: saved screen for {} was outside the bound and was not restored",
+                            screen.thread_id
+                        );
+                    }
+                    Some((screen.thread_id, screen.started_seq, finished?))
+                })
+                .collect::<Vec<_>>()
+        })
+        .await;
+    this.update(cx, |workspace, cx| {
+        let mut shown = false;
+        for (id, started_seq, finished) in restored {
+            let Some(run) = workspace.runs.get_mut(&id) else {
+                continue;
+            };
+            if run.shown.is_none() && run.started_seq == Some(started_seq) {
+                run.shown = Some(crate::thread::Shown::Ended(finished));
+                shown = true;
+            }
+        }
+        if shown {
+            cx.emit(WorkspaceEvent::Changed);
+            cx.notify();
+        }
+    })
+    .map_err(closed)
 }

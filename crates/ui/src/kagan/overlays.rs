@@ -57,7 +57,7 @@ impl Kagan {
                 .update(cx, |host, cx| host.mount_overlay(&plugin, window, cx))
                 .inspect_err(|error| {
                     let message = format!("could not draw the overlay: {}", mount_error(error));
-                    host.read(cx).report(&plugin, &message);
+                    host.read(cx).report(&plugin, &message, cx);
                 })
                 .ok(); // The error is logged above.
             let (activation, generation) = current(&plugin, cx);

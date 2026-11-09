@@ -158,7 +158,7 @@ impl Bindings {
                 ),
             };
             self.host
-                .update(cx, |host, _| host.report(plugin, &message));
+                .update(cx, |host, cx| host.report(plugin, &message, cx));
         }
         self.refused = refused.into_iter().map(|(_, _, refused)| refused).collect();
     }

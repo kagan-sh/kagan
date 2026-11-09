@@ -12,6 +12,8 @@ use crate::host::database::{Database, Result};
 mod git;
 mod patch;
 mod snapshot;
+#[cfg(test)]
+mod tests;
 
 pub(crate) use snapshot::resolve_base;
 
@@ -21,6 +23,9 @@ use snapshot::{Snapshot, ends, snapshot_key};
 
 pub(super) const PATCH_LIMIT: usize = 1024 * 1024;
 pub(super) const FILE_LIMIT: u64 = 1024 * 1024;
+
+/// Scopes kept at once. Past this the cache starts over, since git can rebuild every diff.
+const MAX_ENTRIES: usize = 64;
 
 struct Entry {
     left: String,
@@ -38,6 +43,11 @@ impl Cache {
         Arc::new(Self {
             entries: Mutex::new(HashMap::new()),
         })
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.entries.lock().map_or(0, |entries| entries.len())
     }
 }
 
@@ -82,6 +92,9 @@ fn cached<T>(
         .entries
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if guard.len() >= MAX_ENTRIES && !guard.contains_key(key) {
+        guard.clear();
+    }
     let entry = guard.entry(key.to_owned()).or_insert_with(|| Entry {
         left: left.to_owned(),
         right: right.to_owned(),

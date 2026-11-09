@@ -1,9 +1,10 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{
     Environment, EnvironmentId, EnvironmentProvider as Provider, EnvironmentStatus, EventKind,
-    NoticeSeverity, OpError,
+    NoticeSeverity, OpError, ProjectId,
 };
 
 use crate::Workspace;
@@ -26,43 +27,54 @@ pub(crate) async fn sweep(
     let database = crate::workspace::database(this, cx)?;
     let (records, environments) = database
         .call(|store| {
-            let mut environments = Vec::new();
-            for project in store.projects()? {
-                for environment in store.environments(&project.id)? {
-                    environments.push((environment, project.path.clone()));
-                }
-            }
+            let paths: BTreeMap<ProjectId, PathBuf> = store
+                .projects()?
+                .into_iter()
+                .map(|project| (project.id, project.path))
+                .collect();
+            let environments: Vec<(Environment, PathBuf)> = store
+                .all_environments()?
+                .into_iter()
+                .filter_map(|environment| {
+                    let path = paths.get(&environment.project_id)?.clone();
+                    Some((environment, path))
+                })
+                .collect();
             Ok((store.all_threads()?, environments))
         })
         .await?;
     let at = time(this, cx)?;
     let mut changed = false;
-    let mut drop_screens = Vec::new();
-    for record in &records {
-        if record
-            .archived_at
-            .is_some_and(|archived| at.0 >= archived.0.saturating_add(GRACE))
-        {
-            let thread = this
-                .update(cx, |workspace, cx| {
-                    if workspace
-                        .runs
-                        .get_mut(&record.id)
-                        .is_some_and(crate::thread::Run::release)
-                    {
-                        cx.emit(crate::WorkspaceEvent::Changed);
-                    }
-                    drop_screens.push(record.id.clone());
-                    workspace.threads.get(&record.id).cloned()
-                })
-                .map_err(closed)?;
-            if let Some(thread) = thread
-                && thread.read_with(cx, |thread, _| thread.running())
-            {
-                crate::thread::retire(this, &thread, cx).await?;
-                changed = true;
+    let archived_before = at.0.saturating_sub(GRACE);
+    let retiring = this
+        .update(cx, |workspace, cx| {
+            let mut retiring = Vec::new();
+            for record in &records {
+                if record
+                    .archived_at
+                    .is_none_or(|archived| archived.0 > archived_before)
+                {
+                    continue;
+                }
+                if workspace
+                    .runs
+                    .get_mut(&record.id)
+                    .is_some_and(crate::thread::Run::release)
+                {
+                    cx.emit(crate::WorkspaceEvent::Changed);
+                }
+                if let Some(thread) = workspace.threads.get(&record.id)
+                    && thread.read(cx).running()
+                {
+                    retiring.push(thread.clone());
+                }
             }
-        }
+            retiring
+        })
+        .map_err(closed)?;
+    for thread in retiring {
+        crate::thread::retire(this, &thread, cx).await?;
+        changed = true;
     }
     let mut retirements = Vec::new();
     for (mut environment, project) in environments {
@@ -101,16 +113,9 @@ pub(crate) async fn sweep(
             });
         }
     }
-    if !drop_screens.is_empty() {
-        database
-            .call(move |store| {
-                for id in &drop_screens {
-                    store.delete_screen(id)?;
-                }
-                Ok(())
-            })
-            .await?;
-    }
+    database
+        .call(move |store| store.delete_archived_screens(archived_before))
+        .await?;
     Ok((changed, retirements))
 }
 

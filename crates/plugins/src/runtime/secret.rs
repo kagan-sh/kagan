@@ -158,7 +158,7 @@ impl Store {
         id: &PluginId,
         level: crate::Level,
         message: &str,
-        cx: &mut gpui_kit::App,
+        cx: &gpui_kit::App,
     ) {
         let (store, id, message) = (self.clone(), id.clone(), message.to_owned());
         cx.background_executor()

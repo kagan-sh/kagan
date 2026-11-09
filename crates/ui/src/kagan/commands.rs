@@ -1,3 +1,4 @@
+use crate::kagan::dispatch;
 use std::rc::Rc;
 
 use crate::theme::TypeScale as _;
@@ -15,7 +16,6 @@ use gpui_kit::{
     InteractiveElement as _, IntoElement, ParentElement as _, SharedString, Styled as _, Task,
     WeakEntity, Window, actions, div, px,
 };
-use kg_core::Workspace;
 use kg_domain::{Found, Op, PluginOp, SHORTCUTS, SettingsOp, ShortcutWhen, WindowOp};
 use kg_plugins::{CommandWhen, RunCommand};
 
@@ -150,7 +150,7 @@ impl Kagan {
             Run::Action(action) => window.defer(cx, move |window, cx| {
                 back.dispatch_action(action.as_ref(), window, cx);
             }),
-            Run::Op(op) => Workspace::dispatch((*op).clone(), cx).detach(),
+            Run::Op(op) => dispatch::logged((*op).clone(), cx),
         }
     }
 }

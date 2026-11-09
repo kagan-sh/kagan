@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::InteractiveElementExt as _;
@@ -221,6 +221,12 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Ro
             .collect();
         threads.sort_by_key(|thread| !thread.pinned);
         let ids: BTreeSet<_> = threads.iter().map(|thread| &thread.id).collect();
+        let mut children: BTreeMap<&ThreadId, Vec<&Thread>> = BTreeMap::new();
+        for &thread in &threads {
+            if let Some(parent) = &thread.parent_thread_id {
+                children.entry(parent).or_default().push(thread);
+            }
+        }
         let mut visited = BTreeSet::new();
         for thread in &threads {
             if thread
@@ -228,12 +234,12 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Ro
                 .as_ref()
                 .is_none_or(|parent| !ids.contains(parent))
             {
-                append_thread(&mut rows, thread, &threads, &mut visited, 0, &scope);
+                append_thread(&mut rows, thread, &children, &mut visited, 0, &scope);
             }
         }
         for thread in &threads {
             if !visited.contains(&thread.id) {
-                append_thread(&mut rows, thread, &threads, &mut visited, 0, &scope);
+                append_thread(&mut rows, thread, &children, &mut visited, 0, &scope);
             }
         }
     }
@@ -243,7 +249,7 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Ro
 fn append_thread(
     rows: &mut Vec<Row>,
     thread: &Thread,
-    threads: &[&Thread],
+    children_of: &BTreeMap<&ThreadId, Vec<&Thread>>,
     visited: &mut BTreeSet<ThreadId>,
     depth: u16,
     scope: &Scope,
@@ -251,9 +257,7 @@ fn append_thread(
     if !visited.insert(thread.id.clone()) {
         return;
     }
-    let children = threads
-        .iter()
-        .any(|child| child.parent_thread_id.as_ref() == Some(&thread.id));
+    let children = children_of.contains_key(&thread.id);
     let expanded = !scope.sidebar.closed_threads.contains(&thread.id);
     rows.push(Row {
         kind: Kind::Thread {
@@ -271,27 +275,25 @@ fn append_thread(
         selected: scope.shown.as_ref() == Some(&thread.id),
         open: false,
     });
-    for child in threads
-        .iter()
-        .filter(|child| child.parent_thread_id.as_ref() == Some(&thread.id))
-    {
+    for &child in children_of.get(&thread.id).into_iter().flatten() {
         if expanded {
-            append_thread(rows, child, threads, visited, depth + 1, scope);
+            append_thread(rows, child, children_of, visited, depth + 1, scope);
         } else {
-            mark_descendants(child, threads, visited);
+            mark_descendants(child, children_of, visited);
         }
     }
 }
 
-fn mark_descendants(thread: &Thread, threads: &[&Thread], visited: &mut BTreeSet<ThreadId>) {
+fn mark_descendants(
+    thread: &Thread,
+    children_of: &BTreeMap<&ThreadId, Vec<&Thread>>,
+    visited: &mut BTreeSet<ThreadId>,
+) {
     if !visited.insert(thread.id.clone()) {
         return;
     }
-    for child in threads
-        .iter()
-        .filter(|child| child.parent_thread_id.as_ref() == Some(&thread.id))
-    {
-        mark_descendants(child, threads, visited);
+    for &child in children_of.get(&thread.id).into_iter().flatten() {
+        mark_descendants(child, children_of, visited);
     }
 }
 

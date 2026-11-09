@@ -1,6 +1,7 @@
 #[cfg(test)]
 pub(crate) mod tests;
 
+use crate::kagan::dispatch;
 use std::collections::BTreeMap;
 
 use gpui_kit::{
@@ -8,7 +9,6 @@ use gpui_kit::{
     ParentElement as _, Styled as _, Window, WindowId, actions, div,
 };
 use gpui_shell::ScriptView;
-use kg_core::Workspace;
 use kg_domain::{DiffNote, DiffScope, Op, PluginId, PluginOp, Slot, SlotChoice};
 use kg_plugins::{HostUi, PluginHost, ReviewComment};
 use serde_json::json;
@@ -187,7 +187,7 @@ impl Kagan {
                 .iter()
                 .any(|status| status.id == plugin)
         {
-            host.read(cx).report(&plugin, &line);
+            host.read(cx).report(&plugin, &line, cx);
         }
         self.note = Some(format!("{line} ({plugin})").into());
     }
@@ -205,7 +205,7 @@ impl Kagan {
             id: SlotChoice::Kagan,
             thread_id: None,
         });
-        Workspace::dispatch(op, cx).detach();
+        dispatch::logged(op, cx);
         if held {
             match self.screen.review() {
                 Some(_) if slot == Slot::Review => self.focus_review(window, cx),

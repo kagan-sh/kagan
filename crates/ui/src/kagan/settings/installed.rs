@@ -1,3 +1,4 @@
+use crate::kagan::dispatch;
 use crate::theme::TypeScale as _;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -7,7 +8,6 @@ use gpui_kit::{
     Context, ElementId, Focusable as _, InteractiveElement, IntoElement, ParentElement as _, Role,
     Styled as _, Window, div,
 };
-use kg_core::Workspace;
 use kg_domain::{Op, PluginId, PluginOp};
 use kg_plugins::{PluginHost, PluginStatus};
 
@@ -436,7 +436,7 @@ fn install_waiting_row(stoppable: bool) -> Row {
                 .outline()
                 .label("Cancel")
                 .on_click(|_, _, cx| {
-                    Workspace::dispatch(Op::Plugin(PluginOp::CancelInstall), cx).detach();
+                    dispatch::logged(Op::Plugin(PluginOp::CancelInstall), cx);
                 }),
         )
         .into_any_element(),

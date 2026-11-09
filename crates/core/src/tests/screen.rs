@@ -81,18 +81,11 @@ async fn a_crash_while_a_program_runs_keeps_no_screen(cx: &mut TestAppContext) {
             .is_none()
     );
     let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
-    for row in store
-        .screens()
-        .unwrap()
-        .iter()
-        .filter(|row| row.thread_id == id)
-    {
-        let text = String::from_utf8_lossy(&row.replay);
-        assert!(
-            !text.contains("CRASH-MARKER"),
-            "the screen from the crashed run was kept"
-        );
-    }
+    let replay = store.screen_replay(&id).unwrap().unwrap_or_default();
+    assert!(
+        !String::from_utf8_lossy(&replay).contains("CRASH-MARKER"),
+        "the screen from the crashed run was kept"
+    );
     drop(fixture);
 }
 

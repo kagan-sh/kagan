@@ -9,7 +9,7 @@ use gpui_kit::AppContext as _;
 use gpui_shell::{HostArguments, HostError, HostModule, HostValue};
 use serde_json::json;
 
-use crate::area::{awaited, to_host, with_app};
+use crate::area::{to_host, with_app};
 
 const MAX_BYTES: u64 = 1024 * 1024;
 const MAX_LIST_ENTRIES: usize = 10_000;
@@ -82,9 +82,9 @@ pub(crate) fn module(
 fn spawn(
     work: impl FnOnce() -> Result<serde_json::Value, Error> + Send + 'static,
 ) -> Result<impl std::future::Future<Output = Result<HostValue, HostError>> + Send, HostError> {
-    let read = with_app(|cx| awaited(cx.background_spawn(async move { work() }), cx))?;
+    let read = with_app(|cx| cx.background_spawn(async move { work() }))?;
     Ok(async move {
-        read.await?
+        read.await
             .map(to_host)
             .map_err(|error| HostError::new(error.to_string()))
     })
