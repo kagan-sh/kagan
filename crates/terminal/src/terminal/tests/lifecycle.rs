@@ -192,7 +192,15 @@ fn a_resize_changes_the_screen_and_marks_it_changed() {
     let terminal = Terminal::spawn(shell_launch(), 80, 24).unwrap();
     let reap = Reap(terminal.process_id());
     terminal.resize(100, 40).unwrap();
-    assert!(terminal.view().take_changed());
+    // The reader may still hold the screen, and then it applies the resize on its next pass.
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !terminal.view().take_changed() {
+        assert!(
+            Instant::now() < deadline,
+            "the resize never marked the screen changed"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
     assert!(terminal.view().screen().contains("\x1b[40;1H"));
     quit_within(terminal, Duration::from_secs(3));
     drop(reap);
