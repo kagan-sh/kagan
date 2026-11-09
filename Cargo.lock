@@ -5421,7 +5421,6 @@ version = "0.1.0"
 dependencies = [
  "apple-native-keyring-store",
  "async-channel",
- "async-io",
  "cap-std",
  "dunce",
  "futures",
