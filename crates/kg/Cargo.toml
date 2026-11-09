@@ -11,6 +11,7 @@ async-channel.workspace = true
 clap.workspace = true
 gpui-kit.workspace = true
 gpui-shell.workspace = true
+hex.workspace = true
 interprocess.workspace = true
 kg-domain.workspace = true
 kg-core.workspace = true
@@ -39,7 +40,7 @@ widestring.workspace = true
 windows-sys.workspace = true
 
 [build-dependencies]
-embed-resource = "=3.0.11"
+embed-resource = "=3.0.12"
 
 [dev-dependencies]
 sha2.workspace = true

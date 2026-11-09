@@ -6,6 +6,10 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   title:
     runs-on: ubuntu-latest

@@ -26,13 +26,7 @@ fn non_empty(key: &str) -> Option<std::ffi::OsString> {
 fn socket_id(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
 
-    let digest = Sha256::digest(bytes);
-    let mut id = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        id.push(char::from(b"0123456789abcdef"[(byte >> 4) as usize]));
-        id.push(char::from(b"0123456789abcdef"[(byte & 0x0f) as usize]));
-    }
-    id
+    hex::encode(Sha256::digest(bytes))
 }
 
 #[cfg(unix)]
@@ -370,12 +364,14 @@ fn answer(
     stream: Stream,
     handle: &impl Fn(Op, &Receiver<()>) -> Result<OpResult, OpError>,
 ) -> io::Result<()> {
-    let (receive, mut send) = stream.split();
+    let stream = Arc::new(stream);
+    let receive = Arc::clone(&stream);
+    let mut send = &*stream;
     let (lines, incoming) = mpsc::channel();
     let (present, gone) = async_channel::bounded::<()>(1);
     thread::spawn(move || {
         let _present = present;
-        for line in BufReader::new(receive).lines() {
+        for line in BufReader::new(&*receive).lines() {
             if lines.send(line).is_err() {
                 return;
             }

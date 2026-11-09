@@ -12,11 +12,12 @@ kg-store.workspace = true
 kg-terminal.workspace = true
 gpui-kit.workspace = true
 async-channel.workspace = true
-base64 = "=0.22.1"
+base64 = "=0.23.1"
 chrono = { version = "=0.4.45", default-features = false, features = ["alloc"] }
 dunce.workspace = true
 futures.workspace = true
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg"] }
+hex.workspace = true
 minisign-verify = "=0.3.0"
 reqwest = { package = "gpui-pre-reqwest", version = "=0.12.15", default-features = false, features = ["blocking", "rustls-tls-native-roots"] }
 semver.workspace = true

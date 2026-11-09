@@ -1,5 +1,5 @@
 Third-party notices for the kg binary.
-cargo-lock f4708ca83a3a9cfdda0fa7794af2894014cef8abbf96207faf7f779dfd5cd3d4
+cargo-lock 5c221d1fcb59f65d851b2cfbe0c62a3ac09897bd2a0a458ef3c66d1f01f2f79d
 
 kagan itself is Apache-2.0. See LICENSE.
 
@@ -243,7 +243,7 @@ PERFORMANCE OF THIS SOFTWARE.
 
 ================================================================================
 0BSD
-interprocess 2.4.4
+interprocess 2.4.7
 
 BSD Zero Clause License
 
@@ -1609,7 +1609,7 @@ linux-raw-sys 0.12.1
 regalloc2 0.11.2
 rustix-linux-procfs 0.1.1
 rustix-openpty 0.2.0
-rustix 1.1.5
+rustix 1.1.6
 target-lexicon 0.12.16
 target-lexicon 0.13.5
 winx 0.36.4
@@ -8975,7 +8975,7 @@ rustc-hash 1.1.0
 rustc_version 0.4.1
 rustix-linux-procfs 0.1.1
 rustix-openpty 0.2.0
-rustix 1.1.5
+rustix 1.1.6
 rustls-native-certs 0.8.5
 rustls-pemfile 2.2.0
 rustls 0.23.46
@@ -9020,7 +9020,7 @@ unicode-segmentation 1.13.3
 unicode-vo 0.1.0
 unicode-width 0.2.3
 url 2.5.8
-uuid 1.26.1
+uuid 1.29.0
 version_check 0.9.5
 wait-timeout 0.2.1
 waker-fn 1.2.0
@@ -14420,7 +14420,7 @@ serde_bytes 0.11.19
 serde_core 1.0.229
 serde_derive 1.0.229
 serde_derive_internals 0.30.0
-serde_json 1.0.151
+serde_json 1.0.154
 serde_repr 0.1.21
 serde_urlencoded 0.7.1
 serde_yaml 0.9.34+deprecated
@@ -17368,7 +17368,7 @@ THE SOFTWARE.
 ================================================================================
 MIT
 winreg 0.10.1
-winreg 0.55.0
+winreg 0.56.0
 
 Copyright (c) 2015 Igor Shaula
 
@@ -18600,8 +18600,8 @@ SOFTWARE.
 
 ================================================================================
 MIT
-jsonschema 0.58.3
-referencing 0.58.3
+jsonschema 0.60.2
+referencing 0.60.2
 
 MIT License
 
@@ -18984,8 +18984,8 @@ block 0.1.6
 dpi 0.1.2
 harfrust 0.5.2
 hex-simd 0.8.0
-jsonschema-regex 0.58.3
-jsonschema-value 0.58.3
+jsonschema-regex 0.60.2
+jsonschema-value 0.60.2
 libm 0.2.16
 malloc_buf 0.0.6
 minisign-verify 0.3.0
@@ -18996,7 +18996,7 @@ objc2-encode 4.1.0
 objc2-foundation 0.2.2
 objc2-foundation 0.3.2
 objc2 0.5.3
-objc2 0.6.4
+objc2 0.6.5
 pulp-wasm-simd-flag 0.1.1
 quickjs-jit-core 0.14.1
 quickjs-jit-macro 0.14.1
@@ -20002,7 +20002,7 @@ SOFTWARE.
 
 ================================================================================
 MIT
-embed-resource 3.0.11
+embed-resource 3.0.12
 
 The MIT License (MIT)
 

@@ -158,7 +158,7 @@ fn hash_tree(root: &Path) -> std::io::Result<String> {
     }
     let mut hash = Sha256::new();
     visit(root, root, &mut hash)?;
-    Ok(format!("{:x}", hash.finalize()))
+    Ok(hex::encode(hash.finalize()))
 }
 
 pub(crate) async fn run(

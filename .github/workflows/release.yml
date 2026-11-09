@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
+      checks: read
       contents: read
     outputs:
       tag: ${{ steps.next.outputs.tag }}
@@ -44,10 +45,28 @@ jobs:
           set -eu
           bash scripts/release-version.sh check "$VERSION" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Require green CI on the commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ steps.next.outputs.sha }}
+        run: |
+          set -eu
+          # The three checks main requires. A skipped check means a change with no Rust input, and the ruleset passes that too.
+          results=$(gh api --paginate "repos/$GH_REPO/commits/$SHA/check-runs" \
+            --jq '.check_runs[] | select(.name == "linux" or .name == "macos" or .name == "windows") | "\(.name) \(.conclusion)"')
+          for name in linux macos windows; do
+            states=$(printf '%s\n' "$results" | awk -v n="$name" '$1 == n { print $2 }')
+            if [ -z "$states" ] || printf '%s\n' "$states" | grep -qvxE 'success|skipped'; then
+              echo "::error::The $name check on $SHA is not green. Release from a commit whose CI passed."
+              exit 1
+            fi
+          done
+          echo "CI is green on $SHA"
 
   package:
     needs: tag
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
     strategy:
@@ -65,14 +84,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev libwebkit2gtk-4.1-dev libgtk-3-dev libfuse2 lld
-      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
+      - uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
         with:
           cache: false
-      # Keyed from the committed manifests. Stamping the version comes after,
-      # so this cache stays one entry per OS and kg still rebuilds for the stamp.
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: release-${{ matrix.os }}
       - name: Stamp version
         shell: bash
         env:
@@ -81,7 +95,7 @@ jobs:
       - name: Prepare cargo-packager cache directory
         shell: bash
         run: mkdir -p "$RUNNER_TEMP/cargo-packager"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: packager
         with:
           path: ${{ runner.temp }}/cargo-packager
@@ -173,7 +187,7 @@ jobs:
           bin=target/release/kg
           if [ "$RUNNER_OS" = Windows ]; then bin=$bin.exe; fi
           echo "\`kg\` on $RUNNER_OS: $(wc -c < "$bin" | tr -d ' ') bytes" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installers-${{ matrix.os }}
           path: |
@@ -185,7 +199,7 @@ jobs:
 
   mac-build:
     needs: tag
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
     strategy:
@@ -204,17 +218,13 @@ jobs:
           HOMEBREW_NO_ANALYTICS: "1"
           HOMEBREW_NO_ENV_HINTS: "1"
         run: brew install lld
-      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
+      - uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
         with:
           cache: false
       - name: Add the target
         env:
           TARGET: ${{ matrix.target }}
         run: rustup target add "$TARGET"
-      # Keyed from the committed manifests, before the version stamp.
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: release-${{ matrix.target }}
       - name: Stamp version
         env:
           VERSION: ${{ needs.tag.outputs.version }}
@@ -223,7 +233,7 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
         run: cargo build --release -p kg --target "$TARGET"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kg-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/kg
@@ -246,12 +256,12 @@ jobs:
         env:
           VERSION: ${{ needs.tag.outputs.version }}
         run: bash scripts/release-version.sh stamp "$VERSION"
-      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
+      - uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
         with:
           cache: false
       - name: Prepare cargo-packager cache directory
         run: mkdir -p "$RUNNER_TEMP/cargo-packager"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: packager
         with:
           path: ${{ runner.temp }}/cargo-packager
@@ -261,7 +271,7 @@ jobs:
         run: cargo install cargo-packager --version 0.11.8 --locked --root "$RUNNER_TEMP/cargo-packager"
       - name: Put cargo-packager on PATH
         run: echo "$RUNNER_TEMP/cargo-packager/bin" >> "$GITHUB_PATH"
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: kg-*
           path: ${{ runner.temp }}/halves
@@ -378,8 +388,8 @@ jobs:
           echo "signed $archive"
       - name: Size budget
         env:
-          # 160 MiB for the universal kg, both CPUs: about 152 MB with thin LTO (decision 119).
-          BUDGET: 167772160
+          # 256 MiB for the universal kg, both CPUs: 232 MB with thin LTO and the review's grammars (decision 181).
+          BUDGET: 268435456
         run: |
           set -eu
           size=$(wc -c < target/universal-apple-darwin/release/kg | tr -d ' ')
@@ -388,7 +398,7 @@ jobs:
             echo "::error::kg is $size bytes, over its $BUDGET byte budget"
             exit 1
           fi
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installers-macos
           path: |
@@ -404,7 +414,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: installers-*
           merge-multiple: true
@@ -450,13 +460,13 @@ jobs:
           } | jq -s --arg version "${TAG#v}" '{version: $version, platforms: add}' > dist/update.json
       - name: Prepare cargo-packager cache directory
         run: mkdir -p "$RUNNER_TEMP/cargo-packager"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: packager
         with:
           path: ${{ runner.temp }}/cargo-packager
           key: cargo-packager-0.11.8-${{ runner.os }}-${{ runner.arch }}
       - if: steps.packager.outputs.cache-hit != 'true'
-        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
         with:
           cache: false
       - name: Install cargo-packager
