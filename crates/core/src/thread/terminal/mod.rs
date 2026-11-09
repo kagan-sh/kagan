@@ -59,6 +59,7 @@ pub(crate) async fn start(
                 .unwrap_or((COLS, ROWS))
         })
         .map_err(closed)?;
+    crate::workspace::hold(this, crate::workspace::Hold::Start, cx).await;
     // Taken before the program starts, so what it begins in that moment counts as after the start.
     let at = crate::workspace::time(this, cx)?;
     let spawned = match folder {

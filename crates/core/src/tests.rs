@@ -84,22 +84,7 @@ impl Fixture {
             })
             .unwrap();
         drop(store);
-        let workspace = cx
-            .update(|cx| {
-                Workspace::open(
-                    dir.path().into(),
-                    std::env::current_exe().unwrap(),
-                    Some("/tmp/kagan-test.sock".into()),
-                    cx,
-                )
-            })
-            .await
-            .unwrap();
-        cx.update(|cx| {
-            workspace.update(cx, |workspace, _| {
-                insert_homes(&mut workspace.homes, dir.path());
-            });
-        });
+        let workspace = open_at(&dir, cx, |_| {}).await.unwrap();
         Self {
             dir,
             project,
@@ -124,22 +109,7 @@ impl Fixture {
         let mut store = kg_store::Store::open(dir.path().join("kagan.sqlite3")).unwrap();
         plant(&mut store);
         drop(store);
-        let workspace = cx
-            .update(|cx| {
-                Workspace::open(
-                    dir.path().into(),
-                    std::env::current_exe().unwrap(),
-                    Some("/tmp/kagan-test.sock".into()),
-                    cx,
-                )
-            })
-            .await
-            .unwrap();
-        cx.update(|cx| {
-            workspace.update(cx, |workspace, _| {
-                insert_homes(&mut workspace.homes, dir.path());
-            });
-        });
+        let workspace = open_at(&dir, cx, |_| {}).await.unwrap();
         Self {
             dir,
             project,
@@ -160,6 +130,27 @@ impl Fixture {
             metadata: None,
         }))
     }
+}
+
+// Opens the app on `dir`, with every program's folder in it, before the restart's resume runs.
+fn open_at(
+    dir: &tempfile::TempDir,
+    cx: &mut TestAppContext,
+    prepare: impl FnOnce(&mut Workspace) + 'static,
+) -> gpui_kit::Task<Result<gpui_kit::Entity<Workspace>>> {
+    let home = dir.path().to_path_buf();
+    cx.update(|cx| {
+        Workspace::open_with(
+            dir.path().into(),
+            std::env::current_exe().unwrap(),
+            Some("/tmp/kagan-test.sock".into()),
+            move |workspace| {
+                insert_homes(&mut workspace.homes, &home);
+                prepare(workspace);
+            },
+            cx,
+        )
+    })
 }
 
 // Points every program's folder into the test's folder, so no test reads the person's own.
