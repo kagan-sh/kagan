@@ -104,6 +104,24 @@ impl Reuse {
     }
 }
 
+/// Whether a thread runs in the chosen project's folder, as of the last window refresh.
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+pub(super) enum FolderUse {
+    #[default]
+    Free,
+    Busy,
+}
+
+impl FolderUse {
+    pub(super) fn of(busy: bool) -> Self {
+        if busy { Self::Busy } else { Self::Free }
+    }
+
+    pub(super) fn is_busy(self) -> bool {
+        self == Self::Busy
+    }
+}
+
 #[derive(Default)]
 pub(super) struct StartState {
     reuse: Option<Reuse>,
@@ -119,6 +137,7 @@ pub(super) struct StartState {
     branch_query: Option<Entity<InputState>>,
     branch_watch: Option<Subscription>,
     branches: Branches,
+    pub(super) busy: FolderUse,
     setup_epoch: u64,
     setup_task: Option<Task<()>>,
     setup: Option<PinnedSetup>,
@@ -294,7 +313,7 @@ impl Kagan {
     }
 
     pub(super) fn start_ready(&self, kind: Option<ProjectKind>, cx: &App) -> bool {
-        kind.is_some_and(|kind| self.start_environment(kind, cx).is_some())
+        kind.is_some_and(|kind| self.start_environment(kind).is_some())
             && self.setup_ready()
             && !self.start.starting
             && self.picker.read(cx).command(cx).is_ok()

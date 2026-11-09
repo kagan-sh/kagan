@@ -213,7 +213,7 @@ impl Kagan {
             .then(|| {
                 super::branches::branch_move_block(
                     branches.checkout_block.clone(),
-                    self.folder_busy(cx),
+                    self.start.busy.is_busy(),
                 )
             })
             .flatten();
