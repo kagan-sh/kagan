@@ -1078,7 +1078,7 @@ fn example_roots() -> Vec<std::path::PathBuf> {
 #[test]
 fn bundled_examples_pass_check() {
     let roots = example_roots();
-    assert_eq!(roots.len(), 10);
+    assert_eq!(roots.len(), 11);
     for root in &roots {
         let data = tempfile::tempdir().unwrap();
         crate::development::check(
