@@ -80,13 +80,21 @@ pub struct BranchList {
     pub checkout_block: Option<String>,
 }
 
-/// A commit, and the setup script at it. `mode` is None when the commit has no setup file; `120000`
-/// is a link, which kagan does not run. `text` is cut to the lines the Start screen shows.
+/// What the setup file at a commit is. A link is never run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SetupFile {
+    Link,
+    Script,
+}
+
+/// A commit, and the setup script at it. `mode` is None when the commit has no setup file. `text` is
+/// cut to the lines the Start screen shows.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PinnedSetup {
     pub commit: String,
-    pub mode: Option<String>,
+    pub mode: Option<SetupFile>,
     pub text: String,
     pub truncated: bool,
 }

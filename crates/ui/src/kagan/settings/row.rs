@@ -22,6 +22,15 @@ pub(super) struct Group {
     pub(super) title: SharedString,
     pub(super) rows: Vec<Row>,
     pub(super) headed: bool,
+    pub(super) style: GroupStyle,
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub(super) enum GroupStyle {
+    #[default]
+    Plain,
+    Shortcuts,
+    FirstShortcuts,
 }
 
 pub(super) fn row(id: &str, title: &str, note: &str, control: AnyElement) -> Row {
@@ -47,6 +56,7 @@ pub(super) fn group(
         title: title.into(),
         rows,
         headed: false,
+        style: GroupStyle::Plain,
     }
 }
 

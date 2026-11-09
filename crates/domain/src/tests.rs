@@ -260,6 +260,13 @@ fn error_wire() {
         "hint": "set KG_THREAD_ID, or pass the id",
     }});
     assert_eq!(serde_json::from_value::<OpError>(hinted).unwrap(), error);
+    let changed = OpError::SetupChanged("script changed".into());
+    let changed_wire = json!({ "error": { "kind": "setup-changed", "message": "script changed" } });
+    assert_eq!(serde_json::to_value(&changed).unwrap(), changed_wire);
+    assert_eq!(
+        serde_json::from_value::<OpError>(changed_wire).unwrap(),
+        changed
+    );
     assert!(
         serde_json::from_value::<OpError>(json!({ "error": { "kind": "odd", "message": "" } }))
             .is_err()

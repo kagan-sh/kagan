@@ -5,8 +5,8 @@ use gpui_kit::{
 };
 use kg_core::Workspace;
 use kg_domain::{
-    BranchList, EnvironmentOp, Op, OpResult, PinnedSetup, ProjectId, ProjectKind, ThreadId,
-    ThreadOp,
+    BranchList, EnvironmentOp, Op, OpError, OpResult, PinnedSetup, ProjectId, ProjectKind,
+    SetupFile, ThreadId, ThreadOp,
 };
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -54,13 +54,10 @@ enum Branches {
 }
 
 fn setup_announcement(setup: &PinnedSetup) -> Option<&'static str> {
-    match setup.mode.as_deref() {
-        Some("120000") => Some(".kagan/setup is a link, so kagan will not run it."),
-        Some("100644" | "100755") => {
-            Some("Runs .kagan/setup in the new worktree before the program starts.")
-        }
-        _ => None,
-    }
+    setup.mode.map(|mode| match mode {
+        SetupFile::Link => ".kagan/setup is a link, so kagan will not run it.",
+        SetupFile::Script => "Runs .kagan/setup in the new worktree before the program starts.",
+    })
 }
 
 fn setup_script(setup: &PinnedSetup) -> Option<(&str, bool)> {
@@ -81,7 +78,7 @@ pub(super) struct StartState {
     setup_task: Option<Task<()>>,
     setup: Option<PinnedSetup>,
     setup_open: bool,
-    setup_failure: Option<String>,
+    setup_failure: Option<OpError>,
     starting: bool,
     load: Option<Task<()>>,
     run: Option<Task<()>>,
@@ -119,10 +116,6 @@ fn base_label(branches: &BranchList) -> String {
             .as_deref()
             .map_or_else(|| "HEAD".into(), |head| head.chars().take(7).collect()),
     }
-}
-
-fn script_changed(failure: &str) -> bool {
-    failure.contains("Start will use the version shown on screen now")
 }
 
 async fn pinned_setup(project: ProjectId, rev: String, cx: &mut AsyncApp) -> Option<PinnedSetup> {

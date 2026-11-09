@@ -145,7 +145,8 @@ impl Kagan {
     pub(super) fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let approvals = Workspace::global(cx).read(cx).approvals().count();
         if self.in_settings() && approvals > self.settings_approvals {
-            self.settings_scroll.scroll_to_top_of_item(1);
+            self.settings_scroll
+                .scroll_to_top_of_item(super::settings::QUESTIONS_ITEM);
         }
         self.settings_approvals = approvals;
         self.announce_questions(window, cx);
