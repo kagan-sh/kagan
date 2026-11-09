@@ -14,21 +14,28 @@ A change to what an `Op` does updates `docs/behaviour.md`. A non-obvious design 
 
 At every step, make the best decision that will elevate all three: the user experience (UX), developer experience (DX), and agent experience (AX), without breaking or degrading anything.
 
+## Folder rules
+
+Read a crate's own `AGENTS.md` before you change it. It adds to the rules here:
+
+- `crates/store/AGENTS.md`: schema migrations.
+- `crates/domain/AGENTS.md`: no GPUI, and the shared types and `Op`.
+- `crates/ui/AGENTS.md`: GPUI rules, theme tokens, the smoke test.
+- `crates/plugins/AGENTS.md`: powers and approval.
+- `crates/kg/AGENTS.md`: the CLI and the `cli.md` regeneration.
+
+Claude Code and Cursor load a nested `AGENTS.md` on their own when they work in its folder. Other tools may not, so this list is the pointer.
+
 ## Build and test
 
 - Rust 1.98 is pinned. macOS links with `ld64.lld`, so run `brew install lld` first; Linux and Windows prerequisites are in `book/src/start.md`.
-- `cargo run -p kg --release` builds and opens the app only when none is running; otherwise `kg` sends the command to the running app over a socket, so quit it before testing a new UI build. `KG_DATA_DIR=<temp>` gives an isolated headless app for CLI tests.
 - `cargo t` is the alias for the pinned nextest (`cargo bin cargo-nextest run`; install `cargo-run-bin` once). Run `cargo t --workspace --locked`; one crate or test with `cargo t -p kg-core <filter>`.
 - Before a pull request, run: `cargo fmt --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo t --workspace --locked`.
-- For a UI change, run `sh scripts/smoke.sh --keep` on macOS before a pull request, and attach its snapshot and screenshot paths to the report.
-- `book/src/cli.md` is generated from clap help. After changing the CLI, run `KG_UPDATE_CLI=1 cargo t -p kg cli_reference_matches_help`; the test `cli_reference_matches_help` fails otherwise.
 
 ## Crates
 
 - `kg` is the binary (CLI, app start, socket, MCP); `kg-ui` the GPUI window; `kg-plugins` the plugin host; `kg-core` the `Workspace`, entities, and thread lifecycle; `kg-store` SQLite; `kg-domain` ids, records, and `Op`; `kg-terminal` the terminal; `kg-process` the process tree.
-- Only `kg-core` may have a normal dependency on `kg-store`; `kg-domain` must not reach GPUI. `scripts/crate-boundaries.sh` enforces the graph in its `EXPECTED` table. The diagram in `docs/architecture.md` is a picture of that table, and review checks that they match.
-- Every user-visible feature is an `Op` dispatched by `Workspace::dispatch`; the CLI is derived from `Op`.
-- SQLite migrations are the `MIGRATIONS` array in `crates/store/src/store.rs`: append a new entry and never edit an applied one; `user_version` is the count applied.
+- `scripts/crate-boundaries.sh` enforces the graph in its `EXPECTED` table. The diagram in `docs/architecture.md` is a picture of that table, and review checks that they match.
 
 ## Skills
 
@@ -40,10 +47,9 @@ Agent skills on these topics help, and are optional for contributors:
 
 The GPUI Kit coding and design skills are in the `skills/` folder of [gpui-kit](https://github.com/aorumbayev/gpui-kit).
 
-Where a skill disagrees with this file, this file wins. Known overrides:
+Where a skill disagrees with this file, this file wins. Known override:
 
 - No tokio in kagan's own code. Async runs on GPUI's executors (`cx.spawn`, `cx.background_spawn`); see decision 90.
-- Shared UI state lives in GPUI entities (`Entity<T>`, `cx.notify()`, events), not `Arc<Mutex<T>>`.
 
 ## Laconic
 
@@ -59,15 +65,6 @@ Where a skill disagrees with this file, this file wins. Known overrides:
 - States are enums, matched exhaustively. Parse at the boundary, pass typed values inside.
 - Borrow before you clone; iterators before index loops; `impl Trait` in argument position for single-use generics.
 - Visibility is the smallest that compiles: `pub(crate)` by default. The workspace lint `unreachable_pub` (in the root `Cargo.toml`) warns on a `pub` item no other crate can reach.
-
-## GPUI
-
-- Views implement `Render`; stateless pieces implement `RenderOnce`. No I/O and no heavy work in `render`.
-- Retained state (inputs, lists, subscriptions, tasks) is owned by an entity and kept alive by a field; drop a `Task` or `Subscription` only to cancel it.
-- Commands are GPUI actions with keybindings, and every user-facing one is also an `Op`.
-- `ElementId`s are stable across renders.
-- Colors and spacing come from the Workbench theme tokens (`docs/look.md`), never literals in views; `scripts/view-colors.sh` enforces it outside `crates/ui/src/theme.rs`.
-- UI behavior is tested with GPUI's test context through the view's interface.
 
 ## Tests
 
@@ -88,7 +85,7 @@ Commit messages and pull requests carry the change, not the tooling. Never add a
 
 A fresh clone turns it on with `git config core.hooksPath .githooks`.
 `.githooks/pre-commit` runs only `cargo fmt --check`, so a commit takes about a second. `.githooks/pre-push-test` fails if it gains any other cargo command.
-`.githooks/pre-push` runs checks that do not compile: attribution, typos, the glossary, the size budget, crate boundaries, view colors, and `cargo fmt --check`. It refuses a dirty tree or a HEAD other than the one pushed. Fetch `origin/main` first. Install the pinned `typos` (`scripts/typos-version`).
+`.githooks/pre-push` runs checks that do not compile: attribution, typos, the glossary, decision numbers, test env reads, the size budget, crate boundaries, view colors, and `cargo fmt --check`. It refuses a dirty tree or a HEAD other than the one pushed. Fetch `origin/main` first. Install the pinned `typos` (`scripts/typos-version`).
 
 ## Agent loop
 
@@ -100,9 +97,9 @@ Push with the hooks on, so `.githooks/pre-push` runs. Mutation testing (`scripts
 
 ## Enforced
 
-- `.github/workflows/ci.yml` runs on every pull request and every push to `main` (`docs/decisions.md` 30): the hook checks, typos, the glossary, jscpd, the size budget, `cargo fmt --check`, cargo-deny, cargo-shear, crate boundaries, decision numbers and test env reads; `cargo clippy --workspace --all-targets -- -D warnings` on Linux and macOS; and the tests on Linux, macOS and Windows. A diff of only docs, the book and markdown skips the Rust jobs.
+- `.github/workflows/ci.yml` runs on every pull request and every push to `main` (decision 30): the hook checks, typos, the glossary, jscpd, the size budget, `cargo fmt --check`, cargo-deny, cargo-shear, crate boundaries, decision numbers and test env reads; `cargo clippy --workspace --all-targets -- -D warnings` on Linux and macOS; and the tests on Linux, macOS and Windows. A diff of only docs, the book and markdown skips the Rust jobs.
 - Merges into `main` are squashed, and the squash commit takes the PR title, so `.github/workflows/pr-title.yml` fails any title that is not a Conventional Commit (`type(scope)?: summary`).
 - Workspace lints in the root `Cargo.toml` (`[workspace.lints]`) deny `unwrap_used`, `expect_used` (tests excepted), `dbg_macro`, `todo`, `print_stdout` outside `kg`, and warn on `clippy::pedantic`.
-- Every pull request into `main` is reviewed against this file, and anything that breaks it is sent back.
+- Every pull request into `main` is reviewed against this file and the folder files, and anything that breaks them is sent back.
 
 Product Rust — `.rs` files under `crates`, excluding `tests.rs`, `*_test.rs`, and anything in a `tests/` directory — is measured in physical lines (`wc -l`). `.config/size-budget.txt` records `target`, `ceiling`, `allow_expect`, and a ceiling for every product file already over 600 lines. `scripts/size-budget.sh` (run by CI's `hygiene` job and the pre-push hook) fails when the total, the marker count, or a listed file is above its ceiling, and when an unlisted file is over 600 lines. It does not track exact counts, so a PR under the ceilings does not edit the file; lowering a ceiling is a deliberate ratchet. The end target is 35,000 lines.
