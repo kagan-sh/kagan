@@ -112,6 +112,7 @@ impl Kagan {
 
     fn started(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.start.branch_focus = Some(cx.focus_handle().tab_stop(true));
+        self.start.segments_focus = Some(cx.focus_handle().tab_stop(false));
         self.load_settings(cx);
         self.activity
             .update_state(Updater::global(cx).read(cx).state());

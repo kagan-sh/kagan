@@ -181,6 +181,40 @@ fn cancel_leaves_the_new_thread_screen(cx: &mut TestAppContext) {
     assert!(!shows(cx, window, "start"));
 }
 
+// The form's controls in the order Tab reaches them, after the program search.
+const FORM_STOPS: [&str; 6] = [
+    "custom-command-toggle-button",
+    "folder-project-button",
+    "folder-worktree-button",
+    "branch-from-button",
+    "start-cancel-button",
+    "start-button-control",
+];
+
+#[gpui_kit::test]
+fn tab_visits_each_control_of_the_form_in_order_then_escape_leaves(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let (_repo, project) = committed_repo(cx, data.path());
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "start-cancel"));
+    click(cx, window, "program-search");
+    let mut order = Vec::new();
+    for _ in FORM_STOPS {
+        press_key(cx, window, "tab");
+        order.push(
+            FORM_STOPS
+                .into_iter()
+                .find(|name| choice_focused(cx, window, name) == Some(true)),
+        );
+    }
+    assert_eq!(order, FORM_STOPS.map(Some).to_vec());
+    press_key(cx, window, "escape");
+    wait_until(cx, |cx| {
+        cx.update(|cx| screen_read::start_project(kagan.read(cx)))
+            .is_none()
+    });
+}
+
 fn end_shell_thread(cx: &mut TestAppContext, window: AnyWindowHandle) -> ThreadId {
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));

@@ -117,6 +117,7 @@ pub(super) struct StartState {
     intent: ProjectIntent,
     panel: Panel,
     pub(super) branch_focus: Option<FocusHandle>,
+    pub(super) segments_focus: Option<FocusHandle>,
     branch_query: Option<Entity<InputState>>,
     branch_watch: Option<Subscription>,
     branches: Branches,

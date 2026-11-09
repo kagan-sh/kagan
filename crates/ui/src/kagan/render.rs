@@ -254,7 +254,7 @@ impl Kagan {
                 self.render_thread(view, cx).into_any_element()
             }
             screen::Center::Work(Shown::Start(project)) => {
-                self.render_start(project, cx).into_any_element()
+                self.render_start(project, window, cx).into_any_element()
             }
             screen::Center::Work(Shown::Nothing) => Self::render_welcome(cx).into_any_element(),
         }

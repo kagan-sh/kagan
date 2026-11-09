@@ -4,9 +4,10 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Disableable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, AnyElement, App, Context, IntoElement, ParentElement as _, Role, SharedString,
-    Styled as _, div,
+    Styled as _, Window, div,
 };
 use gpui_kit::{InteractiveElement as _, StatefulInteractiveElement as _};
 
@@ -32,7 +33,12 @@ pub(super) fn shown_path(path: &Path) -> String {
     }
 }
 impl Kagan {
-    pub(super) fn render_folder(&self, kind: ProjectKind, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_folder(
+        &self,
+        kind: ProjectKind,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let muted = cx.theme().muted_foreground;
         if let Some(reuse) = &self.start.reuse {
             return Self::reuse_hint(reuse, cx);
@@ -92,7 +98,7 @@ impl Kagan {
             .gap_2()
             .items_start()
             .child(div().type_caption(cx).text_color(muted).child("Runs in"))
-            .child(self.folder_toggles(chosen, cx))
+            .child(self.folder_toggles(chosen, window, cx))
             .child(self.branch_control(branches, cx))
             .child(hint)
             .into_any_element()
@@ -147,8 +153,18 @@ impl Kagan {
             .into_any_element()
     }
 
-    pub(super) fn folder_toggles(&self, chosen: Option<StartFolder>, cx: &App) -> AnyElement {
+    // The two segments are one row. The row takes the ring when either segment has keyboard focus.
+    pub(super) fn folder_toggles(
+        &self,
+        chosen: Option<StartFolder>,
+        window: &Window,
+        cx: &App,
+    ) -> AnyElement {
         let starting = self.start.starting;
+        let focus = self.start.segments_focus.clone();
+        let focused = focus
+            .as_ref()
+            .is_some_and(|focus| focus.contains_focused(window, cx));
         let toggle = |id: &'static str,
                       button: &'static str,
                       name: SharedString,
@@ -173,6 +189,8 @@ impl Kagan {
                 .on_click(move |_, window, cx| window.dispatch_action(action.boxed_clone(), cx))
         };
         crate::kagan::controls::segments(cx)
+            .when_some(focus, |row, focus| row.track_focus(&focus).tab_stop(false))
+            .when(focused, |row| row.border_color(cx.theme().ring))
             .child(toggle(
                 "folder-project",
                 "folder-project-button",

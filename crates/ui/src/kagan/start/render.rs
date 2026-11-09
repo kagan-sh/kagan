@@ -19,6 +19,7 @@ impl Kagan {
     pub(in crate::kagan) fn render_start(
         &self,
         project: &ProjectId,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let name = self
@@ -90,7 +91,7 @@ impl Kagan {
                                                     .child(self.picker.clone()),
                                             ),
                                     )
-                                    .children(kind.map(|kind| self.render_folder(kind, cx)))
+                                    .children(kind.map(|kind| self.render_folder(kind, window, cx)))
                                     .children(self.setup_block(cx)),
                             ),
                     )
