@@ -383,7 +383,10 @@ fn names_of(
         .collect()
 }
 
-#[allow(clippy::cast_precision_loss)]
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "a capture index rides in the hue, and indexes stay far below f32's exact range"
+)]
 fn marker(index: usize) -> Option<Hsla> {
     let hue = u32::try_from(index).ok()?;
     Some(Hsla {
@@ -397,7 +400,8 @@ fn marker(index: usize) -> Option<Hsla> {
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    clippy::cast_precision_loss
+    clippy::cast_precision_loss,
+    reason = "reads back the capture index that marker stored in the hue"
 )]
 fn recorded_name(names: &[String], color: Hsla) -> Option<String> {
     let zero = 0.0_f32.to_bits();

@@ -97,6 +97,7 @@ unreachable_pub = "warn"
 [workspace.lints.clippy]
 # Its fix writes `assert_eq!(x, [] as [T; 0])`, which reads worse than `assert!(x.is_empty())`.
 assert_is_empty = "allow"
+allow_attributes_without_reason = "warn"
 cognitive_complexity = "warn"
 dbg_macro = "deny"
 expect_used = "deny"
@@ -105,6 +106,7 @@ print_stdout = "deny"
 todo = "deny"
 too_many_arguments = "warn"
 too_many_lines = "warn"
+undocumented_unsafe_blocks = "warn"
 unwrap_used = "deny"
 disallowed_types = "deny"
 

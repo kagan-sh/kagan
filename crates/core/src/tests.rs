@@ -1,4 +1,8 @@
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "a test stops at the first broken step"
+)]
 
 mod agent;
 #[cfg(unix)]
