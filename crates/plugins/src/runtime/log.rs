@@ -95,13 +95,8 @@ pub(crate) fn counts(data_dir: &Path, id: &PluginId) -> LogCounts {
         return LogCounts::Unreadable;
     }
     let text = String::from_utf8_lossy(&bytes);
-    let mut lines: Vec<&str> = text.lines().collect();
-    if start > 0 {
-        let skip = usize::from(!lines.is_empty());
-        lines.drain(..skip);
-    }
     let (mut warn, mut error) = (0u32, 0u32);
-    for line in lines {
+    for line in text.lines() {
         match serde_json::from_str::<Entry>(line).map(|entry| entry.level) {
             Ok(Level::Warn) => warn = warn.saturating_add(1),
             Ok(Level::Error) => error = error.saturating_add(1),

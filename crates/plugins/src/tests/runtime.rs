@@ -18,6 +18,26 @@ use super::{
 };
 
 #[test]
+fn a_tail_that_starts_on_a_whole_line_counts_that_line() {
+    use crate::runtime::log::counts;
+    use kg_domain::LogCounts;
+    let data = tempfile::tempdir().unwrap();
+    let id = PluginId("dev.test.tail".into());
+    let path = kg_core::plugin_log_file(data.path(), &id);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let info = |message: &str| format!("{{\"level\":\"info\",\"message\":\"{message}\"}}\n");
+    let warn = "{\"level\":\"warn\",\"message\":\"w\"}\n";
+    let pad = 64 * 1024 - warn.len() - info("").len();
+    let tail = format!("{warn}{}", info(&"x".repeat(pad)));
+    assert_eq!(tail.len(), 64 * 1024);
+    std::fs::write(&path, format!("{}{tail}", info("older").repeat(2000))).unwrap();
+    assert_eq!(
+        counts(data.path(), &id),
+        LogCounts::Counted { warn: 1, error: 0 }
+    );
+}
+
+#[test]
 fn shared_logs_escape_messages_and_resume_after_complete_lines() {
     let data = tempfile::tempdir().unwrap();
     let id = PluginId(ID.into());
