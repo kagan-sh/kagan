@@ -73,15 +73,14 @@ fn drive_surface(op: SurfaceOp, cx: &mut gpui_kit::AsyncApp) -> Result<OpResult,
 
 fn publish(
     claimed: &AtomicBool,
-    sender: &async_channel::Sender<Result<OpResult, OpError>>,
+    sender: &async_channel::Sender<Result<(Target, bool), OpError>>,
     window: &gpui_kit::Window,
-    path: &Path,
 ) {
     if claimed.swap(true, Ordering::SeqCst) {
         return;
     }
-    let result = captured(window, path, true);
-    let _ = sender.try_send(result); // The caller may have stopped waiting; then no one reads the result.
+    let target = window_target(window).map(|target| (target, true));
+    let _ = sender.try_send(target); // The caller may have stopped waiting; then no one reads the result.
 }
 
 // A covered, minimized, or sleeping window stops its display link, so
@@ -104,25 +103,21 @@ async fn capture_after_present(
         })
         .map_err(|_| closed())?;
     if !visible {
-        return cx
-            .update_window(handle, |_, window, _| captured(window, &path, false))
-            .map_err(|_| closed())?;
+        let target = target_in(handle, cx)?;
+        return shoot(target, path, false, cx).await;
     }
     let (sender, receiver) = async_channel::bounded(1);
     let claimed = Arc::new(AtomicBool::new(false));
     cx.update_window(handle, {
         let sender = sender.clone();
         let claimed = Arc::clone(&claimed);
-        let path = path.clone();
         move |_, window, _| {
             window.refresh();
             window.on_next_frame(move |window, _| {
                 window.refresh();
                 let sender = sender.clone();
                 let claimed = Arc::clone(&claimed);
-                window.on_next_frame(move |window, _| {
-                    publish(&claimed, &sender, window, &path);
-                });
+                window.on_next_frame(move |window, _| publish(&claimed, &sender, window));
             });
         }
     })
@@ -135,21 +130,37 @@ async fn capture_after_present(
             if claimed.swap(true, Ordering::SeqCst) {
                 return;
             }
-            let result = cx
-                .update_window(handle, |_, window, _| captured(window, &path, false))
-                .unwrap_or_else(|_| Err(closed()));
-            let _ = sender.try_send(result); // The caller may have stopped waiting; then no one reads the result.
+            let target = target_in(handle, cx).map(|target| (target, false));
+            let _ = sender.try_send(target); // The caller may have stopped waiting; then no one reads the result.
         }
     })
     .detach();
-    receiver
+    let (target, current) = receiver
         .recv()
         .await
-        .map_err(|_| OpError::Failed("screenshot cancelled".into()))?
+        .map_err(|_| OpError::Failed("screenshot cancelled".into()))??;
+    shoot(target, path, current, cx).await
 }
 
-fn captured(window: &gpui_kit::Window, path: &Path, current: bool) -> Result<OpResult, OpError> {
-    capture_window(window, path).map(|()| OpResult::Capture {
+// The native id is read on the window's thread; the capture itself runs off it.
+fn target_in(handle: AnyWindowHandle, cx: &mut gpui_kit::AsyncApp) -> Result<Target, OpError> {
+    cx.update_window(handle, |_, window, _| window_target(window))
+        .map_err(|_| closed())?
+}
+
+async fn shoot(
+    target: Target,
+    path: PathBuf,
+    current: bool,
+    cx: &mut gpui_kit::AsyncApp,
+) -> Result<OpResult, OpError> {
+    cx.background_executor()
+        .spawn(async move { captured(target, &path, current) })
+        .await
+}
+
+fn captured(target: Target, path: &Path, current: bool) -> Result<OpResult, OpError> {
+    capture_target(target, path).map(|()| OpResult::Capture {
         path: path.display().to_string(),
         current,
     })
@@ -246,18 +257,36 @@ fn flush(window: &mut gpui_kit::Window, cx: &mut App) {
     }
 }
 
-fn capture_window(window: &gpui_kit::Window, path: &Path) -> Result<(), OpError> {
+type Target = isize;
+
+fn window_target(window: &gpui_kit::Window) -> Result<Target, OpError> {
     #[cfg(target_os = "macos")]
     {
-        macos::capture(window, path)
+        macos::number(window)
     }
     #[cfg(target_os = "windows")]
     {
-        windows::capture(window, path)
+        windows::hwnd(window)
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        let _ = (window, path);
+        let _ = window;
+        Err(OpError::Failed(kg_domain::UI_SCREENSHOT_UNAVAILABLE.into()))
+    }
+}
+
+fn capture_target(target: Target, path: &Path) -> Result<(), OpError> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::capture(target, path)
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows::capture(target, path)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = (target, path);
         Err(OpError::Failed(kg_domain::UI_SCREENSHOT_UNAVAILABLE.into()))
     }
 }
@@ -273,7 +302,7 @@ mod macos {
     use kg_domain::OpError;
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-    pub(super) fn capture(window: &Window, path: &Path) -> Result<(), OpError> {
+    pub(super) fn number(window: &Window) -> Result<isize, OpError> {
         use objc2::MainThreadMarker;
         use objc2_app_kit::NSView;
 
@@ -281,16 +310,20 @@ mod macos {
             .ok_or_else(|| OpError::Failed("screenshot must run on the main thread".into()))?;
         let handle = HasWindowHandle::window_handle(window)
             .map_err(|error| OpError::Failed(error.to_string()))?;
-        let number = match handle.as_raw() {
+        match handle.as_raw() {
             RawWindowHandle::AppKit(appkit) => {
                 // SAFETY: GPUI's AppKit handle points at the content NSView for this window.
                 let view: &NSView = unsafe { &*appkit.ns_view.as_ptr().cast() };
-                view.window()
+                Ok(view
+                    .window()
                     .ok_or_else(|| OpError::Failed("window has no NSWindow".into()))?
-                    .windowNumber()
+                    .windowNumber())
             }
-            _ => return Err(OpError::Failed("not an AppKit window".into())),
-        };
+            _ => Err(OpError::Failed("not an AppKit window".into())),
+        }
+    }
+
+    pub(super) fn capture(number: isize, path: &Path) -> Result<(), OpError> {
         run(OsStr::new("screencapture"), number, path)
     }
 
@@ -351,7 +384,16 @@ mod windows {
     use kg_domain::OpError;
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-    pub(super) fn capture(window: &Window, path: &Path) -> Result<(), OpError> {
+    pub(super) fn hwnd(window: &Window) -> Result<isize, OpError> {
+        let handle = HasWindowHandle::window_handle(window)
+            .map_err(|error| OpError::Failed(error.to_string()))?;
+        match handle.as_raw() {
+            RawWindowHandle::Win32(win32) => Ok(win32.hwnd.get()),
+            _ => Err(OpError::Failed("not a Win32 window".into())),
+        }
+    }
+
+    pub(super) fn capture(target: isize, path: &Path) -> Result<(), OpError> {
         use windows::Win32::Foundation::HWND;
         use windows::Win32::Graphics::Gdi::{
             BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleBitmap, CreateCompatibleDC,
@@ -360,12 +402,7 @@ mod windows {
         use windows::Win32::Storage::Xps::{PRINT_WINDOW_FLAGS, PrintWindow};
         use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, PW_RENDERFULLCONTENT};
 
-        let handle = HasWindowHandle::window_handle(window)
-            .map_err(|error| OpError::Failed(error.to_string()))?;
-        let hwnd = match handle.as_raw() {
-            RawWindowHandle::Win32(win32) => HWND(win32.hwnd.get() as _),
-            _ => return Err(OpError::Failed("not a Win32 window".into())),
-        };
+        let hwnd = HWND(target as _);
         let mut rect = windows::Win32::Foundation::RECT::default();
         // SAFETY: `hwnd` is GPUI's live window handle and `rect` is a writable RECT.
         unsafe { GetWindowRect(hwnd, &raw mut rect) }
