@@ -2102,6 +2102,7 @@ Commands:
   thread                   Open the Nth visible thread and focus its terminal
   next-thread-needing-you  Open the oldest unread thread or question and focus its terminal
   toggle-review-wrap       Toggle wrapping in the open diff review
+  toggle-activity-log      Show or hide the activity log at the bottom of the window
   command-list             Open the command list
   search-threads           Open the command list on thread search
   next-terminal            Move the keyboard to the shown thread's next terminal
@@ -2271,6 +2272,18 @@ Options:
 Toggle wrapping in the open diff review
 
 Usage: kg window toggle-review-wrap
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg window toggle-activity-log`
+
+```text
+Show or hide the activity log at the bottom of the window
+
+Usage: kg window toggle-activity-log
 
 Options:
   -h, --help

@@ -1,7 +1,10 @@
-use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, TestAppContext, px, size};
+use gpui_kit::{
+    AnyWindowHandle, AppContext as _, ElementId, FocusHandle, TestAppContext, px, size,
+};
 use kg_core::{Target, Updater, Workspace};
 use kg_domain::{
     InteractionOption, Op, OpResult, Plugin, PluginId, PluginOp, ThreadId, ThreadOp, UpdateState,
+    WindowOp,
 };
 
 use crate::kagan::screen_read;
@@ -410,7 +413,9 @@ fn the_log_button_opens_the_log_and_escape_closes_it(cx: &mut TestAppContext) {
     assert!((height - 168.).abs() < 0.5, "the open strip is {height}");
 
     // A person's click focuses the toggle; the test click does not, so focus it the same way.
-    let focus = cx.update(|cx| kagan.read(cx).activity_toggle_focus());
+    let focus = cx
+        .update(|cx| kagan.read(cx).activity_focus("toggle"))
+        .expect("the toggle has a focus handle");
     cx.update_window(window, |_, window, cx| window.focus(&focus, cx))
         .unwrap();
     crate::tests::kagan::press_key(cx, window, "escape");
@@ -685,4 +690,84 @@ fn clicking_a_status_line_with_a_command_runs_that_command(cx: &mut TestAppConte
         label(cx, window, "activity-row-0"),
         format!("{STATUS}: ran a command")
     );
+}
+
+#[gpui_kit::test]
+fn each_strip_control_is_one_tab_stop_in_tab_order(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open_with_plugins_then(cx, |data| {
+        install_status_plugin_with(data, STATUS, "Usage", Some("usage.refresh"), "42%");
+    });
+    wait_until(cx, |cx| shows(cx, window, STATUS_ITEM));
+    offer_update(cx, data.path());
+    let waiting = run_shell(cx);
+    let _asked = raise(cx, &waiting, "First?");
+    assert!(shows(cx, window, "activity-needs"));
+    assert!(shows(cx, window, "activity-update"));
+
+    let names = ["needs", "update", "plugin-dev.test.status", "toggle"];
+    let handles: Vec<(&str, FocusHandle)> = names
+        .iter()
+        .map(|name| {
+            let focus = cx.update(|cx| kagan.read(cx).activity_focus(name));
+            (
+                *name,
+                focus.unwrap_or_else(|| panic!("{name} has no focus handle")),
+            )
+        })
+        .collect();
+
+    let mut seen: Vec<&str> = Vec::new();
+    for _ in 0..600 {
+        crate::tests::kagan::press_key(cx, window, "tab");
+        let now = cx
+            .update_window(window, |_, window, _| {
+                handles
+                    .iter()
+                    .find(|(_, focus)| focus.is_focused(window))
+                    .map(|(name, _)| *name)
+            })
+            .unwrap();
+        seen.push(now.unwrap_or("-"));
+    }
+    let start = seen
+        .iter()
+        .position(|name| *name == "needs")
+        .expect("Tab reaches the needs-you button");
+    let end = start
+        + 1
+        + seen[start + 1..]
+            .iter()
+            .position(|name| *name == "needs")
+            .expect("Tab comes back to the needs-you button");
+    let cycle = &seen[start..end];
+    for name in names {
+        let count = cycle.iter().filter(|seen| **seen == name).count();
+        assert_eq!(count, 1, "{name} is {count} Tab stops in {cycle:?}");
+    }
+    let order: Vec<usize> = names
+        .iter()
+        .map(|name| cycle.iter().position(|seen| seen == name).unwrap())
+        .collect();
+    assert!(order.windows(2).all(|pair| pair[0] < pair[1]), "{cycle:?}");
+
+    let toggle = handles[3].1.clone();
+    cx.update_window(window, |_, window, cx| window.focus(&toggle, cx))
+        .unwrap();
+    crate::tests::kagan::press_key(cx, window, "enter");
+    assert!(shows(cx, window, "activity-log"), "Enter opens the log");
+}
+
+#[gpui_kit::test]
+fn the_activity_log_op_shows_and_hides_the_log(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let toggle = |cx: &mut TestAppContext| {
+        let task = cx.update(|cx| Workspace::dispatch(Op::Window(WindowOp::ToggleActivityLog), cx));
+        cx.foreground_executor().block_test(task).unwrap();
+        cx.run_until_parked();
+    };
+    toggle(cx);
+    assert!(shows(cx, window, "activity-log"));
+    assert_eq!(selected_of(cx, window, "activity-toggle"), Some(true));
+    toggle(cx);
+    assert!(!shows(cx, window, "activity-log"));
 }

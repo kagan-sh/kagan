@@ -2,8 +2,8 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{Sizable as _, h_flex};
 use gpui_kit::{
-    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, Role,
-    SharedString, Styled as _, div, px,
+    AnyElement, Context, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _,
+    Role, SharedString, Styled as _, div, px,
 };
 use kg_core::Updater;
 use kg_domain::UpdateState;
@@ -21,14 +21,25 @@ use crate::ui_registry::Facts;
 
 impl Kagan {
     pub(super) fn strip_summary(
-        &self,
+        &mut self,
         summary: SharedString,
         plugins: Vec<StatusItem>,
         working: usize,
-        needs: usize,
-        open: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
+        let needs = self.needs_you(cx);
+        let open = self.activity.open();
+        let needs_focus = self.activity.focus("needs", cx);
+        let update_focus = self.activity.focus("update", cx);
+        let install_focus = self.activity.focus("install", cx);
+        let toggle_focus = self.activity.focus("toggle", cx);
+        let plugins: Vec<(StatusItem, FocusHandle)> = plugins
+            .into_iter()
+            .map(|item| {
+                let focus = self.activity.focus(&format!("plugin-{}", item.id.0), cx);
+                (item, focus)
+            })
+            .collect();
         let dot = div()
             .flex_none()
             .size(px(DOT))
@@ -64,14 +75,18 @@ impl Kagan {
             .type_small(cx)
             .text_color(cx.theme().muted_foreground)
             .child(head)
-            .children(needs_part(needs, cx))
-            .children(update_part(cx))
-            .children(self.install_part(cx))
-            .children(plugins.into_iter().map(|item| plugin_item(item, cx)))
-            .child(log::toggle(open, &self.activity.toggle_focus, cx))
+            .children(needs_part(needs, &needs_focus, cx))
+            .children(update_part(&update_focus, cx))
+            .children(self.install_part(&install_focus, cx))
+            .children(
+                plugins
+                    .into_iter()
+                    .map(|(item, focus)| plugin_item(item, &focus, cx)),
+            )
+            .child(log::toggle(open, &toggle_focus, cx))
     }
 
-    fn install_part(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    fn install_part(&self, focus: &FocusHandle, cx: &mut Context<Self>) -> Option<AnyElement> {
         let install: SharedString = self.activity.install.clone()?;
         Some(
             control(
@@ -90,6 +105,7 @@ impl Kagan {
                     .ghost()
                     .label(install)
                     .text_color(cx.theme().muted_foreground)
+                    .track_focus(focus)
                     .on_click(cx.listener(|this, _, window, cx| this.manage_plugins(window, cx))),
             )
             .into_any_element(),
@@ -97,7 +113,7 @@ impl Kagan {
     }
 }
 
-fn needs_part(needs: usize, cx: &Context<Kagan>) -> Option<AnyElement> {
+fn needs_part(needs: usize, focus: &FocusHandle, cx: &Context<Kagan>) -> Option<AnyElement> {
     (needs > 0).then(|| {
         control(
             "activity-needs",
@@ -115,6 +131,7 @@ fn needs_part(needs: usize, cx: &Context<Kagan>) -> Option<AnyElement> {
                 .ghost()
                 .label(format!("{needs} needs you"))
                 .text_color(Tone::Needs.color(cx))
+                .track_focus(focus)
                 .on_click(|_, window, cx| {
                     window.dispatch_action(Box::new(NextThreadNeedingYou), cx);
                 }),
@@ -123,7 +140,7 @@ fn needs_part(needs: usize, cx: &Context<Kagan>) -> Option<AnyElement> {
     })
 }
 
-fn update_part(cx: &Context<Kagan>) -> Option<AnyElement> {
+fn update_part(focus: &FocusHandle, cx: &Context<Kagan>) -> Option<AnyElement> {
     let available = {
         let updater = Updater::global(cx);
         let updater = updater.read(cx);
@@ -151,6 +168,7 @@ fn update_part(cx: &Context<Kagan>) -> Option<AnyElement> {
                 .ghost()
                 .label("Update available")
                 .text_color(cx.theme().muted_foreground)
+                .track_focus(focus)
                 .on_click(|_, window, cx| update::primary(window, cx)),
         )
         .into_any_element()

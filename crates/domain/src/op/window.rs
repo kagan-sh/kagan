@@ -33,6 +33,8 @@ pub enum WindowOp {
     NextThreadNeedingYou,
     /// Toggle wrapping in the open diff review
     ToggleReviewWrap,
+    /// Show or hide the activity log at the bottom of the window
+    ToggleActivityLog,
     /// Open the command list
     CommandList,
     /// Open the command list on thread search

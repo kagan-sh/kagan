@@ -3,8 +3,8 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Sizable as _, h_flex};
 use gpui_kit::{
-    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Role,
-    SharedString, StatefulInteractiveElement as _, Styled as _, div, px,
+    AnyElement, App, ElementId, FocusHandle, InteractiveElement as _, IntoElement,
+    ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, div, px,
 };
 use kg_plugins::{RunCommand, StatusItem, StatusTone};
 
@@ -14,7 +14,7 @@ use crate::theme::{Tone, TypeScale as _};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-pub(super) fn plugin_item(item: StatusItem, cx: &App) -> AnyElement {
+pub(super) fn plugin_item(item: StatusItem, focus: &FocusHandle, cx: &App) -> AnyElement {
     let color = match item.tone {
         StatusTone::Quiet => cx.theme().muted_foreground,
         StatusTone::Busy => Tone::Busy.color(cx),
@@ -80,6 +80,7 @@ pub(super) fn plugin_item(item: StatusItem, cx: &App) -> AnyElement {
         .small()
         .ghost()
         .child(body)
+        .track_focus(focus)
         .on_click(move |_, window, cx| {
             window.dispatch_action(
                 Box::new(RunCommand::new(plugin.clone(), command.clone())),

@@ -68,7 +68,7 @@ pub(super) fn toggle(open: bool, focus: &FocusHandle, cx: &App) -> impl IntoElem
             value: Some(if open { "shown" } else { "hidden" }.into()),
             disabled: false,
             selected: Some(open),
-            focus: Some(focus.clone()),
+            focus: None,
             hint: None,
         })
         .flex_none()
@@ -85,6 +85,6 @@ pub(super) fn toggle(open: bool, focus: &FocusHandle, cx: &App) -> impl IntoElem
                 ToggleActivityLog,
                 cx,
             )
-            .tab_stop(false),
+            .track_focus(focus),
         )
 }

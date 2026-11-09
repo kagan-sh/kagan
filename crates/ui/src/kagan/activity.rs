@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::v_flex;
@@ -33,8 +33,8 @@ const PLUGIN_ITEMS: usize = 4;
 pub(super) const CONTEXT: &str = "ActivityStrip";
 
 pub(super) struct Strip {
-    toggle_focus: FocusHandle,
     open: bool,
+    focus: BTreeMap<String, FocusHandle>,
     next: u64,
     lines: VecDeque<(u64, SharedString)>,
     update: Option<SharedString>,
@@ -42,15 +42,28 @@ pub(super) struct Strip {
 }
 
 impl Strip {
-    pub(super) fn new(toggle_focus: FocusHandle) -> Self {
+    pub(super) fn new() -> Self {
         Self {
-            toggle_focus,
             open: false,
+            focus: BTreeMap::new(),
             next: 0,
             lines: VecDeque::new(),
             update: None,
             install: None,
         }
+    }
+
+    // One focus handle per strip control, made on first use and kept, so Tab order and focus see the same handle.
+    fn focus(&mut self, name: &str, cx: &mut App) -> FocusHandle {
+        self.focus
+            .entry(name.to_owned())
+            .or_insert_with(|| cx.focus_handle().tab_stop(true))
+            .clone()
+    }
+
+    #[cfg(test)]
+    fn focus_of(&self, name: &str) -> Option<FocusHandle> {
+        self.focus.get(name).cloned()
     }
 
     fn open(&self) -> bool {
@@ -174,8 +187,8 @@ impl Kagan {
     }
 
     #[cfg(test)]
-    pub(crate) fn activity_toggle_focus(&self) -> FocusHandle {
-        self.activity.toggle_focus.clone()
+    pub(crate) fn activity_focus(&self, name: &str) -> Option<FocusHandle> {
+        self.activity.focus_of(name)
     }
 
     pub(super) fn toggle_log(&mut self, cx: &mut Context<Self>) {
@@ -196,7 +209,6 @@ impl Kagan {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let working = Workspace::global(cx).read(cx).busy_threads(cx);
-        let needs = self.needs_you(cx);
         let open = self.activity.open();
         let summary: SharedString = match working {
             0 => "Quiet".into(),
@@ -215,7 +227,7 @@ impl Kagan {
             Vec::new()
         };
         let log = strip_log(self.activity.tail(), cx);
-        let summary_row = self.strip_summary(summary, plugins, working, needs, open, cx);
+        let summary_row = self.strip_summary(summary, plugins, working, cx);
         let height = px(if open {
             HEIGHT + f32::from(ROWS) * ROW
         } else {

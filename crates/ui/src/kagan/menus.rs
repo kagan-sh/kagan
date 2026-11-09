@@ -6,7 +6,7 @@ use kg_domain::WindowOp;
 use super::window;
 use super::{
     ActualSize, AddProject, ArchiveThread, Bigger, NewThread, OpenSettings, RenameThread, Smaller,
-    StartAgain, StopThread, ToggleRightSidebar, ToggleSidebar,
+    StartAgain, StopThread, ToggleActivityLog, ToggleRightSidebar, ToggleSidebar,
 };
 
 actions!(
@@ -36,6 +36,7 @@ pub(crate) fn bind(cx: &mut App) {
     window::bind::<Minimize>(cx, WindowOp::Minimize);
     window::bind::<Zoom>(cx, WindowOp::Zoom);
     window::bind::<Close>(cx, WindowOp::Close);
+    window::bind::<ToggleActivityLog>(cx, WindowOp::ToggleActivityLog);
     let workspace = Workspace::global(cx);
     cx.subscribe(&workspace, |_, event, cx| {
         if let WorkspaceEvent::Window(op) = event {
@@ -67,6 +68,7 @@ fn perform(op: WindowOp, cx: &mut App) {
         WindowOp::Minimize => on_window(cx, |window| window.minimize_window()),
         WindowOp::Zoom => on_window(cx, |window| window.zoom_window()),
         WindowOp::Close => on_window(cx, Window::remove_window),
+        WindowOp::ToggleActivityLog => window::with_front(cx, |this, _, cx| this.toggle_log(cx)),
         WindowOp::ToggleReviewWrap => window::with_front(cx, |this, _, cx| {
             if this.screen.review().is_some() {
                 this.layout.review_wrap = !this.layout.review_wrap;
