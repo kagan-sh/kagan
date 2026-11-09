@@ -132,6 +132,8 @@ jobs:
         run: sh scripts/crate-boundaries.sh
       - name: Decision numbers
         run: sh scripts/decisions-check.sh
+      - name: Test env reads
+        run: sh scripts/test-env-check.sh
 
   linux-clippy:
     needs: [scope, checks]

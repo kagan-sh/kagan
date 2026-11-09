@@ -69,6 +69,19 @@ Where a skill disagrees with this file, this file wins. Known overrides:
 - Colors and spacing come from the Workbench theme tokens (`docs/look.md`), never literals in views; `scripts/view-colors.sh` enforces it outside `crates/ui/src/theme.rs`.
 - UI behavior is tested with GPUI's test context through the view's interface.
 
+## Tests
+
+Each rule came from a real failure. A rule with a script names it; the others are checked in review.
+
+- A `fix:` commit carries a regression test that fails on the code before the fix. Check: review.
+- A test must be able to fail when its behaviour breaks. Delete a test that repeats the implementation or cannot fail. Check: review, with the surviving mutants from `scripts/mutants-diff.sh` as evidence.
+- A test reads a `KG_*` or `KAGAN_*` variable only when it sets that variable itself: a child process it starts, or a value it saves and restores. Check: `scripts/test-env-check.sh`.
+- A test matches an error by its typed kind, never by another crate's message text. Check: review.
+
+## Decisions
+
+- `docs/decisions.md` records why. A replaced entry starts with "Superseded by N". Entry numbers only go up, with no gaps except the retired ones named in the script, and every "decision N" reference names a real entry. Check: `scripts/decisions-check.sh` checks the numbers and that each "Superseded by N" names a real entry; review checks that the words sit at the top.
+
 ## Attribution
 
 Commit messages and pull requests carry the change, not the tooling. Never add a `Co-authored-by`, `Generated with`, `Assisted-by`, `Created-by`, or `Made-with` line that names an AI tool, and never bypass `.githooks/commit-msg`. The hook is only a backstop.
@@ -87,7 +100,7 @@ Push with the hooks on, so `.githooks/pre-push` runs. Mutation testing (`scripts
 
 ## Enforced
 
-- `.github/workflows/ci.yml` runs on every pull request and every push to `main` (`docs/decisions.md` 30): the hook checks, typos, the glossary, jscpd, the size budget, `cargo fmt --check`, cargo-deny, cargo-shear and crate boundaries; `cargo clippy --workspace --all-targets -- -D warnings` on Linux and macOS; and the tests on Linux, macOS and Windows. A diff of only docs, the book and markdown skips the Rust jobs.
+- `.github/workflows/ci.yml` runs on every pull request and every push to `main` (`docs/decisions.md` 30): the hook checks, typos, the glossary, jscpd, the size budget, `cargo fmt --check`, cargo-deny, cargo-shear, crate boundaries, decision numbers and test env reads; `cargo clippy --workspace --all-targets -- -D warnings` on Linux and macOS; and the tests on Linux, macOS and Windows. A diff of only docs, the book and markdown skips the Rust jobs.
 - Merges into `main` are squashed, and the squash commit takes the PR title, so `.github/workflows/pr-title.yml` fails any title that is not a Conventional Commit (`type(scope)?: summary`).
 - Workspace lints in the root `Cargo.toml` (`[workspace.lints]`) deny `unwrap_used`, `expect_used` (tests excepted), `dbg_macro`, `todo`, `print_stdout` outside `kg`, and warn on `clippy::pedantic`.
 - Every pull request into `main` is reviewed against this file, and anything that breaks it is sent back.
