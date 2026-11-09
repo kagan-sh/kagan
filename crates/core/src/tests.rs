@@ -162,7 +162,7 @@ impl Fixture {
     }
 }
 
-/// Points every program's folder into the test's folder, so no test reads the person's own.
+// Points every program's folder into the test's folder, so no test reads the person's own.
 fn insert_homes(homes: &mut BTreeMap<&'static str, PathBuf>, dir: &Path) {
     homes.insert("BB_DATA_DIR", dir.join("bb"));
     homes.insert("CLAUDE_CONFIG_DIR", dir.join("claude"));

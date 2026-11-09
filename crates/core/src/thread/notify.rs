@@ -144,7 +144,7 @@ fn hold(workspace: &mut Workspace, id: &ThreadId, until: Instant) {
     run.held_until = Some(run.held_until.map_or(until, |held| held.max(until)));
 }
 
-/// Types the queued lines into the parent as one message once it is idle and the person is not typing.
+// Types the queued lines into the parent as one message once it is idle and the person is not typing.
 fn schedule(workspace: &mut Workspace, parent: &ThreadId, cx: &mut Context<Workspace>) {
     let Some(run) = workspace.runs.get_mut(parent) else {
         return;
