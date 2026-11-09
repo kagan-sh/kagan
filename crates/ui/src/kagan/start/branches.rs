@@ -335,7 +335,7 @@ impl Kagan {
                     if let Err(error) = &result
                         && error.to_string().contains(".kagan/setup")
                     {
-                        this.start.setup_failure = Some(error.to_string());
+                        this.start.setup_failure = Some(error.clone());
                         cx.notify();
                     } else {
                         this.finish(result, "start the thread", window, cx);

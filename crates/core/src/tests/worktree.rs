@@ -700,6 +700,11 @@ async fn a_setup_blob_that_does_not_match_is_not_run(cx: &mut TestAppContext) {
         message.contains("Start will use the version shown on screen now"),
         "{message}"
     );
+    assert!(matches!(error, OpError::SetupChanged(_)), "{error}");
+    assert_eq!(
+        serde_json::to_value(&error).unwrap()["error"]["kind"],
+        "setup-changed"
+    );
     assert_eq!(worktree_count(fixture.dir.path()), 0);
     assert!(error_rows(&fixture).is_empty());
     let OpResult::Threads(threads) = op(

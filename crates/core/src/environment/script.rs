@@ -176,7 +176,7 @@ fn expected_setup(root: &Path, base: Option<&str>) -> std::result::Result<Option
 }
 
 fn mismatch_message() -> OpError {
-    OpError::Failed(format!(
+    OpError::SetupChanged(format!(
         "{SETUP} changed. Start will use the version shown on screen now."
     ))
 }

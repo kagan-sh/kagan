@@ -4,7 +4,7 @@ What kagan should do, one rule per line, for a model suite that reads this file 
 
 Sources, in order: [CONTEXT], [decision N], [book:page], [docs:file], [op/] (the `crates/domain/src/op/` modules), [event.rs], [record.rs]. Help text is the CLI contract in [book:cli].
 
-A missing id is `not-found`. A bad argument is `invalid`. Every other refusal is `failed` [op/]. An `Op` request uses the kebab-case name and camelCase fields, like the `OpResult` reply.
+A missing id is `not-found`. A bad argument is `invalid`. A pinned setup script that changed before Start is `setup-changed` [decision NNN]. Every other refusal is `failed` [op/]. An `Op` request uses the kebab-case name and camelCase fields, like the `OpResult` reply.
 
 ## Questions for the person
 

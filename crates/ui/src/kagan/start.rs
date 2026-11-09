@@ -5,8 +5,8 @@ use gpui_kit::{
 };
 use kg_core::Workspace;
 use kg_domain::{
-    BranchList, EnvironmentOp, Op, OpResult, PinnedSetup, ProjectId, ProjectKind, ThreadId,
-    ThreadOp,
+    BranchList, EnvironmentOp, Op, OpError, OpResult, PinnedSetup, ProjectId, ProjectKind,
+    ThreadId, ThreadOp,
 };
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -81,7 +81,7 @@ pub(super) struct StartState {
     setup_task: Option<Task<()>>,
     setup: Option<PinnedSetup>,
     setup_open: bool,
-    setup_failure: Option<String>,
+    setup_failure: Option<OpError>,
     starting: bool,
     load: Option<Task<()>>,
     run: Option<Task<()>>,
@@ -119,10 +119,6 @@ fn base_label(branches: &BranchList) -> String {
             .as_deref()
             .map_or_else(|| "HEAD".into(), |head| head.chars().take(7).collect()),
     }
-}
-
-fn script_changed(failure: &str) -> bool {
-    failure.contains("Start will use the version shown on screen now")
 }
 
 async fn pinned_setup(project: ProjectId, rev: String, cx: &mut AsyncApp) -> Option<PinnedSetup> {

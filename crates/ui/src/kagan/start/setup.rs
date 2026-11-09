@@ -7,8 +7,9 @@ use gpui_kit::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, div,
 };
+use kg_domain::OpError;
 
-use super::{StartFolder, script_changed, setup_announcement, setup_script};
+use super::{StartFolder, setup_announcement, setup_script};
 use crate::kagan::Kagan;
 use crate::kagan::controls::{control, note};
 use crate::ui_observe::UiObserveExt as _;
@@ -103,8 +104,8 @@ impl Kagan {
             rows.push(self.setup_disclosure(seen, cx));
         }
         if let Some(failure) = &self.start.setup_failure {
-            rows.push(note("setup-failure", failure.clone(), failed, cx));
-            if !script_changed(failure) {
+            rows.push(note("setup-failure", failure.to_string(), failed, cx));
+            if !matches!(failure, OpError::SetupChanged(_)) {
                 rows.push(self.setup_retry(cx));
             }
         }
