@@ -234,6 +234,29 @@ fn the_strip_starts_closed_and_quiet_at_the_bottom(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn the_open_strip_sits_under_the_center_and_inside_the_window(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "activity-summary");
+    let (_, center_y, _, center_height) = bounds_of(cx, window, "center");
+    let (_, strip_y, _, strip_height) = bounds_of(cx, window, "activity-strip");
+    let viewport_height = cx
+        .update_window(window, |_, window, _| {
+            f32::from(window.viewport_size().height)
+        })
+        .unwrap();
+    assert!(
+        center_y + center_height <= strip_y + 0.5,
+        "the center ends at {} but the strip starts at {strip_y}",
+        center_y + center_height
+    );
+    assert!(
+        (strip_y + strip_height - viewport_height).abs() < 0.5,
+        "the open strip ends at {} of {viewport_height}",
+        strip_y + strip_height
+    );
+}
+
+#[gpui_kit::test]
 fn the_open_log_says_nothing_has_happened_yet(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "activity-summary");
