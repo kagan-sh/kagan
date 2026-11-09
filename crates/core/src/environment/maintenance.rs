@@ -8,7 +8,7 @@ use kg_domain::{
 };
 
 use crate::Workspace;
-use crate::host::database::{Database, Result};
+use crate::host::database::Result;
 use crate::workspace::{closed, missing, time};
 
 use super::{git, personal, script};
@@ -20,22 +20,17 @@ pub(crate) struct Retirement {
     pub(crate) project: PathBuf,
 }
 
-/// Writes only when a thread is past the grace, so an idle workspace does no screen work.
-async fn drop_archived_screens(
-    database: &Database,
-    records: &[kg_domain::Thread],
-    archived_before: i64,
+// Called once at startup, for saved screens that no screen in memory released. Later sweeps
+// delete only what they release, so an idle workspace does no screen work.
+pub(crate) async fn drop_expired_screens(
+    this: &WeakEntity<Workspace>,
+    cx: &mut AsyncApp,
 ) -> Result<()> {
-    if records.iter().any(|record| {
-        record
-            .archived_at
-            .is_some_and(|archived| archived.0 <= archived_before)
-    }) {
-        database
-            .call(move |store| store.delete_archived_screens(archived_before))
-            .await?;
-    }
-    Ok(())
+    let database = crate::workspace::database(this, cx)?;
+    let archived_before = time(this, cx)?.0.saturating_sub(GRACE);
+    database
+        .call(move |store| store.delete_archived_screens(archived_before))
+        .await
 }
 
 pub(crate) async fn sweep(
@@ -64,9 +59,10 @@ pub(crate) async fn sweep(
     let at = time(this, cx)?;
     let mut changed = false;
     let archived_before = at.0.saturating_sub(GRACE);
-    let retiring = this
+    let (retiring, dropped) = this
         .update(cx, |workspace, cx| {
             let mut retiring = Vec::new();
+            let mut dropped = false;
             for record in &records {
                 if record
                     .archived_at
@@ -74,12 +70,11 @@ pub(crate) async fn sweep(
                 {
                     continue;
                 }
-                if workspace
-                    .runs
-                    .get_mut(&record.id)
-                    .is_some_and(crate::thread::Run::release)
-                {
-                    cx.emit(crate::WorkspaceEvent::Changed);
+                if let Some(run) = workspace.runs.get_mut(&record.id) {
+                    dropped |= matches!(run.shown, Some(crate::thread::Shown::Ended(_)));
+                    if run.release() {
+                        cx.emit(crate::WorkspaceEvent::Changed);
+                    }
                 }
                 if let Some(thread) = workspace.threads.get(&record.id)
                     && thread.read(cx).running()
@@ -87,7 +82,7 @@ pub(crate) async fn sweep(
                     retiring.push(thread.clone());
                 }
             }
-            retiring
+            (retiring, dropped)
         })
         .map_err(closed)?;
     for thread in retiring {
@@ -131,7 +126,11 @@ pub(crate) async fn sweep(
             });
         }
     }
-    drop_archived_screens(&database, &records, archived_before).await?;
+    if dropped {
+        database
+            .call(move |store| store.delete_archived_screens(archived_before))
+            .await?;
+    }
     Ok((changed, retirements))
 }
 

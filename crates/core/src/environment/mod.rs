@@ -17,7 +17,8 @@ mod restore;
 mod script;
 
 pub(crate) use maintenance::{
-    Retirement, finish_removal, leftovers, removal_refusal, remove_again, remove_folder, sweep,
+    Retirement, drop_expired_screens, finish_removal, leftovers, removal_refusal, remove_again,
+    remove_folder, sweep,
 };
 pub(crate) use personal::{describe, personal_folders};
 pub(crate) use restore::restore;
