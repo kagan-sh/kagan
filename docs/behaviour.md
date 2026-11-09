@@ -356,6 +356,11 @@ A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matche
 - **Changes**: copies an existing skill folder into user skills, or into the project when `--project` is set [book:skills].
 - **Refused when**: a path that is not a skill folder, or a skill name that starts with `kg-` — `invalid` [op/].
 
+### `Open`
+
+- **Changes**: nothing on disk. It asks the window to show the Skills page (`kg skill open`). With no window open it does nothing and succeeds [decision 205].
+- **Refused when**: never.
+
 ### `Update`
 
 - **Allowed when**: the skill is a user or project skill [decision 202].

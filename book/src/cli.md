@@ -130,6 +130,7 @@ Find, read and create skills
 Usage: kg skill [OPTIONS] <COMMAND>
 
 Commands:
+  open    Show the skills page, opening the window if it is closed
   list    List skills
   show    Show one skill
   files   List a skill's files
@@ -143,6 +144,18 @@ Options:
       --json
           Print compact JSON; failures print the error envelope
 
+  -h, --help
+          Print help
+```
+
+## `kg skill open`
+
+```text
+Show the skills page, opening the window if it is closed
+
+Usage: kg skill open
+
+Options:
   -h, --help
           Print help
 ```
