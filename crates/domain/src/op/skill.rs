@@ -10,6 +10,8 @@ use super::OpError;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
 #[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum SkillOp {
+    /// Show the skills page, opening the window if it is closed
+    Open,
     /// List skills
     List {
         /// Project whose skills to include

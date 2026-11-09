@@ -214,6 +214,7 @@ fn listen(
                 WorkspaceEvent::Open
                 | WorkspaceEvent::Settings
                 | WorkspaceEvent::SettingsPlugins
+                | WorkspaceEvent::Skills
                 | WorkspaceEvent::NewPlugin
                 | WorkspaceEvent::Window(_)
                 | WorkspaceEvent::Screen(..) => {}

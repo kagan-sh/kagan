@@ -106,3 +106,13 @@ async fn update_refuses_text_with_another_name(cx: &mut TestAppContext) {
             .contains("name: mine")
     );
 }
+
+#[gpui_kit::test]
+async fn open_is_accepted_without_a_window(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    assert!(matches!(
+        op(Op::Skill(SkillOp::Open), cx).await,
+        Ok(OpResult::Done)
+    ));
+    let _ = fixture;
+}

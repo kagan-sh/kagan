@@ -58,7 +58,9 @@ impl Kagan {
                         ids.push(view.entity_id());
                     }
                 }
-                screen::Center::Work(_) | screen::Center::Archived(_) => {}
+                screen::Center::Work(_)
+                | screen::Center::Archived(_)
+                | screen::Center::Skills(_) => {}
             }
         }
         ids
@@ -252,6 +254,7 @@ impl Kagan {
                 self.render_review(replaced, window, cx)
             }
             screen::Center::Archived(_) => archived::list(self, window, cx).into_any_element(),
+            screen::Center::Skills(page) => page.clone().into_any_element(),
             screen::Center::Work(Shown::Thread(view)) => {
                 self.render_thread(view, cx).into_any_element()
             }

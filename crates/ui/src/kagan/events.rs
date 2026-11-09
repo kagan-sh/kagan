@@ -102,6 +102,7 @@ impl Kagan {
                 .map(|slot| (slot.plugin.clone(), slot.contribution.clone())),
             tool: self.slots.tool.as_ref().map(|slot| slot.plugin.clone()),
             archived: self.shows_archived(),
+            skills: self.shows_skills(),
             in_settings: self.in_settings(),
             waiting: self
                 .slots

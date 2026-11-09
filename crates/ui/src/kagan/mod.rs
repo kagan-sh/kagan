@@ -35,6 +35,7 @@ mod screen;
 mod settings;
 mod shown;
 mod sidebar;
+mod skills;
 mod start;
 mod surface;
 mod tabs;
@@ -64,7 +65,8 @@ mod window;
 
 pub(crate) use window::shows;
 pub(crate) use window::{
-    front, show, show_plugin_settings, show_preview, show_settings, start_plugin, watch_waiting,
+    front, show, show_plugin_settings, show_preview, show_settings, show_skills, start_plugin,
+    watch_waiting,
 };
 
 use std::collections::BTreeSet;

@@ -151,6 +151,7 @@ pub(crate) async fn run(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     let project_id = match &op {
+        SkillOp::Open => None,
         SkillOp::List { project_id }
         | SkillOp::Show { project_id, .. }
         | SkillOp::Files { project_id, .. }
@@ -161,6 +162,7 @@ pub(crate) async fn run(
     };
     let mut catalog = catalog(this, project_id.clone(), cx).await?;
     match op {
+        SkillOp::Open => Ok(OpResult::Done),
         SkillOp::List { .. } => Ok(OpResult::Skills {
             skills: catalog
                 .skills

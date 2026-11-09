@@ -164,6 +164,7 @@ pub struct Workspace {
 #[derive(Clone, Debug)]
 pub enum WorkspaceEvent {
     Open,
+    Skills,
     Settings,
     SettingsPlugins,
     NewPlugin,

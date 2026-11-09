@@ -55,6 +55,7 @@ pub(in crate::kagan) fn rail(
         .items_center()
         .gap(px(6.))
         .child(threads_home(shows, cx))
+        .child(skills_row(shows.skills, cx))
         .children(tools)
         .children(pages)
         .child(manage_row(manage_focus, cx))
@@ -171,6 +172,28 @@ pub(super) fn rail_tool(
             })),
         )
         .into_any_element()
+}
+
+fn skills_row(active: bool, cx: &mut Context<Sidebar>) -> impl IntoElement {
+    let button = Button::new("skills-rail-button")
+        .small()
+        .rounded(px(radius_xs(cx)))
+        .icon(IconName::BookOpen)
+        .accessibility_label("Skills")
+        .tooltip("Skills")
+        .ghost()
+        .selected(active)
+        .on_click(|_, _, cx| {
+            crate::kagan::dispatch::logged(kg_domain::Op::Skill(kg_domain::SkillOp::Open), cx);
+        });
+    control(
+        "skills-rail",
+        Facts {
+            selected: Some(active),
+            ..Facts::button("Skills")
+        },
+        button,
+    )
 }
 
 pub(super) fn threads_home(shows: &Shows, cx: &mut Context<Sidebar>) -> impl IntoElement {
