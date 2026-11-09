@@ -5,7 +5,9 @@ use gpui_kit::{AppContext as _, SystemNotification, SystemNotificationResponse, 
 use kg_core::Workspace;
 use kg_domain::{EnvironmentSpec, Op, OpResult, ProjectId, Run, ThreadId, ThreadOp};
 
-use crate::tests::kagan::{host, open_with_plugins, set_preference, shown, thread_record};
+use crate::tests::kagan::{
+    app_then, host, open_with_plugins, set_preference, shown, thread_record,
+};
 
 const SPINNER: &str = "printf '\\033]2;\\342\\227\\220 work\\007'";
 const PLAIN: &str = "printf '\\033]2;\\342\\234\\263 work\\007'";
@@ -29,6 +31,27 @@ fn a_quiet_thread_notifies_when_no_window_shows_it(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn clicking_the_notice_opens_that_thread(cx: &mut TestAppContext) {
     let (kagan, _window, data) = open_with_plugins(cx, false);
+    let program = script(
+        data.path(),
+        "spin",
+        &format!("{SPINNER}; sleep 1; {PLAIN}; sleep 30"),
+    );
+    let id = start(cx, &program);
+    let [note] = until_notice(cx).try_into().unwrap();
+    cx.simulate_system_notification_response(SystemNotificationResponse {
+        tag: note.tag,
+        action_id: None,
+    });
+    cx.run_until_parked();
+    stop(cx, &id);
+    assert_eq!(shown(cx, &kagan), Some(id));
+}
+
+#[gpui_kit::test]
+fn a_notice_click_opens_its_thread_before_the_plugin_host_starts(cx: &mut TestAppContext) {
+    let data = app_then(cx, |_| {});
+    let kagan = cx.update(|cx| crate::kagan::open(cx).unwrap());
+    cx.run_until_parked();
     let program = script(
         data.path(),
         "spin",
@@ -128,6 +151,7 @@ fn stop_a_failed_start_and_a_plain_title_do_not_notify(cx: &mut TestAppContext) 
                 environment: EnvironmentSpec::Personal,
                 visibility: None,
                 parent_thread_id: None,
+                quiet: false,
                 lifecycle_owner_thread_id: None,
                 metadata: None,
             })),
@@ -156,6 +180,7 @@ fn start(cx: &mut TestAppContext, program: &str) -> ThreadId {
                 environment: EnvironmentSpec::Personal,
                 visibility: None,
                 parent_thread_id: None,
+                quiet: false,
                 lifecycle_owner_thread_id: None,
                 metadata: None,
             })),

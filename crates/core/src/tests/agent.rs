@@ -150,6 +150,7 @@ async fn started_on(
             environment: EnvironmentSpec::ProjectDefault,
             visibility: None,
             parent_thread_id: None,
+            quiet: false,
             lifecycle_owner_thread_id: None,
             metadata: None,
         })),
@@ -166,7 +167,6 @@ async fn started_on(
 #[cfg(unix)]
 #[gpui_kit::test]
 async fn a_claude_thread_gets_kagan_flags_env_and_skills(cx: &mut TestAppContext) {
-    cx.update(|cx| cx.set_global(crate::SocketLocation("/tmp/kagan-test.sock".into())));
     let fixture = Fixture::new(cx).await;
     install_plugin(fixture.dir.path(), true);
     let run = fixture.dir.path().join("first");
@@ -611,7 +611,7 @@ fn bb_root(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
     let root = fixture.dir.path().join("bb");
     cx.update(|cx| {
         Workspace::global(cx).update(cx, |workspace, _| {
-            workspace.bb_data_dir = Some(root.clone());
+            workspace.homes.insert("BB_DATA_DIR", root.clone());
         });
     });
     root
@@ -927,6 +927,7 @@ async fn a_second_project_keeps_the_first_catalog_and_its_links(cx: &mut TestApp
             environment: EnvironmentSpec::ProjectDefault,
             visibility: None,
             parent_thread_id: None,
+            quiet: false,
             lifecycle_owner_thread_id: None,
             metadata: None,
         })),
@@ -1007,6 +1008,23 @@ async fn kimi_uses_skills_dir_without_a_git_root(cx: &mut TestAppContext) {
     );
     assert!(!fixture.dir.path().join(".agents").exists());
     assert!(!fixture.dir.path().join(".kimi-code").exists());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn kimi_reads_skills_from_the_folder_its_workspace_names(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = fixture.dir.path().join("kimi-home");
+    write_skill(&home.join("skills"), "from-home", "home body");
+    let run = fixture.dir.path().join("kimi-home-run");
+    let program = fake_agent(&run, "kimi");
+    let (_id, _reap) = started(&fixture, program.to_str().unwrap(), cx).await;
+    let (args, _env) = ran(&run);
+    assert!(
+        args.chunks(2)
+            .any(|pair| pair[0] == "--skills-dir" && Path::new(&pair[1]) == home.join("skills")),
+        "{args:?}"
+    );
 }
 
 #[cfg(unix)]

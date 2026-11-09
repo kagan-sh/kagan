@@ -388,3 +388,69 @@ fn a_declared_item_that_is_never_set_draws_nothing(cx: &mut TestAppContext) {
     open(cx, &[installed_at(plugin.path())]);
     assert!(items(cx).is_empty());
 }
+
+#[test]
+fn every_tone_name_parses() {
+    use crate::StatusTone::{Busy, Failed, Needs, Quiet};
+    let parse = crate::strip::StatusTone::parse;
+    assert_eq!(parse("quiet"), Some(Quiet));
+    assert_eq!(parse("busy"), Some(Busy));
+    assert_eq!(parse("needs"), Some(Needs));
+    assert_eq!(parse("failed"), Some(Failed));
+    assert_eq!(parse("loud"), None);
+}
+
+#[gpui_kit::test]
+fn a_tooltip_reaches_the_item_and_a_bad_one_is_refused(cx: &mut TestAppContext) {
+    let plugin = tempfile::tempdir().unwrap();
+    status_plugin(plugin.path(), STATUS, Some("Usage"), "");
+    open(cx, &[installed_at(plugin.path())]);
+
+    call(
+        cx,
+        json!({ "op": "value", "text": "42%", "options": { "tone": "busy", "tooltip": "Tokens used" } }),
+    );
+    assert_eq!(items(cx)[0].tooltip.as_deref(), Some("Tokens used"));
+
+    let refused = call(
+        cx,
+        json!({ "op": "value", "text": "42%", "options": { "tooltip": "a\nb" } }),
+    );
+    assert!(refused.contains("plain line"), "{refused}");
+    assert_eq!(items(cx)[0].tooltip.as_deref(), Some("Tokens used"));
+}
+
+#[gpui_kit::test]
+fn a_declared_status_command_reaches_the_item(cx: &mut TestAppContext) {
+    let plugin = tempfile::tempdir().unwrap();
+    status_plugin(plugin.path(), STATUS, None, "");
+    write_plugin(
+        plugin.path(),
+        &json!({
+            "id": STATUS,
+            "name": "Status",
+            "version": "1.0.0",
+            "kagan": ">=0.1.0",
+            "entry": "main.js",
+            "instructions": "Show a line in the activity strip.",
+            "powers": {},
+            "commands": [{ "id": "usage.refresh", "title": "Refresh usage" }],
+            "ui": { "status": { "title": "Usage", "command": "usage.refresh" } },
+            "tools": [{
+                "name": "status",
+                "description": "Change the status line",
+                "input": "schemas/any.json",
+                "scope": "all"
+            }]
+        }),
+    );
+    std::fs::write(
+        plugin.path().join("main.js"),
+        SCRIPT.replace("__INIT__", ""),
+    )
+    .unwrap();
+    open(cx, &[installed_at(plugin.path())]);
+
+    call(cx, json!({ "op": "value", "text": "42%", "options": {} }));
+    assert_eq!(items(cx)[0].command.as_deref(), Some("usage.refresh"));
+}

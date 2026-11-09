@@ -71,44 +71,51 @@ fn find_program(name: &str) -> Option<PathBuf> {
 }
 
 fn run(
-    name: &str,
     cwd: &Path,
     args: &[&str],
+    index: Option<&Path>,
     limit: Duration,
 ) -> std::result::Result<kg_process::Captured, ToolError> {
-    let program = program(name, cwd).ok_or(ToolError::Missing)?;
+    let program = program("git", cwd).ok_or(ToolError::Missing)?;
     let mut command = Command::new(program);
     command.current_dir(cwd).args(args);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt as _;
-        command.creation_flags(0x0800_0000);
+    command.env("GIT_TERMINAL_PROMPT", "0");
+    if let Some(index) = index {
+        command.env("GIT_INDEX_FILE", index);
     }
-    kg_process::capture_with_limit(command, limit).map_err(|error| match error.kind() {
+    kg_process::capture(command, limit, || false).map_err(|error| match error.kind() {
         std::io::ErrorKind::NotFound => ToolError::Missing,
         std::io::ErrorKind::TimedOut => ToolError::TimedOut,
         _ => ToolError::Failed(error.to_string()),
     })
 }
 
-pub(crate) fn git(cwd: &Path, args: &[&str]) -> Result<String> {
-    let output = run("git", cwd, args, GIT_LIMIT).map_err(tool_error("git"))?;
-    if output.code != 0 {
-        return Err(OpError::Failed(if output.stderr.is_empty() {
-            "git failed".into()
-        } else {
-            output.stderr
-        }));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+/// Runs git in `cwd` and returns what it printed, even when it exits non-zero.
+pub(crate) fn git_captured(
+    cwd: &Path,
+    args: &[&str],
+    index: Option<&Path>,
+) -> Result<kg_process::Captured> {
+    run(cwd, args, index, GIT_LIMIT).map_err(|error| match error {
+        ToolError::Missing => OpError::Failed("git is not installed".into()),
+        ToolError::TimedOut => OpError::Failed("git timed out".into()),
+        ToolError::Failed(message) => OpError::Failed(message),
+    })
 }
 
-fn tool_error(name: &str) -> impl Fn(ToolError) -> OpError + '_ {
-    move |error| match error {
-        ToolError::Missing => OpError::Failed(format!("{name} is not installed")),
-        ToolError::TimedOut => OpError::Failed(format!("{name} timed out")),
-        ToolError::Failed(message) => OpError::Failed(message),
+pub(crate) fn git_bytes(cwd: &Path, args: &[&str], index: Option<&Path>) -> Result<Vec<u8>> {
+    let output = git_captured(cwd, args, index)?;
+    if output.code == 0 {
+        Ok(output.stdout)
+    } else if output.stderr.is_empty() {
+        Err(OpError::Failed(format!("git failed ({})", output.code)))
+    } else {
+        Err(OpError::Failed(output.stderr))
     }
+}
+
+pub(crate) fn git(cwd: &Path, args: &[&str]) -> Result<String> {
+    Ok(String::from_utf8_lossy(&git_bytes(cwd, args, None)?).into_owned())
 }
 
 pub(crate) fn is_repository(cwd: &Path) -> bool {
@@ -166,6 +173,25 @@ pub(crate) async fn branches(
         .spawn(async move { branch_list(&path) })
         .await?;
     Ok(OpResult::Branches(list))
+}
+
+pub(crate) async fn setup(
+    database: &Database,
+    id: ProjectId,
+    rev: String,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let lookup = id.clone();
+    let project = database
+        .call(move |store| store.project(&lookup))
+        .await?
+        .ok_or_else(|| missing("project", &id))?;
+    let path = project.path;
+    let setup = cx
+        .background_executor()
+        .spawn(async move { crate::environment::pinned_setup(&path, &rev) })
+        .await;
+    Ok(OpResult::Setup(setup))
 }
 
 pub(crate) fn branch_list(path: &Path) -> Result<BranchList> {
@@ -408,7 +434,7 @@ mod tests {
         std::fs::write(&script, "#!/bin/sh\nexec sleep 60\n").unwrap();
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
         super::set_program(dir.path(), "git", Some(script));
-        let result = super::run("git", dir.path(), &[], std::time::Duration::from_millis(20));
+        let result = super::run(dir.path(), &[], None, std::time::Duration::from_millis(20));
         super::set_program(dir.path(), "git", None);
         assert!(matches!(result, Err(super::ToolError::TimedOut)));
     }

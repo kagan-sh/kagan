@@ -1,24 +1,13 @@
 use gpui_kit::{App, AppContext as _, Entity, Task};
 use kg_domain::{Found, OpResult, SEARCH_DEFAULT, Snippet, Visibility};
-use kg_terminal::Lines;
+use kg_terminal::View;
 
 use crate::Workspace;
 use crate::host::database::Result;
 use crate::workspace::closed;
 
-use super::Shown;
-
 const BEFORE: usize = 40;
 const WIDTH: usize = 120;
-
-impl Shown {
-    fn lines(&self) -> Lines {
-        match self {
-            Self::Running(terminal) => terminal.lines(),
-            Self::Ended(finished) => finished.lines(),
-        }
-    }
-}
 
 // Matches one thread at a time on the background executor, so dropping the task stops the search
 // at the next thread.
@@ -49,7 +38,9 @@ pub(crate) fn search(
                 live.into_iter()
                     .chain(retired)
                     .map(|thread| {
-                        let lines = workspace.terminals.get(&thread.id).map(Shown::lines);
+                        let lines = workspace
+                            .shown(&thread.id)
+                            .map(|shown| shown.view().clone());
                         (thread, lines)
                     })
                     .collect()
@@ -89,7 +80,7 @@ pub(crate) fn search(
     })
 }
 
-fn find(lines: &Lines, needle: &str) -> Option<Snippet> {
+fn find(lines: &View, needle: &str) -> Option<Snippet> {
     let kept = lines.kept();
     let screen = kept.on_screen;
     let history = kept.rows.saturating_sub(screen);

@@ -135,39 +135,8 @@ pub enum NoticeSeverity {
 }
 
 impl EventKind {
-    /// Every `type` tag an event can carry, including kinds kagan no longer writes. An old log
-    /// may hold any of them.
-    pub const TYPES: [&'static str; 26] = [
-        "created",
-        "started",
-        "exited",
-        "stopped",
-        "idle",
-        "waiting",
-        "failed",
-        "archived",
-        "unarchived",
-        "deleted",
-        "turn.started",
-        "turn.ended",
-        "message",
-        "tool",
-        "tool.started",
-        "tool.ended",
-        "restore.failed",
-        "snapshot.failed",
-        "notice",
-        "answered",
-        "file.changed",
-        "file.read",
-        "file.predicted",
-        "opened",
-        "rewound",
-        "reconnecting",
-    ];
-
-    /// The kinds kagan writes now, and the only names a wait or a subscription accepts. A kind
-    /// that is in [`Self::TYPES`] but not here still loads from an old log.
+    /// The kinds kagan writes now, and the only names a wait or a subscription accepts. Other
+    /// kinds still load from an old log.
     pub const LIVE_TYPES: [&'static str; 17] = [
         "created",
         "started",

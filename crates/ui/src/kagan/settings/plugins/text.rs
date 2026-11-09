@@ -1,6 +1,3 @@
-//! A plugin's settings page: its declared settings as rows, then its own view when it has one.
-//! A save reply is applied only when that save is still the latest and the plugin activation is still the one captured when the save started.
-
 #[cfg(test)]
 use std::collections::BTreeMap;
 
@@ -248,7 +245,8 @@ impl TextField {
         let scope = format!("{}/{key}", plugin.0);
         let request = kagan.update(cx, |kagan, cx| {
             kagan
-                .settings_drafts
+                .settings
+                .drafts
                 .begin(scope, plugin, key, change, Some(baseline), cx)
         });
         self.request = request.ok();
@@ -395,7 +393,7 @@ pub(super) fn revert(field: &Entity<TextField>, window: &mut Window, cx: &mut Ap
         let scope = format!("{}/{}", field.plugin.0, field.key);
         let kagan = field.kagan.clone();
         let _ = kagan.update(cx, |kagan, _| {
-            forget_queued(&mut kagan.settings_drafts, &scope);
+            forget_queued(&mut kagan.settings.drafts, &scope);
         });
         let committed = field.committed.clone();
         field.input.set_value(committed, window, cx);
@@ -405,15 +403,12 @@ pub(super) fn revert(field: &Entity<TextField>, window: &mut Window, cx: &mut Ap
 
 #[cfg(test)]
 thread_local! {
-    /// The input of each text setting as the last render drew it, for the tests. Weak, so the
-    /// test does not keep the input alive.
     static TEXT_INPUTS: std::cell::RefCell<BTreeMap<String, gpui_kit::WeakEntity<InputState>>> =
         const { std::cell::RefCell::new(BTreeMap::new()) };
     static TEXTAREAS: std::cell::RefCell<BTreeMap<String, gpui_kit::WeakEntity<TextareaState>>> =
         const { std::cell::RefCell::new(BTreeMap::new()) };
 }
 
-/// The text a plugin's text setting shows, as the last render drew it. Used by the tests.
 #[cfg(test)]
 pub(crate) fn text_for_test(plugin: &PluginId, key: &str, cx: &App) -> String {
     let scope = format!("{}/{key}", plugin.0);

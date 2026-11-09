@@ -12,11 +12,16 @@ pub(crate) fn install(cx: &mut App) {
     Workspace::global(cx).update(cx, |workspace, _| {
         workspace.set_ui_driver(Rc::new(|job, cx| match job {
             UiJob::NewTheme { id, from } => crate::theme::new_theme(&id, from.as_deref(), cx),
+            UiJob::Preview { thread, path } => {
+                crate::show_preview(thread, path, cx);
+                Task::ready(Ok(OpResult::Done))
+            }
             UiJob::Browser(op) => browser(op, cx),
             UiJob::Op(UiOp::Screenshot { window, path }) => {
                 cx.spawn(async move |cx| capture_after_present(window, path, cx).await)
             }
-            job => cx.spawn(async move |cx| drive(job, cx)),
+            UiJob::Op(op) => cx.spawn(async move |cx| drive(op, cx)),
+            UiJob::Surface(op) => cx.spawn(async move |cx| drive_surface(op, cx)),
         }));
     });
 }
@@ -29,18 +34,15 @@ fn closed() -> OpError {
     OpError::Failed("window closed".into())
 }
 
-fn drive(job: UiJob, cx: &mut gpui_kit::AsyncApp) -> Result<OpResult, OpError> {
-    if let UiJob::Surface(op) = job {
-        return drive_surface(op, cx);
-    }
+fn drive(op: UiOp, cx: &mut gpui_kit::AsyncApp) -> Result<OpResult, OpError> {
     let _armed = crate::synthetic::arm();
-    let index = window_index(&job);
+    let index = window_index(&op);
     let handle = cx
         .update(|cx| window_at(cx, index))
         .ok_or_else(|| OpError::NotFound(format!("window {index}")))?;
     let result = cx
         .update_window(handle, |_, window, cx| {
-            crate::synthetic::with_active(|| run_job(job, window, cx))
+            crate::synthetic::with_active(|| run_op(op, window, cx))
         })
         .map_err(|_| closed())?;
     if crate::synthetic::take_person_blocked() {
@@ -79,15 +81,13 @@ fn publish(
         return;
     }
     let result = captured(window, path, true);
-    let _ = sender.try_send(result);
+    let _ = sender.try_send(result); // The caller may have stopped waiting; then no one reads the result.
 }
 
-/// Draws a fresh frame, then captures it.
-///
-/// A covered, minimized, or sleeping window stops its display link, so
-/// `on_next_frame` never runs. Capture the last presented buffer instead of
-/// waiting for a frame that will not come. If a visible window still does not
-/// present, capture that buffer rather than failing the screenshot.
+// A covered, minimized, or sleeping window stops its display link, so
+// `on_next_frame` never runs. Capture the last presented buffer instead of
+// waiting for a frame that will not come. If a visible window still does not
+// present, capture that buffer rather than failing the screenshot.
 async fn capture_after_present(
     index: u32,
     path: PathBuf,
@@ -138,7 +138,7 @@ async fn capture_after_present(
             let result = cx
                 .update_window(handle, |_, window, _| captured(window, &path, false))
                 .unwrap_or_else(|_| Err(closed()));
-            let _ = sender.try_send(result);
+            let _ = sender.try_send(result); // The caller may have stopped waiting; then no one reads the result.
         }
     })
     .detach();
@@ -155,10 +155,7 @@ fn captured(window: &gpui_kit::Window, path: &Path, current: bool) -> Result<OpR
     })
 }
 
-fn window_index(job: &UiJob) -> u32 {
-    let UiJob::Op(op) = job else {
-        return 0;
-    };
+fn window_index(op: &UiOp) -> u32 {
     match op {
         UiOp::Snapshot { window }
         | UiOp::Click { window, .. }
@@ -177,11 +174,8 @@ fn window_at(cx: &App, index: u32) -> Option<AnyWindowHandle> {
     handles.get(index as usize).copied()
 }
 
-fn run_job(job: UiJob, window: &mut gpui_kit::Window, cx: &mut App) -> Result<OpResult, OpError> {
+fn run_op(op: UiOp, window: &mut gpui_kit::Window, cx: &mut App) -> Result<OpResult, OpError> {
     crate::ui_dispatch::render_frame(window, cx);
-    let UiJob::Op(op) = job else {
-        return Err(OpError::Failed(UI_UNAVAILABLE.into()));
-    };
     match op {
         UiOp::Snapshot { window: index } => {
             Ok(OpResult::Ui(crate::ui_dispatch::snapshot(window, index)))
@@ -300,9 +294,6 @@ mod macos {
         run(OsStr::new("screencapture"), number, path)
     }
 
-    /// Captures window `number` with `program` into a new file beside `path`, then moves it over
-    /// `path`. A destination that already holds an image is only replaced by a capture that wrote
-    /// one in this run.
     fn run(program: &OsStr, number: isize, path: &Path) -> Result<(), OpError> {
         let folder = match path.parent() {
             Some(parent) if !parent.as_os_str().is_empty() => parent,
@@ -320,7 +311,7 @@ mod macos {
             .map_err(|error| OpError::Failed(error.to_string()));
         let finished = output.and_then(|output| finish(&output, &staged, path));
         if finished.is_err() {
-            let _ = std::fs::remove_file(&staged);
+            let _ = std::fs::remove_file(&staged); // Best effort: the staged file is temporary, and the error to report is `finished`.
         }
         finished
     }
@@ -338,7 +329,6 @@ mod macos {
         std::fs::rename(staged, path).map_err(OpError::from)
     }
 
-    /// The reason `screencapture` gave in its own words, or its exit status when it gave none.
     fn failure(stderr: &[u8], status: ExitStatus) -> String {
         let reason = String::from_utf8_lossy(stderr);
         let reason = reason.trim();
@@ -350,92 +340,7 @@ mod macos {
     }
 
     #[cfg(test)]
-    mod tests {
-        use std::os::unix::fs::PermissionsExt;
-        use std::path::{Path, PathBuf};
-        use std::process::Command;
-
-        use kg_domain::OpError;
-
-        use super::{failure, run};
-
-        /// A stand-in for `screencapture`: `body` runs with the capture path as its last argument.
-        fn program(folder: &Path, body: &str) -> PathBuf {
-            let script = folder.join("screencapture");
-            std::fs::write(&script, format!("#!/bin/sh\n{body}\n")).expect("script is written");
-            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
-                .expect("script is executable");
-            script
-        }
-
-        fn staged_left_behind(folder: &Path) -> usize {
-            std::fs::read_dir(folder)
-                .expect("folder reads")
-                .filter_map(Result::ok)
-                .filter(|entry| {
-                    entry
-                        .file_name()
-                        .to_string_lossy()
-                        .starts_with("kg-capture-")
-                })
-                .count()
-        }
-
-        #[test]
-        fn a_capture_that_writes_nothing_leaves_an_existing_image_alone() {
-            let folder = tempfile::tempdir().expect("folder");
-            let destination = folder.path().join("shot.png");
-            std::fs::write(&destination, "OLD").expect("old image");
-            let fake = program(folder.path(), "exit 0");
-
-            assert_eq!(
-                run(fake.as_os_str(), 1, &destination),
-                Err(OpError::Failed(format!(
-                    "screencapture wrote no image to {}",
-                    destination.display()
-                )))
-            );
-            assert_eq!(
-                std::fs::read_to_string(&destination).expect("old image"),
-                "OLD"
-            );
-            assert_eq!(staged_left_behind(folder.path()), 0);
-        }
-
-        #[test]
-        fn a_capture_that_writes_replaces_the_image() {
-            let folder = tempfile::tempdir().expect("folder");
-            let destination = folder.path().join("shot.png");
-            std::fs::write(&destination, "OLD").expect("old image");
-            // `last` is the capture path, which screencapture receives as its final argument.
-            let fake = program(
-                folder.path(),
-                "for last; do :; done\nprintf NEW > \"$last\"",
-            );
-
-            assert_eq!(run(fake.as_os_str(), 1, &destination), Ok(()));
-            assert_eq!(
-                std::fs::read_to_string(&destination).expect("new image"),
-                "NEW"
-            );
-            assert_eq!(staged_left_behind(folder.path()), 0);
-        }
-
-        #[test]
-        fn a_failed_capture_keeps_the_reason_macos_gave() {
-            let output = Command::new("sh")
-                .args([
-                    "-c",
-                    "printf 'could not create image from window\\n' >&2; exit 1",
-                ])
-                .output()
-                .expect("sh runs");
-            assert_eq!(
-                failure(&output.stderr, output.status),
-                "screencapture failed: could not create image from window"
-            );
-        }
-    }
+    mod tests;
 }
 
 #[cfg(target_os = "windows")]
@@ -470,23 +375,39 @@ mod windows {
         if width <= 0 || height <= 0 {
             return Err(OpError::Failed("window has no size".into()));
         }
+        let bi_size = u32::try_from(std::mem::size_of::<BITMAPINFOHEADER>())
+            .map_err(|_| OpError::Failed("bitmap header is too large".into()))?;
         // SAFETY: `hwnd` is a live window handle; the DC is released below.
         let hdc = unsafe { GetWindowDC(Some(hwnd)) };
         if hdc.is_invalid() {
             return Err(OpError::Failed("GetWindowDC failed".into()));
         }
-        // SAFETY: `hdc` was checked above and the memory DC is deleted below.
+        // SAFETY: `hdc` was checked above; each handle made here is released below.
         let mem_dc = unsafe { CreateCompatibleDC(Some(hdc)) };
-        // SAFETY: both handles are live and the bitmap is deleted below.
+        // SAFETY: `hdc` was checked above; the bitmap is released below.
         let bitmap = unsafe { CreateCompatibleBitmap(hdc, width, height) };
-        // SAFETY: both handles are live and the bitmap is compatible with the DC.
-        let _ = unsafe { SelectObject(mem_dc, HGDIOBJ(bitmap.0)) };
+        if mem_dc.is_invalid() || bitmap.is_invalid() {
+            // SAFETY: each handle that exists was created above and is released once here.
+            unsafe {
+                if !bitmap.is_invalid() {
+                    let _ = DeleteObject(HGDIOBJ(bitmap.0));
+                }
+                if !mem_dc.is_invalid() {
+                    let _ = DeleteDC(mem_dc);
+                }
+                let _ = ReleaseDC(Some(hwnd), hdc);
+            }
+            return Err(OpError::Failed(
+                "could not create the capture buffers".into(),
+            ));
+        }
+        // SAFETY: both handles were checked above and the bitmap is compatible with the DC.
+        let old_bitmap = unsafe { SelectObject(mem_dc, HGDIOBJ(bitmap.0)) };
         let printed =
             // SAFETY: `hwnd` is live and `mem_dc` is a compatible memory DC.
             unsafe { PrintWindow(hwnd, mem_dc, PRINT_WINDOW_FLAGS(PW_RENDERFULLCONTENT)) };
         let header = BITMAPINFOHEADER {
-            biSize: u32::try_from(std::mem::size_of::<BITMAPINFOHEADER>())
-                .map_err(|_| OpError::Failed("bitmap header is too large".into()))?,
+            biSize: bi_size,
             biWidth: width,
             biHeight: -height,
             biPlanes: 1,
@@ -512,11 +433,13 @@ mod windows {
                 windows::Win32::Graphics::Gdi::DIB_RGB_COLORS,
             )
         };
-        // SAFETY: each handle was created above and is released exactly once here.
+        // SAFETY: each handle was created above and is released exactly once here. Windows will
+        // not delete a bitmap that is still selected, so the old object goes back in first.
         unsafe {
-            let _ = DeleteObject(HGDIOBJ(bitmap.0));
-            let _ = DeleteDC(mem_dc);
-            let _ = ReleaseDC(Some(hwnd), hdc);
+            let _ = SelectObject(mem_dc, old_bitmap);
+            let _ = DeleteObject(HGDIOBJ(bitmap.0)); // Cleanup: nothing to undo if it fails.
+            let _ = DeleteDC(mem_dc); // Cleanup: nothing to undo if it fails.
+            let _ = ReleaseDC(Some(hwnd), hdc); // Cleanup: nothing to undo if it fails.
         }
         printed
             .ok()

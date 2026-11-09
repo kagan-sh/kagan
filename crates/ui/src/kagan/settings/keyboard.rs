@@ -1,6 +1,3 @@
-//! The Keyboard section: the built-in shortcuts by where they apply, then each enabled plugin's
-//! commands under its name. A row shows its key, or Not set, and binds through `kg keymap`.
-
 use crate::theme::TypeScale as _;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -18,7 +15,7 @@ use kg_domain::{KeymapAction, KeymapOp, Op, OpResult, PluginId, SHORTCUTS, Short
 use kg_plugins::{CommandContribution, PluginHost, RunCommand};
 
 use super::Kagan;
-use super::row::{Group, Row, group, row};
+use super::row::{Group, GroupStyle, Row, group, row};
 use crate::plugins::{Refused, Why, refused};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -76,13 +73,19 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     let mut out: Vec<Group> = ["Window", "Thread", "New thread", "Review"]
         .into_iter()
         .zip(built_in)
-        .map(|(title, shortcuts)| {
+        .enumerate()
+        .map(|(at, (title, shortcuts))| {
             let key = format!("shortcuts-{}", title.to_lowercase().replace(' ', "-"));
             let rows = shortcuts
                 .iter()
                 .map(|shortcut| shortcut_row(kagan, shortcut, &refused, &labels, window, cx))
                 .collect();
-            headed(group(key, title, rows))
+            let style = if at == 0 {
+                GroupStyle::FirstShortcuts
+            } else {
+                GroupStyle::Shortcuts
+            };
+            shortcut_group(group(key, title, rows), style)
         })
         .collect();
     for (plugin, name, commands) in plugin_commands(cx) {
@@ -108,22 +111,21 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
                 shortcut_row(kagan, &shortcut, &refused, &labels, window, cx)
             })
             .collect();
-        out.push(headed(group(
-            format!("shortcuts-plugin-{}", plugin.0),
-            name,
-            rows,
-        )));
+        out.push(shortcut_group(
+            group(format!("shortcuts-plugin-{}", plugin.0), name, rows),
+            GroupStyle::Shortcuts,
+        ));
     }
     out
 }
 
-/// How many groups the Keyboard section has, so the page can scroll past it.
 pub(super) fn count(cx: &App) -> usize {
     4 + plugin_commands(cx).len()
 }
 
-fn headed(mut group: Group) -> Group {
+fn shortcut_group(mut group: Group, style: GroupStyle) -> Group {
     group.headed = true;
+    group.style = style;
     group
 }
 
@@ -196,6 +198,7 @@ fn shortcut_row(
             .map(|refused| format!("{} also wants this key.", label(labels, &refused.action))),
     );
     if let Some((_, fault)) = kagan
+        .settings
         .keyboard
         .fault
         .as_ref()
@@ -204,6 +207,7 @@ fn shortcut_row(
         notes.push(fault.clone());
     }
     let recording = kagan
+        .settings
         .keyboard
         .recording
         .as_ref()
@@ -246,7 +250,7 @@ fn controls(
         cx,
         move |this, window, cx| {
             if recording {
-                this.keyboard.recording = None;
+                this.settings.keyboard.recording = None;
                 cx.notify();
             } else {
                 this.begin_shortcut(record.clone(), window, cx);
@@ -329,7 +333,9 @@ fn keycaps(id: &str, strokes: &[Keystroke]) -> AnyElement {
     div()
         .id(ElementId::Name(format!("shortcut-{id}").into()))
         .ui_container()
-        .aria_label(SharedString::from(keys_text(strokes)))
+        .aria_label(SharedString::from(crate::kagan::controls::keys_text(
+            strokes,
+        )))
         .child(
             h_flex()
                 .gap_1()
@@ -361,15 +367,10 @@ fn for_window(key: &Keystroke) -> bool {
 }
 
 fn taken(key: &str, by: &str) -> String {
-    format!("{} is already used by {by}.", keys_text(&parse(key)))
-}
-
-fn keys_text(strokes: &[Keystroke]) -> String {
-    strokes
-        .iter()
-        .map(Kbd::format)
-        .collect::<Vec<_>>()
-        .join(" ")
+    format!(
+        "{} is already used by {by}.",
+        crate::kagan::controls::keys_text(&parse(key))
+    )
 }
 
 impl Kagan {
@@ -395,7 +396,7 @@ impl Kagan {
                 cx.stop_propagation();
             }
         });
-        self.keyboard = Recorder {
+        self.settings.keyboard = Recorder {
             recording: Some((action, intercept)),
             fault: None,
         };
@@ -404,7 +405,7 @@ impl Kagan {
 
     // A key pressed after Settings closed some other way still reaches the window.
     fn finish_shortcut(&mut self, key: &Keystroke, cx: &mut Context<Self>) -> bool {
-        let Some((action, _)) = self.keyboard.recording.take() else {
+        let Some((action, _)) = self.settings.keyboard.recording.take() else {
             return false;
         };
         cx.notify();
@@ -416,7 +417,7 @@ impl Kagan {
             if for_window(key) {
                 self.save_shortcut(action, Some(text), cx);
             } else {
-                self.keyboard.fault = Some((action, PROGRAM_KEY.to_owned()));
+                self.settings.keyboard.fault = Some((action, PROGRAM_KEY.to_owned()));
             }
         }
         true
@@ -433,7 +434,7 @@ impl Kagan {
                 action: action.clone(),
             },
         };
-        self.keyboard.fault = None;
+        self.settings.keyboard.fault = None;
         let saved = Workspace::dispatch(Op::Keymap(op), cx);
         cx.spawn(async move |this, cx| {
             let result = saved.await;
@@ -446,7 +447,7 @@ impl Kagan {
                     Ok(_) => return,
                     Err(error) => error.to_string(),
                 };
-                this.keyboard.fault = Some((action, message));
+                this.settings.keyboard.fault = Some((action, message));
                 cx.notify();
             })
             .ok();
@@ -455,6 +456,6 @@ impl Kagan {
     }
 
     pub(super) fn stop_recording(&mut self) {
-        self.keyboard = Recorder::default();
+        self.settings.keyboard = Recorder::default();
     }
 }

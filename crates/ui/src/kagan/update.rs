@@ -1,5 +1,3 @@
-//! The update notice, the install question, and Check for updates (decisions 113 to 115).
-
 use gpui_kit::component::button::Button;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, WindowExt as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -20,7 +18,6 @@ actions!(kagan, [CheckForUpdates]);
 
 pub(super) const BREW: &str = "brew upgrade --cask kagan";
 
-/// The version the person put off with Not now, until the next Check for updates.
 struct Hidden(String);
 impl Global for Hidden {}
 
@@ -46,13 +43,66 @@ pub(super) fn check(cx: &mut App) {
     .detach();
 }
 
+const COPY: &str = "Copy command";
+const RESTART: &str = "Restart and install…";
+const NOTES: &str = "Release notes";
+
+// What the main update action is for this install: the activity strip's Update button and the
+// notice both use it, so they can't disagree.
+#[derive(Clone, Copy)]
+enum Primary {
+    Copy,
+    Restart,
+    Notes,
+}
+
+impl Primary {
+    fn of(kind: InstallKind) -> Self {
+        match kind {
+            InstallKind::Homebrew => Self::Copy,
+            kind if kind.replaces_itself() => Self::Restart,
+            _ => Self::Notes,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Copy => COPY,
+            Self::Restart => RESTART,
+            Self::Notes => NOTES,
+        }
+    }
+}
+
+pub(super) fn primary_label(cx: &App) -> &'static str {
+    Primary::of(Updater::global(cx).read(cx).kind()).label()
+}
+
+pub(super) fn primary(window: &mut Window, cx: &mut App) {
+    match Primary::of(Updater::global(cx).read(cx).kind()) {
+        Primary::Copy => copy_brew(cx),
+        Primary::Restart => ask(window, cx),
+        Primary::Notes => {
+            let notes = match Updater::global(cx).read(cx).state() {
+                UpdateState::Available { notes, .. } => notes.clone(),
+                _ => return,
+            };
+            cx.open_url(&notes);
+        }
+    }
+}
+
+fn copy_brew(cx: &mut App) {
+    cx.write_to_clipboard(ClipboardItem::new_string(BREW.into()));
+    say("Copied.".into(), cx);
+}
+
 fn say(message: String, cx: &mut App) {
     if let Some((_, kagan)) = super::front(cx) {
         kagan.update(cx, |kagan, cx| kagan.show_toast(Toast::said(message), cx));
     }
 }
 
-/// The sentence for an update that is arriving in the background, wherever it is shown.
 pub(super) fn progress_sentence(state: &UpdateState) -> Option<String> {
     match state {
         UpdateState::Downloading { version } => Some(format!("Downloading kagan {version}…")),
@@ -70,7 +120,6 @@ pub(super) fn hidden(cx: &App) -> Option<String> {
     cx.try_global::<Hidden>().map(|hidden| hidden.0.clone())
 }
 
-/// The quiet line over the center while a newer kagan waits.
 pub(super) fn notice(cx: &mut Context<Kagan>) -> Option<AnyElement> {
     let hidden = hidden(cx);
     let updater = Updater::global(cx);
@@ -113,7 +162,6 @@ pub(super) fn notice(cx: &mut Context<Kagan>) -> Option<AnyElement> {
     )
 }
 
-/// What the person can do with the update the last check found.
 fn actions(cx: &App) -> AnyElement {
     let updater = Updater::global(cx).read(cx);
     let notes = match updater.state() {
@@ -124,13 +172,12 @@ fn actions(cx: &App) -> AnyElement {
     h_flex()
         .flex_wrap()
         .gap_1()
-        .child(button("update-notes", "Release notes", move |_, cx| {
+        .child(button("update-notes", NOTES, move |_, cx| {
             cx.open_url(&notes);
         }))
         .map(|row| match updater.kind() {
-            InstallKind::Homebrew => row.child(button("update-copy", "Copy command", |_, cx| {
-                cx.write_to_clipboard(ClipboardItem::new_string(BREW.into()));
-                say("Copied.".into(), cx);
+            InstallKind::Homebrew => row.child(button("update-copy", COPY, |_, cx| {
+                copy_brew(cx);
             })),
             kind if kind.replaces_itself() => row
                 .when(!ready, |row| {
@@ -142,13 +189,9 @@ fn actions(cx: &App) -> AnyElement {
                         },
                     ))
                 })
-                .child(button(
-                    "update-install",
-                    "Restart and install…",
-                    |window, cx| {
-                        ask(window, cx);
-                    },
-                )),
+                .child(button("update-install", RESTART, |window, cx| {
+                    ask(window, cx);
+                })),
             _ => row,
         })
         .into_any_element()
@@ -201,12 +244,13 @@ fn ask(window: &mut Window, cx: &mut App) {
         _ => return,
     };
     let running = Workspace::global(cx).read(cx).running_programs(cx);
-    let description = match running {
-        0 => "kagan quits, installs it and opens again.".to_owned(),
-        1 => "kagan quits, installs it and opens again. 1 running program will stop and resume when kagan opens again.".to_owned(),
-        _ => format!(
-            "kagan quits, installs it and opens again. {running} running programs will stop and resume when kagan opens again."
-        ),
+    let description = if running == 0 {
+        "kagan quits, installs it and opens again.".to_owned()
+    } else {
+        format!(
+            "kagan quits, installs it and opens again. {}",
+            super::quit::consequence(running)
+        )
     };
     window.open_alert_dialog(cx, move |dialog, _, _| {
         dialog

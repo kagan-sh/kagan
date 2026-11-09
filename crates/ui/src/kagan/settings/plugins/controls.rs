@@ -1,6 +1,3 @@
-//! A plugin's settings page: its declared settings as rows, then its own view when it has one.
-//! A save reply is applied only when that save is still the latest and the plugin activation is still the one captured when the save started.
-
 use crate::theme::TypeScale as _;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -43,7 +40,8 @@ pub(super) fn secret_field(
         {
             let (scope, plugin, key) = (scope.clone(), plugin.clone(), key.clone());
             kagan
-                .settings_drafts
+                .settings
+                .drafts
                 .begin(scope, plugin, key, text, None, cx);
         }
     });

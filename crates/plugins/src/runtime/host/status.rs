@@ -119,11 +119,7 @@ impl PluginHost {
                     enabled: record.enabled,
                     slow: watchdog.is_some_and(|watchdog| watchdog.slow),
                     error: self.failure(id),
-                    note: self
-                        .skipped
-                        .get(id)
-                        .cloned()
-                        .or_else(|| tool_notes.get(id).cloned()),
+                    note: tool_notes.get(id).cloned(),
                 }
             })
             .collect()
@@ -224,6 +220,7 @@ impl PluginHost {
         self.started
     }
 
+    #[cfg(test)]
     #[must_use]
     pub fn is_loaded(&self, id: &PluginId) -> bool {
         self.active
@@ -234,7 +231,7 @@ impl PluginHost {
 impl PluginHost {
     #[must_use]
     pub fn plugin_data(&self, id: &PluginId) -> PathBuf {
-        self.data_dir.join("plugins").join(&id.0).join("data")
+        kg_core::plugin_data_dir(&self.data_dir, id)
     }
 
     /// The plugin folder, for serving that plugin's own page.

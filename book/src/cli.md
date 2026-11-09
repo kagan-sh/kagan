@@ -408,6 +408,9 @@ Options:
       --parent-thread-id <PARENT_THREAD_ID>
           
 
+      --quiet
+          With a parent, do not type a note into the parent's terminal when this thread's turn ends, asks the person, exits or fails
+
       --lifecycle-owner-thread-id <LIFECYCLE_OWNER_THREAD_ID>
           
 
@@ -1225,6 +1228,7 @@ Commands:
   get       Show an environment
   restore   Recreate a thread's environment
   branches  Local branches of a project
+  setup     The setup script a worktree from this revision of a project would run
   set-base  Which branch change counts compare against
   remove    Remove a worktree again after git refused because of files it would keep
   help      Print this message or the help of the given subcommand(s)
@@ -1279,6 +1283,25 @@ Usage: kg environment branches <PROJECT_ID>
 Arguments:
   <PROJECT_ID>
           [env: KG_PROJECT_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg environment setup`
+
+```text
+The setup script a worktree from this revision of a project would run
+
+Usage: kg environment setup <PROJECT_ID> <REV>
+
+Arguments:
+  <PROJECT_ID>
+          [env: KG_PROJECT_ID=]
+
+  <REV>
+          
 
 Options:
   -h, --help
@@ -2082,6 +2105,7 @@ Commands:
   thread                   Open the Nth visible thread and focus its terminal
   next-thread-needing-you  Open the oldest unread thread or question and focus its terminal
   toggle-review-wrap       Toggle wrapping in the open diff review
+  toggle-activity-log      Show or hide the activity log at the bottom of the window
   command-list             Open the command list
   search-threads           Open the command list on thread search
   next-terminal            Move the keyboard to the shown thread's next terminal
@@ -2251,6 +2275,18 @@ Options:
 Toggle wrapping in the open diff review
 
 Usage: kg window toggle-review-wrap
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg window toggle-activity-log`
+
+```text
+Show or hide the activity log at the bottom of the window
+
+Usage: kg window toggle-activity-log
 
 Options:
   -h, --help

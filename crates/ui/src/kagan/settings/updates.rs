@@ -1,5 +1,3 @@
-//! Settings → Updates: the running version, Check now, and the automatic check.
-
 use gpui_kit::component::button::Button;
 use gpui_kit::component::{Disableable as _, Sizable as _, h_flex};
 use gpui_kit::{App, IntoElement, ParentElement as _};
@@ -64,7 +62,7 @@ pub(super) fn group(kagan: &Kagan, cx: &App) -> Group {
                     |on, _, cx| {
                         save(
                             Op::Preference(PreferenceOp::Set {
-                                key: "update-check".into(),
+                                key: kg_domain::prefs::UPDATE_CHECK.into(),
                                 value: json!(on),
                             }),
                             cx,

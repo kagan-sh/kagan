@@ -1,8 +1,3 @@
-//! `KgInput` and `KgTextarea`: text fields a script builds, observed by `kg ui`.
-//!
-//! The shell's `Input` and `Textarea` are built where this crate cannot wrap them or replace
-//! their names. These take an accessible name and state the field's name, value and focus.
-
 use std::sync::Arc;
 
 use crate::ui_observe::UiObserveExt as _;

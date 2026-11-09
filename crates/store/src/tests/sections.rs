@@ -37,9 +37,8 @@ fn sections_file_threads() {
 }
 #[test]
 fn reopening_a_file_keeps_data() {
-    let dir = std::env::temp_dir().join(format!("kg-store-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("kagan.db");
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("kagan.db");
     Store::open(&path)
         .unwrap()
         .put_section(&Section {
@@ -51,5 +50,4 @@ fn reopening_a_file_keeps_data() {
         Store::open(&path).unwrap().sections().unwrap()[0].name,
         "Kept"
     );
-    std::fs::remove_dir_all(dir).unwrap();
 }

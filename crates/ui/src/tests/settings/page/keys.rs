@@ -36,6 +36,7 @@ pub(in crate::tests) fn install_twin(data: &Path) {
             commit: None,
             enabled: true,
             approved: json!({ "powers": {}, "downloads": {}, "folders": {} }),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();
@@ -291,6 +292,7 @@ pub(in crate::tests) fn install_tool(data: &Path, id: &str, key: Option<&str>, e
             commit: None,
             enabled,
             approved: json!({ "powers": {}, "downloads": {}, "folders": {} }),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();

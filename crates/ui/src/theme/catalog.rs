@@ -43,9 +43,7 @@ pub(crate) struct ThemeState {
     applied_id: Option<String>,
     warned: Option<String>,
     builtins: Vec<CatalogEntry>,
-    /// The light or dark mode the operating system uses now
     system: ThemeMode,
-    /// The mode painted now: the setting, with `system` resolved
     pub(crate) mode: ThemeMode,
     _watch: Task<()>,
     _changed: Subscription,
@@ -58,7 +56,6 @@ impl EventEmitter<Notice> for ThemeState {}
 struct ThemeOwner(Entity<ThemeState>);
 impl Global for ThemeOwner {}
 
-/// The density and type sizes in force. A window without a theme state keeps the defaults.
 pub(crate) fn look(cx: &App) -> Look {
     cx.try_global::<ThemeOwner>()
         .map_or_else(Look::default, |owner| owner.0.read(cx).look())
@@ -79,10 +76,7 @@ impl ThemeState {
 
     fn new(dir: PathBuf, cx: &mut Context<Self>) -> Self {
         let file = fjord();
-        let settings = ThemeSettings {
-            theme: "fjord".into(),
-            mode: Appearance::System,
-        };
+        let settings = ThemeSettings::default();
         let system = ThemeMode::Dark;
         let mode = resolve(settings.mode, system);
         let palette = palette(&file, mode).clone();
@@ -226,7 +220,6 @@ impl ThemeState {
         }
     }
 
-    /// Follows the operating system's light or dark mode. Only a `system` setting changes.
     fn set_system(&mut self, system: ThemeMode, cx: &mut Context<Self>) {
         if self.system != system {
             self.system = system;
@@ -265,7 +258,6 @@ impl ThemeState {
         Ok(file)
     }
 }
-/// The light or dark mode a setting paints, given the operating system's mode.
 fn resolve(mode: Appearance, system: ThemeMode) -> ThemeMode {
     match mode {
         Appearance::Light => ThemeMode::Light,
@@ -274,8 +266,6 @@ fn resolve(mode: Appearance, system: ThemeMode) -> ThemeMode {
     }
 }
 
-/// Makes a `system` setting follow the window's light or dark mode, now and when it changes.
-/// The window keeps the returned subscription.
 pub(crate) fn watch_system(window: &mut Window, cx: &mut App) -> Subscription {
     follow_system(ThemeMode::from(window.appearance()), cx);
     window.observe_window_appearance(|window, cx| {
@@ -283,8 +273,6 @@ pub(crate) fn watch_system(window: &mut Window, cx: &mut App) -> Subscription {
     })
 }
 
-/// Three colors of a theme in `mode`, for its card on the settings page: the window, the accent,
-/// and the text.
 pub(crate) fn swatches(file: &ThemeFile, mode: ThemeMode) -> [Hsla; 3] {
     let palette = palette(file, mode);
     [palette.bg, palette.accent, palette.ink].map(token_color)

@@ -1,12 +1,12 @@
-use gpui_kit::{AsyncApp, Entity, WeakEntity};
+use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{
     EnvironmentStatus, EventKind, OpError, OpResult, ThreadId, ThreadStatus, TurnOutcome,
 };
 use kg_terminal::Exit;
 
+use crate::Workspace;
 use crate::host::database::Result;
 use crate::workspace::closed;
-use crate::{Thread, Workspace};
 
 use super::agent::Start;
 use super::screen::keep_screen;
@@ -24,24 +24,16 @@ pub(crate) enum StopReason {
 /// Asks a running program to end and marks the thread stopping. Its exit records the stop and keeps
 /// the screen. Returns whether there was a program to end.
 pub(crate) fn request_stop(workspace: &mut Workspace, id: &ThreadId) -> bool {
-    let Some(Shown::Running(terminal)) = workspace.terminals.get(id) else {
+    let Some(run) = workspace.runs.get_mut(id) else {
+        return false;
+    };
+    let Some(Shown::Running(terminal)) = &run.shown else {
         return false;
     };
     terminal.stop();
-    workspace
-        .stopping
-        .entry(id.clone())
-        .or_insert(StopReason::Stop);
+    run.stopping.get_or_insert(StopReason::Stop);
     true
 }
-async fn status_idle(
-    this: &WeakEntity<Workspace>,
-    thread: &Entity<Thread>,
-    cx: &mut AsyncApp,
-) -> Result<()> {
-    status(this, thread, ThreadStatus::Idle, cx).await
-}
-
 /// Runs a stopped or recovered thread's program again, in the folder it had.
 /// Opening the app calls this for a thread the last process left running.
 pub(crate) async fn start_again(
@@ -92,8 +84,10 @@ pub(crate) async fn exited(
 ) -> Result<OpResult> {
     let reason = this
         .update(cx, |workspace, _| {
-            workspace.exiting.remove(&id);
-            workspace.stopping.remove(&id)
+            workspace.runs.get_mut(&id).and_then(|run| {
+                run.exiting = false;
+                run.stopping.take()
+            })
         })
         .map_err(closed)?;
     let Ok(thread) = crate::thread::thread(this, &id, cx) else {
@@ -123,7 +117,7 @@ pub(crate) async fn exited(
             cx,
         )
         .await?;
-        status_idle(this, &thread, cx).await?;
+        status(this, &thread, ThreadStatus::Idle, cx).await?;
         return Ok(OpResult::Done);
     }
     let (events, next) = match exit {
@@ -186,9 +180,9 @@ pub(crate) async fn exited(
     }
     Ok(OpResult::Done)
 }
-/// A recovered thread has the status of a running program and no terminal in this process.
+// A recovered thread has the status of a running program and no terminal in this process.
 fn program_is_live(workspace: &Workspace, id: &ThreadId, cx: &gpui_kit::App) -> bool {
-    let shown = workspace.terminals.get(id);
+    let shown = workspace.shown(id);
     if matches!(shown, Some(Shown::Running(_))) {
         return true;
     }
@@ -196,10 +190,7 @@ fn program_is_live(workspace: &Workspace, id: &ThreadId, cx: &gpui_kit::App) -> 
         .threads
         .get(id)
         .map(|thread| thread.read(cx).record.status);
-    matches!(
-        status,
-        Some(ThreadStatus::Active | ThreadStatus::Starting | ThreadStatus::Stopping)
-    ) && shown.is_some()
+    status.is_some_and(ThreadStatus::running) && shown.is_some()
 }
 
 fn close_turn(

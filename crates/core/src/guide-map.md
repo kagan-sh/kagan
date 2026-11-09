@@ -16,7 +16,7 @@ project: `kg project list`, `kg project get`, `kg project add`, `kg project remo
 
 program: `kg program list`.
 
-environment: `kg environment get`, `kg environment restore`, `kg environment branches`, `kg environment set-base`, `kg environment remove`.
+environment: `kg environment get`, `kg environment restore`, `kg environment branches`, `kg environment setup`, `kg environment set-base`, `kg environment remove`.
 
 plugin: `kg plugin cancel-install`, `kg plugin start`, `kg plugin command`, `kg plugin new`, `kg plugin check`, `kg plugin share`, `kg plugin reload`, `kg plugin dev`, `kg plugin logs`, `kg plugin types`, `kg plugin list`, `kg plugin remove`, `kg plugin install`, `kg plugin update`, `kg plugin index add`, `kg plugin index list`, `kg plugin index remove`, `kg plugin search`, `kg plugin enable`, `kg plugin disable`, `kg plugin config get`, `kg plugin config set`, `kg plugin config clear`, `kg plugin use`.
 
@@ -28,7 +28,7 @@ theme: `kg theme get`, `kg theme set`, `kg theme new`, `kg theme folder`.
 
 settings: `kg settings open`, `kg settings plugins`.
 
-window: `kg window about`, `kg window hide`, `kg window hide-others`, `kg window show-all`, `kg window quit`, `kg window minimize`, `kg window zoom`, `kg window close`, `kg window next-thread`, `kg window previous-thread`, `kg window thread`, `kg window next-thread-needing-you`, `kg window toggle-review-wrap`, `kg window command-list`, `kg window search-threads`, `kg window next-terminal`, `kg window previous-terminal`, `kg window open-local-link`.
+window: `kg window about`, `kg window hide`, `kg window hide-others`, `kg window show-all`, `kg window quit`, `kg window minimize`, `kg window zoom`, `kg window close`, `kg window next-thread`, `kg window previous-thread`, `kg window thread`, `kg window next-thread-needing-you`, `kg window toggle-review-wrap`, `kg window toggle-activity-log`, `kg window command-list`, `kg window search-threads`, `kg window next-terminal`, `kg window previous-terminal`, `kg window open-local-link`.
 
 surface: `kg surface list`, `kg surface threads`, `kg surface open`, `kg surface close`.
 

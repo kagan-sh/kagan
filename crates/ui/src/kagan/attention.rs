@@ -13,14 +13,18 @@ impl Global for AttentionGlobal {}
 pub(crate) fn global(cx: &App) -> Entity<Attention> {
     cx.global::<AttentionGlobal>().0.clone()
 }
+pub(super) fn refreshes(event: &WorkspaceEvent) -> bool {
+    matches!(
+        event,
+        WorkspaceEvent::Changed | WorkspaceEvent::Event { .. } | WorkspaceEvent::Waiting(_)
+    )
+}
+
 pub(super) fn init(cx: &mut App) {
     let workspace = Workspace::global(cx);
     let attention = cx.new(|cx: &mut Context<Attention>| {
         let watch = cx.subscribe(&workspace, |this, _, event, cx| {
-            if matches!(
-                event,
-                WorkspaceEvent::Changed | WorkspaceEvent::Event { .. } | WorkspaceEvent::Waiting(_)
-            ) {
+            if refreshes(event) {
                 this.load(cx);
             }
         });
@@ -35,6 +39,14 @@ pub(super) fn init(cx: &mut App) {
     cx.set_global(AttentionGlobal(attention));
 }
 impl Attention {
+    pub(crate) fn needs_you(&self, thread: &Thread) -> bool {
+        thread.unread()
+            || self
+                .questions
+                .iter()
+                .any(|question| question.thread_id == thread.id)
+    }
+
     fn load(&mut self, cx: &mut Context<Self>) {
         let listed = Workspace::dispatch(
             Op::Thread(ThreadOp::List {

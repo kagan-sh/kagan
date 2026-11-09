@@ -1,6 +1,6 @@
 use super::Kagan;
+use super::rows::ReviewRow;
 use gpui_kit::{Context, Focusable as _, Window};
-use kg_domain::ReviewRow;
 
 impl Kagan {
     pub(super) fn find_in_review(&mut self, window: &mut Window, cx: &mut Context<Self>) {

@@ -1,9 +1,9 @@
-use async_channel::{Receiver, Sender};
+use async_channel::Receiver;
 use futures::future::{Either, select};
 use gpui_kit::{App, Context, Task};
 use kg_domain::{InteractionOption, OpError, OpResult, PendingInteractionId};
 
-use crate::workspace::Request;
+use crate::workspace::{Request, Waiting};
 use crate::{Workspace, WorkspaceEvent};
 
 #[derive(Clone, Debug)]
@@ -48,14 +48,11 @@ impl Requester {
     }
 }
 
-pub(crate) struct Waiting {
-    approval: Approval,
-    answer: Sender<String>,
-}
-
 impl Workspace {
     pub fn approvals(&self) -> impl Iterator<Item = &Approval> {
-        self.approvals.values().map(|waiting| &waiting.approval)
+        self.pending
+            .values()
+            .filter_map(|waiting| waiting.approval.as_ref())
     }
 
     pub(crate) fn standalone(
@@ -71,15 +68,18 @@ impl Workspace {
         let (answer, answered) = async_channel::bounded(1);
         let id = PendingInteractionId(crate::workspace::id("approval"));
         workspace.update(cx, |workspace, cx| {
-            workspace.approvals.insert(
+            workspace.pending.insert(
                 id.clone(),
                 Waiting {
-                    approval: Approval {
+                    thread: None,
+                    answer,
+                    for_a_person: true,
+                    approval: Some(Approval {
                         id: id.clone(),
                         title,
                         options,
-                    },
-                    answer,
+                    }),
+                    ask: None,
                 },
             );
             cx.emit(WorkspaceEvent::Open);
@@ -90,8 +90,9 @@ impl Workspace {
         cx.spawn(async move |cx| {
             let Some(answer) = Requester::unless_gone(requester.as_ref(), answered.recv()).await
             else {
+                // The workspace is gone, so there is nothing left to withdraw from.
                 let _ = workspace.update(cx, |workspace, cx| {
-                    workspace.approvals.remove(&id);
+                    workspace.pending.remove(&id);
                     cx.emit(WorkspaceEvent::Changed);
                     cx.notify();
                 });
@@ -121,21 +122,17 @@ impl Workspace {
         option: String,
         cx: &mut Context<Self>,
     ) -> Result<OpResult, OpError> {
-        let waiting = self
-            .approvals
+        let approval = self
+            .pending
             .get(id)
+            .and_then(|waiting| waiting.approval.as_ref())
             .ok_or_else(|| OpError::NotFound("this request was already answered".into()))?;
-        if !waiting
-            .approval
-            .options
-            .iter()
-            .any(|choice| choice.id == option)
-        {
+        if !approval.options.iter().any(|choice| choice.id == option) {
             return Err(OpError::Invalid(format!(
                 "approval {id} has no option {option}"
             )));
         }
-        if let Some(waiting) = self.approvals.remove(id) {
+        if let Some(waiting) = self.pending.remove(id) {
             waiting
                 .answer
                 .try_send(option)

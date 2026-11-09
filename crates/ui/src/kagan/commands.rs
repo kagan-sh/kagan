@@ -1,5 +1,4 @@
-//! The command list: every window command, with its live key, and thread search.
-
+use crate::kagan::dispatch;
 use std::rc::Rc;
 
 use crate::theme::TypeScale as _;
@@ -17,7 +16,6 @@ use gpui_kit::{
     InteractiveElement as _, IntoElement, ParentElement as _, SharedString, Styled as _, Task,
     WeakEntity, Window, actions, div, px,
 };
-use kg_core::Workspace;
 use kg_domain::{Found, Op, PluginOp, SHORTCUTS, SettingsOp, ShortcutWhen, WindowOp};
 use kg_plugins::{CommandWhen, RunCommand};
 
@@ -74,20 +72,15 @@ pub(super) fn perform(op: WindowOp, cx: &mut App) {
     if super::show(cx).is_err() {
         return;
     }
-    let Some((handle, kagan)) = super::front(cx) else {
-        return;
-    };
-    _ = cx.update_window(handle, |_, window, cx| {
-        kagan.update(cx, |this, cx| this.open_commands(mode, window, cx));
-    });
+    super::window::with_front(cx, |this, window, cx| this.open_commands(mode, window, cx));
 }
 
 pub(super) fn open_list(_: &OpenCommandList, _: &mut Window, cx: &mut App) {
-    Workspace::dispatch(Op::Window(WindowOp::CommandList), cx).detach();
+    super::window::dispatch(WindowOp::CommandList, cx);
 }
 
 pub(super) fn search_threads(_: &SearchThreads, _: &mut Window, cx: &mut App) {
-    Workspace::dispatch(Op::Window(WindowOp::SearchThreads), cx).detach();
+    super::window::dispatch(WindowOp::SearchThreads, cx);
 }
 
 pub(super) fn rail_button(cx: &App) -> impl IntoElement {
@@ -103,7 +96,7 @@ pub(super) fn rail_button(cx: &App) -> impl IntoElement {
             .accessibility_label("Command list")
             .tooltip(tip)
             .on_click(|_, _, cx| {
-                Workspace::dispatch(Op::Window(WindowOp::CommandList), cx).detach();
+                super::window::dispatch(WindowOp::CommandList, cx);
             }),
     )
 }
@@ -157,7 +150,7 @@ impl Kagan {
             Run::Action(action) => window.defer(cx, move |window, cx| {
                 back.dispatch_action(action.as_ref(), window, cx);
             }),
-            Run::Op(op) => Workspace::dispatch((*op).clone(), cx).detach(),
+            Run::Op(op) => dispatch::logged((*op).clone(), cx),
         }
     }
 }
@@ -267,7 +260,7 @@ fn command_item(entry: Entry, keys: Vec<gpui_kit::Keystroke>) -> CommandItem {
         plugin,
         ..
     } = entry;
-    let text: String = keys.iter().map(Kbd::format).collect::<Vec<_>>().join(" ");
+    let text = crate::kagan::controls::keys_text(&keys);
     CommandItem::new()
         .label(label.clone())
         .keywords(plugin)

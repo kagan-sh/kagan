@@ -2,7 +2,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use gpui_kit::{App, Task};
-use kg_domain::{Op, OpError, ThreadStatus};
+use kg_domain::{Op, OpError};
 
 use crate::host::database::Result;
 
@@ -15,9 +15,11 @@ impl Workspace {
     pub fn set_ui_driver(&mut self, dispatch: crate::dispatch::ui::UiDispatch) {
         self.ui = Some(dispatch);
     }
-    pub fn end_programs(&mut self) {
-        self.extras.clear();
-        self.terminals.clear();
+    pub(crate) fn end_programs(&mut self) {
+        for run in self.runs.values_mut() {
+            run.extras = crate::thread::Extras::default();
+            run.shown = None;
+        }
     }
     pub fn stop_for_quit(cx: &mut App) -> Task<Result<()>> {
         let workspace = Self::global(cx);
@@ -25,12 +27,7 @@ impl Workspace {
             .read(cx)
             .threads
             .iter()
-            .filter(|(_, thread)| {
-                matches!(
-                    thread.read(cx).record.status,
-                    ThreadStatus::Active | ThreadStatus::Starting
-                )
-            })
+            .filter(|(_, thread)| thread.read(cx).record.status.live())
             .map(|(id, _)| id.clone())
             .collect();
         let ids: Vec<_> = workspace
@@ -46,15 +43,13 @@ impl Workspace {
             let work = async {
                 if !resume.is_empty() {
                     database
-                        .call(move |store| store.remember_resume(&resume))
+                        .call(move |store| super::recovery::remember_resume(store, &resume))
                         .await?;
                 }
                 let stops: Vec<_> = cx.update(|cx| {
                     workspace.update(cx, |workspace, _| {
                         for id in &ids {
-                            workspace
-                                .stopping
-                                .insert(id.clone(), crate::thread::StopReason::Quit);
+                            workspace.run_mut(id).stopping = Some(crate::thread::StopReason::Quit);
                         }
                     });
                     ids.iter()
@@ -79,14 +74,11 @@ impl Workspace {
                                 .threads
                                 .get(id)
                                 .is_some_and(|thread| thread.read(cx).running());
-                            let saving = matches!(
-                                workspace.terminals.get(id),
-                                Some(crate::thread::Shown::Ended(_))
-                            ) && workspace
-                                .runs
-                                .get(id)
-                                .is_some_and(|seq| !workspace.saved.contains(&(id.clone(), *seq)));
-                            !running && !saving
+                            !running
+                                && workspace
+                                    .runs
+                                    .get(id)
+                                    .is_none_or(|run| run.unsaved().is_none())
                         })
                     });
                     if done {
@@ -108,7 +100,7 @@ impl Workspace {
     }
     #[cfg(any(test, feature = "test"))]
     pub fn hold_screen_save(&mut self, hold: async_channel::Receiver<()>) {
-        self.screen_hold = Some(hold);
+        self.holds.insert(crate::workspace::Hold::Screen, hold);
     }
     #[must_use]
     pub fn running_programs(&self, cx: &App) -> usize {
@@ -129,7 +121,7 @@ impl Workspace {
     #[cfg(any(test, feature = "test"))]
     #[must_use]
     pub fn terminal_process_id(&self, id: &kg_domain::ThreadId) -> Option<u32> {
-        match self.terminals.get(id)? {
+        match self.shown(id)? {
             crate::thread::Shown::Running(terminal) => Some(terminal.process_id()),
             crate::thread::Shown::Ended(_) => None,
         }

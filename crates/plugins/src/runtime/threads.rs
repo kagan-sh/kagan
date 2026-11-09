@@ -2,130 +2,206 @@ use gpui_shell::{HostArguments, HostError, HostModule, HostValue};
 use kg_core::Workspace;
 use kg_domain::{
     AskField, DiffOp, DiffQuery, DiffScope, EnvironmentId, EnvironmentOp, EnvironmentSpec,
-    InteractionOption, Metadata, Op, OpError, OpResult, PluginId, Project, ProjectId, ProjectOp,
-    Run, Section, SectionId, ThreadId, ThreadOp, ThreadStatus, Timestamp, Visibility,
+    InteractionOption, Metadata, Op, OpResult, Order, PluginId, Project, ProjectId, ProjectOp, Run,
+    Section, SectionId, ThreadId, ThreadOp, ThreadStatus, Timestamp, Visibility,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::Agents;
-use crate::area::{from_host, to_host};
+use crate::area::{argument, awaited, dispatch, error, from_host, to_host, with_app};
 
 /// Must match the 256 KiB ceiling published for `threads.output`.
 pub(crate) const OUTPUT_CAP: usize = 256 * 1024;
 
-pub(crate) fn module(plugin: &PluginId, _agents: &Agents) -> HostModule {
-    let mut module = HostModule::new("kagan/threads");
-    let methods = [
-        "get",
-        "list",
-        "stop",
-        "send",
-        "archive",
-        "unarchive",
-        "remove",
-        "setPinned",
-        "rename",
-        "markRead",
-        "metadata",
-        "setMetadata",
-        "events",
-        "waitEvent",
-        "wait",
-        "ask",
-        "projects",
-        "project",
-        "environment",
-        "restoreEnvironment",
-    ];
-    module = module
+type Build = fn(&HostArguments, &PluginId) -> Result<Op, HostError>;
+
+fn thread(op: ThreadOp) -> Op {
+    Op::Thread(op)
+}
+
+fn id(args: &HostArguments) -> Result<ThreadId, HostError> {
+    Ok(ThreadId(args.string(0)?.to_owned()))
+}
+
+const CALLS: [(&str, Build); 23] = [
+    ("get", |a, _| Ok(thread(ThreadOp::Get { id: id(a)? }))),
+    ("list", |a, _| {
+        let ListOptions {
+            project_id,
+            archived,
+            limit,
+            before,
+        } = optional(a, 0)?;
+        Ok(thread(ThreadOp::List {
+            project_id,
+            archived,
+            limit,
+            before,
+        }))
+    }),
+    ("stop", |a, _| Ok(thread(ThreadOp::Stop { id: id(a)? }))),
+    ("send", |a, _| {
+        Ok(thread(ThreadOp::Send {
+            id: id(a)?,
+            text: a.string(1)?.to_owned(),
+        }))
+    }),
+    ("archive", |a, _| {
+        Ok(thread(ThreadOp::Archive { id: id(a)? }))
+    }),
+    ("unarchive", |a, _| {
+        Ok(thread(ThreadOp::Unarchive { id: id(a)? }))
+    }),
+    ("remove", |a, _| {
+        Ok(thread(ThreadOp::Delete {
+            id: id(a)?,
+            approval_thread_id: None,
+        }))
+    }),
+    ("setPinned", |a, _| {
+        Ok(thread(ThreadOp::SetPinned {
+            id: id(a)?,
+            pinned: argument(a, 1)?,
+        }))
+    }),
+    ("rename", |a, _| {
+        Ok(thread(ThreadOp::Rename {
+            id: id(a)?,
+            title: a.string(1)?.to_owned(),
+        }))
+    }),
+    ("markRead", |a, _| {
+        Ok(thread(ThreadOp::MarkRead { id: id(a)? }))
+    }),
+    ("metadata", |a, plugin| {
+        Ok(thread(ThreadOp::Metadata {
+            id: id(a)?,
+            plugin_id: plugin.clone(),
+        }))
+    }),
+    ("setMetadata", |a, plugin| {
+        Ok(thread(ThreadOp::SetMetadata {
+            id: id(a)?,
+            plugin_id: plugin.clone(),
+            value: from_host(a.value(1)?),
+        }))
+    }),
+    ("events", |a, _| {
+        let EventsOptions {
+            after_seq,
+            limit,
+            order,
+        } = argument(a, 1)?;
+        Ok(thread(ThreadOp::Events {
+            id: id(a)?,
+            after_seq,
+            limit,
+            order,
+        }))
+    }),
+    ("waitEvent", |a, _| {
+        let WaitEventOptions {
+            kind,
+            after_seq,
+            timeout_ms,
+        } = argument(a, 1)?;
+        Ok(thread(ThreadOp::WaitEvent {
+            id: id(a)?,
+            kind,
+            after_seq,
+            timeout_ms,
+        }))
+    }),
+    ("wait", |a, _| {
+        let WaitOptions { timeout_ms } = argument(a, 1)?;
+        Ok(thread(ThreadOp::Wait {
+            id: id(a)?,
+            timeout_ms,
+        }))
+    }),
+    ("ask", |a, _| ask_person(a)),
+    ("projects", |_, _| Ok(Op::Project(ProjectOp::List))),
+    ("project", |a, _| {
+        Ok(Op::Project(ProjectOp::Get {
+            id: argument(a, 0)?,
+        }))
+    }),
+    ("environment", |a, _| {
+        Ok(Op::Environment(EnvironmentOp::Get {
+            id: argument(a, 0)?,
+        }))
+    }),
+    ("restoreEnvironment", |a, _| {
+        Ok(Op::Environment(EnvironmentOp::Restore {
+            thread_id: argument(a, 0)?,
+        }))
+    }),
+    ("spawn", spawn_thread),
+    ("changes", |a, _| shown_diff(a, None)),
+    ("diff", |a, _| shown_diff(a, Some(a.string(2)?.to_owned()))),
+];
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct ListOptions {
+    project_id: Option<ProjectId>,
+    archived: Option<bool>,
+    limit: Option<u32>,
+    before: Option<Timestamp>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EventsOptions {
+    after_seq: Option<u64>,
+    limit: Option<u32>,
+    order: Option<Order>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WaitEventOptions {
+    #[serde(rename = "type")]
+    kind: String,
+    after_seq: Option<u64>,
+    timeout_ms: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WaitOptions {
+    timeout_ms: u64,
+}
+
+pub(crate) fn module(plugin: &PluginId) -> HostModule {
+    let mut module = HostModule::new("kagan/threads")
         .declarations(include_str!("threads.d.ts"))
         .function("sidebar", |_| {
-            gpui_shell::with_current_app(|cx| {
+            with_app(|cx| {
                 serde_json::to_value(PluginSidebar::from(
                     &Workspace::global(cx).read(cx).sidebar(cx),
                 ))
                 .map(to_host)
                 .map_err(error)
-            })
-            .ok_or_else(|| HostError::new("no kagan app context"))?
-        });
-    let owner = plugin.clone();
-    module = module.async_function("spawn", move |args| dispatch(spawn_thread(args, &owner)?));
-    module = module.async_function("output", read_output);
-    module = module.async_function("changes", |args| dispatch(shown_diff(args, None)?));
-    module = module.async_function("diff", |args| {
-        dispatch(shown_diff(args, Some(args.string(2)?.to_owned()))?)
-    });
-    for name in methods {
+            })?
+        })
+        .async_function("output", read_output);
+    for (name, build) in CALLS {
         let plugin = plugin.clone();
-        module = module.async_function(name, move |args| dispatch(operation(name, args, &plugin)?));
+        module = module.async_function(name, move |args| dispatch(build(args, &plugin)?));
     }
     module
-}
-
-fn operation(name: &str, args: &HostArguments, plugin: &PluginId) -> Result<Op, HostError> {
-    match name {
-        "get" | "stop" | "archive" | "unarchive" => thread_by_id(name, args),
-        "send" => send_line(args),
-        "markRead" => thread_by_id("mark-read", args),
-        "remove" => thread_by_id("delete", args),
-        "list" => list_threads(args),
-        "events" => with_fields("events", args),
-        "waitEvent" => wait_event(args),
-        "wait" => wait_for_settle(args),
-        "ask" => ask_person(args),
-        "setPinned" => set_pinned(args),
-        "rename" => rename_thread(args),
-        "metadata" => read_metadata(args, plugin),
-        "setMetadata" => write_metadata(args, plugin),
-        "projects" => Ok(Op::Project(ProjectOp::List)),
-        "project" => get_project(args),
-        "environment" => get_environment(args),
-        "restoreEnvironment" => restore_environment(args),
-        _ => Err(HostError::new(format!("unknown threads function {name}"))),
-    }
-}
-
-fn send_line(args: &HostArguments) -> Result<Op, HostError> {
-    as_thread(json!({
-        "send": {
-            "id": args.string(0)?,
-            "text": args.string(1)?,
-        }
-    }))
-}
-
-fn thread_by_id(name: &str, args: &HostArguments) -> Result<Op, HostError> {
-    as_thread(json!({ name: { "id": args.string(0)? } }))
 }
 
 fn read_output(
     args: &HostArguments,
 ) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
     let id = ThreadId(args.string(0)?.to_owned());
-    let receive = gpui_shell::with_current_app(|cx| {
-        let (sender, receive) = async_channel::bounded(1);
-        let task = Workspace::thread_output(&id, OUTPUT_CAP, cx);
-        cx.spawn(async move |_| {
-            let _ = sender.send(task.await).await;
-        })
-        .detach();
-        receive
-    })
-    .ok_or_else(|| HostError::new("no kagan app context"))?;
+    let output = with_app(|cx| awaited(Workspace::thread_output(&id, OUTPUT_CAP, cx), cx))?;
     Ok(async move {
-        let text = receive.recv().await.map_err(error)?.map_err(error)?;
+        let text = output.await?.map_err(error)?;
         Ok(to_host(json!({ "output": text })))
     })
-}
-
-fn as_thread(value: Value) -> Result<Op, HostError> {
-    serde_json::from_value(value).map(Op::Thread).map_err(error)
-}
-
-fn list_threads(args: &HostArguments) -> Result<Op, HostError> {
-    as_thread(json!({ "list": optional(args, 0) }))
 }
 
 #[derive(Deserialize)]
@@ -137,6 +213,8 @@ struct PluginSpawn {
     environment: EnvironmentSpec,
     visibility: Option<Visibility>,
     parent_thread_id: Option<ThreadId>,
+    #[serde(default)]
+    quiet: bool,
     lifecycle_owner_thread_id: Option<ThreadId>,
     metadata: Option<Value>,
 }
@@ -150,6 +228,7 @@ fn spawn_thread(args: &HostArguments, plugin: &PluginId) -> Result<Op, HostError
         environment: spawn.environment,
         visibility: spawn.visibility,
         parent_thread_id: spawn.parent_thread_id,
+        quiet: spawn.quiet,
         lifecycle_owner_thread_id: spawn.lifecycle_owner_thread_id,
         metadata: spawn.metadata.map(|value| Metadata {
             plugin_id: plugin.clone(),
@@ -162,7 +241,7 @@ fn spawn_thread(args: &HostArguments, plugin: &PluginId) -> Result<Op, HostError
 fn shown_diff(args: &HostArguments, path: Option<String>) -> Result<Op, HostError> {
     let thread_id = ThreadId(args.string(0)?.to_owned());
     let scope: DiffScope = argument(args, 1)?;
-    let listed = gpui_shell::with_current_app(|cx| {
+    let listed = with_app(|cx| {
         Workspace::global(cx)
             .read(cx)
             .thread(&thread_id)
@@ -170,8 +249,7 @@ fn shown_diff(args: &HostArguments, path: Option<String>) -> Result<Op, HostErro
                 let record = thread.read(cx).record();
                 record.visibility == Visibility::Visible && record.archived_at.is_none()
             })
-    })
-    .ok_or_else(|| HostError::new("no kagan app context"))?;
+    })?;
     if !listed {
         return Err(HostError::new(format!(
             "thread {thread_id} is not in kagan's thread list"
@@ -189,137 +267,32 @@ fn shown_diff(args: &HostArguments, path: Option<String>) -> Result<Op, HostErro
     }))
 }
 
-fn with_fields(kind: &str, args: &HostArguments) -> Result<Op, HostError> {
-    let mut fields = argument::<serde_json::Map<String, Value>>(args, 1)?;
-    fields.insert("id".into(), json!(args.string(0)?));
-    as_thread(json!({ kind: fields }))
-}
-
-fn wait_event(args: &HostArguments) -> Result<Op, HostError> {
-    let mut fields = argument::<serde_json::Map<String, Value>>(args, 1)?;
-    fields.insert("id".into(), json!(args.string(0)?));
-    if let Some(kind) = fields.remove("type") {
-        fields.insert("kind".into(), kind);
-    }
-    as_thread(json!({ "wait-event": fields }))
-}
-
 fn ask_person(args: &HostArguments) -> Result<Op, HostError> {
     let options = argument::<Vec<InteractionOption>>(args, 2)?;
     let fields = match args.get(3) {
-        None => Some(Vec::<AskField>::new()),
-        Some(value) if from_host(value) == Value::Null => Some(Vec::new()),
-        Some(_) => Some(argument::<Vec<AskField>>(args, 3)?),
+        None => Vec::<AskField>::new(),
+        Some(value) if from_host(value) == Value::Null => Vec::new(),
+        Some(_) => argument::<Vec<AskField>>(args, 3)?,
     };
-    as_thread(json!({
-        "ask": {
-            "id": args.string(0)?,
-            "title": args.string(1)?,
-            "options": options,
-            "fields": fields,
-        }
+    Ok(thread(ThreadOp::Ask {
+        id: id(args)?,
+        title: args.string(1)?.to_owned(),
+        options,
+        fields: Some(fields),
     }))
 }
 
-fn wait_for_settle(args: &HostArguments) -> Result<Op, HostError> {
-    let mut fields = argument::<serde_json::Map<String, Value>>(args, 1)?;
-    fields.insert("id".into(), json!(args.string(0)?));
-    as_thread(json!({ "wait": fields }))
-}
-
-fn set_pinned(args: &HostArguments) -> Result<Op, HostError> {
-    as_thread(json!({
-        "set-pinned": { "id": args.string(0)?, "pinned": argument::<bool>(args, 1)? }
-    }))
-}
-
-fn rename_thread(args: &HostArguments) -> Result<Op, HostError> {
-    as_thread(json!({
-        "rename": { "id": args.string(0)?, "title": args.string(1)? }
-    }))
-}
-
-fn read_metadata(args: &HostArguments, plugin: &PluginId) -> Result<Op, HostError> {
-    as_thread(json!({ "metadata": { "id": args.string(0)?, "pluginId": plugin } }))
-}
-
-fn write_metadata(args: &HostArguments, plugin: &PluginId) -> Result<Op, HostError> {
-    as_thread(json!({
-        "set-metadata": {
-            "id": args.string(0)?,
-            "pluginId": plugin,
-            "value": from_host(args.value(1)?)
-        }
-    }))
-}
-
-fn get_project(args: &HostArguments) -> Result<Op, HostError> {
-    Ok(Op::Project(ProjectOp::Get {
-        id: argument(args, 0)?,
-    }))
-}
-
-fn get_environment(args: &HostArguments) -> Result<Op, HostError> {
-    Ok(Op::Environment(EnvironmentOp::Get {
-        id: argument(args, 0)?,
-    }))
-}
-
-fn restore_environment(args: &HostArguments) -> Result<Op, HostError> {
-    Ok(Op::Environment(EnvironmentOp::Restore {
-        thread_id: argument(args, 0)?,
-    }))
-}
-
-pub(crate) fn argument<T: for<'de> Deserialize<'de>>(
+fn optional<T: serde::de::DeserializeOwned + Default>(
     args: &HostArguments,
     ix: usize,
 ) -> Result<T, HostError> {
-    serde_json::from_value(from_host(args.value(ix)?)).map_err(error)
+    args.get(ix).map_or_else(
+        || Ok(T::default()),
+        |value| serde_json::from_value(from_host(value)).map_err(error),
+    )
 }
 
-fn optional(args: &HostArguments, ix: usize) -> Value {
-    args.get(ix).map_or_else(|| json!({}), from_host)
-}
-
-pub(crate) fn error(error: impl std::fmt::Display) -> HostError {
-    HostError::new(error.to_string())
-}
-
-pub(crate) fn dispatch(
-    op: Op,
-) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send, HostError> {
-    let receive = gpui_shell::with_current_app(|cx| {
-        let task = match op {
-            Op::Thread(ThreadOp::Rename { id, title }) => Workspace::rename_once(id, title, cx),
-            op => Workspace::dispatch(op, cx),
-        };
-        watch(task, cx)
-    })
-    .ok_or_else(|| HostError::new("no kagan app context"))?;
-    Ok(finish(receive))
-}
-
-fn watch(
-    task: impl Future<Output = Result<OpResult, OpError>> + 'static,
-    cx: &mut gpui_kit::App,
-) -> async_channel::Receiver<Result<OpResult, OpError>> {
-    let (sender, receive) = async_channel::bounded(1);
-    cx.spawn(async move |_| {
-        let _ = sender.send(task.await).await;
-    })
-    .detach();
-    receive
-}
-
-async fn finish(
-    receive: async_channel::Receiver<Result<OpResult, OpError>>,
-) -> Result<HostValue, HostError> {
-    let result = receive.recv().await.map_err(error)?.map_err(error)?;
-    shown(result).map(to_host).map_err(error)
-}
-
-fn shown(result: OpResult) -> serde_json::Result<Value> {
+pub(crate) fn shown(result: OpResult) -> serde_json::Result<Value> {
     match &result {
         OpResult::Thread(thread) => serde_json::to_value(PluginThread::from(thread)),
         OpResult::Threads(threads) => {
@@ -366,6 +339,7 @@ impl<'a> From<&'a kg_domain::Thread> for PluginThread<'a> {
             status,
             visibility,
             parent_thread_id,
+            quiet: _,
             lifecycle_owner_thread_id,
             section_id,
             pinned,
@@ -423,45 +397,28 @@ mod tests {
     use gpui_shell::HostArguments;
     use kg_domain::PluginId;
 
-    use super::operation;
+    use super::CALLS;
+
+    fn build(name: &str, args: Vec<serde_json::Value>) -> kg_domain::Op {
+        let (_, build) = CALLS.iter().find(|(call, _)| *call == name).unwrap();
+        let args = HostArguments::new(args.into_iter().map(super::to_host));
+        build(&args, &PluginId("dev.test".into())).unwrap()
+    }
 
     #[test]
-    fn answer_is_not_an_operation() {
-        let plugin = PluginId("dev.test".into());
-        let answer = operation("answer", &HostArguments::new(Vec::new()), &plugin).unwrap_err();
+    fn answer_and_output_are_not_calls() {
         assert!(
-            answer
-                .to_string()
-                .contains("unknown threads function answer"),
-            "{answer}"
+            CALLS
+                .iter()
+                .all(|(name, _)| !["answer", "output"].contains(name))
         );
     }
 
     #[test]
     fn rename_is_the_thread_title() {
-        let op = operation(
-            "rename",
-            &HostArguments::new(vec![
-                super::to_host(serde_json::json!("thr_1")),
-                super::to_host(serde_json::json!("Notes")),
-            ]),
-            &PluginId("dev.test".into()),
-        )
-        .unwrap();
+        let op = build("rename", vec!["thr_1".into(), "Notes".into()]);
         assert!(
             matches!(op, kg_domain::Op::Thread(kg_domain::ThreadOp::Rename { id, title }) if id.0 == "thr_1" && title == "Notes")
-        );
-    }
-
-    #[test]
-    fn output_is_not_an_operation() {
-        let plugin = PluginId("dev.test".into());
-        let output = operation("output", &HostArguments::new(Vec::new()), &plugin).unwrap_err();
-        assert!(
-            output
-                .to_string()
-                .contains("unknown threads function output"),
-            "{output}"
         );
     }
 }

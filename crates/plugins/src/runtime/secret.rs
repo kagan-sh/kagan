@@ -56,8 +56,8 @@ struct Known {
     no_keychain: bool,
 }
 
-/// `<data>/secrets/<plugin id>.json`: the keys the keychain holds, by name only, and the
-/// text of any key kept in the file instead.
+// `<data>/secrets/<plugin id>.json`: the keys the keychain holds, by name only, and the
+// text of any key kept in the file instead.
 #[derive(Default, Serialize, Deserialize)]
 struct Kept {
     #[serde(default)]
@@ -71,8 +71,8 @@ impl Kept {
         self.keychain.iter().chain(self.file.keys())
     }
 
-    /// The keychain item, or `None` when the key goes to the file. A key the keychain holds
-    /// is never moved to the file or forgotten while the keychain cannot be reached.
+    // The keychain item, or `None` when the key goes to the file. A key the keychain holds
+    // is never moved to the file or forgotten while the keychain cannot be reached.
     fn entry(&self, store: &Store, id: &PluginId, key: &str) -> Result<Option<Entry>, Error> {
         match store.entry(id, key)? {
             None if self.keychain.contains(key) => Err(Error::Unreachable),
@@ -91,7 +91,6 @@ impl Store {
         }
     }
 
-    /// The warning a person sees once secrets are known to go to the file.
     pub(crate) fn warning(&self) -> Option<String> {
         let missing = self.keychain.is_none() || self.known().is_ok_and(|known| known.no_keychain);
         missing.then(|| {
@@ -146,6 +145,27 @@ impl Store {
         crate::log(&self.data_dir, id, level, &self.redact(id, message))
     }
 
+    /// Writes a line kagan has to say about the plugin. A line that cannot be written goes to
+    /// stderr, since nothing else can tell the person.
+    pub(crate) fn note(&self, id: &PluginId, level: crate::Level, message: &str) {
+        if let Err(error) = self.log(id, level, message) {
+            eprintln!("kg: plugin log: {error}");
+        }
+    }
+
+    pub(crate) fn note_later(
+        &self,
+        id: &PluginId,
+        level: crate::Level,
+        message: &str,
+        cx: &gpui_kit::App,
+    ) {
+        let (store, id, message) = (self.clone(), id.clone(), message.to_owned());
+        cx.background_executor()
+            .spawn(async move { store.note(&id, level, &message) })
+            .detach();
+    }
+
     /// Reads the declared secrets into memory and forgets any kept key the manifest no longer
     /// declares. Returns what could not be read or forgotten.
     pub(crate) fn load(&self, id: &PluginId, declared: &[String]) -> Vec<String> {
@@ -190,7 +210,6 @@ impl Store {
         problems
     }
 
-    /// Keeps `text`, and returns the warning when it went to the file.
     pub(crate) fn set(
         &self,
         id: &PluginId,

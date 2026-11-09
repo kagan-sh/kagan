@@ -3,31 +3,34 @@ use gpui_kit::base::actions::{SelectDown, SelectUp};
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Input;
-use gpui_kit::component::list::List;
+use gpui_kit::component::list::{List, ListState};
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
-    Render, RenderOnce, Role, StatefulInteractiveElement as _, Styled as _, Window, div,
+    Pixels, Render, RenderOnce, Role, StatefulInteractiveElement as _, Styled as _, WeakEntity,
+    Window, div,
 };
 use kg_domain::ProgramSource;
 
-use super::list::{ProgramRow, status_line};
-use super::{CONTEXT, Close, LIST_ROWS, Mode, Picker, Programs};
+use super::list::{ProgramRow, Version, version_of};
+use super::{CONTEXT, Close, LIST_ROWS, Mode, Picker, Programs, Rows};
 use super::{CloseCustomCommand, RetryPrograms, ToggleCustomCommand};
-use crate::kagan::controls::{container, control, dispatch, note};
+use crate::kagan::controls::{control, dispatch, note};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 impl RenderOnce for ProgramRow {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
-        let icon = match self.program.source {
-            ProgramSource::Known => None,
-            ProgramSource::Shell => Some(IconName::SquareTerminal),
-            ProgramSource::Recent => Some(IconName::Undo),
-        };
-        let status = status_line(&self.program);
+        // A known agent's command is implied by its name, so only a shell or a recent program shows it.
+        let command = (!matches!(self.program.source, ProgramSource::Known))
+            .then(|| self.program.command.clone());
+        let Version {
+            shown: version,
+            full: full_version,
+        } = version_of(&self.program);
         // The selected row says so in words too, not only by its fill.
         let name = if self.selected {
             format!("{}, selected", self.program.label)
@@ -37,40 +40,16 @@ impl RenderOnce for ProgramRow {
         let (list, first) = (self.list, self.first);
         div()
             .on_children_prepainted(move |bounds, window, cx| {
-                let Some(row) = bounds.first().filter(|_| first) else {
-                    return;
-                };
-                let height = row.size.height;
-                // A collapsed pass reports no height. Keeping it would lock the list shut.
-                if height.as_f32() <= 1. {
-                    return;
-                }
-                let changed = list
-                    .update(cx, |state, cx| {
-                        let rows = state.delegate_mut();
-                        if rows.row_height == Some(height) {
-                            return false;
-                        }
-                        rows.row_height = Some(height);
-                        if state
-                            .selected_index()
-                            .is_some_and(|index| index.row >= usize::from(LIST_ROWS))
-                        {
-                            state.scroll_to_selected_item(window, cx);
-                        }
-                        cx.notify();
-                        true
-                    })
-                    .unwrap_or(false);
-                if changed {
-                    // The cap is read on the next frame. Painting cannot start one, so the window
-                    // is refreshed once this paint is done.
-                    cx.refresh_windows();
+                if let Some(row) = bounds.first().filter(|_| first) {
+                    record_row_height(&list, row.size.height, window, cx);
                 }
             })
             .child(
                 div()
                     .id(format!("program-{}", self.program.command))
+                    .when_some(full_version, |row, full| {
+                        row.tooltip(move |window, cx| Tooltip::new(full.clone()).build(window, cx))
+                    })
                     .ui_observe_as(Facts {
                         role: Role::ListBoxOption,
                         selected: Some(self.selected),
@@ -86,9 +65,6 @@ impl RenderOnce for ProgramRow {
                                 h_flex()
                                     .items_center()
                                     .gap_2()
-                                    .child(div().w_4().children(
-                                        icon.map(|icon| Icon::new(icon).small().text_color(muted)),
-                                    ))
                                     .child(
                                         div()
                                             .id(format!("program-name-{}", self.program.command))
@@ -100,24 +76,29 @@ impl RenderOnce for ProgramRow {
                                             .aria_label(name)
                                             .child(self.program.label),
                                     )
+                                    .child(div().flex_1().min_w_0().children(command.map(
+                                        |command| {
+                                            div()
+                                                .id(format!("program-command-{command}"))
+                                                .ui_container()
+                                                .type_small(cx)
+                                                .text_color(muted)
+                                                .whitespace_nowrap()
+                                                .text_ellipsis()
+                                                .aria_label(command.clone())
+                                                .child(command)
+                                        },
+                                    )))
                                     .child(
                                         div()
-                                            .flex_1()
-                                            .min_w_0()
-                                            .type_small(cx)
-                                            .text_color(muted)
-                                            .text_ellipsis()
-                                            .child(self.program.command),
-                                    )
-                                    .child(
-                                        div()
-                                            .max_w(gpui_kit::px(100.))
+                                            .id(format!("program-version-{}", self.program.command))
+                                            .flex_shrink_0()
                                             .type_caption(cx)
-                                            .font_family(cx.theme().mono_font_family.clone())
                                             .text_color(muted)
                                             .whitespace_nowrap()
-                                            .text_ellipsis()
-                                            .child(status),
+                                            .ui_container()
+                                            .aria_label(version.clone())
+                                            .child(version),
                                     ),
                             ),
                     ),
@@ -125,7 +106,86 @@ impl RenderOnce for ProgramRow {
     }
 }
 
-/// The programs could not be listed: why, and a Retry.
+// The first row's height is every row's height, so the list's cap is read in rows.
+fn record_row_height(
+    list: &WeakEntity<ListState<Rows>>,
+    height: Pixels,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    // A collapsed pass reports no height. Keeping it would lock the list shut.
+    if height.as_f32() <= 1. {
+        return;
+    }
+    let changed = list
+        .update(cx, |state, cx| {
+            let rows = state.delegate_mut();
+            if rows.row_height == Some(height) {
+                return false;
+            }
+            rows.row_height = Some(height);
+            if state
+                .selected_index()
+                .is_some_and(|index| index.row >= usize::from(LIST_ROWS))
+            {
+                state.scroll_to_selected_item(window, cx);
+            }
+            cx.notify();
+            true
+        })
+        .unwrap_or(false);
+    if changed {
+        // The cap is read on the next frame. Painting cannot start one, so the window
+        // is refreshed once this paint is done.
+        cx.refresh_windows();
+    }
+}
+
+// A row the width of the list. Its label keeps the program names' inset, and the chevron turns
+// while the fields are open.
+fn custom_toggle(toggle: &'static str, custom: bool, cx: &App) -> AnyElement {
+    let muted = cx.theme().muted_foreground;
+    control(
+        "custom-command-toggle",
+        Facts::button(toggle),
+        Button::new("custom-command-toggle-button")
+            .small()
+            .ghost()
+            .w_full()
+            .h_7()
+            .accessibility_label(toggle)
+            // The button centres its content, so the row fills the width.
+            .child(
+                h_flex()
+                    .w_full()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .id("custom-command-label")
+                            .ui_container()
+                            .type_body(cx)
+                            .aria_label(toggle)
+                            // The test measures the text, so padding on the label moves it.
+                            .child(div().id("custom-command-text").ui_container().child(toggle)),
+                    )
+                    .child(
+                        div().pr_2().child(
+                            Icon::new(if custom {
+                                IconName::ChevronUp
+                            } else {
+                                IconName::ChevronDown
+                            })
+                            .small()
+                            .text_color(muted),
+                        ),
+                    ),
+            )
+            .on_click(dispatch(ToggleCustomCommand)),
+    )
+    .into_any_element()
+}
+
 fn programs_failed(message: &str, muted: Hsla, cx: &App) -> AnyElement {
     // The message sits above the button: a long path in it must not push the Retry out of view.
     v_flex()
@@ -151,7 +211,6 @@ fn programs_failed(message: &str, muted: Hsla, cx: &App) -> AnyElement {
 }
 
 impl Picker {
-    /// Five rows, or fewer when the search leaves fewer. A theme row until one is measured.
     fn program_list_height(&self, cx: &App) -> gpui_kit::Pixels {
         let rows = self.list.read(cx).delegate();
         let count = if rows.loading {
@@ -170,18 +229,40 @@ impl Picker {
 impl Render for Picker {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
-        let body: AnyElement = if let Programs::Failed(message) = &self.state {
-            programs_failed(message, muted, cx)
-        } else {
-            let height = self.program_list_height(cx);
-            List::new(&self.list)
-                .h(height)
-                .max_h(height)
-                .into_any_element()
+        let body: AnyElement = match &self.state {
+            Programs::Failed(message) => programs_failed(message, muted, cx),
+            Programs::Loading => div()
+                .id("program-loading")
+                .ui_container()
+                .flex()
+                .items_center()
+                .h(gpui_kit::px(crate::theme::row_height(cx)))
+                .px_2()
+                .type_body(cx)
+                .text_color(muted)
+                .aria_label("Looking for programs…")
+                .child("Looking for programs…")
+                .into_any_element(),
+            Programs::Loaded => {
+                let height = self.program_list_height(cx);
+                List::new(&self.list)
+                    .h(height)
+                    .max_h(height)
+                    .into_any_element()
+            }
         };
+        let hidden = self
+            .list
+            .read(cx)
+            .delegate()
+            .matches
+            .len()
+            .saturating_sub(usize::from(LIST_ROWS));
         // Off while the custom command is open: its field shows the same reason beside it.
+        // Off with no match too: the list's own row says what to do.
         let custom = self.mode == Mode::Custom;
-        let reason = self.command(cx).err().filter(|_| !custom);
+        let matched = !self.list.read(cx).delegate().matches.is_empty();
+        let reason = self.command(cx).err().filter(|_| !custom && matched);
         let toggle = match self.mode {
             Mode::Custom => "Hide custom command",
             Mode::Catalog => "Custom command…",
@@ -209,32 +290,19 @@ impl Render for Picker {
                     .text_size(gpui_kit::px(crate::theme::type_body(cx)))
                     .small(),
             ))
-            .child(container("program-list", body))
+            .child(div().id("program-list").ui_container().child(body))
+            .when(hidden > 0, |this| {
+                this.child(note(
+                    "program-more",
+                    format!("{hidden} more. Type to search, or scroll."),
+                    muted,
+                    cx,
+                ))
+            })
             .when_some(reason, |this, reason| {
                 this.child(note("program-reason", reason, muted, cx))
             })
-            .child(control(
-                "custom-command-toggle",
-                Facts::button(toggle),
-                Button::new("custom-command-toggle-button")
-                    .small()
-                    .ghost()
-                    .w_full()
-                    .accessibility_label(toggle)
-                    // The button centres its content, so the label fills the width to sit left.
-                    .child(
-                        h_flex()
-                            .w_full()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .w_4()
-                                    .child(Icon::new(IconName::Plus).small().text_color(muted)),
-                            )
-                            .child(toggle),
-                    )
-                    .on_click(dispatch(ToggleCustomCommand)),
-            ))
+            .child(custom_toggle(toggle, custom, cx))
             .when(custom, |this| this.child(self.render_custom(cx)))
     }
 }

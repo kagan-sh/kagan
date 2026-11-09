@@ -1,6 +1,7 @@
 #[cfg(test)]
-pub(crate) mod read;
+pub(crate) mod tests;
 
+use crate::kagan::dispatch;
 use std::collections::BTreeMap;
 
 use gpui_kit::{
@@ -8,7 +9,6 @@ use gpui_kit::{
     ParentElement as _, Styled as _, Window, WindowId, actions, div,
 };
 use gpui_shell::ScriptView;
-use kg_core::Workspace;
 use kg_domain::{DiffNote, DiffScope, Op, PluginId, PluginOp, Slot, SlotChoice};
 use kg_plugins::{HostUi, PluginHost, ReviewComment};
 use serde_json::json;
@@ -82,7 +82,7 @@ impl Kagan {
         if !offered && PluginHost::try_global(cx).is_some_and(|host| host.read(cx).started()) {
             return;
         }
-        let epoch = self.replaced.epoch;
+        let epoch = self.slots.replaced.epoch;
         let reads = Slot::ALL.map(|slot| {
             (
                 slot,
@@ -99,8 +99,8 @@ impl Kagan {
             }
             _ = cx.update_window(handle, |_, window, cx| {
                 _ = this.update(cx, |this, cx| {
-                    if this.replaced.epoch == epoch && this.replaced.chosen != saved {
-                        this.replaced.chosen = saved;
+                    if this.slots.replaced.epoch == epoch && this.slots.replaced.chosen != saved {
+                        this.slots.replaced.chosen = saved;
                         this.sync_replaced(window, cx);
                         cx.notify();
                     }
@@ -115,8 +115,8 @@ impl Kagan {
             return;
         }
         for slot in Slot::ALL {
-            let Some(plugin) = self.replaced.chosen.get(&slot).cloned() else {
-                self.replaced.mounted.remove(&slot);
+            let Some(plugin) = self.slots.replaced.chosen.get(&slot).cloned() else {
+                self.slots.replaced.mounted.remove(&slot);
                 continue;
             };
             if let Err(reason) = self.fill(slot, &plugin, window, cx) {
@@ -148,7 +148,7 @@ impl Kagan {
             return Err(Lost::Stopped(error));
         }
         let generation = host.read(cx).generation(plugin);
-        if let Some(mounted) = self.replaced.mounted.get(&slot)
+        if let Some(mounted) = self.slots.replaced.mounted.get(&slot)
             && mounted.contribution == panel.id
             && generation == Some(mounted.generation)
         {
@@ -164,7 +164,7 @@ impl Kagan {
         if let Some(error) = &mounted.error {
             return Err(Lost::Unloaded(first_line(error).to_owned()));
         }
-        self.replaced.mounted.insert(slot, mounted);
+        self.slots.replaced.mounted.insert(slot, mounted);
         Ok(())
     }
 
@@ -175,7 +175,7 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(plugin) = self.replaced.chosen.remove(&slot) else {
+        let Some(plugin) = self.slots.replaced.chosen.remove(&slot) else {
             return;
         };
         self.empty(slot, window, cx);
@@ -187,25 +187,25 @@ impl Kagan {
                 .iter()
                 .any(|status| status.id == plugin)
         {
-            host.read(cx).report(&plugin, &line);
+            host.read(cx).report(&plugin, &line, cx);
         }
         self.note = Some(format!("{line} ({plugin})").into());
     }
 
-    // Drops the plugin's view, saves the built-in, and keeps the keyboard somewhere it can type.
     fn empty(&mut self, slot: Slot, window: &mut Window, cx: &mut Context<Self>) {
         let held = self
+            .slots
             .replaced
             .mounted
             .remove(&slot)
             .is_some_and(|mounted| mounted.focus.contains_focused(window, cx));
-        self.replaced.epoch += 1;
+        self.slots.replaced.epoch += 1;
         let op = Op::Plugin(PluginOp::Use {
             slot,
             id: SlotChoice::Kagan,
             thread_id: None,
         });
-        Workspace::dispatch(op, cx).detach();
+        dispatch::logged(op, cx);
         if held {
             match self.screen.review() {
                 Some(_) if slot == Slot::Review => self.focus_review(window, cx),
@@ -221,7 +221,7 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.replaced.chosen.remove(&Slot::Threads);
+        self.slots.replaced.chosen.remove(&Slot::Threads);
         self.empty(Slot::Threads, window, cx);
     }
 
@@ -231,19 +231,19 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.replaced.chosen.remove(&Slot::Review);
+        self.slots.replaced.chosen.remove(&Slot::Review);
         self.empty(Slot::Review, window, cx);
     }
 
-    /// The plugin's body for `slot`, clipped to its frame. After a rebuild, a deferred check puts
-    /// the built-in back when the view threw or drew a floating component.
+    // After a rebuild, a deferred check puts
+    // the built-in back when the view threw or drew a floating component.
     pub(super) fn replaced_body(
         &self,
         slot: Slot,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let mounted = self.replaced.mounted.get(&slot)?;
+        let mounted = self.slots.replaced.mounted.get(&slot)?;
         let view = mounted.view.clone()?;
         let state = view.read(cx);
         if state.is_dirty() || state.snapshot().is_none() || built(state).is_err() {
@@ -269,6 +269,7 @@ impl Kagan {
 
     fn check_built(&mut self, slot: Slot, window: &mut Window, cx: &mut Context<Self>) {
         let built = self
+            .slots
             .replaced
             .mounted
             .get(&slot)
@@ -279,10 +280,9 @@ impl Kagan {
         }
     }
 
-    /// Tells the review plugin which thread, scope and file the review on screen shows.
     pub(super) fn deliver_review(&mut self, cx: &mut App) {
         let (Some(plugin), Some(review)) = (
-            self.replaced.chosen.get(&Slot::Review),
+            self.slots.replaced.chosen.get(&Slot::Review),
             self.screen.review(),
         ) else {
             return;
@@ -293,29 +293,26 @@ impl Kagan {
             "path": review.path,
         });
         let next = Some((plugin.clone(), props.clone()));
-        if self.replaced.delivered == next {
+        if self.slots.replaced.delivered == next {
             return;
         }
-        self.replaced.delivered = next;
+        self.slots.replaced.delivered = next;
         if let Some(host) = HostUi::global(cx) {
             let (plugin, window) = (plugin.clone(), self.window.window_id());
             host.update(cx, |host, _| host.deliver(window, &plugin, props));
         }
     }
 
-    /// A sidebar plugin reads the list again when the threads change.
     pub(super) fn wake_threads_plugin(&self, cx: &mut App) {
-        if let (Some(plugin), Some(host)) =
-            (self.replaced.chosen.get(&Slot::Threads), HostUi::global(cx))
-        {
+        if let (Some(plugin), Some(host)) = (
+            self.slots.replaced.chosen.get(&Slot::Threads),
+            HostUi::global(cx),
+        ) {
             let plugin = plugin.clone();
             host.update(cx, |host, _| host.wake(&plugin));
         }
     }
 
-    /// A note from the plugin that draws the review in the front window, the one whose context
-    /// the plugin reads. Other windows leave the request alone, so it is answered once. The note
-    /// joins the host's own, so the host's footer counts, discards and sends it.
     pub(super) fn plugin_comment(
         &mut self,
         plugin: &PluginId,
@@ -339,8 +336,8 @@ impl Kagan {
             .screen
             .review()
             .filter(|_| {
-                self.replaced.chosen.get(&Slot::Review) == Some(plugin)
-                    && self.replaced.mounted.contains_key(&Slot::Review)
+                self.slots.replaced.chosen.get(&Slot::Review) == Some(plugin)
+                    && self.slots.replaced.mounted.contains_key(&Slot::Review)
             })
             .ok_or_else(|| format!("{plugin} does not draw the review on screen"))?;
         if comment.text.len() > MAX_COMMENT {

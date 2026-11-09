@@ -4,14 +4,14 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use kg_domain::{
-    BrowserOp, BrowserSnapshot, ConfigOp, Op, OpError, OpResult, PluginOp, PreviewKind, ThreadOp,
-    UiSnapshot,
+    BrowserOp, BrowserSnapshot, ConfigOp, Op, OpError, OpResult, PluginOp, PreviewKind, TEXT_MAX,
+    ThreadOp, UiSnapshot, is_git_source,
 };
 
 use crate::socket::Client;
 
 pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
-    let op = take_value(take_browser_text(take_paste(op)?)?)?;
+    let op = take_value(take_file_text(op, std::io::stdin().lock())?)?;
     let next = match &op {
         Op::Plugin(PluginOp::New { name, dir }) => {
             Some((true, dir.clone().unwrap_or_else(|| PathBuf::from(name))))
@@ -240,91 +240,32 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
     Ok(())
 }
 
-const PASTE_CAP: u64 = 1024 * 1024;
-
-pub(crate) fn take_paste(op: Op) -> Result<Op, OpError> {
-    take_paste_from(op, std::io::stdin().lock())
-}
-
-pub(crate) fn take_paste_from(op: Op, stdin: impl std::io::Read) -> Result<Op, OpError> {
-    let Op::Thread(ThreadOp::Paste {
-        id,
-        text,
-        file,
-        terminal,
-    }) = op
-    else {
+/// Reads the `--file` of a paste or a browser fill (`-` is stdin) and sends its text, so a
+/// password stays out of argv and the process list.
+pub(crate) fn take_file_text(mut op: Op, stdin: impl std::io::Read) -> Result<Op, OpError> {
+    let (text, path, noun) = match &mut op {
+        Op::Thread(ThreadOp::Paste { text, file, .. }) => {
+            (text, file.take().map(PathBuf::from), "paste")
+        }
+        Op::Browser(BrowserOp::Fill { text, file, .. }) => (text, file.take(), "text"),
+        _ => return Ok(op),
+    };
+    let Some(path) = path else {
         return Ok(op);
     };
-    let Some(path) = file else {
-        return Ok(Op::Thread(ThreadOp::Paste {
-            id,
-            text,
-            file: None,
-            terminal,
-        }));
-    };
-    if text.is_some() {
-        return Err(OpError::Invalid("pass the text or --file, not both".into()));
-    }
-    let bytes = if path == "-" {
-        read_capped(stdin, "paste")?
-    } else {
-        read_file(Path::new(&path), "paste")?
-    };
-    let text =
-        String::from_utf8(bytes).map_err(|_| OpError::Invalid("paste must be UTF-8".into()))?;
-    Ok(Op::Thread(ThreadOp::Paste {
-        id,
-        text: Some(text),
-        file: None,
-        terminal,
-    }))
-}
-
-/// Reads a `browser fill --file`, so a password stays out of argv and the process list.
-pub(crate) fn take_browser_text(op: Op) -> Result<Op, OpError> {
-    take_browser_text_from(op, std::io::stdin().lock())
-}
-
-pub(crate) fn take_browser_text_from(op: Op, stdin: impl std::io::Read) -> Result<Op, OpError> {
-    let Op::Browser(BrowserOp::Fill {
-        ref_id,
-        text,
-        file,
-        thread_id,
-    }) = op
-    else {
-        return Ok(op);
-    };
-    let Some(path) = file else {
-        return Ok(Op::Browser(BrowserOp::Fill {
-            ref_id,
-            text,
-            file: None,
-            thread_id,
-        }));
-    };
-    if text.is_some() {
-        return Err(OpError::Invalid("pass the text or --file, not both".into()));
-    }
     let bytes = if path == Path::new("-") {
-        read_capped(stdin, "text")?
+        read_capped(stdin, noun)?
     } else {
-        read_file(&path, "text")?
+        read_file(&path, noun)?
     };
-    let text =
-        String::from_utf8(bytes).map_err(|_| OpError::Invalid("text must be UTF-8".into()))?;
-    Ok(Op::Browser(BrowserOp::Fill {
-        ref_id,
-        text: Some(text),
-        file: None,
-        thread_id,
-    }))
+    *text = Some(
+        String::from_utf8(bytes).map_err(|_| OpError::Invalid(format!("{noun} must be UTF-8")))?,
+    );
+    Ok(op)
 }
 
-/// A setting value left off the command line comes from a prompt that does not show it, or
-/// from stdin, so a secret stays out of shell history.
+// A setting value left off the command line comes from a prompt that does not show it, or
+// from stdin, so a secret stays out of shell history.
 fn take_value(op: Op) -> Result<Op, OpError> {
     use std::io::IsTerminal as _;
     let stdin = std::io::stdin();
@@ -374,10 +315,11 @@ fn read_file(path: &Path, noun: &str) -> Result<Vec<u8>, OpError> {
     let meta = std::fs::metadata(path)
         .map_err(|error| OpError::Invalid(format!("could not read {}: {error}", path.display())))?;
     // A fifo reports length 0, and a file can grow after this check.
-    if meta.is_file() && meta.len() > PASTE_CAP {
+    if meta.is_file() && meta.len() > TEXT_MAX as u64 {
         return Err(OpError::Invalid(format!(
-            "{noun} is {} bytes; the cap is 1 MiB",
-            meta.len()
+            "{noun} is {} bytes; the cap is {} MiB",
+            meta.len(),
+            TEXT_MAX >> 20
         )));
     }
     let file = std::fs::File::open(path)
@@ -403,9 +345,10 @@ fn read_capped(mut reader: impl std::io::Read, noun: &str) -> Result<Vec<u8>, Op
             break;
         }
         let next = bytes.len().saturating_add(read);
-        if u64::try_from(next).unwrap_or(u64::MAX) > PASTE_CAP {
+        if next > TEXT_MAX {
             return Err(OpError::Invalid(format!(
-                "{noun} is {next} bytes; the cap is 1 MiB"
+                "{noun} is {next} bytes; the cap is {} MiB",
+                TEXT_MAX >> 20
             )));
         }
         bytes.extend_from_slice(&chunk[..read]);
@@ -414,18 +357,21 @@ fn read_capped(mut reader: impl std::io::Read, noun: &str) -> Result<Vec<u8>, Op
 }
 
 pub(crate) fn format_browser_snapshot(snapshot: &BrowserSnapshot) -> String {
+    use std::fmt::Write as _;
+
     let mut out = String::new();
-    let _ = std::fmt::Write::write_fmt(&mut out, format_args!("{}\n", snapshot.url));
+    let _ = writeln!(out, "{}", snapshot.url);
     if !snapshot.title.is_empty() {
-        let _ = std::fmt::Write::write_fmt(&mut out, format_args!("{}\n", snapshot.title));
+        let _ = writeln!(out, "{}", snapshot.title);
     }
     for control in &snapshot.controls {
-        let _ = std::fmt::Write::write_fmt(
-            &mut out,
-            format_args!("[{}] {} {:?}", control.ref_id, control.role, control.name),
+        let _ = write!(
+            out,
+            "[{}] {} {:?}",
+            control.ref_id, control.role, control.name
         );
         if let Some(value) = &control.value {
-            let _ = std::fmt::Write::write_fmt(&mut out, format_args!(" value={value:?}"));
+            let _ = write!(out, " value={value:?}");
         }
         out.push('\n');
     }
@@ -438,37 +384,38 @@ pub(crate) fn format_browser_snapshot(snapshot: &BrowserSnapshot) -> String {
 }
 
 fn format_ui_snapshot(snapshot: &UiSnapshot) -> String {
+    use std::fmt::Write as _;
+
     let mut out = String::new();
     for element in &snapshot.elements {
-        let _ = std::fmt::Write::write_fmt(
-            &mut out,
-            format_args!(
-                "{} role={} label={:?} value={:?} bounds=({:.1},{:.1},{:.1},{:.1}) focused={} disabled={} selected={} visible={}\n",
-                element.id,
-                element.role.as_deref().unwrap_or("-"),
-                element.label,
-                element.value,
-                element.bounds.x,
-                element.bounds.y,
-                element.bounds.width,
-                element.bounds.height,
-                element
-                    .focused
-                    .map(|focused| focused.to_string())
-                    .as_deref()
-                    .unwrap_or("-"),
-                element
-                    .disabled
-                    .map(|disabled| disabled.to_string())
-                    .as_deref()
-                    .unwrap_or("-"),
-                element
-                    .selected
-                    .map(|selected| selected.to_string())
-                    .as_deref()
-                    .unwrap_or("-"),
-                element.visible,
-            ),
+        let _ = writeln!(
+            out,
+            "{} role={} label={:?} value={:?} bounds=({:.1},{:.1},{:.1},{:.1}) focused={} disabled={} selected={} visible={} hint={:?}",
+            element.id,
+            element.role.as_deref().unwrap_or("-"),
+            element.label,
+            element.value,
+            element.bounds.x,
+            element.bounds.y,
+            element.bounds.width,
+            element.bounds.height,
+            element
+                .focused
+                .map(|focused| focused.to_string())
+                .as_deref()
+                .unwrap_or("-"),
+            element
+                .disabled
+                .map(|disabled| disabled.to_string())
+                .as_deref()
+                .unwrap_or("-"),
+            element
+                .selected
+                .map(|selected| selected.to_string())
+                .as_deref()
+                .unwrap_or("-"),
+            element.visible,
+            element.hint,
         );
     }
     out
@@ -543,7 +490,7 @@ pub(crate) fn paths(mut op: Op) -> Result<Op, OpError> {
                     kg_domain::IndexOp::Add { location: source }
                     | kg_domain::IndexOp::Remove { location: source },
             },
-        ) if !source.starts_with("git:") && Path::new(source.as_str()).exists() => {
+        ) if !is_git_source(source) && Path::new(source.as_str()).exists() => {
             let mut path = PathBuf::from(&*source);
             absolute(&mut path);
             *source = path

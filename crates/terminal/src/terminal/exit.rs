@@ -37,7 +37,7 @@ impl super::Terminal {
             // The leader is gone, so its tree is what still holds the pty open. Kill it now, so
             // the output can end.
             #[cfg(unix)]
-            crate::tree::kill_tree(self.process_id);
+            kg_process::kill_tree(self.process_id);
             *self.observed.get_or_init(|| (exit, self.now()))
         };
         if !self.ended.load(Ordering::Acquire) && self.now().saturating_sub(observed) < DRAIN {
@@ -61,8 +61,8 @@ impl super::Terminal {
         // exit could never be read. The leader and its tree are killed by pid, and reaped later.
         #[cfg(unix)]
         {
-            crate::tree::kill_leader(self.process_id);
-            crate::tree::kill_tree(self.process_id);
+            kg_process::kill_leader(self.process_id);
+            kg_process::kill_tree(self.process_id);
         }
         #[cfg(windows)]
         {
@@ -70,6 +70,7 @@ impl super::Terminal {
                 job.terminate();
             }
             if let Some(child) = lock(&self.child).as_mut() {
+                // The program may already have exited.
                 let _ = child.kill();
             }
         }

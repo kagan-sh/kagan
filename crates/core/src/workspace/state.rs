@@ -1,9 +1,11 @@
+use std::collections::BTreeSet;
+
 use gpui_kit::{App, AppContext as _, AsyncApp, Entity, WeakEntity};
 use kg_domain::{EnvironmentId, ProjectId, ThreadId};
 
 use crate::host::database::Result;
 use crate::workspace::clock::{closed, time};
-use crate::workspace::screens::remember;
+use crate::workspace::screens::{remember, restore_unshown};
 use crate::{Environment, Project, Thread};
 
 use super::{Workspace, WorkspaceEvent};
@@ -47,22 +49,12 @@ impl Workspace {
         self.environments.get(id)
     }
     pub(crate) async fn refresh(this: &WeakEntity<Self>, cx: &mut AsyncApp) -> Result<()> {
-        let database = this
-            .update(cx, |workspace, _| workspace.database.clone())
-            .map_err(closed)?;
+        let database = crate::workspace::database(this, cx)?;
         let (projects, environments, threads, sections, endings, screens) = database
             .call(|store| {
-                let projects = store.projects()?;
-                let environments = projects
-                    .iter()
-                    .map(|project| store.environments(&project.id))
-                    .collect::<kg_store::Result<Vec<_>>>()?
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>();
                 Ok((
-                    projects,
-                    environments,
+                    store.projects()?,
+                    store.all_environments()?,
                     store.all_threads()?,
                     store.sections()?,
                     store.endings()?,
@@ -70,64 +62,72 @@ impl Workspace {
                 ))
             })
             .await?;
-        this.update(cx, |workspace, cx| {
-            workspace.sections = sections;
-            workspace
-                .projects
-                .retain(|id, _| projects.iter().any(|record| &record.id == id));
-            workspace
-                .environments
-                .retain(|id, _| environments.iter().any(|record| &record.id == id));
-            for record in projects {
-                if let Some(entity) = workspace.projects.get(&record.id) {
-                    entity.update(cx, |project, cx| {
-                        project.record = record;
-                        cx.notify();
-                    });
-                } else {
-                    workspace
-                        .projects
-                        .insert(record.id.clone(), cx.new(|_| Project { record }));
+        let unshown = this
+            .update(cx, |workspace, cx| {
+                workspace.sections = sections;
+                let project_ids: BTreeSet<&ProjectId> =
+                    projects.iter().map(|record| &record.id).collect();
+                workspace.projects.retain(|id, _| project_ids.contains(id));
+                let environment_ids: BTreeSet<&EnvironmentId> =
+                    environments.iter().map(|record| &record.id).collect();
+                workspace
+                    .environments
+                    .retain(|id, _| environment_ids.contains(id));
+                for record in projects {
+                    if let Some(entity) = workspace.projects.get(&record.id) {
+                        entity.update(cx, |project, cx| {
+                            project.record = record;
+                            cx.notify();
+                        });
+                    } else {
+                        workspace
+                            .projects
+                            .insert(record.id.clone(), cx.new(|_| Project { record }));
+                    }
                 }
-            }
-            for record in environments {
-                if let Some(entity) = workspace.environments.get(&record.id) {
-                    entity.update(cx, |environment, cx| {
-                        environment.record = record;
-                        cx.notify();
-                    });
-                } else {
-                    workspace
-                        .environments
-                        .insert(record.id.clone(), cx.new(|_| Environment { record }));
+                for record in environments {
+                    if let Some(entity) = workspace.environments.get(&record.id) {
+                        entity.update(cx, |environment, cx| {
+                            environment.record = record;
+                            cx.notify();
+                        });
+                    } else {
+                        workspace
+                            .environments
+                            .insert(record.id.clone(), cx.new(|_| Environment { record }));
+                    }
                 }
-            }
-            workspace
-                .threads
-                .retain(|id, _| threads.iter().any(|record| &record.id == id));
-            for record in threads {
-                if let Some(entity) = workspace.threads.get(&record.id) {
-                    entity.update(cx, |thread, cx| {
-                        thread.record = record;
-                        cx.notify();
-                    });
-                } else {
-                    workspace
-                        .threads
-                        .insert(record.id.clone(), cx.new(|_| Thread::new(record)));
+                let thread_ids: BTreeSet<&ThreadId> =
+                    threads.iter().map(|record| &record.id).collect();
+                workspace.threads.retain(|id, _| thread_ids.contains(id));
+                for record in threads {
+                    if let Some(entity) = workspace.threads.get(&record.id) {
+                        entity.update(cx, |thread, cx| {
+                            thread.record = record;
+                            cx.notify();
+                        });
+                    } else {
+                        workspace
+                            .threads
+                            .insert(record.id.clone(), cx.new(|_| Thread::new(record)));
+                    }
                 }
-            }
-            workspace.ends.clear();
-            for (id, kinds) in endings {
-                if let Some(end) = crate::end::End::from_newest(&kinds) {
-                    workspace.ends.insert(id, end);
+                for run in workspace.runs.values_mut() {
+                    run.end = None;
+                    run.loss = None;
                 }
-            }
-            workspace.losses = remember(workspace, screens);
-            cx.emit(WorkspaceEvent::Changed);
-            cx.notify();
-        })
-        .map_err(closed)
+                for (id, kinds) in endings {
+                    if let Some(end) = crate::end::End::from_newest(&kinds) {
+                        workspace.run_mut(&id).end = Some(end);
+                    }
+                }
+                let unshown = remember(workspace, screens);
+                cx.emit(WorkspaceEvent::Changed);
+                cx.notify();
+                unshown
+            })
+            .map_err(closed)?;
+        restore_unshown(this, unshown, cx).await
     }
     pub(crate) async fn events(
         this: &WeakEntity<Self>,
@@ -145,9 +145,7 @@ impl Workspace {
         kinds: Vec<kg_domain::EventKind>,
         cx: &mut AsyncApp,
     ) -> Result<()> {
-        let database = this
-            .update(cx, |workspace, _| workspace.database.clone())
-            .map_err(closed)?;
+        let database = crate::workspace::database(this, cx)?;
         let started = kinds
             .iter()
             .any(|kind| matches!(kind, kg_domain::EventKind::Started));
@@ -186,14 +184,12 @@ impl Workspace {
             }
             newest.reverse();
             if let Some(seq) = run {
-                workspace.runs.insert(thread_id.clone(), seq);
-                workspace.saved.retain(|(thread, _)| thread != &thread_id);
-                workspace.losses.remove(&thread_id);
-                workspace.ends.remove(&thread_id);
+                workspace.run_mut(&thread_id).begin(seq);
             }
             if let Some(end) = crate::end::End::from_newest(&newest) {
-                workspace.ends.insert(thread_id, end);
+                workspace.run_mut(&thread_id).end = Some(end);
             }
+            crate::thread::notify::after(workspace, &thread_id, &events, cx);
             for event in events {
                 cx.emit(WorkspaceEvent::Event {
                     event,

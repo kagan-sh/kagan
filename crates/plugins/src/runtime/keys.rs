@@ -65,7 +65,6 @@ pub fn sequence(binding: &KeyBinding) -> Vec<String> {
         .collect()
 }
 
-/// Whether a binding can fire in the window: it has no context, or its context is the window's.
 fn in_window(predicate: Option<Rc<KeyBindingContextPredicate>>) -> bool {
     predicate.is_none_or(|predicate| predicate.to_string().contains(WINDOW_CONTEXT))
 }

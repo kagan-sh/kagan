@@ -17,8 +17,6 @@ use serde::Deserialize;
 use crate::host::database::{Database, Result};
 pub use install::Target;
 
-pub(crate) const PREFERENCE: &str = "update-check";
-
 // A test build can name its own key. Nothing at runtime can replace it.
 const KEY: &str = match option_env!("KG_UPDATE_KEY") {
     Some(key) => key,
@@ -29,7 +27,7 @@ const DAY: Duration = Duration::from_hours(24);
 const TICK: Duration = Duration::from_hours(1);
 const LIMIT: u64 = 512 * 1024 * 1024;
 
-/// `update.json`, read only after its own signature checks.
+// `update.json`, read only after its own signature checks.
 #[derive(Deserialize)]
 struct Manifest {
     version: String,
@@ -330,7 +328,7 @@ pub(crate) async fn run(database: &Database, op: UpdateOp, cx: &mut AsyncApp) ->
 
 async fn automatic_on(database: &Database) -> bool {
     database
-        .call(|store| store.setting(PREFERENCE))
+        .call(|store| store.setting(kg_domain::prefs::UPDATE_CHECK))
         .await
         .ok()
         .flatten()
@@ -374,7 +372,7 @@ pub(crate) fn newer(current: &Version, offered: &str) -> Option<Version> {
     (offered.pre.is_empty() && offered > *current).then_some(offered)
 }
 
-/// `signature` is the `.sig` file cargo-packager writes: a minisign signature, base64 encoded.
+// `signature` is the `.sig` file cargo-packager writes: a minisign signature, base64 encoded.
 fn verify(bytes: &[u8], signature: &str, key: &str) -> std::result::Result<(), UpdateError> {
     let key = PublicKey::from_base64(key).map_err(|error| UpdateError::Key(error.to_string()))?;
     let text = base64::engine::general_purpose::STANDARD
@@ -387,7 +385,7 @@ fn verify(bytes: &[u8], signature: &str, key: &str) -> std::result::Result<(), U
         .map_err(|_| UpdateError::Mismatch)
 }
 
-/// HTTPS, or plain HTTP to this machine for tests and local proof. Everything read is signed.
+// HTTPS, or plain HTTP to this machine for tests and local proof. Everything read is signed.
 fn allowed(url: &reqwest::Url) -> bool {
     url.scheme() == "https"
         || (url.scheme() == "http"

@@ -5,9 +5,8 @@ use std::path::PathBuf;
 use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 
-use super::ThreadId;
-
-const BROWSER_TEXT_MAX: usize = 1024 * 1024;
+use super::check::carried_text;
+use super::{TEXT_MAX, ThreadId};
 
 /// What a thread may do with the Browser tab's one page.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
@@ -170,32 +169,20 @@ pub struct BrowserControl {
     pub checked: Option<bool>,
 }
 
-pub(super) fn browser_check(op: &BrowserOp) -> Result<(), &'static str> {
+pub(super) fn browser_check(op: &BrowserOp) -> Result<(), String> {
     match op {
         BrowserOp::Open { url, .. } | BrowserOp::Goto { url, .. } if url.trim().is_empty() => {
-            Err("type a web address, such as example.com")
+            Err("type a web address, such as example.com".into())
         }
-        BrowserOp::Fill {
-            text: Some(_),
-            file: Some(_),
-            ..
-        } => Err("pass the text or --file, not both"),
-        BrowserOp::Fill {
-            text: None,
-            file: None,
-            ..
-        } => Err("pass the text or --file"),
-        BrowserOp::Fill {
-            text: Some(text), ..
+        BrowserOp::Fill { text, file, .. } => carried_text(text.as_ref(), file.as_ref()),
+        BrowserOp::Type { text, .. } if text.len() > TEXT_MAX => {
+            Err(format!("text is over {} MiB", TEXT_MAX >> 20))
         }
-        | BrowserOp::Type { text, .. }
-            if text.len() > BROWSER_TEXT_MAX =>
-        {
-            Err("text is over 1 MiB")
+        BrowserOp::Type { text, .. } if text.is_empty() => Err("text must not be empty".into()),
+        BrowserOp::Press { key, .. } if key.trim().is_empty() => {
+            Err("key must not be empty".into())
         }
-        BrowserOp::Type { text, .. } if text.is_empty() => Err("text must not be empty"),
-        BrowserOp::Press { key, .. } if key.trim().is_empty() => Err("key must not be empty"),
-        BrowserOp::Scroll { dy, .. } if !dy.is_finite() => Err("scroll must be a number"),
+        BrowserOp::Scroll { dy, .. } if !dy.is_finite() => Err("scroll must be a number".into()),
         _ => Ok(()),
     }
 }

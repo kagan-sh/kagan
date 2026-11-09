@@ -2,100 +2,93 @@ use std::path::PathBuf;
 
 use gpui_kit::{AppContext as _, AsyncApp, Entity};
 use kg_core::{Requester, Workspace};
-use kg_domain::{OpError, OpResult, Plugin, PluginId, PluginOp, ThreadId};
+use kg_domain::{OpError, OpResult, Plugin, PluginId, ThreadId};
 
 use crate::manifest::Grant;
 use crate::source::{Source, fetch};
 use crate::{PluginHost, Result};
 
-use super::approve::{approve, choose, removal_options};
+use super::approve::{approve, choose, options};
 use super::install::keep;
 use super::{approved, record, start};
+use crate::host::{Hold, hold};
 
-pub(in crate::runtime::ops) async fn develop(
+pub(in crate::runtime::ops) async fn new(
     host: &Entity<PluginHost>,
-    op: PluginOp,
+    name: String,
+    dir: Option<PathBuf>,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let components = host.read_with(cx, |host, _| host.components());
+    cx.background_spawn(async move { crate::development::new(&name, dir, &components) })
+        .await
+}
+
+pub(in crate::runtime::ops) async fn check(
+    host: &Entity<PluginHost>,
+    path: PathBuf,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let (data_dir, components) =
+        host.read_with(cx, |host, _| (host.data_dir.clone(), host.components()));
+    cx.background_spawn(async move {
+        let warnings = crate::development::check(&path, &data_dir, &components)?;
+        Ok(if warnings.is_empty() {
+            OpResult::Done
+        } else {
+            OpResult::Warnings(warnings)
+        })
+    })
+    .await
+}
+
+pub(in crate::runtime::ops) async fn share(
+    host: &Entity<PluginHost>,
+    path: PathBuf,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let (data_dir, components) =
+        host.read_with(cx, |host, _| (host.data_dir.clone(), host.components()));
+    cx.background_spawn(async move { crate::share::share(&path, &data_dir, &components) })
+        .await
+}
+
+pub(in crate::runtime::ops) async fn types(
+    host: &Entity<PluginHost>,
+    path: PathBuf,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let components = host.read_with(cx, |host, _| host.components());
+    cx.background_spawn(async move {
+        crate::development::types(&path, &components).map(OpResult::Files)
+    })
+    .await
+}
+
+pub(in crate::runtime::ops) async fn reload_enabled(
+    host: &Entity<PluginHost>,
+    id: PluginId,
+    thread_id: Option<ThreadId>,
     requester: Option<Requester>,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    match op {
-        PluginOp::New { name, dir } => {
-            let components = host.read_with(cx, |host, _| host.components());
-            cx.background_spawn(async move { crate::development::new(&name, dir, &components) })
-                .await
-        }
-        PluginOp::Check { path } => {
-            let (data_dir, components) =
-                host.read_with(cx, |host, _| (host.data_dir.clone(), host.components()));
-            cx.background_spawn(async move {
-                let warnings = crate::development::check(&path, &data_dir, &components)?;
-                Ok(if warnings.is_empty() {
-                    OpResult::Done
-                } else {
-                    OpResult::Warnings(warnings)
-                })
-            })
-            .await
-        }
-        PluginOp::Share { path } => {
-            let (data_dir, components) =
-                host.read_with(cx, |host, _| (host.data_dir.clone(), host.components()));
-            cx.background_spawn(async move { crate::share::share(&path, &data_dir, &components) })
-                .await
-        }
-        PluginOp::Types { path } => {
-            let components = host.read_with(cx, |host, _| host.components());
-            cx.background_spawn(async move {
-                crate::development::types(&path, &components).map(OpResult::Files)
-            })
-            .await
-        }
-        PluginOp::List => Ok(OpResult::Plugins(host.read_with(cx, |host, _| {
-            host.records
-                .values()
-                .map(|record| Plugin {
-                    error: host.failure(&record.id),
-                    source: crate::index::shown(&record.source),
-                    ..record.clone()
-                })
-                .collect()
-        }))),
-        PluginOp::Remove { id, thread_id } => remove(host, id, thread_id, requester, cx).await,
-        PluginOp::CancelInstall => {
-            if host.read_with(cx, |host, _| host.stop_install()) {
-                Ok(OpResult::Done)
-            } else {
-                Err(OpError::Invalid("no git install is running".into()))
-            }
-        }
-        PluginOp::Reload { id, thread_id } => {
-            let record = record(host, &id, cx)?;
-            if !record.enabled {
-                return Err(OpError::Invalid(format!("plugin {id} is disabled")));
-            }
-            reload(host, record, thread_id, requester, cx).await
-        }
-        PluginOp::Dev { path, thread_id } => dev(host, path, thread_id, requester, cx).await,
-        PluginOp::Logs { id, after, .. } => {
-            record(host, &id, cx)?;
-            let path = host.read_with(cx, |host, _| {
-                host.data_dir.join("plugins").join(&id.0).join("logs.jsonl")
-            });
-            cx.background_spawn(async move { crate::development::logs(&path, after.unwrap_or(0)) })
-                .await
-        }
-        PluginOp::Start
-        | PluginOp::Cli { .. }
-        | PluginOp::Command { .. }
-        | PluginOp::Install { .. }
-        | PluginOp::Update { .. }
-        | PluginOp::Index { .. }
-        | PluginOp::Search { .. }
-        | PluginOp::Enable { .. }
-        | PluginOp::Disable { .. }
-        | PluginOp::Config { .. }
-        | PluginOp::Use { .. } => Err(OpError::Failed("not a development operation".into())),
+    let record = record(host, &id, cx)?;
+    if !record.enabled {
+        return Err(OpError::Invalid(format!("plugin {id} is disabled")));
     }
+    reload(host, record, thread_id, requester, cx).await
+}
+
+pub(in crate::runtime::ops) async fn logs(
+    host: &Entity<PluginHost>,
+    id: PluginId,
+    after: Option<u64>,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    record(host, &id, cx)?;
+    let path = host.read_with(cx, |host, _| kg_core::plugin_log_file(&host.data_dir, &id));
+    cx.background_spawn(async move { crate::development::logs(&path, after.unwrap_or(0)) })
+        .await
 }
 
 pub(in crate::runtime::ops) async fn enable(
@@ -124,21 +117,15 @@ pub(in crate::runtime::ops) async fn disable(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     record(host, &id, cx)?;
-    host.update(cx, |host, cx| {
+    let stop = |host: &mut PluginHost, cx: &mut gpui_kit::Context<PluginHost>| {
         host.disable_loaded(&id, cx);
         if let Some(record) = host.records.get_mut(&id) {
             record.enabled = false;
         }
-    });
-    #[cfg(test)]
-    if let Some(hold) = host.update(cx, |host, _| host.lifecycle_hold.take()) {
-        let _ = hold.recv().await;
-        host.update(cx, |host, cx| {
-            host.disable_loaded(&id, cx);
-            if let Some(record) = host.records.get_mut(&id) {
-                record.enabled = false;
-            }
-        });
+    };
+    host.update(cx, stop);
+    if hold(host, Hold::Lifecycle, cx).await {
+        host.update(cx, stop);
     }
     set_enabled(&id, false, cx).await?;
     Ok(OpResult::Done)
@@ -158,7 +145,7 @@ pub(in crate::runtime::ops) async fn remove(
         requester,
         question.clone(),
         &question,
-        removal_options(),
+        options("Remove", true),
         cx,
     )
     .await?;
@@ -169,15 +156,13 @@ pub(in crate::runtime::ops) async fn remove(
             .map(|active| active.manifest.settings.secrets())
             .unwrap_or_default()
     });
-    host.update(cx, |host, _| host.end_activation(&id));
+    let paused = host.update(cx, |host, _| host.pause_activation(&id));
     let workspace = cx.update(|cx| Workspace::global(cx));
-    if let Err(error) = workspace
+    workspace
         .read_with(cx, |workspace, _| workspace.remove_plugin(id.clone()))
-        .await
-    {
-        host.update(cx, |host, _| host.resume_activation(&id));
-        return Err(error);
-    }
+        .await?;
+    paused.commit();
+    host.update(cx, |host, _| host.end_activation(&id));
     let data = host.read_with(cx, |host, _| host.plugin_data(&id));
     let store_ids = crate::web_store::read_store_ids(&data);
     host.update(cx, |host, cx| {
@@ -188,7 +173,6 @@ pub(in crate::runtime::ops) async fn remove(
         host.active.remove(&id);
         host.records.remove(&id);
         host.warnings.remove(&id);
-        host.skipped.remove(&id);
         host.identities.remove(&id);
         cx.notify();
     });
@@ -266,7 +250,7 @@ pub(in crate::runtime::ops) async fn reload(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
-    let plugins = data_dir.join("plugins");
+    let plugins = kg_core::plugins_dir(&data_dir);
     let root = record.root.clone();
     let mut fetched = cx
         .background_spawn(async move {
@@ -298,7 +282,7 @@ pub(in crate::runtime::ops) async fn reload(
             ),
             Vec::new(),
             grant.added(&approved),
-            false,
+            "Approve",
             cx,
         )
         .await?;
@@ -310,10 +294,10 @@ pub(in crate::runtime::ops) async fn reload(
         ));
     }
     let result = keep(host, fetched, record.source, grant, &plugins, false, cx).await?;
-    let secrets = host.read_with(cx, |host, _| host.secrets.clone());
-    let id = record.id;
-    cx.background_spawn(async move { secrets.log(&id, crate::Level::Info, "reloaded") })
-        .await?;
+    host.update(cx, |host, cx| {
+        host.secrets
+            .note_later(&record.id, crate::Level::Info, "reloaded", cx);
+    });
     Ok(result)
 }
 

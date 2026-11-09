@@ -9,9 +9,10 @@ use serde_json::{Value, json};
 
 use crate::{Cli, Command, json_error};
 
-use super::socket::set_env;
+use super::socket::{drop_inherited_ids, set_env};
 
 pub(super) fn parse(args: &[&str]) -> Op {
+    drop_inherited_ids();
     match Cli::try_parse_from(std::iter::once("kg").chain(args.iter().copied()))
         .unwrap()
         .command
@@ -60,6 +61,119 @@ fn cli_thread_terminal_parses_its_verbs() {
             terminal: Some(2),
         })
     );
+}
+
+const TERMINAL_COMMANDS: [(&[&str], &str); 16] = [
+    (
+        &["input", "thr_1", "ls"],
+        r#"{"input":{"id":"thr_1","text":"ls"}}"#,
+    ),
+    (
+        &["input", "thr_1", "ls", "--terminal", "2"],
+        r#"{"input":{"id":"thr_1","terminal":2,"text":"ls"}}"#,
+    ),
+    (
+        &["resize", "thr_1", "100", "40"],
+        r#"{"resize":{"id":"thr_1","cols":100,"rows":40}}"#,
+    ),
+    (
+        &["resize", "thr_1", "100", "40", "--terminal", "2"],
+        r#"{"resize":{"id":"thr_1","terminal":2,"cols":100,"rows":40}}"#,
+    ),
+    (
+        &["screen", "thr_1"],
+        r#"{"screen":{"id":"thr_1","scrollback":false}}"#,
+    ),
+    (
+        &[
+            "screen",
+            "thr_1",
+            "--terminal",
+            "2",
+            "--scrollback",
+            "--lines",
+            "20",
+        ],
+        r#"{"screen":{"id":"thr_1","terminal":2,"scrollback":true,"lines":20}}"#,
+    ),
+    (
+        &["scroll", "thr_1", "-3"],
+        r#"{"scroll":{"id":"thr_1","lines":-3}}"#,
+    ),
+    (
+        &["scroll", "thr_1", "5", "--terminal", "2"],
+        r#"{"scroll":{"id":"thr_1","terminal":2,"lines":5}}"#,
+    ),
+    (
+        &["select", "thr_1", "word", "4", "1"],
+        r#"{"select":{"id":"thr_1","mode":"word","column":4,"row":1,"right":false}}"#,
+    ),
+    (
+        &[
+            "select",
+            "thr_1",
+            "extend",
+            "4",
+            "1",
+            "--right",
+            "--terminal",
+            "2",
+        ],
+        r#"{"select":{"id":"thr_1","terminal":2,"mode":"extend","column":4,"row":1,"right":true}}"#,
+    ),
+    (&["copy", "thr_1"], r#"{"copy":{"id":"thr_1"}}"#),
+    (
+        &["copy", "thr_1", "--terminal", "2"],
+        r#"{"copy":{"id":"thr_1","terminal":2}}"#,
+    ),
+    (
+        &["report", "thr_1", "27", "91", "77"],
+        r#"{"report":{"id":"thr_1","bytes":[27,91,77]}}"#,
+    ),
+    (
+        &["report", "thr_1", "27", "91", "77", "--terminal", "2"],
+        r#"{"report":{"id":"thr_1","terminal":2,"bytes":[27,91,77]}}"#,
+    ),
+    (
+        &["paste", "thr_1", "hi"],
+        r#"{"paste":{"id":"thr_1","text":"hi"}}"#,
+    ),
+    (
+        &["paste", "thr_1", "--file", "-", "--terminal", "2"],
+        r#"{"paste":{"id":"thr_1","terminal":2,"file":"-"}}"#,
+    ),
+];
+
+#[test]
+fn terminal_commands_parse_to_their_exact_json() {
+    let _thread = set_env("KG_THREAD_ID", std::ffi::OsStr::new("thr_env"));
+    for (args, wire) in TERMINAL_COMMANDS {
+        let with_id = [&["thread"], args].concat();
+        let Op::Thread(op) = parse(&with_id) else {
+            panic!("{args:?} is not a thread op");
+        };
+        assert_eq!(serde_json::to_string(&op).unwrap(), wire, "{args:?}");
+
+        if args[2..]
+            .first()
+            .is_some_and(|word| !word.starts_with("--"))
+        {
+            continue;
+        }
+        let without_id: Vec<&str> = with_id
+            .iter()
+            .copied()
+            .filter(|word| *word != "thr_1")
+            .collect();
+        let Op::Thread(op) = parse(&without_id) else {
+            panic!("{without_id:?} is not a thread op");
+        };
+        assert_eq!(
+            serde_json::to_string(&op).unwrap(),
+            wire.replace("thr_1", "thr_env"),
+            "{without_id:?}"
+        );
+    }
 }
 
 #[test]
@@ -292,12 +406,14 @@ fn a_missing_id_names_the_variable_that_would_fill_it() {
                 (&["project", "get"][..], "KG_PROJECT_ID"),
                 (&["environment", "get"][..], "KG_ENVIRONMENT_ID"),
             ] {
-                let Err(error) =
-                    Cli::try_parse_from(std::iter::once("kg").chain(args.iter().copied()))
-                else {
+                let argv: Vec<String> = std::iter::once("kg")
+                    .chain(args.iter().copied())
+                    .map(String::from)
+                    .collect();
+                let Err(error) = Cli::try_parse_from(argv.clone()) else {
                     panic!("{args:?} parsed without an id");
                 };
-                let value: Value = serde_json::from_str(&json_error(&error)).unwrap();
+                let value: Value = serde_json::from_str(&json_error(&error, &argv)).unwrap();
                 assert_eq!(value["error"]["kind"], "invalid");
                 assert!(
                     value["error"]["message"]
@@ -310,10 +426,11 @@ fn a_missing_id_names_the_variable_that_would_fill_it() {
                 );
                 assert!(value.get("ok").is_none());
             }
-            let Err(error) = Cli::try_parse_from(["kg", "thread", "run"]) else {
+            let argv = ["kg", "thread", "run"].map(String::from);
+            let Err(error) = Cli::try_parse_from(argv.clone()) else {
                 panic!("thread run parsed without its arguments");
             };
-            let value: Value = serde_json::from_str(&json_error(&error)).unwrap();
+            let value: Value = serde_json::from_str(&json_error(&error, &argv)).unwrap();
             assert!(value["error"].get("hint").is_none(), "{value}");
         }
         _ => {

@@ -6,7 +6,7 @@ use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, Anchor, AnyElement, App, ClickEvent, Context, ElementId, Entity, FocusHandle, Hsla,
-    InteractiveElement, IntoElement, ParentElement as _, Role, SharedString,
+    InteractiveElement, IntoElement, Keystroke, ParentElement as _, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, anchored, deferred, div, px,
 };
 use kg_domain::PluginId;
@@ -16,7 +16,6 @@ use crate::theme::{SpaceStep, TypeScale as _, space};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-/// A thread actions menu item `kg ui` can find and activate by id, named as it shows.
 pub(super) fn menu_item(id: &'static str, label: &'static str) -> impl IntoElement {
     control(
         id,
@@ -28,12 +27,6 @@ pub(super) fn menu_item(id: &'static str, label: &'static str) -> impl IntoEleme
     )
 }
 
-/// A container `kg ui` can find by id. It has no role or state of its own.
-pub(super) fn container(id: &'static str, child: impl IntoElement) -> impl IntoElement {
-    div().id(id).ui_container().child(child)
-}
-
-/// A control `kg ui` can find by id. Its facts are required: see `Facts`.
 pub(super) fn control(
     id: impl Into<gpui_kit::ElementId>,
     facts: Facts,
@@ -93,9 +86,9 @@ pub(super) fn note(
         .into_any_element()
 }
 
-/// The menu, under the button it is wrapped in: its top right corner sits on the button's bottom
-/// right corner. The zero-size holder is placed there, because an anchored child on its own sits at
-/// the button's top left.
+// The menu, under the button it is wrapped in: its top right corner sits on the button's bottom
+// right corner. The zero-size holder is placed there, because an anchored child on its own sits at
+// the button's top left.
 pub(super) fn menu_popup(
     menu: &Entity<PopupMenu>,
     layer: &'static str,
@@ -131,23 +124,33 @@ pub(super) fn dispatch(
     move |_, window, cx| window.dispatch_action(action.boxed_clone(), cx)
 }
 
-pub(super) fn bound_keys(action: &dyn Action, cx: &App) -> String {
+pub(super) fn bound_strokes(action: &dyn Action, cx: &App) -> Vec<Keystroke> {
     cx.key_bindings()
         .borrow()
         .bindings()
-        .find(|binding| binding.action().name() == action.name())
+        .find(|binding| binding.action().partial_eq(action))
         .map(|binding| {
             binding
                 .keystrokes()
                 .iter()
-                .map(|key| Kbd::format(key.inner()))
-                .collect::<Vec<_>>()
-                .join(" ")
+                .map(|stroke| stroke.inner().clone())
+                .collect()
         })
         .unwrap_or_default()
 }
 
-/// A tooltip with the action's live key, so the label always matches the keymap.
+pub(super) fn bound_keys(action: &dyn Action, cx: &App) -> String {
+    keys_text(&bound_strokes(action, cx))
+}
+
+pub(super) fn keys_text<'a>(strokes: impl IntoIterator<Item = &'a Keystroke>) -> String {
+    strokes
+        .into_iter()
+        .map(Kbd::format)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 pub(super) fn tip(label: &str, action: &dyn Action, cx: &App) -> String {
     let keys = bound_keys(action, cx);
     if keys.is_empty() {
@@ -157,7 +160,6 @@ pub(super) fn tip(label: &str, action: &dyn Action, cx: &App) -> String {
     }
 }
 
-/// An outline button that focuses `focus` and then sends `action` to its handlers.
 pub(super) fn act<A: Action + Clone>(
     name: impl Into<String>,
     label: &'static str,
@@ -180,9 +182,8 @@ pub(super) fn act<A: Action + Clone>(
     .into_any_element()
 }
 
-/// A small outline button that sends its action to the handlers on `focus`'s element. A key
-/// press keeps focus on the button; a mouse press moves focus to `focus`, because a press does
-/// not focus a button.
+// A key press keeps focus on the button; a mouse press moves focus to `focus`, because a press
+// does not focus a button.
 pub(super) fn send<A: Action + Clone>(
     name: impl Into<String>,
     label: &'static str,
@@ -208,7 +209,6 @@ pub(super) fn send<A: Action + Clone>(
     .into_any_element()
 }
 
-/// Answers one named action for a plugin row or card. Its keys and its buttons both reach it.
 pub(super) fn answer<A: Action, E: InteractiveElement>(
     row: E,
     id: &PluginId,

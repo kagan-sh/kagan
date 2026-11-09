@@ -118,10 +118,7 @@ fn retry_runs_a_failed_setup_again_without_a_second_worktree(cx: &mut TestAppCon
     wait_until(cx, |cx| {
         label(cx, window, "setup-failure").contains(".kagan/setup")
     });
-    assert_eq!(
-        label(cx, window, "setup-retry"),
-        "Retry setup in this worktree"
-    );
+    assert_eq!(label(cx, window, "start"), "Retry setup");
     assert!(shown(cx, &kagan).is_none());
     assert_eq!(
         std::fs::read_dir(data.path().join("worktrees"))
@@ -129,7 +126,7 @@ fn retry_runs_a_failed_setup_again_without_a_second_worktree(cx: &mut TestAppCon
             .count(),
         1
     );
-    click(cx, window, "setup-retry");
+    click(cx, window, "start");
     wait_until(cx, |cx| shown(cx, &kagan).is_some());
     assert_eq!(
         std::fs::read_dir(data.path().join("worktrees"))
@@ -221,7 +218,7 @@ fn the_start_screen_can_show_the_pinned_setup_script(cx: &mut TestAppContext) {
     assert_eq!(label(cx, window, "setup-disclose"), "Show script");
     assert!(!shows(cx, window, "setup-body"));
     click(cx, window, "setup-disclose");
-    wait_until(cx, |cx| shows(cx, window, "setup-body"));
+    wait_until(cx, |cx| !label(cx, window, "setup-body").is_empty());
     let script = label(cx, window, "setup-body");
     assert!(script.contains("echo from-commit"), "{script}");
     assert!(!script.contains("from-worktree"), "{script}");
@@ -240,7 +237,7 @@ fn a_long_setup_script_is_capped(cx: &mut TestAppContext) {
     click(cx, window, &format!("project-new-{}", project.id.0));
     wait_until(cx, |cx| shows(cx, window, "setup-disclose"));
     click(cx, window, "setup-disclose");
-    wait_until(cx, |cx| shows(cx, window, "setup-body"));
+    wait_until(cx, |cx| !label(cx, window, "setup-body").is_empty());
     let script = label(cx, window, "setup-body");
     assert!(script.contains("echo line-0"), "{script}");
     assert!(script.contains("echo line-39"), "{script}");
@@ -261,21 +258,20 @@ fn a_changed_script_hides_retry_and_leaves_start(cx: &mut TestAppContext) {
     wait_until(cx, |cx| shows(cx, window, "setup-script"));
     set_program(cx, window, &kagan, shell());
     click(cx, window, "start");
-    wait_until(cx, |cx| shows(cx, window, "setup-retry"));
+    wait_until(cx, |cx| label(cx, window, "start") == "Retry setup");
     let old = only_worktree(data.path());
     std::fs::write(old.join(".kagan/setup"), "echo edited\n").unwrap();
-    click(cx, window, "setup-retry");
+    click(cx, window, "start");
     wait_until(cx, |cx| {
         label(cx, window, "setup-failure").contains("Start will use the version shown")
     });
     let failure = label(cx, window, "setup-failure");
     assert!(failure.contains(".kagan/setup changed"), "{failure}");
-    assert!(!shows(cx, window, "setup-retry"));
-    assert!(shows(cx, window, "start"));
+    assert_eq!(label(cx, window, "start"), "Start");
     assert!(!old.exists());
     assert!(worktree_dirs(data.path()).is_empty());
     click(cx, window, "start");
-    wait_until(cx, |cx| shows(cx, window, "setup-retry"));
+    wait_until(cx, |cx| label(cx, window, "start") == "Retry setup");
     let fresh = only_worktree(data.path());
     assert_eq!(fresh, old);
 }

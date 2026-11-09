@@ -1,7 +1,6 @@
 use gpui_kit::{App, SystemNotification};
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, PreferenceOp, ThreadId};
-use kg_plugins::{PluginHost, PluginHostEvent};
 
 pub(super) fn init(cx: &mut App) {
     cx.set_app_identity("kagan.kg", "Kagan");
@@ -13,13 +12,10 @@ pub(super) fn init(cx: &mut App) {
         if Workspace::global(cx).read(cx).thread(&id).is_none() {
             return;
         }
-        let Some(host) = PluginHost::try_global(cx).map(|host| host.downgrade()) else {
-            return;
-        };
         let opened = Workspace::dispatch(Op::Open, cx);
         cx.spawn(async move |cx| {
             if opened.await.is_ok() {
-                let _ = host.update(cx, |_, cx| cx.emit(PluginHostEvent::OpenThread(id)));
+                cx.update(|cx| super::window::open_thread(&id, cx));
             }
         })
         .detach();
@@ -50,7 +46,7 @@ async fn post(id: ThreadId, title: String, cx: &mut gpui_kit::AsyncApp) {
     let task = cx.update(|cx| {
         Workspace::dispatch(
             Op::Preference(PreferenceOp::Get {
-                key: "notify".into(),
+                key: kg_domain::prefs::NOTIFY.into(),
             }),
             cx,
         )

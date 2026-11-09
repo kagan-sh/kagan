@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use super::fetch::{Area, Fetch};
+use super::fetch::Fetch;
 use super::*;
 
 fn parsed(extra: &Value) -> Manifest {
@@ -195,14 +195,4 @@ fn a_loopback_host_is_shown_without_its_scheme_and_port() {
         fetch("http://LOCALHOST:8080").view_host().unwrap(),
         "localhost"
     );
-}
-
-#[test]
-fn each_area_has_a_name_and_a_phrase() {
-    let names = Area::ALL.iter().map(|area| area.name()).collect::<Vec<_>>();
-    assert_eq!(names, ["Threads", "Database", "Process", "Browser"]);
-    for area in Area::ALL {
-        assert!(!area.id().is_empty());
-        assert!(!area.phrase().is_empty());
-    }
 }

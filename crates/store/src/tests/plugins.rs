@@ -30,11 +30,13 @@ fn plugin_enabled_and_commit_update_the_same_row() {
         commit: Some("abc".into()),
         enabled: true,
         approved: json!({ "powers": { "serve": false } }),
+        skills: vec!["skills/demo".into()],
         error: None,
     };
     store.insert_plugin(&plugin).unwrap();
     plugin.enabled = false;
     plugin.commit = None;
+    plugin.skills = vec!["skills/next".into()];
     store
         .set_plugin_enabled(&plugin.id, plugin.enabled)
         .unwrap();
@@ -45,7 +47,11 @@ fn plugin_enabled_and_commit_update_the_same_row() {
             &plugin.source,
             &plugin.commit,
             &plugin.approved,
+            &plugin.skills,
         )
         .unwrap();
+    assert_eq!(store.plugins().unwrap(), vec![plugin.clone()]);
+    plugin.skills.clear();
+    store.set_plugin_skills(&plugin.id, &plugin.skills).unwrap();
     assert_eq!(store.plugins().unwrap(), vec![plugin]);
 }

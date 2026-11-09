@@ -18,7 +18,6 @@ pub(super) enum Field {
     Arguments,
 }
 
-/// `program` and `arguments` as one command line: the program quoted when it has a space.
 pub(super) fn custom_command(program: &str, arguments: &str) -> Result<String, (Field, String)> {
     if program.is_empty() {
         return Err((Field::Program, "Enter a program to start.".into()));
@@ -89,8 +88,6 @@ impl ListDelegate for Rows {
         })
     }
 
-    /// Escape makes the list clear its selection. A list with programs keeps one: the program
-    /// that starts stays the one the person saw.
     fn set_selected_index(
         &mut self,
         ix: Option<IndexPath>,
@@ -108,11 +105,18 @@ impl ListDelegate for Rows {
         _: &mut Window,
         cx: &mut Context<ListState<Self>>,
     ) -> impl IntoElement {
+        let text = format!(
+            "No program matches “{}”. Clear the search to see them all.",
+            self.query
+        );
         div()
+            .id("program-empty")
+            .ui_container()
             .p_2()
             .type_body(cx)
             .text_color(cx.theme().muted_foreground)
-            .child(format!("No program matches “{}”.", self.query))
+            .aria_label(text.clone())
+            .child(text)
     }
 }
 
@@ -122,7 +126,6 @@ pub(crate) struct ProgramRow {
     pub(super) program: Program,
     pub(super) selected: bool,
     pub(super) mode: Mode,
-    /// The first row sets the list's height. Rows can differ, so the others do not.
     pub(super) first: bool,
     pub(super) list: WeakEntity<ListState<Rows>>,
 }
@@ -138,8 +141,6 @@ impl Selectable for ProgramRow {
     }
 }
 
-/// A custom command field: its name and input, and what the input says under it. Clicking
-/// anywhere in the field focuses the input, and kg ui finds the field by its id.
 pub(super) fn custom_field(
     id: &'static str,
     title: &'static str,
@@ -174,19 +175,39 @@ pub(super) fn custom_field(
         )
 }
 
-/// What a row says after the name: the first line of the version, or that the program is missing.
-pub(super) fn status_line(program: &Program) -> String {
-    if program.installed() {
-        // Only the first line of a version: a row must stay one line tall.
-        program
-            .version
-            .as_deref()
-            .unwrap_or_default()
-            .lines()
-            .next()
-            .unwrap_or_default()
-            .to_owned()
-    } else {
-        "Not installed".to_owned()
+// The number alone: the first word that starts with a digit, without a build suffix or the
+// punctuation after it, so `codex-cli 0.16.0` shows `0.16.0` and `GitHub Copilot 1.0.10.` shows
+// `1.0.10`. The full first line is the tooltip.
+pub(super) struct Version {
+    pub(super) shown: String,
+    pub(super) full: Option<String>,
+}
+
+pub(super) fn version_of(program: &Program) -> Version {
+    if !program.installed() {
+        return Version {
+            shown: "Not installed".to_owned(),
+            full: None,
+        };
+    }
+    let line = program
+        .version
+        .as_deref()
+        .unwrap_or_default()
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim();
+    let number = line
+        .split_whitespace()
+        .find(|word| word.starts_with(|c: char| c.is_ascii_digit()))
+        .unwrap_or_default()
+        .split(['-', '+'])
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches(|c: char| !c.is_ascii_alphanumeric());
+    Version {
+        shown: number.to_owned(),
+        full: (!line.is_empty()).then(|| line.to_owned()),
     }
 }

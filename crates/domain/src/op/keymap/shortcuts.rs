@@ -60,7 +60,7 @@ pub struct Shortcut {
     pub settings_group: ShortcutGroup,
 }
 
-/// Built-in shortcuts. A saved override uses `name`, so those names stay.
+// Built-in shortcuts. A saved override uses `name`, so those names stay.
 const fn bind(
     name: &'static str,
     action: &'static str,
@@ -111,6 +111,7 @@ pub const SHORTCUTS: &[Shortcut] = &[
     bind("ThreadActions", "kagan::ThreadActions", "secondary-shift-m", "Thread actions", (ShortcutScope::Window, ShortcutWhen::Thread, CommandGroup::Threads, ShortcutGroup::Thread)),
     bind("ToggleSidebar", "kagan::ToggleSidebar", "secondary-b", "Show or hide left sidebar", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Window, ShortcutGroup::Window)),
     bind("ToggleRightSidebar", "kagan::ToggleRightSidebar", "secondary-\\", "Show or hide right sidebar", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Window, ShortcutGroup::Window)),
+    bind("ToggleActivityLog", "kagan::ToggleActivityLog", "secondary-shift-e", "Show or hide activity log", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Window, ShortcutGroup::Window)),
     bind("AddProject", "kagan::AddProject", "secondary-shift-o", "Add project", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Window, ShortcutGroup::Window)),
     bind("SendReview", "review::SendReview", "secondary-enter", "Send review", (ShortcutScope::ReviewSend, ShortcutWhen::Review, CommandGroup::Review, ShortcutGroup::Review)),
     bind("NextHunk", "review::NextChange", "alt-]", "Next change", (ShortcutScope::Review, ShortcutWhen::Review, CommandGroup::Review, ShortcutGroup::Review)),

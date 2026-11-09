@@ -23,11 +23,11 @@ kagan forgets a removed project and its threads. Your folder stays. You cannot r
 | Mark | Meaning |
 | --- | --- |
 | Spinner | The program is busy |
-| Amber ring | The thread needs you |
-| Red fill | The thread failed |
-| Filled square | The program finished while you looked at a different thread |
+| Circle with ! | The thread needs you |
+| Octagon with × | The thread failed |
+| Check | The program finished while you looked at a different thread |
 | Small dot | The program runs and waits |
-| Hollow square | The program ended |
+| Dash | The program ended |
 | Pin | You pinned the thread |
 
 **Archived** at the bottom lists archived threads. **Restore** brings one back. Its program stays stopped.
@@ -47,9 +47,9 @@ One line at the bottom of the window, under the sidebars and the center. It is c
 - **Update available** means a check found a newer kagan. **Not now** on the update notice hides it here too.
 - **Installing /home/me/plugins/kagan-tools** or **Installing git:github.com/acme/tools@main** means a plugin install is running. The words are the source.
 
-Click the line, or press Enter or Space while it has focus, to see the last seven things: turns started and ended, other threads that need you, updates, and plugin installs. A new row is added at the bottom. Click again, or press Escape, to close it.
+Press the Activity log button at the right of the line, or click it, to see the last seven things: turns started and ended, other threads that need you, updates, and plugin installs. A new row is added at the bottom. Press the button again, or press Escape while focus is on it, to close it. The button is also Cmd+Shift+E.
 
-A plugin may add one short piece of plain text at the right, such as a usage figure. It shows the plugin's own label first, then the text, in a color for quiet, busy, needs you, or failed. You cannot click these, and they never take the keyboard. At most four show, and only while the window is at least 720 px wide. Turn **Plugin status** off in Settings → Appearance to hide them all, or turn one plugin off in Installed.
+A plugin may add one short piece of plain text at the right, such as a usage figure. It shows the plugin's own label first, then the text, in a color for quiet, busy, needs you, or failed. You cannot click these, unless the plugin names a command for the line; then the line is a button that runs it. Hovering shows the plugin's tooltip when it sets one. At most four show, and only while the window is at least 720 px wide. Turn **Plugin status** off in Settings → Appearance to hide them all, or turn one plugin off in Installed.
 
 The list stays in memory and is gone when kagan quits. A question or a finished turn never takes your keyboard. Plugins cannot draw panels in the strip.
 

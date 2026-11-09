@@ -1,8 +1,4 @@
-//! The Installed page: every plugin in one card. Install from a folder or a git address, turn a
-//! plugin on or off, and open its details for update, reload, logs and removal. Each plugin's
-//! state comes from the plugin host, so a change from the CLI shows here too. Each command is a
-//! named action; a plugin row answers its keys while it has focus.
-
+use crate::kagan::dispatch;
 use crate::theme::TypeScale as _;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -12,8 +8,7 @@ use gpui_kit::{
     Context, ElementId, Focusable as _, InteractiveElement, IntoElement, ParentElement as _, Role,
     Styled as _, Window, div,
 };
-use kg_core::Workspace;
-use kg_domain::{Op, PluginId, PluginOp};
+use kg_domain::{Op, PluginId, PluginOp, is_git_source};
 use kg_plugins::{PluginHost, PluginStatus};
 
 use super::Kagan;
@@ -125,6 +120,7 @@ fn form_row(kagan: &Kagan, cx: &mut Context<Kagan>) -> Row {
     );
     Row {
         wide: true,
+        bare: true,
         ..row(
             "install-form",
             "Folder or git address",
@@ -241,10 +237,6 @@ fn plugin_rows(
     rows
 }
 
-fn is_git_source(source: &str) -> bool {
-    source.starts_with("git:")
-}
-
 fn addition_note(status: &PluginStatus, cx: &mut Context<Kagan>) -> String {
     if !status.enabled {
         return String::new();
@@ -292,7 +284,6 @@ fn addition_note(status: &PluginStatus, cx: &mut Context<Kagan>) -> String {
     }
 }
 
-/// The keys a plugin row answers to while it has focus. Each one runs the named action's command.
 fn row_keys<E: InteractiveElement>(row: E, id: &PluginId, git: bool, cx: &mut Context<Kagan>) -> E {
     let row = answer::<TogglePluginDetails, _>(row, id, cx, |this, id, cx| {
         this.toggle_details(id, cx);
@@ -420,8 +411,6 @@ fn log_row(id: &PluginId, text: &str, cx: &mut Context<Kagan>) -> Row {
     }
 }
 
-/// The row while an install runs. Cancel shows only while a git address is downloading, since
-/// that is the only step Cancel can stop.
 fn install_waiting_row(stoppable: bool) -> Row {
     if !stoppable {
         return row(
@@ -443,7 +432,7 @@ fn install_waiting_row(stoppable: bool) -> Row {
                 .outline()
                 .label("Cancel")
                 .on_click(|_, _, cx| {
-                    Workspace::dispatch(Op::Plugin(PluginOp::CancelInstall), cx).detach();
+                    dispatch::logged(Op::Plugin(PluginOp::CancelInstall), cx);
                 }),
         )
         .into_any_element(),

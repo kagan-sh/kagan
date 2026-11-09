@@ -226,6 +226,28 @@ fn head(path: &Path, limit: u64) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+/// The bytes of an image the window draws, under the caps `PreviewOp::Show` checks. A file
+/// outside `root` is refused when there is one.
+#[must_use]
+pub fn preview_image(root: Option<&Path>, absolute: &Path) -> Option<Vec<u8>> {
+    let absolute = dunce::canonicalize(absolute).ok()?;
+    if let Some(root) = root {
+        let root = dunce::canonicalize(root).ok()?;
+        if !absolute.starts_with(root) {
+            return None;
+        }
+    }
+    if !std::fs::metadata(&absolute).ok()?.is_file() {
+        return None;
+    }
+    let bytes = head(&absolute, IMAGE_LIMIT + 1).ok()?;
+    if bytes.len() as u64 > IMAGE_LIMIT {
+        return None;
+    }
+    let (width, height) = image_size(&bytes)?;
+    (u64::from(width) * u64::from(height) <= PIXEL_LIMIT).then_some(bytes)
+}
+
 /// One sentence for each dimension that was cut, or `None` when nothing was.
 #[must_use]
 pub fn preview_note(kind: &PreviewKind) -> Option<String> {

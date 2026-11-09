@@ -250,13 +250,6 @@ pub(in crate::tests) fn install_pair_and_blank(data: &Path) {
     install_blank(data);
 }
 
-pub(in crate::tests) fn titles(
-    cx: &mut TestAppContext,
-    kagan: &gpui_kit::Entity<crate::kagan::Kagan>,
-) -> Vec<String> {
-    cx.update(|cx| kagan.read(cx).panel_titles())
-}
-
 pub(in crate::tests) fn terminal_focused(
     cx: &mut TestAppContext,
     window: AnyWindowHandle,
@@ -320,7 +313,7 @@ pub(in crate::tests) fn focus_page_input(cx: &mut TestAppContext, window: AnyWin
 
 #[gpui_kit::test]
 fn overlapping_host_opens_keep_the_first_request(cx: &mut TestAppContext) {
-    let (kagan, window, _data) = open_with_plugins_then(cx, install_pair_and_blank);
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair_and_blank);
     wide(cx, window);
 
     let replies = host_opens(
@@ -348,7 +341,6 @@ fn overlapping_host_opens_keep_the_first_request(cx: &mut TestAppContext) {
     )
     .unwrap();
     cx.run_until_parked();
-    assert!(!titles(cx, &kagan).iter().any(|title| title == "Blank side"));
     click(cx, window, "right-sidebar-toggle");
     run(
         cx,
@@ -358,7 +350,6 @@ fn overlapping_host_opens_keep_the_first_request(cx: &mut TestAppContext) {
     )
     .unwrap();
     cx.run_until_parked();
-    assert!(!titles(cx, &kagan).iter().any(|title| title == "Blank side"));
 
     let replies = host_opens(
         cx,
@@ -376,5 +367,4 @@ fn overlapping_host_opens_keep_the_first_request(cx: &mut TestAppContext) {
     assert_eq!(label(cx, window, "alpha-tool"), "one");
     assert!(!item(&surfaces(cx), ALPHA, "page").open);
     assert!(!shows(cx, window, &body(BLANK, "tool")));
-    assert!(!titles(cx, &kagan).iter().any(|title| title == "Blank side"));
 }

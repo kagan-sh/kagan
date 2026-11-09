@@ -12,7 +12,6 @@ struct Bindings {
     _subscription: Subscription,
 }
 
-/// A plugin command whose key is not bound. `action` is a `kg keymap` name.
 #[derive(Clone)]
 pub(crate) struct Refused {
     pub(crate) action: String,
@@ -22,9 +21,7 @@ pub(crate) struct Refused {
 
 #[derive(Clone)]
 pub(crate) enum Why {
-    /// Another command, named as `kg keymap` names it, took the key first.
     Taken(String),
-    /// kagan cannot read the key; the text says why.
     Unreadable(String),
 }
 
@@ -63,8 +60,6 @@ pub(crate) fn init(cx: &mut App) {
     cx.set_global(PluginBindings { bindings });
 }
 
-/// Binds the plugin keys again. The window calls this when its own shortcuts change, so a plugin key
-/// that a built-in or saved shortcut now takes is dropped, and one it freed is bound.
 pub(crate) fn rebind(cx: &mut App) {
     let Some(bindings) = cx
         .try_global::<PluginBindings>()
@@ -106,10 +101,6 @@ impl Bindings {
         self.rebind(cx);
     }
 
-    /// Binds the window's own keys, then each plugin key the window does not already take. The
-    /// window's keys win: a plugin key that overlaps one is not bound, and the plugin's log says why.
-    /// Plugin keys that collide keep only the first: saved keys, then manifest keys, each in plugin
-    /// and command order.
     fn rebind(&mut self, cx: &mut Context<Self>) {
         let mut taken = window_keys(cx);
         let mut bindings: Vec<KeyBinding> = cx
@@ -135,8 +126,8 @@ impl Bindings {
             };
             let binding = match crate::kagan::bind(
                 key,
-                RunCommand::new(plugin.clone(), command.clone()),
-                binding_context(*when),
+                Box::new(RunCommand::new(plugin.clone(), command.clone())),
+                &binding_context(*when),
                 cx,
             ) {
                 Ok(binding) => binding,
@@ -167,16 +158,19 @@ impl Bindings {
                 ),
             };
             self.host
-                .update(cx, |host, _| host.report(plugin, &message));
+                .update(cx, |host, cx| host.report(plugin, &message, cx));
         }
         self.refused = refused.into_iter().map(|(_, _, refused)| refused).collect();
     }
 }
 
-fn binding_context(when: CommandWhen) -> &'static str {
+pub(crate) const THREAD: &str = "thread";
+pub(crate) const PROJECT: &str = "project";
+
+fn binding_context(when: CommandWhen) -> String {
     match when {
-        CommandWhen::Always => CONTEXT,
-        CommandWhen::Thread => "Kagan && thread == true",
-        CommandWhen::Project => "Kagan && project == true",
+        CommandWhen::Always => CONTEXT.to_owned(),
+        CommandWhen::Thread => format!("{CONTEXT} && {THREAD} == true"),
+        CommandWhen::Project => format!("{CONTEXT} && {PROJECT} == true"),
     }
 }

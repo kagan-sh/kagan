@@ -3,15 +3,17 @@ use std::time::Duration;
 
 use gpui_kit::{AppContext, AsyncApp, Entity, WeakEntity};
 use kg_domain::{EventKind, OpError, OpResult, SelectMode, ThreadId, ThreadOp, ThreadStatus};
-use kg_terminal::{Finished, Launch, Terminal};
+use kg_terminal::{Finished, Launch, Terminal, View};
 
 use crate::host::database::Result;
 use crate::workspace::{closed, missing};
 use crate::{Thread, Workspace, WorkspaceEvent};
 
 use super::agent::{self, Start};
+use super::extra::Extras;
 use super::halt::status;
 use super::resolve_program;
+use crate::end::{End, Loss};
 
 mod exit;
 mod screen;
@@ -31,7 +33,6 @@ pub(super) const ROWS: u16 = 24;
 const TICK: Duration = Duration::from_millis(33);
 // A program can drop its spinner for a frame in the middle of a reply. Waiting counts only after this quiet.
 const QUIET: Duration = Duration::from_secs(1);
-pub(crate) const ARM: Duration = Duration::from_secs(2);
 
 pub(crate) async fn start(
     this: &WeakEntity<Workspace>,
@@ -52,9 +53,9 @@ pub(crate) async fn start(
     let size = this
         .update(cx, |workspace, _| {
             workspace
-                .sizes
+                .runs
                 .get(&record.id)
-                .copied()
+                .and_then(|run| run.size)
                 .unwrap_or((COLS, ROWS))
         })
         .map_err(closed)?;
@@ -67,9 +68,7 @@ pub(crate) async fn start(
     match spawned {
         Ok(terminal) => {
             this.update(cx, |workspace, cx| {
-                workspace
-                    .terminals
-                    .insert(record.id.clone(), Shown::Running(terminal));
+                workspace.run_mut(&record.id).shown = Some(Shown::Running(terminal));
                 follow_terminals(workspace, cx);
             })
             .map_err(closed)?;
@@ -175,8 +174,6 @@ fn is_utf8(locale: &str) -> bool {
         .contains("utf8")
 }
 
-const TEXT_CAP: usize = 1024 * 1024;
-
 pub(crate) async fn submit(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
@@ -186,14 +183,15 @@ pub(crate) async fn submit(
     if text.is_empty() {
         return Err(OpError::Invalid("send needs text".into()));
     }
-    if text.len() > TEXT_CAP {
+    if text.len() > kg_domain::TEXT_MAX {
         return Err(OpError::Invalid(format!(
-            "send is {} bytes; the cap is 1 MiB",
-            text.len()
+            "send is {} bytes; the cap is {} MiB",
+            text.len(),
+            kg_domain::TEXT_MAX >> 20
         )));
     }
     let (typed, written) = this
-        .update(cx, |workspace, _| match workspace.terminals.get(id) {
+        .update(cx, |workspace, _| match workspace.shown(id) {
             Some(Shown::Running(terminal)) => terminal
                 .submit(text)
                 .map_err(|error| OpError::Invalid(error.to_string())),
@@ -222,25 +220,33 @@ pub(crate) async fn submit(
     Ok(typed)
 }
 
+pub(crate) async fn send(
+    this: &WeakEntity<Workspace>,
+    id: ThreadId,
+    text: &str,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let typed = submit(this, &id, text, cx).await?;
+    Workspace::events(
+        this,
+        id,
+        vec![EventKind::Message {
+            role: kg_domain::Role::User,
+            text: typed,
+            message_id: None,
+            attachments: Vec::new(),
+        }],
+        cx,
+    )
+    .await?;
+    Ok(OpResult::Done)
+}
+
 pub(crate) fn run(
     this: &WeakEntity<Workspace>,
     op: ThreadOp,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    if let ThreadOp::Paste { text, file, .. } = &op {
-        if file.is_some() {
-            return Err(OpError::Invalid("paste carries text, not a path".into()));
-        }
-        let Some(text) = text else {
-            return Err(OpError::Invalid("paste needs text".into()));
-        };
-        if text.len() > TEXT_CAP {
-            return Err(OpError::Invalid(format!(
-                "paste is {} bytes; the cap is 1 MiB",
-                text.len()
-            )));
-        }
-    }
     let (ThreadOp::Input { id, terminal, .. }
     | ThreadOp::Resize { id, terminal, .. }
     | ThreadOp::Screen { id, terminal, .. }
@@ -259,18 +265,25 @@ pub(crate) fn run(
         if number.is_none()
             && let ThreadOp::Resize { cols, rows, .. } = &op
         {
-            workspace.sizes.insert(id.clone(), (*cols, *rows));
+            workspace.run_mut(&id).size = Some((*cols, *rows));
+        }
+        if number.is_none() {
+            let now = cx.background_executor().now();
+            match &op {
+                ThreadOp::Input { text, .. } => super::notify::typed(workspace, &id, text, now),
+                ThreadOp::Paste { .. } => super::notify::typed(workspace, &id, "", now),
+                _ => {}
+            }
         }
         let result = if let Some(number) = number {
             super::extra::find(workspace, &id, number)
                 .ok_or_else(|| missing("terminal", &number))
-                .map(|terminal| act_running(terminal, op))
+                .map(|terminal| act(Some(terminal), terminal.view(), op))
         } else {
             workspace
-                .terminals
-                .get(&id)
+                .shown(&id)
                 .ok_or_else(|| missing("terminal", &id))
-                .map(|shown| act(shown, op))
+                .map(|shown| act(shown.running(), shown.view(), op))
         }?
         .map_err(|error| OpError::Invalid(error.to_string()));
         if moves_view {
@@ -281,84 +294,119 @@ pub(crate) fn run(
     .map_err(closed)?
 }
 
+/// Everything the workspace keeps for one thread's program. Forgetting the thread is one `remove`.
+#[derive(Default)]
+pub(crate) struct Run {
+    pub(crate) shown: Option<Shown>,
+    pub(crate) extras: Extras,
+    pub(crate) size: Option<(u16, u16)>,
+    pub(crate) started_seq: Option<u64>,
+    /// Whether the run's settled screen was already offered to the store.
+    pub(crate) saved: bool,
+    pub(crate) end: Option<End>,
+    pub(crate) loss: Option<Loss>,
+    /// The program was asked to stop, and why. Quit skips `turn.ended` only.
+    pub(crate) stopping: Option<StopReason>,
+    /// Its exit is queued for the request loop, so the watcher reports each once.
+    pub(crate) exiting: bool,
+    /// Lines for this thread's parent wait until this instant, so they do not land mid-keystroke.
+    pub(crate) held_until: Option<std::time::Instant>,
+    /// Lines queued for this thread, by child, to type into it once it is idle.
+    pub(crate) notes: std::collections::BTreeMap<ThreadId, String>,
+}
+
+impl Run {
+    pub(crate) fn begin(&mut self, seq: u64) {
+        self.started_seq = Some(seq);
+        self.saved = false;
+        self.loss = None;
+        self.end = None;
+    }
+
+    pub(crate) fn unsaved(&self) -> Option<u64> {
+        if matches!(self.shown, Some(Shown::Ended(_))) && !self.saved {
+            self.started_seq
+        } else {
+            None
+        }
+    }
+
+    /// Past the archive grace: drops the screen an ended program left and ends the extra terminals,
+    /// keeping their numbers so none is reused. Returns whether any extra terminal ended.
+    pub(crate) fn release(&mut self) -> bool {
+        if matches!(self.shown, Some(Shown::Ended(_))) {
+            self.shown = None;
+            self.loss = None;
+        }
+        !std::mem::take(&mut self.extras.open).is_empty()
+    }
+}
+
 /// A thread's terminal: the program while it runs, or the screen it left when it ended.
 pub(crate) enum Shown {
     Running(Terminal),
     Ended(Finished),
 }
 
-fn act(shown: &Shown, op: ThreadOp) -> std::io::Result<OpResult> {
-    match shown {
-        Shown::Running(terminal) => act_running(terminal, op),
-        Shown::Ended(finished) => act_ended(finished, &op),
+impl Shown {
+    pub(crate) fn view(&self) -> &View {
+        match self {
+            Self::Running(terminal) => terminal.view(),
+            Self::Ended(finished) => finished.view(),
+        }
+    }
+
+    fn running(&self) -> Option<&Terminal> {
+        match self {
+            Self::Running(terminal) => Some(terminal),
+            Self::Ended(_) => None,
+        }
     }
 }
 
 // An ended program has no pty: input is refused, and the view and the text still work.
-fn act_ended(finished: &Finished, op: &ThreadOp) -> std::io::Result<OpResult> {
-    match op {
-        ThreadOp::Input { .. } | ThreadOp::Paste { .. } => {
-            Err(std::io::Error::other("the program has ended"))
+fn act(running: Option<&Terminal>, view: &View, op: ThreadOp) -> std::io::Result<OpResult> {
+    match (op, running) {
+        (ThreadOp::Input { text, .. }, Some(terminal)) => {
+            terminal.write(text.into_bytes()).map(|()| OpResult::Done)
         }
-        ThreadOp::Resize { .. } | ThreadOp::Report { .. } => Ok(OpResult::Done),
-        ThreadOp::Scroll { lines, .. } => {
-            finished.scroll(*lines);
-            Ok(OpResult::Done)
-        }
-        ThreadOp::Select {
-            mode,
-            column,
-            row,
-            right,
-            ..
-        } => {
-            finished.select(terminal_mode(*mode), *column, *row, *right);
-            Ok(OpResult::Done)
-        }
-        ThreadOp::Copy { .. } => Ok(finished.selection().map_or(OpResult::Done, OpResult::Text)),
-        ThreadOp::Screen {
-            scrollback, lines, ..
-        } => screen_result(
-            *scrollback,
-            *lines,
-            || finished.transcript(),
-            || finished.screen(),
-        ),
-        _ => Err(std::io::Error::other("not a terminal operation")),
-    }
-}
-
-fn act_running(terminal: &Terminal, op: ThreadOp) -> std::io::Result<OpResult> {
-    match op {
-        ThreadOp::Input { text, .. } => terminal.write(text.into_bytes()).map(|()| OpResult::Done),
-        ThreadOp::Resize { cols, rows, .. } => terminal.resize(cols, rows).map(|()| OpResult::Done),
-        ThreadOp::Paste { text, .. } => terminal
+        (ThreadOp::Paste { text, .. }, Some(terminal)) => terminal
             .paste(text.as_deref().unwrap_or(""))
             .map(|()| OpResult::Done),
-        ThreadOp::Report { bytes, .. } => terminal.report(bytes).map(|()| OpResult::Done),
-        ThreadOp::Scroll { lines, .. } => {
-            terminal.scroll(lines);
+        (ThreadOp::Input { .. } | ThreadOp::Paste { .. }, None) => {
+            Err(std::io::Error::other("the program has ended"))
+        }
+        (ThreadOp::Resize { cols, rows, .. }, Some(terminal)) => {
+            terminal.resize(cols, rows).map(|()| OpResult::Done)
+        }
+        (ThreadOp::Report { bytes, .. }, Some(terminal)) => {
+            terminal.report(bytes).map(|()| OpResult::Done)
+        }
+        (ThreadOp::Resize { .. } | ThreadOp::Report { .. }, None) => Ok(OpResult::Done),
+        (ThreadOp::Scroll { lines, .. }, _) => {
+            view.scroll(lines);
             Ok(OpResult::Done)
         }
-        ThreadOp::Select {
-            mode,
-            column,
-            row,
-            right,
-            ..
-        } => {
-            terminal.select(terminal_mode(mode), column, row, right);
+        (
+            ThreadOp::Select {
+                mode,
+                column,
+                row,
+                right,
+                ..
+            },
+            _,
+        ) => {
+            view.select(terminal_mode(mode), column, row, right);
             Ok(OpResult::Done)
         }
-        ThreadOp::Copy { .. } => Ok(terminal.selection().map_or(OpResult::Done, OpResult::Text)),
-        ThreadOp::Screen {
-            scrollback, lines, ..
-        } => screen_result(
-            scrollback,
-            lines,
-            || terminal.transcript(),
-            || terminal.screen(),
-        ),
+        (ThreadOp::Copy { .. }, _) => Ok(view.selection().map_or(OpResult::Done, OpResult::Text)),
+        (
+            ThreadOp::Screen {
+                scrollback, lines, ..
+            },
+            _,
+        ) => screen_result(scrollback, lines, || view.transcript(), || view.screen()),
         _ => Err(std::io::Error::other("not a terminal operation")),
     }
 }
@@ -405,35 +453,26 @@ fn terminal_mode(mode: SelectMode) -> kg_terminal::SelectMode {
 }
 
 impl Workspace {
+    pub(crate) fn run_mut(&mut self, id: &ThreadId) -> &mut Run {
+        self.runs.entry(id.clone()).or_default()
+    }
+
+    pub(crate) fn shown(&self, id: &ThreadId) -> Option<&Shown> {
+        self.runs.get(id)?.shown.as_ref()
+    }
+
     /// A terminal's screen as cells, for a window in this process: the program's, or an extra one by number.
     #[must_use]
     pub fn grid(&self, id: &ThreadId, terminal: Option<u32>) -> Option<kg_terminal::Grid> {
         if let Some(number) = terminal {
-            return super::extra::find(self, id, number).map(Terminal::grid);
+            return super::extra::find(self, id, number).map(|terminal| terminal.view().grid());
         }
-        self.terminals.get(id).map(|shown| match shown {
-            Shown::Running(terminal) => terminal.grid(),
-            Shown::Ended(finished) => finished.grid(),
-        })
+        self.shown(id).map(|shown| shown.view().grid())
     }
 }
 
 pub(crate) fn kill(workspace: &mut Workspace, id: &ThreadId) {
-    super::extra::end(workspace, id);
-    workspace.terminals.remove(id);
-    workspace.sizes.remove(id);
     workspace.runs.remove(id);
-    workspace.ends.remove(id);
-    workspace.losses.remove(id);
-    workspace.saved.retain(|(thread, _)| thread != id);
-}
-
-/// Drops the screen an ended program left, once its thread is past the archive grace.
-pub(crate) fn release_ended(workspace: &mut Workspace, id: &ThreadId) {
-    if matches!(workspace.terminals.get(id), Some(Shown::Ended(_))) {
-        workspace.terminals.remove(id);
-        workspace.losses.remove(id);
-    }
 }
 
 #[cfg(test)]

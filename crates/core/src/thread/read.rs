@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use gpui_kit::{App, AsyncApp, Entity, Task, WeakEntity};
 use kg_domain::{
-    EventKind, OpError, OpResult, Order, ThreadId, ThreadOp, ThreadStatus, ToolOutcome, WaitOutcome,
+    EventKind, OpError, OpResult, Order, ThreadId, ThreadStatus, ToolOutcome, WaitOutcome,
 };
 
 use crate::host::database::{Database, Result};
@@ -12,9 +12,62 @@ use crate::{PluginRequest, Workspace};
 
 use crate::dispatch::forward;
 
-use super::thread;
+use super::{notify, thread};
+
+const ARM: Duration = Duration::from_secs(2);
 
 pub(crate) fn wait_event(
+    workspace: &Entity<Workspace>,
+    id: ThreadId,
+    kind: &str,
+    after_seq: Option<u64>,
+    timeout_ms: u64,
+    cx: &mut App,
+) -> Task<Result<OpResult>> {
+    let child = id.clone();
+    let task = wait_event_in(workspace, id, kind, after_seq, timeout_ms, cx);
+    told_by_wait(workspace, child, task, cx)
+}
+
+pub(crate) fn wait(
+    workspace: &Entity<Workspace>,
+    id: ThreadId,
+    timeout_ms: u64,
+    cx: &mut App,
+) -> Task<Result<OpResult>> {
+    let child = id.clone();
+    let task = wait_in(workspace, id, timeout_ms, cx);
+    told_by_wait(workspace, child, task, cx)
+}
+
+// A wait that returns the child's end already told the parent, so its queued line goes.
+fn told_by_wait(
+    workspace: &Entity<Workspace>,
+    child: ThreadId,
+    task: Task<Result<OpResult>>,
+    cx: &mut App,
+) -> Task<Result<OpResult>> {
+    let parent = workspace
+        .read(cx)
+        .threads
+        .get(&child)
+        .and_then(|thread| thread.read(cx).record.parent_thread_id.clone());
+    let this = workspace.downgrade();
+    cx.spawn(async move |cx| {
+        let result = task.await;
+        if let Some(parent) = parent
+            && let Ok(outcome) = &result
+            && notify::reports_end(outcome)
+        {
+            _ = this.update(cx, |workspace, _| {
+                notify::heard(workspace, &parent, &child);
+            });
+        }
+        result
+    })
+}
+
+fn wait_event_in(
     workspace: &Entity<Workspace>,
     id: ThreadId,
     kind: &str,
@@ -37,6 +90,7 @@ pub(crate) fn wait_event(
         if let crate::WorkspaceEvent::Event { event, .. } = event
             && event.thread_id == watched
         {
+            // The waiter is gone or stopped listening.
             let _ = sent.try_send(event.clone());
         }
     });
@@ -85,7 +139,7 @@ pub(crate) fn wait_event(
     })
 }
 
-pub(crate) fn wait(
+fn wait_in(
     workspace: &Entity<Workspace>,
     id: ThreadId,
     timeout_ms: u64,
@@ -100,6 +154,7 @@ pub(crate) fn wait(
         if let crate::WorkspaceEvent::Event { event, .. } = event
             && event.thread_id == watched
         {
+            // The waiter is gone or stopped listening.
             let _ = events_tx.try_send(event.kind.clone());
         }
     });
@@ -112,10 +167,12 @@ pub(crate) fn wait(
         if let Some(reason) = ended(thread.record.status) {
             if !saw_end {
                 saw_end = true;
+                // The waiter is gone or stopped listening.
                 let _ = wake_tx.try_send(Wake::Ended(reason));
             }
         } else if thread.busy && !saw_busy {
             saw_busy = true;
+            // The waiter is gone or stopped listening.
             let _ = wake_tx.try_send(Wake::Busy);
         }
     });
@@ -133,7 +190,7 @@ pub(crate) fn wait(
         let deadline = cx
             .background_executor()
             .timer(Duration::from_millis(timeout_ms));
-        let arm = cx.background_executor().timer(super::terminal::ARM);
+        let arm = cx.background_executor().timer(ARM);
         futures::pin_mut!(deadline, arm);
         loop {
             let hit = if arming {
@@ -271,101 +328,7 @@ fn settle(kind: &EventKind) -> Option<WaitOutcome> {
     }
 }
 
-pub(super) async fn read_thread(
-    this: &WeakEntity<Workspace>,
-    database: Database,
-    op: ThreadOp,
-    cx: &mut AsyncApp,
-) -> Result<OpResult> {
-    match op {
-        ThreadOp::Get { id } => Ok(OpResult::Thread(
-            thread(this, &id, cx)?.read_with(cx, |thread, _| thread.record.clone()),
-        )),
-        ThreadOp::List {
-            project_id,
-            archived,
-            limit,
-            before,
-        } => {
-            database
-                .call(move |store| {
-                    Ok(OpResult::Threads(store.threads(
-                        project_id.as_ref(),
-                        archived,
-                        limit,
-                        before,
-                    )?))
-                })
-                .await
-        }
-        ThreadOp::Metadata { id, plugin_id } => {
-            thread(this, &id, cx)?;
-            database
-                .call(move |store| {
-                    Ok(OpResult::Metadata(
-                        store.thread_metadata(&id, &plugin_id)?.unwrap_or_default(),
-                    ))
-                })
-                .await
-        }
-        ThreadOp::Events {
-            id,
-            after_seq,
-            limit,
-            order,
-        } => {
-            thread(this, &id, cx)?;
-            let order = order.unwrap_or(Order::Asc);
-            let events = database
-                .call(move |store| store.events_after(&id, after_seq, limit, order))
-                .await?;
-            Ok(OpResult::Events(events))
-        }
-        ThreadOp::Tools { id } => {
-            let entity = thread(this, &id, cx)?;
-            crate::skill::tools(this, &entity, cx).await
-        }
-        ThreadOp::CallTool { id, name, input } => call_tool(this, id, name, input, cx).await,
-        ThreadOp::Interactions { id } => {
-            thread(this, &id, cx)?;
-            database
-                .call(move |store| Ok(OpResult::Interactions(store.pending_interactions(&id)?)))
-                .await
-        }
-        ThreadOp::WaitEvent { .. } => Err(OpError::Invalid(
-            "wait events must use Workspace::dispatch".into(),
-        )),
-        ThreadOp::Wait { .. } => Err(OpError::Invalid("wait must use Workspace::dispatch".into())),
-        ThreadOp::Search { .. } => Err(OpError::Invalid(
-            "search must use Workspace::dispatch".into(),
-        )),
-        ThreadOp::Run(_)
-        | ThreadOp::Stop { .. }
-        | ThreadOp::Input { .. }
-        | ThreadOp::Resize { .. }
-        | ThreadOp::Screen { .. }
-        | ThreadOp::Scroll { .. }
-        | ThreadOp::Select { .. }
-        | ThreadOp::Copy { .. }
-        | ThreadOp::Paste { .. }
-        | ThreadOp::Send { .. }
-        | ThreadOp::Report { .. }
-        | ThreadOp::Terminal(_)
-        | ThreadOp::Details { .. }
-        | ThreadOp::Links { .. }
-        | ThreadOp::Archive { .. }
-        | ThreadOp::Unarchive { .. }
-        | ThreadOp::Delete { .. }
-        | ThreadOp::SetPinned { .. }
-        | ThreadOp::Rename { .. }
-        | ThreadOp::Ask { .. }
-        | ThreadOp::MarkRead { .. }
-        | ThreadOp::SetMetadata { .. }
-        | ThreadOp::StartAgain { .. } => Err(OpError::Invalid("operation changes a thread".into())),
-    }
-}
-
-async fn call_tool(
+pub(super) async fn call_tool(
     this: &WeakEntity<Workspace>,
     id: ThreadId,
     name: String,
@@ -384,7 +347,7 @@ async fn call_tool(
         cx,
     )
     .await;
-    let result = if name == "skill_load" {
+    let result = if name == crate::skill::SKILL_LOAD {
         crate::skill::load(this, &entity, &input, cx).await
     } else {
         forward(
@@ -412,4 +375,79 @@ async fn record(this: &WeakEntity<Workspace>, id: &ThreadId, kind: EventKind, cx
     if let Err(error) = Workspace::events(this, id.clone(), vec![kind], cx).await {
         eprintln!("kg: could not record a tool event: {error}");
     }
+}
+
+pub(super) fn get(
+    this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    Ok(OpResult::Thread(
+        thread(this, id, cx)?.read_with(cx, |thread, _| thread.record.clone()),
+    ))
+}
+
+pub(super) async fn list(
+    database: Database,
+    project_id: Option<kg_domain::ProjectId>,
+    archived: Option<bool>,
+    limit: Option<u32>,
+    before: Option<kg_domain::Timestamp>,
+) -> Result<OpResult> {
+    database
+        .call(move |store| {
+            Ok(OpResult::Threads(store.threads(
+                project_id.as_ref(),
+                archived,
+                limit,
+                before,
+            )?))
+        })
+        .await
+}
+
+pub(super) async fn metadata(
+    this: &WeakEntity<Workspace>,
+    database: Database,
+    id: ThreadId,
+    plugin_id: kg_domain::PluginId,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    thread(this, &id, cx)?;
+    database
+        .call(move |store| {
+            Ok(OpResult::Metadata(
+                store.thread_metadata(&id, &plugin_id)?.unwrap_or_default(),
+            ))
+        })
+        .await
+}
+
+pub(super) async fn events(
+    this: &WeakEntity<Workspace>,
+    database: Database,
+    id: ThreadId,
+    after_seq: Option<u64>,
+    limit: Option<u32>,
+    order: Option<Order>,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    thread(this, &id, cx)?;
+    let order = order.unwrap_or(Order::Asc);
+    let events = database
+        .call(move |store| store.events_after(&id, after_seq, limit, order))
+        .await?;
+    Ok(OpResult::Events(events))
+}
+
+pub(super) async fn interactions(
+    this: &WeakEntity<Workspace>,
+    database: Database,
+    id: ThreadId,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    thread(this, &id, cx)?;
+    database
+        .call(move |store| Ok(OpResult::Interactions(store.pending_interactions(&id)?)))
+        .await
 }

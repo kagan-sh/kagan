@@ -14,7 +14,6 @@ const PARSE_BUDGET: Duration = Duration::from_millis(200);
 
 type Captures = Vec<(Range<usize>, String)>;
 
-/// Capture names for the lines of one review, keyed by side and line number.
 #[derive(Default)]
 pub(super) struct Syntax {
     lines: BTreeMap<(u8, u32), Captures>,
@@ -89,16 +88,11 @@ fn paint_document(syntax: &mut Syntax, side: DiffSide, language: &str, source: &
 
 fn paint_hunks(syntax: &mut Syntax, side: DiffSide, language: &str, hunks: &[DiffHunk]) {
     for hunk in hunks {
-        let lines: Vec<&DiffLine> = hunk
-            .lines
-            .iter()
-            .filter(|line| keeps(line.kind, side))
-            .collect();
-        paint_lines(syntax, side, language, &lines);
+        paint_lines(syntax, side, language, &hunk.lines);
     }
 }
 
-fn paint_lines(syntax: &mut Syntax, side: DiffSide, language: &str, lines: &[&DiffLine]) {
+fn paint_lines(syntax: &mut Syntax, side: DiffSide, language: &str, lines: &[DiffLine]) {
     let mut source = String::new();
     let mut numbered = Vec::new();
     for line in lines {
@@ -118,13 +112,6 @@ fn paint_lines(syntax: &mut Syntax, side: DiffSide, language: &str, lines: &[&Di
         return;
     }
     place(syntax, side, &numbered, &highlight(language, &source));
-}
-
-fn keeps(kind: DiffLineKind, side: DiffSide) -> bool {
-    !matches!(
-        (side, kind),
-        (DiffSide::Old, DiffLineKind::Add) | (DiffSide::New, DiffLineKind::Remove)
-    )
 }
 
 fn line_number(line: &DiffLine, side: DiffSide) -> Option<u32> {
@@ -179,13 +166,11 @@ fn old_text(file: &str, hunks: &[DiffHunk]) -> String {
     let mut at = 0usize;
     for hunk in hunks {
         let start = usize::try_from(hunk.new_start.saturating_sub(1)).unwrap_or(at);
-        if at < start {
-            let end = start.min(lines.len());
-            for range in &lines[at..end] {
-                parts.push(&file[range.clone()]);
-            }
-            at = end;
+        let end = start.min(lines.len());
+        for range in lines.get(at..end).unwrap_or_default() {
+            parts.push(&file[range.clone()]);
         }
+        at = at.max(end);
         for line in &hunk.lines {
             match line.kind {
                 DiffLineKind::Remove => parts.push(&line.text),
@@ -197,10 +182,8 @@ fn old_text(file: &str, hunks: &[DiffHunk]) -> String {
             }
         }
     }
-    if at < lines.len() {
-        for range in &lines[at..] {
-            parts.push(&file[range.clone()]);
-        }
+    for range in lines.get(at..).unwrap_or_default() {
+        parts.push(&file[range.clone()]);
     }
     parts.join("\n")
 }
@@ -213,9 +196,6 @@ fn place(
 ) {
     for (capture, name) in captures {
         for (number, line) in lines {
-            if line.end <= capture.start || line.start >= capture.end {
-                continue;
-            }
             let start = capture.start.max(line.start);
             let end = capture.end.min(line.end);
             if start >= end {
@@ -403,7 +383,10 @@ fn names_of(
         .collect()
 }
 
-#[allow(clippy::cast_precision_loss)]
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "a capture index rides in the hue, and indexes stay far below f32's exact range"
+)]
 fn marker(index: usize) -> Option<Hsla> {
     let hue = u32::try_from(index).ok()?;
     Some(Hsla {
@@ -417,7 +400,8 @@ fn marker(index: usize) -> Option<Hsla> {
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    clippy::cast_precision_loss
+    clippy::cast_precision_loss,
+    reason = "reads back the capture index that marker stored in the hue"
 )]
 fn recorded_name(names: &[String], color: Hsla) -> Option<String> {
     let zero = 0.0_f32.to_bits();
@@ -469,18 +453,11 @@ fn with_background(
         points.push(range.start);
         points.push(range.end);
     }
-    points.retain(|point| *point <= text.len());
     points.sort_unstable();
     points.dedup();
     let mut runs = Vec::new();
     for pair in points.windows(2) {
         let range = pair[0]..pair[1];
-        if range.is_empty()
-            || !text.is_char_boundary(range.start)
-            || !text.is_char_boundary(range.end)
-        {
-            continue;
-        }
         let mut style = syntax
             .iter()
             .find(|(span, _)| span.start <= range.start && range.end <= span.end)

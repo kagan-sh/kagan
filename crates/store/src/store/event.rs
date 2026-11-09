@@ -9,8 +9,10 @@ impl super::Store {
         Ok(self
             .conn
             .query_row(
-                "SELECT at FROM events WHERE thread_id = ?1
-                 AND json_extract(kind, '$.type') = 'started' ORDER BY seq DESC LIMIT 1",
+                &format!(
+                    "SELECT at FROM events WHERE thread_id = ?1 AND seq = {}",
+                    super::latest_start("?1")
+                ),
                 [Text(id)],
                 |row| row.get(0).map(Timestamp),
             )
@@ -61,19 +63,16 @@ impl super::Store {
     /// Newest ending events of the current run, four at most, newest first.
     /// An ending older than the latest start belongs to the previous run.
     pub fn endings(&self) -> Result<Vec<(ThreadId, Vec<EventKind>)>> {
-        let mut statement = self.conn.prepare(
+        let mut statement = self.conn.prepare(&format!(
             "SELECT thread_id, kind FROM ( \
                 SELECT e.thread_id, e.kind, \
                     ROW_NUMBER() OVER (PARTITION BY e.thread_id ORDER BY e.seq DESC) AS n \
                 FROM events e \
                 WHERE json_extract(e.kind, '$.type') IN ('stopped', 'exited', 'failed') \
-                    AND e.seq > COALESCE(( \
-                        SELECT MAX(s.seq) FROM events s \
-                        WHERE s.thread_id = e.thread_id \
-                            AND json_extract(s.kind, '$.type') = 'started' \
-                    ), 0) \
+                    AND e.seq > COALESCE({}, 0) \
              ) WHERE n <= 4 ORDER BY thread_id, n",
-        )?;
+            super::latest_start("e.thread_id")
+        ))?;
         let rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, Text<_>>(0)?.0,
@@ -147,9 +146,9 @@ pub(super) fn append_events(
 
 fn event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Event> {
     Ok(Event {
-        thread_id: row.get::<_, Text<_>>(0)?.0,
-        seq: row.get(1)?,
-        at: Timestamp(row.get(2)?),
-        kind: row.get::<_, Json<_>>(3)?.0,
+        thread_id: row.get::<_, Text<_>>("thread_id")?.0,
+        seq: row.get("seq")?,
+        at: Timestamp(row.get("at")?),
+        kind: row.get::<_, Json<_>>("kind")?.0,
     })
 }

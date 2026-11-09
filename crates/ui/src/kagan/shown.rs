@@ -2,22 +2,22 @@ use crate::theme::TypeScale as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Escape, Input, InputEvent, InputState};
-use gpui_kit::component::menu::PopupMenu;
+use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, AnyElement, App, AppContext as _, Context, DismissEvent, Entity, Focusable as _,
     InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window, div,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Window, div,
 };
 use kg_core::{Color, Workspace};
-use kg_domain::{Op, Thread, ThreadId, ThreadOp, ThreadStatus};
+use kg_domain::{Op, Thread, ThreadId, ThreadOp};
 use kg_plugins::RunCommand;
 
 use super::controls::{bound_keys, control, dispatch, menu_item, menu_popup, tip};
 use super::{
-    AddProject, ArchiveThread, Kagan, NewThread, RenameThread, SaveDiagnostics, StartAgain,
-    StopThread, ThreadActions, TogglePinned,
+    AddProject, Kagan, NewThread, RenameThread, SaveDiagnostics, StartAgain, StopThread,
+    ThreadActions,
 };
 use crate::terminal::TerminalView;
 use crate::theme::terminal_color;
@@ -39,11 +39,48 @@ fn ended_text(id: &ThreadId, cx: &gpui_kit::App) -> String {
     line
 }
 
-pub(super) fn running(thread: &Thread) -> bool {
-    matches!(
-        thread.status,
-        ThreadStatus::Starting | ThreadStatus::Active | ThreadStatus::Stopping
-    )
+#[derive(Default)]
+pub(super) struct TitleState {
+    pub(super) menu: Option<(Entity<PopupMenu>, Subscription)>,
+    pub(super) rename: Option<Entity<InputState>>,
+    pub(super) rename_watch: Option<Subscription>,
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum ThreadPick {
+    Pin,
+    Archive,
+    Rename,
+    SaveDiagnostics,
+}
+
+// The title bar and a sidebar row show the same menu. `tail` adds items after Rename.
+pub(super) fn thread_menu(
+    thread: &Thread,
+    on_pick: impl Fn(ThreadPick, &mut Window, &mut App) + Clone + 'static,
+    tail: impl FnOnce(PopupMenu) -> PopupMenu + 'static,
+    window: &mut Window,
+    cx: &mut App,
+) -> Entity<PopupMenu> {
+    let pin = if thread.pinned { "Unpin" } else { "Pin" };
+    let item = move |pick: ThreadPick, id: &'static str, label: &'static str| {
+        let on_pick = on_pick.clone();
+        PopupMenuItem::element(move |_, _| menu_item(id, label))
+            .on_click(move |_, window, cx| on_pick(pick, window, cx))
+    };
+    PopupMenu::build(window, cx, move |menu, _, _| {
+        let menu = menu
+            .item(item(ThreadPick::Pin, "thread-pin", pin))
+            .separator()
+            .item(item(ThreadPick::Archive, "thread-archive", "Archive"))
+            .separator()
+            .item(item(ThreadPick::Rename, "thread-rename", "Rename…"));
+        tail(menu).separator().item(item(
+            ThreadPick::SaveDiagnostics,
+            "save-diagnostics",
+            "Save diagnostics",
+        ))
+    })
 }
 
 impl Kagan {
@@ -53,15 +90,13 @@ impl Kagan {
         thread.archived_at.is_none().then_some(thread)
     }
 
-    /// Opens the shown thread's actions menu with focus in it. The button and the shortcut both
-    /// come here. An archived thread, or no visibly shown thread, has no menu.
     pub(super) fn open_thread_actions(
         &mut self,
         _: &ThreadActions,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.actions_menu.is_some() {
+        if self.title.menu.is_some() {
             return;
         }
         // Settings covers the terminal, so a thread only has a menu when it is visibly shown.
@@ -70,62 +105,53 @@ impl Kagan {
         };
         self.sidebar
             .update(cx, |sidebar, _| sidebar.close_row_menu());
+        let kagan = cx.entity().downgrade();
+        let id = thread.id.clone();
         let focus = self.focus.clone();
-        let pinned = thread.pinned;
-        let pin = if pinned { "Unpin" } else { "Pin" };
         let plugin_commands = super::header::menu(cx);
-        let menu = PopupMenu::build(window, cx, move |menu, _, _| {
-            let menu = menu
-                .action_context(focus)
-                .menu_element(Box::new(TogglePinned), move |_, _| {
-                    menu_item("thread-pin", pin)
-                })
-                .separator()
-                .menu_element(Box::new(ArchiveThread), |_, _| {
-                    menu_item("thread-archive", "Archive")
-                })
-                .separator()
-                .menu_element(Box::new(RenameThread), |_, _| {
-                    menu_item("thread-rename", "Rename…")
-                });
-            let menu = plugin_commands.into_iter().fold(menu, |menu, command| {
-                let run = RunCommand::new(command.plugin.clone(), command.id.clone());
-                let row = super::header::menu_id_for(&command.plugin, &command.id);
-                let title = command.title;
-                menu.separator().menu_element(Box::new(run), move |_, _| {
-                    control(
-                        row.clone(),
-                        Facts {
-                            role: Role::MenuItem,
-                            ..Facts::button(title.clone())
-                        },
-                        title.clone(),
-                    )
-                })
-            });
-            menu.separator()
-                .menu_element(Box::new(SaveDiagnostics), |_, _| {
-                    menu_item("save-diagnostics", "Save diagnostics")
-                })
-        });
+        let menu = thread_menu(
+            &thread,
+            move |pick, window, cx| {
+                _ = kagan.update(cx, |kagan, cx| kagan.thread_pick(&id, pick, window, cx));
+            },
+            move |menu| {
+                plugin_commands
+                    .into_iter()
+                    .fold(menu.action_context(focus), |menu, command| {
+                        let run = RunCommand::new(command.plugin.clone(), command.id.clone());
+                        let row = super::header::menu_id_for(&command.plugin, &command.id);
+                        let title = command.title;
+                        menu.separator().menu_element(Box::new(run), move |_, _| {
+                            control(
+                                row.clone(),
+                                Facts {
+                                    role: Role::MenuItem,
+                                    ..Facts::button(title.clone())
+                                },
+                                title.clone(),
+                            )
+                        })
+                    })
+            },
+            window,
+            cx,
+        );
         let dismiss = cx.subscribe_in(&menu, window, |this, _, _: &DismissEvent, window, cx| {
             this.close_thread_actions(window, cx);
         });
         menu.read(cx).focus_handle(cx).focus(window, cx);
-        self.actions_menu = Some((menu, dismiss));
+        self.title.menu = Some((menu, dismiss));
         cx.notify();
     }
 
-    // Closes both thread menus: the title's and a sidebar row's.
     pub(super) fn dismiss_thread_menus(&mut self, cx: &mut Context<Self>) {
-        self.actions_menu = None;
+        self.title.menu = None;
         self.sidebar
             .update(cx, |sidebar, _| sidebar.close_row_menu());
     }
 
-    /// Closes the actions menu and gives focus back to the thread's terminal.
     pub(super) fn close_thread_actions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.actions_menu = None;
+        self.title.menu = None;
         self.focus_work(window, cx);
         cx.notify();
     }
@@ -158,8 +184,8 @@ impl Kagan {
             },
         );
         window.focus(&input.focus_handle(cx), cx);
-        self.title_input = Some(input);
-        self.title_watch = Some(watch);
+        self.title.rename = Some(input);
+        self.title.rename_watch = Some(watch);
         cx.notify();
     }
 
@@ -173,37 +199,33 @@ impl Kagan {
             return;
         };
         let title = input.read(cx).value().to_string();
-        self.title_input = None;
+        self.title.rename = None;
         self.focus_work(window, cx);
         cx.notify();
         cx.spawn(async move |this, cx| {
-            _ = this.update(cx, |this, _| this.title_watch = None);
+            _ = this.update(cx, |this, _| this.title.rename_watch = None);
         })
         .detach();
-        let task = Workspace::dispatch(Op::Thread(ThreadOp::Rename { id, title }), cx);
-        let window = window.window_handle();
-        cx.spawn(async move |this, cx| {
-            let result = task.await;
-            _ = cx.update_window(window, |_, _, cx| {
-                _ = this.update(cx, |this, cx| {
-                    this.note = match result {
-                        Ok(_) => None,
-                        Err(error) => Some(format!("Could not rename the thread: {error}").into()),
-                    };
-                    cx.notify();
-                });
-            });
-        })
-        .detach();
+        self.run_then(
+            Op::Thread(ThreadOp::Rename { id, title }),
+            cx,
+            |this, result, _, cx| {
+                this.note = match result {
+                    Ok(_) => None,
+                    Err(error) => Some(format!("Could not rename the thread: {error}").into()),
+                };
+                cx.notify();
+            },
+        );
     }
 
     pub(super) fn close_rename(&mut self) {
-        self.title_input = None;
-        self.title_watch = None;
+        self.title.rename = None;
+        self.title.rename_watch = None;
     }
 
     fn cancel_rename(&mut self, cx: &mut Context<Self>) {
-        if self.title_input.is_none() {
+        if self.title.rename.is_none() {
             return;
         }
         self.close_rename();
@@ -211,7 +233,7 @@ impl Kagan {
     }
 
     fn cancel_rename_to_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.title_input.is_none() {
+        if self.title.rename.is_none() {
             return;
         }
         self.close_rename();
@@ -221,7 +243,7 @@ impl Kagan {
 
     // A click on the title does not start a rename.
     pub(super) fn title_line(&self, thread: &Thread, cx: &mut Context<Self>) -> AnyElement {
-        let Some(input) = &self.title_input else {
+        let Some(input) = &self.title.rename else {
             return div()
                 .id("thread-title")
                 .ui_container()
@@ -260,7 +282,7 @@ impl Kagan {
                     .tooltip(tip("Thread actions", &ThreadActions, cx))
                     .on_click(dispatch(ThreadActions)),
             ))
-            .when_some(self.actions_menu.as_ref(), |wrap, (menu, _)| {
+            .when_some(self.title.menu.as_ref(), |wrap, (menu, _)| {
                 wrap.child(menu_popup(
                     menu,
                     "thread-menu-layer",
@@ -273,6 +295,8 @@ impl Kagan {
     fn ended_notice(id: &ThreadId, archived: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let line = ended_text(id, cx);
         let recovery = Workspace::global(cx).read(cx).recovery(id);
+        // Offered only where the new-thread screen can run in the folder, by the same test.
+        let reusable = !archived && crate::kagan::start::Reuse::of(id, cx).is_some();
         h_flex()
             .id("ended")
             .w_full()
@@ -294,9 +318,23 @@ impl Kagan {
                     Facts::button("Start again"),
                     Button::new("start-again-button")
                         .small()
-                        .outline()
+                        .primary()
                         .label("Start again")
                         .on_click(dispatch(StartAgain)),
+                ))
+            })
+            .when(reusable, |row| {
+                let thread = id.clone();
+                row.child(control(
+                    "new-thread-here",
+                    Facts::button("New thread here…"),
+                    Button::new("new-thread-here-button")
+                        .small()
+                        .outline()
+                        .label("New thread here…")
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.new_thread_here(&thread, window, cx);
+                        })),
                 ))
             })
             .when(recovery, |row| {
@@ -314,17 +352,12 @@ impl Kagan {
 
     pub(super) fn thread_controls(&self, thread: &Thread, cx: &mut Context<Self>) -> AnyElement {
         let archived = thread.archived_at.is_some();
-        let live = running(thread);
+        let live = thread.status.running();
         h_flex()
             .gap_2()
             .children(super::header::buttons(cx))
             .when(live, |header| {
-                let keys = bound_keys(&StopThread, cx);
-                let tip = if keys.is_empty() {
-                    "Stop".to_owned()
-                } else {
-                    format!("Stop ({keys})")
-                };
+                let tip = super::controls::tip("Stop", &StopThread, cx);
                 header.child(control(
                     "stop",
                     Facts::button("Stop"),
@@ -363,7 +396,7 @@ impl Kagan {
             return Self::render_empty("This thread is gone.", cx);
         };
         let archived = thread.archived_at.is_some();
-        let live = running(&thread);
+        let live = thread.status.running();
         // The terminal stays on screen after its program ends, so the last output stays readable.
         let strip = self.render_strip(cx);
         let ended = (!live).then(|| Self::ended_notice(&id, archived, cx));

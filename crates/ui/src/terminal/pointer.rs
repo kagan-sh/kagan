@@ -8,15 +8,12 @@ use kg_domain::{SelectMode, ThreadOp};
 use super::mouse::{Button, Phase, Spot};
 use super::{TerminalView, dispatch, steps};
 
-/// Where the view sits on the window, as the last paint left it.
 #[derive(Clone, Copy)]
 pub(super) struct Geometry {
     pub(super) origin: Point<Pixels>,
     pub(super) cell: gpui_kit::Size<Pixels>,
 }
 
-/// What the pointer is doing. A press the program was told about is `held`; a press that selects
-/// sets `selecting`.
 pub(super) struct Pointer {
     pub(super) geometry: Option<Geometry>,
     pub(super) held: Option<Button>,
@@ -117,7 +114,6 @@ impl TerminalView {
         }
     }
 
-    // The wheel moves the view through the history, or is sent to a program that asked for it.
     // Partial steps wait for the next event.
     pub(super) fn scrolled(&mut self, event: &ScrollEvent, _: &mut Window, cx: &mut Context<Self>) {
         let Some(geometry) = self.pointer.geometry else {
@@ -200,7 +196,6 @@ impl TerminalView {
         );
     }
 
-    /// The cell under a point, and whether the point is in its right half.
     fn locate(&self, at: Point<Pixels>) -> (Spot, bool) {
         let Some(geometry) = self.pointer.geometry else {
             return (Spot { column: 0, row: 0 }, false);
@@ -228,7 +223,6 @@ fn button_of(button: MouseButton) -> Option<Button> {
     }
 }
 
-/// The index of the cell a distance falls in, clamped to the last of `count` cells.
 pub(super) fn cell_at(distance: Pixels, step: Pixels, count: usize) -> usize {
     (0..count)
         .take_while(|index| step * steps(index + 1) <= distance)

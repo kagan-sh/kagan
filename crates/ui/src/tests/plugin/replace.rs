@@ -211,6 +211,7 @@ fn install_with(data: &Path, folder: &str, id: &str, entry: &str) {
             commit: None,
             enabled: true,
             approved: json!({"powers": {"areas": ["threads"]}, "downloads": {}, "folders": {}}),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();
@@ -414,10 +415,12 @@ fn a_sidebar_plugin_draws_only_the_list_and_the_host_keeps_questions(cx: &mut Te
                     InteractionOption {
                         id: "yes".into(),
                         label: "Yes".into(),
+                        role: None,
                     },
                     InteractionOption {
                         id: "no".into(),
                         label: "No".into(),
+                        role: None,
                     },
                 ],
                 fields: None,
@@ -612,6 +615,7 @@ fn install_example(data: &Path, name: &str) {
             commit: None,
             enabled: true,
             approved: json!({"powers": {"areas": ["threads"]}, "downloads": {}, "folders": {}}),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();
@@ -671,10 +675,12 @@ fn ask(cx: &mut TestAppContext, thread: &ThreadId) -> kg_domain::PendingInteract
                     InteractionOption {
                         id: "yes".into(),
                         label: "Yes".into(),
+                        role: None,
                     },
                     InteractionOption {
                         id: "no".into(),
                         label: "No".into(),
+                        role: None,
                     },
                 ],
                 fields: None,

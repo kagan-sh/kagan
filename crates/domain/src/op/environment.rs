@@ -24,6 +24,12 @@ pub enum EnvironmentOp {
         #[arg(env = "KG_PROJECT_ID")]
         project_id: ProjectId,
     },
+    /// The setup script a worktree from this revision of a project would run
+    Setup {
+        #[arg(env = "KG_PROJECT_ID")]
+        project_id: ProjectId,
+        rev: String,
+    },
     /// Which branch change counts compare against
     SetBase {
         #[arg(env = "KG_ENVIRONMENT_ID")]
@@ -72,6 +78,25 @@ pub struct BranchList {
     /// Why the project folder cannot change branches. None when it can.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checkout_block: Option<String>,
+}
+
+/// What the setup file at a commit is. A link is never run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SetupFile {
+    Link,
+    Script,
+}
+
+/// A commit, and the setup script at it. `mode` is None when the commit has no setup file. `text` is
+/// cut to the lines the Start screen shows.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PinnedSetup {
+    pub commit: String,
+    pub mode: Option<SetupFile>,
+    pub text: String,
+    pub truncated: bool,
 }
 
 /// A branch to check out in the project folder, or the base of a branch to create there.

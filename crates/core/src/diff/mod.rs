@@ -12,15 +12,20 @@ use crate::host::database::{Database, Result};
 mod git;
 mod patch;
 mod snapshot;
+#[cfg(test)]
+mod tests;
 
 pub(crate) use snapshot::resolve_base;
 
 use git::{git, git_text};
 use patch::{commits, diff_file, diff_list};
-use snapshot::{Snapshot, snapshot_key, trees};
+use snapshot::{Snapshot, ends, snapshot_key};
 
 pub(super) const PATCH_LIMIT: usize = 1024 * 1024;
 pub(super) const FILE_LIMIT: u64 = 1024 * 1024;
+
+// Scopes kept at once. Past this the cache starts over, since git can rebuild every diff.
+const MAX_ENTRIES: usize = 64;
 
 struct Entry {
     left: String,
@@ -39,10 +44,19 @@ impl Cache {
             entries: Mutex::new(HashMap::new()),
         })
     }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.entries.lock().map_or(0, |entries| entries.len())
+    }
 }
 
-pub(crate) async fn run(database: Database, op: DiffOp, cx: &mut AsyncApp) -> Result<OpResult> {
-    let cache = cx.update(|cx| crate::Workspace::global(cx).read(cx).diffs.clone());
+pub(crate) async fn run(
+    database: Database,
+    cache: Arc<Cache>,
+    op: DiffOp,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
     let (root, hint, op) = locate(database, op).await?;
     cx.background_spawn(async move {
         match op {
@@ -78,6 +92,9 @@ fn cached<T>(
         .entries
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if guard.len() >= MAX_ENTRIES && !guard.contains_key(key) {
+        guard.clear();
+    }
     let entry = guard.entry(key.to_owned()).or_insert_with(|| Entry {
         left: left.to_owned(),
         right: right.to_owned(),
@@ -103,7 +120,7 @@ fn files(cache: &Cache, root: &Path, hint: Option<&str>, query: &DiffQuery) -> R
             repository: false,
         });
     }
-    let (left, right, base) = trees(root, hint, query)?;
+    let (left, right, base) = ends(root, hint, query)?;
     listed(cache, root, &cache_key(root, query), &left, &right, base)
 }
 
@@ -197,7 +214,7 @@ fn file(
     if !crate::host::git::is_repository(root) {
         return Ok(DiffFileView::empty(path));
     }
-    let (left, right, base) = trees(root, hint, query)?;
+    let (left, right, base) = ends(root, hint, query)?;
     if let Some(skipped) = right.skipped.get(path).or_else(|| left.skipped.get(path)) {
         let revision = file_revision(root, &left, &right, path, path)?;
         return Ok(DiffFileView {

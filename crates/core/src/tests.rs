@@ -1,4 +1,8 @@
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "a test stops at the first broken step"
+)]
 
 mod agent;
 #[cfg(unix)]
@@ -9,6 +13,8 @@ mod environment;
 #[cfg(unix)]
 mod extra;
 mod guide;
+#[cfg(unix)]
+mod notify;
 mod plugin;
 mod preview;
 mod program;
@@ -26,7 +32,8 @@ mod update;
 mod workspace;
 mod worktree;
 
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use gpui_kit::{Entity, TestAppContext};
 
@@ -78,12 +85,19 @@ impl Fixture {
             .unwrap();
         drop(store);
         let workspace = cx
-            .update(|cx| Workspace::open(dir.path().into(), std::env::current_exe().unwrap(), cx))
+            .update(|cx| {
+                Workspace::open(
+                    dir.path().into(),
+                    std::env::current_exe().unwrap(),
+                    Some("/tmp/kagan-test.sock".into()),
+                    cx,
+                )
+            })
             .await
             .unwrap();
         cx.update(|cx| {
             workspace.update(cx, |workspace, _| {
-                workspace.bb_data_dir = Some(dir.path().join("bb"));
+                insert_homes(&mut workspace.homes, dir.path());
             });
         });
         Self {
@@ -111,12 +125,19 @@ impl Fixture {
         plant(&mut store);
         drop(store);
         let workspace = cx
-            .update(|cx| Workspace::open(dir.path().into(), std::env::current_exe().unwrap(), cx))
+            .update(|cx| {
+                Workspace::open(
+                    dir.path().into(),
+                    std::env::current_exe().unwrap(),
+                    Some("/tmp/kagan-test.sock".into()),
+                    cx,
+                )
+            })
             .await
             .unwrap();
         cx.update(|cx| {
             workspace.update(cx, |workspace, _| {
-                workspace.bb_data_dir = Some(dir.path().join("bb"));
+                insert_homes(&mut workspace.homes, dir.path());
             });
         });
         Self {
@@ -134,10 +155,20 @@ impl Fixture {
             environment: EnvironmentSpec::ProjectDefault,
             visibility: None,
             parent_thread_id: None,
+            quiet: false,
             lifecycle_owner_thread_id: None,
             metadata: None,
         }))
     }
+}
+
+// Points every program's folder into the test's folder, so no test reads the person's own.
+fn insert_homes(homes: &mut BTreeMap<&'static str, PathBuf>, dir: &Path) {
+    homes.insert("BB_DATA_DIR", dir.join("bb"));
+    homes.insert("CLAUDE_CONFIG_DIR", dir.join("claude"));
+    homes.insert("CODEX_HOME", dir.join("codex-home"));
+    homes.insert("KIMI_CODE_HOME", dir.join("kimi-home"));
+    homes.insert("CURSOR_CONFIG_DIR", dir.join("cursor"));
 }
 
 fn program() -> &'static str {
@@ -309,6 +340,7 @@ fn plant_old_turn(db: &Path, id: &ThreadId) {
             options: vec![InteractionOption {
                 id: "allow".into(),
                 label: "Allow".into(),
+                role: None,
             }],
             fields: None,
             created_at: Timestamp(1),
@@ -349,6 +381,7 @@ fn personal_run(fixture: &Fixture, title: &str, environment: EnvironmentSpec) ->
         environment,
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     }))
@@ -400,9 +433,11 @@ fn dispatch_delete(id: &ThreadId, cx: &mut TestAppContext) -> gpui_kit::Task<Res
 fn hold_removal(fixture: &Fixture, cx: &mut TestAppContext) -> async_channel::Sender<()> {
     let (release, hold) = async_channel::bounded(1);
     cx.update(|cx| {
-        fixture
-            .workspace
-            .update(cx, |workspace, _| workspace.removal_hold = Some(hold));
+        fixture.workspace.update(cx, |workspace, _| {
+            workspace
+                .holds
+                .insert(crate::workspace::Hold::Removal, hold)
+        });
     });
     release
 }
@@ -410,9 +445,9 @@ fn hold_removal(fixture: &Fixture, cx: &mut TestAppContext) -> async_channel::Se
 fn hold_delete(fixture: &Fixture, cx: &mut TestAppContext) -> async_channel::Sender<()> {
     let (release, hold) = async_channel::bounded(1);
     cx.update(|cx| {
-        fixture
-            .workspace
-            .update(cx, |workspace, _| workspace.delete_hold = Some(hold));
+        fixture.workspace.update(cx, |workspace, _| {
+            workspace.holds.insert(crate::workspace::Hold::Delete, hold)
+        });
     });
     release
 }
@@ -420,9 +455,9 @@ fn hold_delete(fixture: &Fixture, cx: &mut TestAppContext) -> async_channel::Sen
 fn hold_run(fixture: &Fixture, cx: &mut TestAppContext) -> async_channel::Sender<()> {
     let (release, hold) = async_channel::bounded(1);
     cx.update(|cx| {
-        fixture
-            .workspace
-            .update(cx, |workspace, _| workspace.run_hold = Some(hold));
+        fixture.workspace.update(cx, |workspace, _| {
+            workspace.holds.insert(crate::workspace::Hold::Run, hold)
+        });
     });
     release
 }
@@ -735,10 +770,12 @@ fn ask_options() -> Vec<InteractionOption> {
         InteractionOption {
             id: "yes".into(),
             label: "Yes".into(),
+            role: None,
         },
         InteractionOption {
             id: "no".into(),
             label: "No".into(),
+            role: None,
         },
     ]
 }
@@ -866,10 +903,12 @@ async fn ask_rejects_duplicate_select_choice_ids(cx: &mut TestAppContext) {
                     InteractionOption {
                         id: "a".into(),
                         label: "A".into(),
+                        role: None,
                     },
                     InteractionOption {
                         id: "a".into(),
                         label: "Also A".into(),
+                        role: None,
                     },
                 ],
                 default: None,
@@ -966,6 +1005,7 @@ async fn ask_refuses_repeated_field_ids_text_over_its_caps_and_a_default_outside
                 vec![InteractionOption {
                     id: "fast".into(),
                     label: "Fast".into(),
+                    role: None,
                 }],
                 Some("slow"),
             )],
@@ -994,6 +1034,7 @@ async fn ask_refuses_more_fields_or_choices_than_the_caps_and_takes_a_full_form(
         .map(|n| InteractionOption {
             id: format!("c{n:02}"),
             label: "Choice".into(),
+            role: None,
         })
         .collect();
     let error = ask_refused(&id, vec![select_field(choices, None)], cx).await;
@@ -1006,6 +1047,7 @@ async fn ask_refuses_more_fields_or_choices_than_the_caps_and_takes_a_full_form(
         .map(|n| InteractionOption {
             id: format!("c{n:02}"),
             label: "Choice".into(),
+            role: None,
         })
         .collect();
     op(
@@ -1202,6 +1244,7 @@ async fn ask_answer_accepts_none_for_a_select(cx: &mut TestAppContext) {
                 choices: vec![InteractionOption {
                     id: "fast".into(),
                     label: "Fast".into(),
+                    role: None,
                 }],
                 default: None,
                 required: false,
@@ -1379,7 +1422,6 @@ fn install_plugin(dir: &Path, enabled: bool) {
     let root = dir.join("demo-plugin");
     let skill = root.join("skills/demo");
     std::fs::create_dir_all(&skill).unwrap();
-    std::fs::write(root.join("kagan.json"), r#"{"skills": ["skills/demo"]}"#).unwrap();
     std::fs::write(
         skill.join("SKILL.md"),
         "---\nname: demo\ndescription: A demo skill.\n---\n\nDo the demo.\n",
@@ -1400,6 +1442,7 @@ fn install_plugin(dir: &Path, enabled: bool) {
             commit: None,
             enabled,
             approved: json!({}),
+            skills: vec!["skills/demo".into()],
             error: None,
         })
         .unwrap();
@@ -1487,6 +1530,7 @@ fn idle_thread(id: &str, project: ProjectId) -> Thread {
         status: ThreadStatus::Idle,
         visibility: Visibility::Visible,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         section_id: None,
         pinned: false,
@@ -1508,8 +1552,11 @@ fn wait_saved(dir: &Path, id: &ThreadId, cx: &mut TestAppContext) {
         if let Ok(store) = kg_store::Store::open(dir.join("kagan.sqlite3"))
             && store.screens().is_ok_and(|rows| {
                 rows.iter()
-                    .any(|row| &row.thread_id == id && row.screen_kept && !row.replay.is_empty())
+                    .any(|row| &row.thread_id == id && row.screen_kept)
             })
+            && store
+                .screen_replay(id)
+                .is_ok_and(|replay| replay.is_some_and(|replay| !replay.is_empty()))
         {
             return;
         }
@@ -1572,6 +1619,7 @@ fn plugin(id: &str, root: &Path, source: &str, commit: Option<&str>, approved: &
         } else {
             json!({ "marker": approved })
         },
+        skills: Vec::new(),
         error: None,
     }
 }
@@ -1610,7 +1658,7 @@ fn assert_diagnostics_keeps_secrets_out(text: &str) {
     assert!(text.contains("version=a1b2c3d"), "{text}");
     assert!(text.contains("version=unknown"), "{text}");
     assert!(text.contains("version=none"), "{text}");
-    assert!(text.contains("1 warn, 1 error"), "{text}");
+    assert!(text.contains("log: not read, no plugin host"), "{text}");
     assert!(
         text.contains("screen: not kept, outside the geometry or 4 MiB bound"),
         "{text}"
@@ -1635,6 +1683,7 @@ fn worktree_run(fixture: &Fixture, title: Option<&str>, base: Option<&str>) -> O
         },
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     }))
@@ -1790,6 +1839,7 @@ async fn folder_plugin_fixture(cx: &mut TestAppContext) -> Fixture {
                 commit: None,
                 enabled: true,
                 approved: json!({ "folders": { "notes": "Notes" } }),
+                skills: Vec::new(),
                 error: None,
             })
             .unwrap();

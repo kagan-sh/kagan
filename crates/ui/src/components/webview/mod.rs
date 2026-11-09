@@ -1,8 +1,6 @@
-//! `WebView`: one local page a plugin panel can place as its body.
-//!
-//! The page is kept on a global, not in element state. Element state is dropped when the panel
-//! leaves the tree, and that would reload the page. A native view also keeps its last place, so a
-//! panel that is off screen hides the page instead of leaving it where it was.
+// The page is kept on a global, not in element state. Element state is dropped when the panel
+// leaves the tree, and that would reload the page. A native view also keeps its last place, so a
+// panel that is off screen hides the page instead of leaving it where it was.
 
 use std::sync::Arc;
 
@@ -26,10 +24,8 @@ use super::component_error::ComponentError;
 pub(crate) const REFUSED_SCHEME: &str = "WebView only opens an http or https page.";
 pub(crate) const REFUSED_HOST: &str =
     "WebView only opens 127.0.0.1, localhost, or a host this plugin may fetch.";
-#[cfg(not(desktop))]
-pub(crate) const UNAVAILABLE: &str = "This page works on macOS, Windows and Linux only for now.";
 
-/// The script's root is a `WebView`, so the panel can sit edge to edge.
+// The script's root is a `WebView`, so the panel can sit edge to edge.
 pub(crate) fn fills_panel(view: &Entity<ScriptView>, cx: &App) -> bool {
     view.read(cx)
         .snapshot()
@@ -115,6 +111,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
 }
 
 type Set = Arc<dyn Fn(&mut Props) + Send + Sync>;
+type Kept = Result<(Option<[u8; 16]>, Option<String>), String>;
 
 struct Props {
     url: Option<String>,
@@ -157,7 +154,6 @@ impl ComponentMaterializer for WebView {
 
 struct Shown {
     note: Option<String>,
-    #[cfg(desktop)]
     page: Option<Entity<crate::web_page::WebPage>>,
 }
 
@@ -167,12 +163,8 @@ fn frame(
     cx: &App,
 ) -> impl gpui_kit::Styled + gpui_kit::ParentElement + gpui_kit::IntoElement {
     let note = shown.note.clone();
-    #[cfg(desktop)]
     let page = shown.page.clone();
-    #[cfg(desktop)]
     let fill_note = page.is_none();
-    #[cfg(not(desktop))]
-    let fill_note = true;
     let element = div()
         .id(ElementId::Name(format!("webview-{id}").into()))
         .ui_container()
@@ -184,9 +176,7 @@ fn frame(
         .when_some(note, |element, note| {
             element.child(sentence(id, note.as_str(), fill_note, cx))
         });
-    #[cfg(desktop)]
-    let element = element.when_some(page, |element, page| element.child(page).min_h_0().flex_1());
-    element
+    element.when_some(page, |element, page| element.child(page).min_h_0().flex_1())
 }
 
 fn sentence(id: &str, note: &str, fill: bool, cx: &App) -> AnyElement {
@@ -213,7 +203,6 @@ fn sentence(id: &str, note: &str, fill: bool, cx: &App) -> AnyElement {
 enum Gate {
     Empty,
     Note(&'static str),
-    #[cfg(desktop)]
     Open,
 }
 
@@ -224,10 +213,7 @@ fn gate(url: &str, hosts: &[String]) -> Gate {
     if let Err(reason) = allowed(url, hosts) {
         return Gate::Note(reason);
     }
-    #[cfg(desktop)]
-    return Gate::Open;
-    #[cfg(not(desktop))]
-    Gate::Note(UNAVAILABLE)
+    Gate::Open
 }
 
 fn place(id: &str, url: &str, store: bool, window: &mut Window, cx: &mut App) -> Shown {
@@ -240,14 +226,14 @@ fn place(id: &str, url: &str, store: bool, window: &mut Window, cx: &mut App) ->
     let keep = store.then(|| {
         let host = kg_plugins::PluginHost::global(cx).read(cx);
         if !host.allows_page_store(&plugin) {
-            return Ok(None);
+            return Ok((None, None));
         }
         if crate::web_page::macos_major() < 14 {
-            return Err(crate::web_page::STORE_NEEDS_MACOS.to_owned());
+            return Ok((None, Some(crate::web_page::STORE_NEEDS_MACOS.to_owned())));
         }
         let data = host.plugin_data(&plugin);
         kg_plugins::keep_store(&data, id)
-            .map(Some)
+            .map(|store| (Some(store), None))
             .map_err(|error| error.to_string())
     });
     #[cfg(not(target_os = "macos"))]
@@ -258,19 +244,10 @@ fn place(id: &str, url: &str, store: bool, window: &mut Window, cx: &mut App) ->
     owned(&owner, id, url, &hosts, keep, window, cx)
 }
 
-fn loose(
-    #[cfg(desktop)] id: &str,
-    #[cfg(not(desktop))] _id: &str,
-    url: &str,
-    #[cfg(desktop)] window: &mut Window,
-    #[cfg(not(desktop))] _window: &mut Window,
-    #[cfg(desktop)] cx: &mut App,
-    #[cfg(not(desktop))] _cx: &mut App,
-) -> Shown {
+fn loose(id: &str, url: &str, window: &mut Window, cx: &mut App) -> Shown {
     match gate(url, &[]) {
         Gate::Empty => blank(),
         Gate::Note(reason) => noted(reason),
-        #[cfg(desktop)]
         Gate::Open => {
             let key = ElementId::Name(format!("webview-loose-{id}-{url}").into());
             let state =
@@ -291,10 +268,8 @@ fn owned(
     id: &str,
     url: &str,
     hosts: &[String],
-    #[cfg(desktop)] keep: Option<Result<Option<[u8; 16]>, String>>,
-    #[cfg(not(desktop))] _keep: Option<Result<Option<[u8; 16]>, String>>,
-    #[cfg(desktop)] window: &mut Window,
-    #[cfg(not(desktop))] _window: &mut Window,
+    keep: Option<Kept>,
+    window: &mut Window,
     cx: &mut App,
 ) -> Shown {
     let index = find(cx, owner.entity_id(), id);
@@ -302,10 +277,7 @@ fn owned(
         Gate::Empty => {
             if let Some(index) = index {
                 conceal_at(cx, index);
-                #[cfg(desktop)]
-                {
-                    cx.default_global::<Pages>().pages[index].page = None;
-                }
+                cx.default_global::<Pages>().pages[index].page = None;
                 write(cx, index, "", None);
             }
             blank()
@@ -317,27 +289,7 @@ fn owned(
             }
             noted(reason)
         }
-        #[cfg(desktop)]
         Gate::Open => match keep {
-            Some(Err(message)) if message == crate::web_page::STORE_NEEDS_MACOS => {
-                let mut shown = open_owned(
-                    Open {
-                        owner: owner.clone(),
-                        id,
-                        url,
-                        hosts,
-                        store: None,
-                        index,
-                    },
-                    window,
-                    cx,
-                );
-                shown.note = Some(message.clone());
-                if let Some(index) = find(cx, owner.entity_id(), id) {
-                    cx.default_global::<Pages>().pages[index].note = Some(message);
-                }
-                shown
-            }
             Some(Err(message)) => {
                 if let Some(index) = index {
                     conceal_at(cx, index);
@@ -346,8 +298,8 @@ fn owned(
                 noted(&message)
             }
             other => {
-                let store = other.and_then(Result::ok).flatten();
-                open_owned(
+                let (store, note) = other.and_then(Result::ok).unwrap_or((None, None));
+                let mut shown = open_owned(
                     Open {
                         owner: owner.clone(),
                         id,
@@ -358,13 +310,19 @@ fn owned(
                     },
                     window,
                     cx,
-                )
+                );
+                if let Some(note) = note {
+                    shown.note = Some(note.clone());
+                    if let Some(index) = find(cx, owner.entity_id(), id) {
+                        cx.default_global::<Pages>().pages[index].note = Some(note);
+                    }
+                }
+                shown
             }
         },
     }
 }
 
-#[cfg(desktop)]
 struct Open<'a> {
     owner: WeakEntity<ScriptView>,
     id: &'a str,
@@ -377,7 +335,6 @@ struct Open<'a> {
 fn blank() -> Shown {
     Shown {
         note: None,
-        #[cfg(desktop)]
         page: None,
     }
 }
@@ -385,12 +342,10 @@ fn blank() -> Shown {
 fn noted(reason: &str) -> Shown {
     Shown {
         note: Some(reason.to_owned()),
-        #[cfg(desktop)]
         page: None,
     }
 }
 
-#[cfg(desktop)]
 fn page_shown(page: Entity<crate::web_page::WebPage>) -> Shown {
     Shown {
         note: None,
@@ -398,7 +353,6 @@ fn page_shown(page: Entity<crate::web_page::WebPage>) -> Shown {
     }
 }
 
-#[cfg(desktop)]
 fn open_owned(open: Open<'_>, window: &mut Window, cx: &mut App) -> Shown {
     let Open {
         owner,
@@ -461,7 +415,6 @@ fn open_owned(open: Open<'_>, window: &mut Window, cx: &mut App) -> Shown {
     }
 }
 
-#[cfg(desktop)]
 fn build(
     url: &str,
     hosts: &[String],
@@ -478,30 +431,24 @@ fn build(
     })
 }
 
-#[cfg(desktop)]
 fn reveal(page: &Entity<crate::web_page::WebPage>, cx: &mut App) {
     if !page.read(cx).visible(cx) {
         page.update(cx, |page, cx| page.show(cx));
     }
 }
 
-#[cfg(desktop)]
 fn conceal(page: &Entity<crate::web_page::WebPage>, cx: &mut App) {
     if page.read(cx).visible(cx) {
         page.update(cx, |page, cx| page.hide(cx));
     }
 }
 
-#[cfg(desktop)]
 fn conceal_at(cx: &mut App, index: usize) {
     let Some(page) = cx.default_global::<Pages>().pages[index].page.clone() else {
         return;
     };
     conceal(&page, cx);
 }
-
-#[cfg(not(desktop))]
-fn conceal_at(_cx: &mut App, _index: usize) {}
 
 #[derive(Default)]
 struct Pages {
@@ -515,11 +462,8 @@ struct Held {
     id: String,
     url: String,
     note: Option<String>,
-    #[cfg(desktop)]
     hosts: Vec<String>,
-    #[cfg(desktop)]
     store: Option<[u8; 16]>,
-    #[cfg(desktop)]
     page: Option<Entity<crate::web_page::WebPage>>,
 }
 
@@ -530,5 +474,4 @@ pub(crate) use pages::native_shown;
 pub(crate) use pages::{drop_stores, sync_pages};
 
 use pages::{find, write};
-#[cfg(desktop)]
 use pages::{held, save, write_page};

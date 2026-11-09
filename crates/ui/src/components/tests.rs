@@ -106,6 +106,7 @@ fn mount_dir(
         kg_core::Workspace::open(
             directory.path().into(),
             std::env::current_exe().unwrap(),
+            None,
             cx,
         )
     });
@@ -264,6 +265,7 @@ fn seed_thread(dir: &std::path::Path) {
             status: ThreadStatus::Idle,
             visibility: Visibility::Visible,
             parent_thread_id: None,
+            quiet: false,
             lifecycle_owner_thread_id: None,
             section_id: None,
             pinned: false,

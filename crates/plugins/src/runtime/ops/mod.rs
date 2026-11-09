@@ -6,15 +6,16 @@ use kg_domain::{
     Op, OpError, OpResult, Plugin, PluginId, PluginOp, PreferenceOp, ProjectId, ProjectOp, Slot,
     SlotChoice, ThreadId, ThreadOp,
 };
-use serde_json::{Map, Value};
+use serde_json::Value;
 
+use crate::ask::{Job, ask};
 use crate::host::activate;
 use crate::manifest::Grant;
 use crate::{Discovered, PluginHost, Result};
 
-use approve::{choose, permission_options};
+use approve::{choose, options};
 use config::config;
-use develop::{develop, disable, enable};
+use develop::{check, dev, disable, enable, logs, new, reload_enabled, remove, share, types};
 use install::{install, update};
 
 mod approve;
@@ -41,16 +42,33 @@ pub(crate) async fn run(
         PluginOp::Start => Err(OpError::Failed(
             "starting a plugin thread needs a window".into(),
         )),
-        PluginOp::New { .. }
-        | PluginOp::Check { .. }
-        | PluginOp::Share { .. }
-        | PluginOp::Types { .. }
-        | PluginOp::List
-        | PluginOp::Remove { .. }
-        | PluginOp::Reload { .. }
-        | PluginOp::Dev { .. }
-        | PluginOp::CancelInstall
-        | PluginOp::Logs { .. } => develop(host, op, requester, cx).await,
+        PluginOp::New { name, dir } => new(host, name, dir, cx).await,
+        PluginOp::Check { path } => check(host, path, cx).await,
+        PluginOp::Share { path } => share(host, path, cx).await,
+        PluginOp::Types { path } => types(host, path, cx).await,
+        PluginOp::List => Ok(OpResult::Plugins(host.read_with(cx, |host, _| {
+            host.records
+                .values()
+                .map(|record| Plugin {
+                    error: host.failure(&record.id),
+                    source: crate::index::shown(&record.source),
+                    ..record.clone()
+                })
+                .collect()
+        }))),
+        PluginOp::Remove { id, thread_id } => remove(host, id, thread_id, requester, cx).await,
+        PluginOp::Reload { id, thread_id } => {
+            reload_enabled(host, id, thread_id, requester, cx).await
+        }
+        PluginOp::Dev { path, thread_id } => dev(host, path, thread_id, requester, cx).await,
+        PluginOp::CancelInstall => {
+            if host.read_with(cx, |host, _| host.stop_install()) {
+                Ok(OpResult::Done)
+            } else {
+                Err(OpError::Invalid("no git install is running".into()))
+            }
+        }
+        PluginOp::Logs { id, after, .. } => logs(host, id, after, cx).await,
         PluginOp::Cli {
             name,
             command,
@@ -129,7 +147,7 @@ async fn use_slot(
                 requester,
                 question.clone(),
                 &question,
-                permission_options(),
+                options("Approve", false),
                 cx,
             )
             .await?;
@@ -210,17 +228,18 @@ async fn cli(host: &Entity<PluginHost>, call: CliCall, cx: &mut AsyncApp) -> Res
                 .map(|project| project.id)
         }
     };
-    let job = Map::from_iter([
-        ("kind".to_owned(), "cli".into()),
-        ("command".to_owned(), command.clone().into()),
-        ("argv".to_owned(), argv.into()),
-        ("cwd".to_owned(), cwd.display().to_string().into()),
-        ("threadId".to_owned(), thread_id.map(|id| id.0).into()),
-        ("projectId".to_owned(), project_id.map(|id| id.0).into()),
-    ]);
-    let reply = crate::host::call(host, &plugin, &command, job, crate::TOOL_TIMEOUT, cx).await?;
+    let job = Job::Cli {
+        command: &command,
+        argv: &argv,
+        cwd: cwd.display().to_string(),
+        thread_id: &thread_id,
+        project_id: &project_id,
+    };
+    let value = ask(host, &plugin, &job, cx)
+        .await
+        .map_err(OpError::from)?
+        .map_err(OpError::Failed)?;
     let secrets = host.read_with(cx, |host, _| host.secrets.clone());
-    let value = reply.map_err(|error| OpError::Failed(secrets.redact(&plugin, &error)))?;
     let exit_code = value["exitCode"]
         .as_i64()
         .and_then(|code| i32::try_from(code).ok())
@@ -237,7 +256,7 @@ async fn cli(host: &Entity<PluginHost>, call: CliCall, cx: &mut AsyncApp) -> Res
     })
 }
 
-/// Starts a plugin. A start that fails leaves its reason on the plugin, in place of any older one.
+// Starts a plugin. A start that fails leaves its reason on the plugin, in place of any older one.
 async fn start(
     host: &Entity<PluginHost>,
     record: &Plugin,

@@ -617,6 +617,7 @@ fn a_hidden_sidebar_counts_what_is_waiting_and_refuses_a_synthetic_answer(cx: &m
     let options = vec![InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     }];
     let first = cx.update(|cx| {
         Workspace::ask_for_person(
@@ -1196,14 +1197,61 @@ pub(crate) fn hover_row(cx: &mut TestAppContext, window: AnyWindowHandle, name: 
 }
 
 #[gpui_kit::test]
-fn the_thread_menu_stays_open_on_its_row(cx: &mut TestAppContext) {
+fn the_thread_menu_opens_without_showing_its_row(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);
     let thread = run_shell(cx);
+    let before = shown(cx, &kagan);
     hover_row(cx, window, &format!("thread-{thread}"));
     click(cx, window, &format!("thread-actions-{thread}"));
     cx.run_until_parked();
     assert!(shows(cx, window, "popup-menu"));
-    assert_eq!(shown(cx, &kagan), Some(thread));
+    assert_eq!(shown(cx, &kagan), before);
+}
+
+#[gpui_kit::test]
+fn a_nested_row_keeps_its_actions_inside_the_narrow_sidebar(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    set_preference(cx, "main.left-width", json!(200));
+    let mut chain = vec![run_shell(cx)];
+    for _ in 0..5 {
+        let child = run_child(cx, chain.last().expect("parent"));
+        chain.push(child);
+    }
+    cx.run_until_parked();
+    let (sidebar_x, sidebar_w) = span(cx, window, "sidebar-pane").expect("sidebar-pane");
+    let right = sidebar_x + sidebar_w;
+    for thread in chain.iter().skip(1) {
+        hover_row(cx, window, &format!("thread-{thread}"));
+        cx.run_until_parked();
+        for control in [
+            format!("thread-archive-{thread}"),
+            format!("thread-actions-{thread}"),
+        ] {
+            let (x, w) = span(cx, window, &control).expect("row control");
+            assert!(
+                x + w <= right + 0.5,
+                "{control} ends at {} past the sidebar edge {right}",
+                x + w
+            );
+        }
+    }
+}
+
+#[gpui_kit::test]
+fn a_row_menu_acts_on_its_own_row_while_another_thread_is_shown(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let shown_thread = run_shell(cx);
+    let row = run_shell(cx);
+    click(cx, window, &format!("thread-{shown_thread}"));
+    assert_eq!(shown(cx, &kagan), Some(shown_thread.clone()));
+    hover_row(cx, window, &format!("thread-{row}"));
+    click(cx, window, &format!("thread-actions-{row}"));
+    cx.run_until_parked();
+    click(cx, window, "thread-pin");
+    cx.run_until_parked();
+    assert!(crate::tests::kagan::thread_record(cx, &row).pinned);
+    assert!(!crate::tests::kagan::thread_record(cx, &shown_thread).pinned);
+    assert_eq!(shown(cx, &kagan), Some(shown_thread));
 }
 
 #[gpui_kit::test]

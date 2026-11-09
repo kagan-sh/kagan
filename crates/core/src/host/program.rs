@@ -141,7 +141,7 @@ pub(crate) fn versions(list: &mut ProgramList) {
         if let Some(path) = &program.path {
             let mut command = std::process::Command::new(path);
             command.arg("--version");
-            program.version = kg_process::capture_with_limit(command, VERSION_LIMIT)
+            program.version = kg_process::capture(command, VERSION_LIMIT, || false)
                 .ok()
                 .filter(|output| output.code == 0)
                 .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned());
@@ -175,6 +175,7 @@ pub(crate) fn search_path(environment: Option<&ProgramEnvironment>) -> Option<Os
     environment.map_or_else(user_path, |environment| Some(environment.path.clone()))
 }
 
+#[cfg(any(test, feature = "test"))]
 pub(crate) fn program_environment_of(
     this: &WeakEntity<Workspace>,
     cx: &mut AsyncApp,
@@ -184,15 +185,55 @@ pub(crate) fn program_environment_of(
         .flatten()
 }
 
+#[cfg(not(any(test, feature = "test")))]
+pub(crate) fn program_environment_of(
+    _: &WeakEntity<Workspace>,
+    _: &mut AsyncApp,
+) -> Option<ProgramEnvironment> {
+    None
+}
+
 fn read_environment(
     environment: Option<ProgramEnvironment>,
 ) -> (Option<OsString>, Option<OsString>, Option<OsString>) {
     match environment {
-        Some(environment) => (Some(environment.path), None, Some(environment.shell)),
+        Some(environment) => (Some(environment.path), pathext(), Some(environment.shell)),
         None => (
             search_path(None),
             pathext(),
             std::env::var_os(shell_variable()),
         ),
+    }
+}
+
+/// The folder `variable` names, when it is set and not empty.
+pub(crate) fn home_set(variable: &str) -> Option<PathBuf> {
+    std::env::var_os(variable)
+        .filter(|dir| !dir.is_empty())
+        .map(PathBuf::from)
+}
+
+pub(crate) fn user_home() -> Option<PathBuf> {
+    std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from)
+}
+
+impl Workspace {
+    /// Where a program keeps its files: a test's folder, else the folder `variable` names.
+    #[cfg_attr(
+        not(any(test, feature = "test")),
+        expect(clippy::unused_self, reason = "only tests keep a folder per workspace")
+    )]
+    pub(crate) fn home_set(&self, variable: &'static str) -> Option<PathBuf> {
+        #[cfg(any(test, feature = "test"))]
+        if let Some(set) = self.homes.get(variable) {
+            return Some(set.clone());
+        }
+        home_set(variable)
+    }
+
+    /// `home_set`, else `folder` under the user's home.
+    pub(crate) fn home(&self, variable: &'static str, folder: &str) -> Option<PathBuf> {
+        self.home_set(variable)
+            .or_else(|| user_home().map(|home| home.join(folder)))
     }
 }

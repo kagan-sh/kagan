@@ -7,12 +7,10 @@ use serde_json::Value;
 
 use crate::host::database::Result;
 use crate::workspace::closed;
-use crate::{PluginRequest, SocketLocation, Workspace, skill};
+use crate::{PluginRequest, Workspace, skill};
 
 use super::conversation;
 use super::run::ResolvedProgram;
-
-const PREFERENCE: &str = "agent-integration";
 
 // https://code.claude.com/docs/en/cli-reference: the commands in its table, and the aliases plugins and kill.
 const CLAUDE_SUBCOMMANDS: &[&str] = &[
@@ -215,6 +213,7 @@ pub(crate) struct Integration {
     pub(crate) args: Vec<OsString>,
 }
 
+#[derive(Clone)]
 pub(super) enum Known {
     Claude,
     Codex,
@@ -225,27 +224,25 @@ pub(super) enum Known {
 }
 
 /// The `KG_*` variables and the PATH with `kg` on it, which every terminal of the thread gets.
-pub(super) fn variables(
+pub(super) async fn variables(
     this: &WeakEntity<Workspace>,
     record: &kg_domain::Thread,
     cx: &mut AsyncApp,
 ) -> Result<Vec<(OsString, OsString)>> {
     let (cli, socket) = this
-        .update(cx, |workspace, cx| {
-            (
-                workspace.cli.clone(),
-                cx.try_global::<SocketLocation>()
-                    .map(|socket| socket.0.clone()),
-            )
+        .update(cx, |workspace, _| {
+            (workspace.cli.clone(), workspace.socket.clone())
         })
         .map_err(closed)?;
+    // The first call waits for the login shell, so it runs off the window's thread.
+    let path = cx.background_spawn(async { kg_process::user_path() }).await;
     Ok(environment(
         record.id.0.as_str(),
         record.project_id.0.as_str(),
         record.environment_id.as_ref().map(|id| id.0.as_str()),
         &cli,
         socket.as_deref(),
-        kg_process::user_path().as_ref(),
+        path.as_ref(),
     ))
 }
 
@@ -257,21 +254,24 @@ pub(crate) async fn integrate(
     start: Start,
     cx: &mut AsyncApp,
 ) -> Result<Integration> {
-    let env = variables(this, record, cx)?;
+    let env = variables(this, record, cx).await?;
     let (cli, data_dir, database, socket) = this
-        .update(cx, |workspace, cx| {
+        .update(cx, |workspace, _| {
             (
                 workspace.cli.clone(),
                 workspace.data_dir.clone(),
                 workspace.database.clone(),
-                cx.try_global::<SocketLocation>()
-                    .map(|socket| socket.0.clone()),
+                workspace.socket.clone(),
             )
         })
         .map_err(closed)?;
-    let on = database.call(|store| store.setting(PREFERENCE)).await? != Some(Value::Bool(false));
+    let on = database
+        .call(|store| store.setting(kg_domain::prefs::AGENT_INTEGRATION))
+        .await?
+        != Some(Value::Bool(false));
     let Some(known) = known(&program.path).filter(|known| on && !subcommand(known, &program.args))
     else {
+        // A closed workspace has no thread to clear.
         let _ = this.update(cx, |workspace, cx| {
             if let Some(thread) = workspace.threads.get(&record.id) {
                 thread.update(cx, |thread, _| thread.instruct = None);
@@ -361,6 +361,9 @@ async fn configure(
             .await
     };
     let agent = data_dir.join("agent");
+    let kimi_home = this
+        .update(cx, |workspace, _| workspace.home_set("KIMI_CODE_HOME"))
+        .map_err(closed)?;
     let (skills_root, skills, skill_errors) = skill::mirror(
         this,
         agent.clone(),
@@ -369,21 +372,18 @@ async fn configure(
         cx,
     )
     .await?;
-    write_agent_files(
-        known,
-        files::AgentFiles {
-            agent: &agent,
-            id,
-            folder,
-            cli,
-            socket,
-            instructions: &instructions,
-            extra: &extra,
-            skills_root: &skills_root,
-        },
-        cx,
-    )
-    .await?;
+    let files = files::AgentFiles {
+        agent: &agent,
+        id,
+        folder,
+        cli,
+        socket,
+        instructions: &instructions,
+        extra: &extra,
+        skills_root: &skills_root,
+        kimi_home: kimi_home.as_deref(),
+    };
+    write_agent_files(known, files, cx).await?;
     let roots: &[&str] = match known {
         Known::Codex => &[".agents/skills"],
         Known::OpenCode => &[".opencode/skills"],
@@ -406,10 +406,7 @@ async fn configure(
                 .collect::<Vec<_>>()
                 .join("; ")
         );
-        warning = Some(match warning {
-            Some(previous) => format!("{previous}; {text}"),
-            None => text,
-        });
+        warning = Some(joined(warning, text));
     }
     if !roots.is_empty()
         && let Err(error) =
@@ -419,28 +416,38 @@ async fn configure(
             "kagan could not offer the composed skills in {}: {error}",
             folder.display()
         );
-        warning = Some(match warning {
-            Some(previous) => format!("{previous}; {text}"),
-            None => text,
-        });
+        warning = Some(joined(warning, text));
     }
-    let mut args = flags(known, id, cli, socket, &agent, &skills_root, folder);
+    let mut args = flags(known, &files);
     let (conversation, notice) =
         conversation::args(this, known, record, &program.args, folder, start, cx).await?;
     args.extend(conversation);
     Ok((args, notice, warning))
 }
 
-fn known(program: &Path) -> Option<Known> {
-    match program.file_stem()?.to_str()? {
-        "claude" => Some(Known::Claude),
-        "codex" => Some(Known::Codex),
-        "cursor-agent" | "agent" => Some(Known::Cursor),
-        "kimi" => Some(Known::Kimi),
-        "opencode" => Some(Known::OpenCode),
-        "pi" => Some(Known::Pi),
-        _ => None,
+fn joined(warning: Option<String>, text: String) -> String {
+    match warning {
+        Some(previous) => format!("{previous}; {text}"),
+        None => text,
     }
+}
+
+const AGENTS: &[(&str, Known)] = &[
+    ("claude", Known::Claude),
+    ("codex", Known::Codex),
+    ("cursor-agent", Known::Cursor),
+    ("agent", Known::Cursor),
+    ("kimi", Known::Kimi),
+    ("opencode", Known::OpenCode),
+    ("pi", Known::Pi),
+];
+
+fn known(program: &Path) -> Option<Known> {
+    let stem = program.file_stem()?.to_str()?;
+    AGENTS
+        .iter()
+        .find(|(name, _)| *name == stem)
+        .map(|(_, kind)| kind.clone())
 }
 
 // Claude takes no flag before a subcommand, so kagan adds nothing to a line that names one. Codex
@@ -458,23 +465,28 @@ fn subcommand(known: &Known, args: &[OsString]) -> bool {
             })
             .and_then(|arg| arg.to_str())
             .is_some_and(|arg| CLAUDE_SUBCOMMANDS.contains(&arg)),
-        Known::Cursor => cursor_subcommand(args),
-        Known::Kimi => {
-            first_word(args, KIMI_VALUE_FLAGS).is_some_and(|arg| KIMI_SUBCOMMANDS.contains(&arg))
-        }
-        Known::OpenCode => first_word(args, OPENCODE_VALUE_FLAGS)
+        Known::Cursor => first_word(args, CURSOR_VALUE_FLAGS, true)
+            .is_some_and(|arg| CURSOR_SUBCOMMANDS.contains(&arg)),
+        Known::Kimi => first_word(args, KIMI_VALUE_FLAGS, false)
+            .is_some_and(|arg| KIMI_SUBCOMMANDS.contains(&arg)),
+        Known::OpenCode => first_word(args, OPENCODE_VALUE_FLAGS, false)
             .is_some_and(|arg| OPENCODE_SUBCOMMANDS.contains(&arg)),
         Known::Pi => {
-            first_word(args, PI_VALUE_FLAGS).is_some_and(|arg| PI_SUBCOMMANDS.contains(&arg))
+            first_word(args, PI_VALUE_FLAGS, false).is_some_and(|arg| PI_SUBCOMMANDS.contains(&arg))
         }
         Known::Codex => false,
     }
 }
 
-fn first_word<'a>(args: &'a [OsString], value_flags: &[&str]) -> Option<&'a str> {
+// The first argument that is not a flag, past the values of `value_flags`. An argument that is not
+// UTF-8 is skipped, or ends the search when `strict`.
+fn first_word<'a>(args: &'a [OsString], value_flags: &[&str], strict: bool) -> Option<&'a str> {
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         let Some(text) = arg.to_str() else {
+            if strict {
+                return None;
+            }
             continue;
         };
         if text == "--" {
@@ -489,29 +501,6 @@ fn first_word<'a>(args: &'a [OsString], value_flags: &[&str]) -> Option<&'a str>
         return Some(text);
     }
     None
-}
-
-fn cursor_subcommand(args: &[OsString]) -> bool {
-    let mut args = args.iter();
-    while let Some(arg) = args.next() {
-        let Some(arg) = arg.to_str() else {
-            return false;
-        };
-        if arg == "--" {
-            return args.next().is_some_and(|arg| {
-                arg.to_str()
-                    .is_some_and(|arg| CURSOR_SUBCOMMANDS.contains(&arg))
-            });
-        }
-        if arg.starts_with('-') {
-            if !arg.contains('=') && CURSOR_VALUE_FLAGS.contains(&arg) {
-                args.next();
-            }
-            continue;
-        }
-        return CURSOR_SUBCOMMANDS.contains(&arg);
-    }
-    false
 }
 
 async fn collect_instruct(
@@ -533,6 +522,7 @@ async fn collect_instruct(
         _ => String::new(),
     };
     let instruct = (!text.is_empty()).then(|| text.clone());
+    // A closed workspace has no thread to record it on.
     let _ = this.update(cx, |workspace, cx| {
         if let Some(thread) = workspace.threads.get(&record.id) {
             thread.update(cx, |thread, _| {
@@ -556,7 +546,7 @@ pub(crate) async fn forget(this: &WeakEntity<Workspace>, ids: Vec<ThreadId>, cx:
     };
     cx.background_spawn(async move {
         for id in ids {
-            let folder = data_dir.join("agent").join("threads").join(&id.0);
+            let folder = files::thread_dir(&data_dir.join("agent"), &id.0);
             if let Err(error) = std::fs::remove_dir_all(&folder)
                 && error.kind() != std::io::ErrorKind::NotFound
             {
@@ -566,14 +556,5 @@ pub(crate) async fn forget(this: &WeakEntity<Workspace>, ids: Vec<ThreadId>, cx:
     })
     .await;
 }
-// A literal string takes backslashes and spaces as they are, so Windows paths need no escaping.
-fn toml(text: &str) -> String {
-    if text.contains('\'') {
-        format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
-    } else {
-        format!("'{text}'")
-    }
-}
-
 #[cfg(test)]
 mod tests;

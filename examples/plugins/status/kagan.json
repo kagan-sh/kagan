@@ -1,0 +1,12 @@
+{
+  "id": "dev.kagan.status",
+  "name": "Status",
+  "version": "0.1.0",
+  "kagan": ">=0.1.0",
+  "entry": "main.js",
+  "icon": "icon.svg",
+  "instructions": "Shows a count in the activity strip. Clicking the line counts again.",
+  "powers": {},
+  "commands": [{ "id": "count", "title": "Count" }],
+  "ui": { "status": { "title": "Clicks", "command": "count" } }
+}

@@ -55,12 +55,21 @@ The title is 1 to 40 characters. It is the label before the value. Then, from `k
 ```js
 import { setStatus } from "kagan/host";
 
-setStatus("42% used", { tone: "busy" });
+setStatus("42% used", { tone: "busy", tooltip: "Tokens used this month" });
 ```
 
-The text is one plain line of at most 120 characters. `tone` is `quiet`, `busy`, `needs`, or `failed`, and defaults to `quiet`. `setStatus(null)` hides the line.
+The text is one plain line of at most 120 characters. `tone` is `quiet`, `busy`, `needs`, or `failed`, and defaults to `quiet`. `tooltip` is optional, one plain line, shown when the line is hovered. `setStatus(null)` hides the line.
 
-A plugin that declares `ui.status` starts with kagan, so the line shows without opening a panel. It is text only: no button, click, or view. A command is how it gets an action. Turn **Plugin status** off in Settings → Appearance, or turn the plugin off in Installed, to hide the line.
+To make the line a button, name one of the plugin's commands in `ui.status`:
+
+```json
+"commands": [{ "id": "usage.refresh", "title": "Refresh usage" }],
+"ui": { "status": { "title": "Usage", "command": "usage.refresh" } }
+```
+
+A click runs that command. It must have `when` set to `always`, which is the default, so the line can run with no thread on screen. When a thread is on screen, the command gets it, as it does for any `always` command.
+
+A plugin that declares `ui.status` starts with kagan, so the line shows without opening a panel. Without `command` it is text only: no click or view. Turn **Plugin status** off in Settings → Appearance, or turn the plugin off in Installed, to hide the line.
 
 ## Call another plugin
 

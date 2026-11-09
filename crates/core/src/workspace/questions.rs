@@ -1,11 +1,23 @@
-use gpui_kit::{App, Task};
+use async_channel::{Receiver, Sender};
+use gpui_kit::{App, AsyncApp, Task};
 
 use crate::host::database::Result;
-use kg_domain::{InteractionOption, OpError, OpResult, PendingInteractionId, ThreadId};
+use kg_domain::{InteractionOption, OpError, OpResult, OptionRole, PendingInteractionId, ThreadId};
 
 use crate::Requester;
 
+use super::approval::Approval;
 use super::{Request, Workspace, WorkspaceGlobal};
+
+/// A question that waits for an answer: on a thread, or standalone with an `Approval`.
+pub(crate) struct Waiting {
+    pub(crate) thread: Option<ThreadId>,
+    pub(crate) answer: Sender<String>,
+    pub(crate) for_a_person: bool,
+    pub(crate) approval: Option<Approval>,
+    // Held so the person's answer to `kg thread ask` still finds a live channel.
+    pub(crate) ask: Option<Receiver<String>>,
+}
 
 impl Workspace {
     /// Answers a pending question. Not an `Op`, so the socket and MCP cannot answer.
@@ -96,21 +108,15 @@ impl Workspace {
                 )));
             }
             let (answer, answered) = async_channel::bounded(1);
-            let raised = crate::thread::raise(
-                &this,
-                &thread,
-                title,
-                options,
-                None,
-                |workspace, thread_id, id| {
-                    if for_a_person {
-                        workspace.for_a_person.insert(id.clone());
-                    }
-                    crate::thread::insert_reply(workspace, thread_id.clone(), id, answer);
-                },
-                cx,
-            )
-            .await?;
+            let waiting = Waiting {
+                thread: None,
+                answer,
+                for_a_person,
+                approval: None,
+                ask: None,
+            };
+            let raised =
+                crate::thread::raise(&this, &thread, title, options, None, waiting, cx).await?;
             let Some(answer) = Requester::unless_gone(requester.as_ref(), answered.recv()).await
             else {
                 crate::thread::withdraw(&this, raised, cx).await?;
@@ -124,6 +130,39 @@ impl Workspace {
     /// An install, a provider change, a thread delete, or a standalone approval.
     #[must_use]
     pub fn needs_a_person(&self, id: &PendingInteractionId) -> bool {
-        self.for_a_person.contains(id) || self.approvals.contains_key(id)
+        self.pending
+            .get(id)
+            .is_some_and(|waiting| waiting.for_a_person)
+    }
+}
+
+pub(crate) async fn approve(
+    thread_id: Option<ThreadId>,
+    requester: Option<Requester>,
+    question: String,
+    verb: &str,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    let options = vec![
+        InteractionOption {
+            id: InteractionOption::DECLINE.into(),
+            label: "Cancel".into(),
+            role: Some(OptionRole::Safe),
+        },
+        InteractionOption {
+            id: InteractionOption::APPROVE.into(),
+            label: verb.into(),
+            role: Some(OptionRole::Destructive),
+        },
+    ];
+    let answer = cx
+        .update(|cx| {
+            Workspace::ask_for_person(thread_id.as_ref(), requester, question.clone(), options, cx)
+        })
+        .await?;
+    if answer == InteractionOption::APPROVE {
+        Ok(())
+    } else {
+        Err(OpError::Invalid(format!("declined: {question}")))
     }
 }

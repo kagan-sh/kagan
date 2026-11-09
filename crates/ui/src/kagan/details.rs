@@ -11,11 +11,9 @@ use kg_domain::{EnvironmentProvider, GitDetails, Op, OpResult, ThreadDetails, Th
 use super::Kagan;
 use super::changes::line;
 use super::controls::control;
-use super::right::Tab;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-/// The shown thread's details, read through `ThreadOp::Details`.
 pub(super) struct Details {
     thread: Option<ThreadId>,
     read: Option<Result<ThreadDetails, String>>,
@@ -37,11 +35,6 @@ impl Default for Details {
 }
 
 impl Kagan {
-    /// Whether the Details panel exists, so a timer should keep it current.
-    pub(super) fn details_open(&self) -> bool {
-        self.panels.iter().any(|panel| panel.tab == Tab::Details)
-    }
-
     pub(super) fn load_details(&mut self, cx: &mut Context<Self>) {
         let Some(thread) = self.shown_thread(cx) else {
             self.details = Details::default();

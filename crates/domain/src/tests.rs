@@ -1,11 +1,8 @@
-mod review;
-
 use crate::{
     AgentTool, Attachment, ConfigOp, DiffNote, DiffScope, DiffSide, EnvironmentSpec, Event,
     EventKind, InteractionOption, Op, OpError, OpResult, PendingInteraction, PendingInteractionId,
     PluginId, PluginOp, ProjectBranch, Thread, ThreadId, ThreadOp, ThreadStatus, Timestamp,
     TurnOutcome, UpdateState, Visibility, WaitOutcome, branch_slug, format_notes, invalid_json,
-    parse_notes,
 };
 use serde_json::{Value, json};
 
@@ -16,6 +13,36 @@ where
     assert_eq!(&serde_json::to_value(value).unwrap(), wire);
     assert_eq!(&serde_json::from_value::<T>(wire.clone()).unwrap(), value);
 }
+
+// Every `type` tag an old log may hold.
+const TYPES: [&str; 26] = [
+    "created",
+    "started",
+    "exited",
+    "stopped",
+    "idle",
+    "waiting",
+    "failed",
+    "archived",
+    "unarchived",
+    "deleted",
+    "turn.started",
+    "turn.ended",
+    "message",
+    "tool",
+    "tool.started",
+    "tool.ended",
+    "restore.failed",
+    "snapshot.failed",
+    "notice",
+    "answered",
+    "file.changed",
+    "file.read",
+    "file.predicted",
+    "opened",
+    "rewound",
+    "reconnecting",
+];
 
 #[test]
 fn run_op() {
@@ -29,6 +56,7 @@ fn run_op() {
         },
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     }));
@@ -139,7 +167,7 @@ fn a_branch_slug_comes_from_the_title() {
 #[test]
 fn thread_unread_when_attention_is_newer_than_read() {
     let wire = json!({
-        "id": "thr_1", "projectId": "prj_1", "environmentId": null, "title": "t", "titleLocked": false,
+        "id": "thr_1", "projectId": "prj_1", "environmentId": null, "title": "t", "titleLocked": false, "quiet": false,
         "provider": "claude-code", "status": "idle", "visibility": "visible",
         "parentThreadId": null, "lifecycleOwnerThreadId": null, "sectionId": null,
         "pinned": false, "lastReadAt": 5, "latestAttentionAt": 5, "mark": "none", "archivedAt": null,
@@ -187,10 +215,12 @@ fn ask_op() {
                 InteractionOption {
                     id: "yes".into(),
                     label: "Yes".into(),
+                    role: None,
                 },
                 InteractionOption {
                     id: "no".into(),
                     label: "No".into(),
+                    role: None,
                 },
             ],
             fields: None,
@@ -231,6 +261,13 @@ fn error_wire() {
         "hint": "set KG_THREAD_ID, or pass the id",
     }});
     assert_eq!(serde_json::from_value::<OpError>(hinted).unwrap(), error);
+    let changed = OpError::SetupChanged("script changed".into());
+    let changed_wire = json!({ "error": { "kind": "setup-changed", "message": "script changed" } });
+    assert_eq!(serde_json::to_value(&changed).unwrap(), changed_wire);
+    assert_eq!(
+        serde_json::from_value::<OpError>(changed_wire).unwrap(),
+        changed
+    );
     assert!(
         serde_json::from_value::<OpError>(json!({ "error": { "kind": "odd", "message": "" } }))
             .is_err()
@@ -377,6 +414,7 @@ fn interactions_result() {
             options: vec![InteractionOption {
                 id: "allow-once".into(),
                 label: "Allow once".into(),
+                role: None,
             }],
             fields: None,
             created_at: Timestamp(5),
@@ -751,6 +789,7 @@ fn a_plugin_theme_is_named_by_its_plugin() {
         "a.b/c/d",
         "a.b/../c",
         "Dev.x/m",
+        "-a.b-/x",
     ] {
         assert!(!crate::valid_theme_choice(id), "{id}");
     }
@@ -828,19 +867,19 @@ fn event_type_names_match_the_wire_tag() {
             text: String::new(),
         },
     ];
-    for (kind, name) in kinds.iter().zip(EventKind::TYPES) {
+    for (kind, name) in kinds.iter().zip(TYPES) {
         assert_eq!(kind.type_name(), name);
         assert_eq!(serde_json::to_value(kind).unwrap()["type"], name);
     }
-    assert_eq!(kinds.len(), EventKind::TYPES.len());
+    assert_eq!(kinds.len(), TYPES.len());
 }
 
 #[test]
 fn live_event_types_are_all_known_types() {
     for live in EventKind::LIVE_TYPES {
-        assert!(EventKind::TYPES.contains(&live), "{live}");
+        assert!(TYPES.contains(&live), "{live}");
     }
-    assert!(EventKind::LIVE_TYPES.len() < EventKind::TYPES.len());
+    assert!(EventKind::LIVE_TYPES.len() < TYPES.len());
 }
 
 #[test]
@@ -1039,6 +1078,7 @@ fn sample(
         status: ThreadStatus::Idle,
         visibility,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: owner,
         section_id: None,
         pinned: false,
@@ -1058,7 +1098,7 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
     });
     assert_eq!(
         crate::check(&stop),
-        Err("thread id must be a plain identifier")
+        Err("thread id must be a plain identifier".into())
     );
     let run = Op::Thread(ThreadOp::Run(crate::Run {
         project_id: crate::ProjectId("project".into()),
@@ -1070,6 +1110,7 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
         },
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     }));
@@ -1085,16 +1126,16 @@ fn surface_ids_and_window_indexes_match_the_documented_checks() {
             id: id.into(),
         }))
     };
-    assert_eq!(open(""), Err("surface id must be a plain name"));
-    assert_eq!(open("a\nb"), Err("surface id must be a plain name"));
+    assert_eq!(open(""), Err("surface id must be a plain name".into()));
+    assert_eq!(open("a\nb"), Err("surface id must be a plain name".into()));
     assert_eq!(open("notes"), Ok(()));
     assert_eq!(
         crate::check(&Op::Window(WindowOp::Thread { index: 0 })),
-        Err("thread index must be between 1 and 9")
+        Err("thread index must be between 1 and 9".into())
     );
     assert_eq!(
         crate::check(&Op::Window(WindowOp::Thread { index: 10 })),
-        Err("thread index must be between 1 and 9")
+        Err("thread index must be between 1 and 9".into())
     );
     assert_eq!(
         crate::check(&Op::Window(WindowOp::Thread { index: 9 })),
@@ -1111,14 +1152,17 @@ fn a_browser_op_needs_a_plain_thread_and_a_web_address() {
             thread_id: ThreadId("thr_1".into()),
         }))
     };
-    assert_eq!(open("  "), Err("type a web address, such as example.com"));
+    assert_eq!(
+        open("  "),
+        Err("type a web address, such as example.com".into())
+    );
     assert_eq!(open("example.com"), Ok(()));
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Goto {
             url: "example.com".into(),
             thread_id: ThreadId("not plain".into()),
         })),
-        Err("thread id must be a plain identifier")
+        Err("thread id must be a plain identifier".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Snapshot {
@@ -1137,14 +1181,14 @@ fn browser_acting_ops_are_checked_and_named_on_the_wire() {
             text: String::new(),
             thread_id: thread_id(),
         })),
-        Err("text must not be empty")
+        Err("text must not be empty".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Type {
             text: "x".repeat(1024 * 1024 + 1),
             thread_id: thread_id(),
         })),
-        Err("text is over 1 MiB")
+        Err("text is over 1 MiB".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Fill {
@@ -1153,7 +1197,7 @@ fn browser_acting_ops_are_checked_and_named_on_the_wire() {
             file: Some("a".into()),
             thread_id: thread_id(),
         })),
-        Err("pass the text or --file, not both")
+        Err("pass the text or --file, not both".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Fill {
@@ -1162,7 +1206,7 @@ fn browser_acting_ops_are_checked_and_named_on_the_wire() {
             file: None,
             thread_id: thread_id(),
         })),
-        Err("pass the text or --file")
+        Err("pass the text or --file".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Fill {
@@ -1171,7 +1215,7 @@ fn browser_acting_ops_are_checked_and_named_on_the_wire() {
             file: None,
             thread_id: thread_id(),
         })),
-        Err("text is over 1 MiB")
+        Err("text is over 1 MiB".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Fill {
@@ -1187,21 +1231,21 @@ fn browser_acting_ops_are_checked_and_named_on_the_wire() {
             key: " ".into(),
             thread_id: thread_id(),
         })),
-        Err("key must not be empty")
+        Err("key must not be empty".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Scroll {
             dy: f32::NAN,
             thread_id: thread_id(),
         })),
-        Err("scroll must be a number")
+        Err("scroll must be a number".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Scroll {
             dy: f32::INFINITY,
             thread_id: thread_id(),
         })),
-        Err("scroll must be a number")
+        Err("scroll must be a number".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Click {
@@ -1301,7 +1345,7 @@ fn update_state_fields_are_camel_case_on_the_wire() {
 }
 
 #[test]
-fn notes_round_trip() {
+fn notes_format_as_one_message() {
     let notes = vec![
         DiffNote {
             scope: DiffScope::Commit,
@@ -1331,7 +1375,13 @@ fn notes_round_trip() {
             text: "On the branch.".into(),
         },
     ];
-    assert_eq!(parse_notes(&format_notes(&notes)).as_ref(), Some(&notes));
+    assert_eq!(
+        format_notes(&notes),
+        "Review notes\n\nscope: commit abc123\nfile: src/a.rs\nside: new\nlines: 12-14\n  \
+         Please rename this.\n  It is the public name.\n\nscope: uncommitted\nfile: src/b.rs\n\
+         side: new\nlines: 3\n  Why?\n\nscope: branch\nfile: src/c.rs\nside: old\nlines: 1-2\n  \
+         On the branch.\n"
+    );
 }
 
 #[test]
@@ -1344,7 +1394,8 @@ fn a_resize_outside_the_terminal_limits_is_refused() {
             terminal: None,
         })
     };
-    let refused = Err("terminal size must be 2 to 1000 columns and 1 to 500 rows");
+    let refused: Result<(), String> =
+        Err("terminal size must be 2 to 1000 columns and 1 to 500 rows".into());
     for (cols, rows) in [
         (0, 24),
         (1, 24),
@@ -1395,4 +1446,30 @@ fn an_update_status_survives_the_socket() {
     });
     let text = serde_json::to_string(&status).unwrap();
     assert_eq!(serde_json::from_str::<OpResult>(&text).unwrap(), status);
+}
+
+#[test]
+fn terminal_ops_keep_their_exact_json() {
+    let wires = [
+        r#"{"input":{"id":"thr_1","text":"ls"}}"#,
+        r#"{"input":{"id":"thr_1","terminal":2,"text":"ls"}}"#,
+        r#"{"resize":{"id":"thr_1","cols":100,"rows":40}}"#,
+        r#"{"resize":{"id":"thr_1","terminal":2,"cols":100,"rows":40}}"#,
+        r#"{"screen":{"id":"thr_1","scrollback":false}}"#,
+        r#"{"screen":{"id":"thr_1","terminal":2,"scrollback":true,"lines":20}}"#,
+        r#"{"scroll":{"id":"thr_1","lines":-3}}"#,
+        r#"{"scroll":{"id":"thr_1","terminal":2,"lines":5}}"#,
+        r#"{"select":{"id":"thr_1","mode":"word","column":4,"row":1,"right":false}}"#,
+        r#"{"select":{"id":"thr_1","terminal":2,"mode":"extend","column":4,"row":1,"right":true}}"#,
+        r#"{"copy":{"id":"thr_1"}}"#,
+        r#"{"copy":{"id":"thr_1","terminal":2}}"#,
+        r#"{"report":{"id":"thr_1","bytes":[27,91,77]}}"#,
+        r#"{"report":{"id":"thr_1","terminal":2,"bytes":[27,91,77]}}"#,
+        r#"{"paste":{"id":"thr_1","text":"hi"}}"#,
+        r#"{"paste":{"id":"thr_1","terminal":2,"file":"-"}}"#,
+    ];
+    for wire in wires {
+        let op: ThreadOp = serde_json::from_str(wire).unwrap();
+        assert_eq!(serde_json::to_string(&op).unwrap(), wire);
+    }
 }

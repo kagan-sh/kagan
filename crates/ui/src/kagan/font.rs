@@ -13,7 +13,7 @@ impl Kagan {
     }
 
     pub(super) fn actual_size(&mut self, _: &ActualSize, _: &mut Window, cx: &mut Context<Self>) {
-        self.change_terminal_size(12, cx);
+        self.change_terminal_size(kg_domain::prefs::TERMINAL_FONT_DEFAULT, cx);
     }
 
     pub(super) fn theme_paint(cx: &mut Context<Self>) -> Subscription {
@@ -38,18 +38,29 @@ impl Kagan {
     }
 
     pub(super) fn change_terminal_size(&mut self, size: u8, cx: &mut Context<Self>) {
-        let size = size.clamp(9, 24);
+        let size = size.clamp(
+            kg_domain::prefs::TERMINAL_FONT_MIN,
+            kg_domain::prefs::TERMINAL_FONT_MAX,
+        );
         self.terminal_font_epoch = self.terminal_font_epoch.wrapping_add(1);
         self.apply_terminal_size(size, cx);
-        layout::save("terminal-font-size", size, cx);
+        layout::save(kg_domain::prefs::TERMINAL_FONT_SIZE, size, cx);
     }
 
     pub(super) fn load_terminal_size(&mut self, cx: &mut Context<Self>) {
         self.terminal_font_epoch = self.terminal_font_epoch.wrapping_add(1);
         let epoch = self.terminal_font_epoch;
-        let read = layout::read::<u8>("terminal-font-size", cx);
+        let read = layout::read::<u8>(kg_domain::prefs::TERMINAL_FONT_SIZE, cx);
         cx.spawn(async move |this, cx| {
-            let size = read.await.ok().flatten().unwrap_or(12).clamp(9, 24);
+            let size = read
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or(kg_domain::prefs::TERMINAL_FONT_DEFAULT)
+                .clamp(
+                    kg_domain::prefs::TERMINAL_FONT_MIN,
+                    kg_domain::prefs::TERMINAL_FONT_MAX,
+                );
             _ = this.update(cx, |this, cx| {
                 if this.terminal_font_epoch == epoch {
                     this.apply_terminal_size(size, cx);

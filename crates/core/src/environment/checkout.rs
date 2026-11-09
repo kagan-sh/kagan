@@ -7,7 +7,6 @@ use super::Prepared;
 use crate::Workspace;
 use crate::host::database::{Database, Result};
 use crate::host::git::{branch_moves, place_project_branch};
-use crate::workspace::closed;
 
 pub(super) async fn project_on(
     this: &WeakEntity<Workspace>,
@@ -30,9 +29,7 @@ pub(super) async fn project_on(
             .await
     };
     if moves {
-        let database = this
-            .update(cx, |workspace, _| workspace.database.clone())
-            .map_err(closed)?;
+        let database = crate::workspace::database(this, cx)?;
         let occupied = checkout_in_use(&database, &project.id, &path).await?;
         let path = path.clone();
         let requested = requested.clone();

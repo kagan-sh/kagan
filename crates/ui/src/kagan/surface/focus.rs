@@ -1,18 +1,16 @@
 use gpui_kit::{Context, Focusable as _, Window};
 use kg_domain::SurfacePlacement;
 
-use super::{Declared, destinations, row_id};
+use super::{Declared, panels, row_id};
 use crate::kagan::Kagan;
 use crate::kagan::Shown;
 
 impl Kagan {
     pub(in crate::kagan) fn closed_right_panels(&self) -> impl Iterator<Item = &Declared> {
-        self.right_panels.iter().filter(|item| {
-            !self
-                .right_slots
-                .iter()
-                .any(|slot| slot.plugin == item.plugin && slot.contribution == item.id)
-        })
+        self.right
+            .panels
+            .iter()
+            .filter(|item| !self.right.slots.iter().any(|slot| slot.is(item)))
     }
 
     pub(in crate::kagan) fn show_right(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -29,7 +27,7 @@ impl Kagan {
     }
 
     pub(in crate::kagan) fn focus_work(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(popup) = self.ask_popup.clone()
+        if let Some(popup) = self.asks.popup.clone()
             && self.terminal_thread(cx).is_some()
         {
             window.focus(&popup, cx);
@@ -76,13 +74,14 @@ impl Kagan {
             .update(cx, |sidebar, _| sidebar.take_return_tool());
         let sidebar = self.sidebar.read(cx);
         let row = self
+            .slots
             .tool
             .as_ref()
             .map(|slot| row_id(&slot.plugin, &slot.contribution))
             .filter(|id| sidebar.row_focus(id).is_some())
             .or(closed.filter(|id| sidebar.row_focus(id).is_some()))
             .or_else(|| {
-                destinations(cx).into_iter().find_map(|item| {
+                panels(cx).into_iter().find_map(|item| {
                     (item.placement == SurfacePlacement::Left)
                         .then(|| row_id(&item.plugin, &item.id))
                 })

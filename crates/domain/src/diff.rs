@@ -25,7 +25,7 @@ pub enum DiffSide {
     New,
 }
 
-/// Formats notes as one user message. `parse_notes` reads it back.
+/// Formats notes as one user message.
 #[must_use]
 pub fn format_notes(notes: &[DiffNote]) -> String {
     let mut text = String::from("Review notes\n");
@@ -59,60 +59,6 @@ pub fn format_notes(notes: &[DiffNote]) -> String {
         }
     }
     text
-}
-
-/// The notes in a message from [`format_notes`].
-#[must_use]
-pub fn parse_notes(text: &str) -> Option<Vec<DiffNote>> {
-    let mut lines = text.strip_prefix("Review notes\n")?.lines().peekable();
-    let mut notes = Vec::new();
-    while let Some(line) = lines.next() {
-        if line.is_empty() {
-            continue;
-        }
-        let scope = line.strip_prefix("scope: ")?;
-        let (scope, rev) = match scope.split_once(' ') {
-            Some((scope, rev)) => (scope, Some(rev.to_owned())),
-            None => (scope, None),
-        };
-        let scope = match scope {
-            "uncommitted" => DiffScope::Uncommitted,
-            "branch" => DiffScope::Branch,
-            "commit" => DiffScope::Commit,
-            _ => return None,
-        };
-        let path = lines.next()?.strip_prefix("file: ")?.to_owned();
-        let side = match lines.next()? {
-            "side: old" => DiffSide::Old,
-            "side: new" => DiffSide::New,
-            _ => return None,
-        };
-        let range = lines.next()?.strip_prefix("lines: ")?;
-        let (start, end) = if let Some((start, end)) = range.split_once('-') {
-            (start.parse().ok()?, end.parse().ok()?)
-        } else {
-            let line = range.parse().ok()?;
-            (line, line)
-        };
-        if start == 0 || end < start {
-            return None;
-        }
-        let mut body = Vec::new();
-        while let Some(line) = lines.peek().and_then(|line| line.strip_prefix("  ")) {
-            body.push(line);
-            lines.next();
-        }
-        notes.push(DiffNote {
-            scope,
-            rev,
-            path,
-            side,
-            start,
-            end,
-            text: body.join("\n"),
-        });
-    }
-    Some(notes)
 }
 
 /// A changed file and its added and removed line counts.

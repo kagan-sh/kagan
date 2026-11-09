@@ -3,7 +3,7 @@ use crate::ThreadId;
 use super::browser::browser_check;
 use super::{
     DiffOp, EnvironmentOp, Op, PluginOp, PreviewOp, SEARCH_LIMIT, SEARCH_TEXT_MAX, SectionOp,
-    SurfaceOp, TERMINAL_COLS, TERMINAL_ROWS, TerminalOp, ThreadOp, WindowOp,
+    SurfaceOp, TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThreadOp, WindowOp,
 };
 
 /// Rejects an op a client must not send.
@@ -15,17 +15,21 @@ use super::{
 /// is empty, longer than [`SEARCH_TEXT_MAX`], or names a limit outside [`SEARCH_LIMIT`], when a
 /// resize is outside [`TERMINAL_COLS`] and [`TERMINAL_ROWS`], or when a window index is outside
 /// 1 to 9.
-pub fn check(op: &Op) -> Result<(), &'static str> {
+pub fn check(op: &Op) -> Result<(), String> {
     match op {
         Op::Window(WindowOp::Thread { index }) if !(1..=9).contains(index) => {
-            Err("thread index must be between 1 and 9")
+            Err("thread index must be between 1 and 9".into())
         }
         Op::Status { thread_id, .. } => plain_opt(thread_id.as_ref()),
         Op::Thread(op) => thread_ids(op)
             .into_iter()
             .try_for_each(plain)
             .and_then(|()| terminal_size(op))
-            .and_then(|()| search(op)),
+            .and_then(|()| search(op))
+            .and_then(|()| match op {
+                ThreadOp::Paste { text, file, .. } => carried_text(text.as_ref(), file.as_ref()),
+                _ => Ok(()),
+            }),
         Op::Environment(op) => environment_thread(op),
         Op::Plugin(op) => plain_opt(plugin_thread(op)),
         Op::Browser(op) => plain(op.thread()).and_then(|()| browser_check(op)),
@@ -46,11 +50,7 @@ pub fn check(op: &Op) -> Result<(), &'static str> {
         Op::Surface(op) => match op {
             SurfaceOp::List | SurfaceOp::Threads => Ok(()),
             SurfaceOp::Open { id, .. } | SurfaceOp::Close { id, .. } => {
-                if id.is_empty() || id.chars().any(char::is_control) {
-                    Err("surface id must be a plain name")
-                } else {
-                    Ok(())
-                }
+                printable(id).ok_or_else(|| "surface id must be a plain name".into())
             }
         },
         Op::Section(op) => match op {
@@ -63,54 +63,71 @@ pub fn check(op: &Op) -> Result<(), &'static str> {
             DiffOp::Commits { thread_id } => plain(thread_id),
         },
         Op::Preview(op) => match op {
-            PreviewOp::Show { thread_id, path } => {
-                plain_opt(thread_id.as_ref()).and_then(|()| plain_path(path))
-            }
+            PreviewOp::Show { thread_id, path } => plain_opt(thread_id.as_ref()).and_then(|()| {
+                printable(path).ok_or_else(|| "preview path must be a plain path".into())
+            }),
         },
     }
 }
 
-fn plain_path(path: &str) -> Result<(), &'static str> {
-    if path.is_empty() || path.chars().any(char::is_control) {
-        Err("preview path must be a plain path")
-    } else {
-        Ok(())
-    }
+fn printable(text: &str) -> Option<()> {
+    (!text.is_empty() && !text.chars().any(char::is_control)).then_some(())
 }
 
-fn terminal_size(op: &ThreadOp) -> Result<(), &'static str> {
+fn terminal_size(op: &ThreadOp) -> Result<(), String> {
     match op {
         ThreadOp::Resize { cols, rows, .. }
             if !TERMINAL_COLS.contains(cols) || !TERMINAL_ROWS.contains(rows) =>
         {
-            Err("terminal size must be 2 to 1000 columns and 1 to 500 rows")
+            Err(format!(
+                "terminal size must be {} to {} columns and {} to {} rows",
+                TERMINAL_COLS.start(),
+                TERMINAL_COLS.end(),
+                TERMINAL_ROWS.start(),
+                TERMINAL_ROWS.end()
+            ))
         }
         _ => Ok(()),
     }
 }
 
-fn search(op: &ThreadOp) -> Result<(), &'static str> {
-    match op {
-        ThreadOp::Search { text, .. } if text.trim().is_empty() => Err("search needs text"),
-        ThreadOp::Search { text, .. } if text.chars().count() > SEARCH_TEXT_MAX => {
-            Err("search text is longer than 256 characters")
+/// Text a paste or a fill carries. A client reads `--file` and sends the text, never the path.
+pub(super) fn carried_text<P>(text: Option<&String>, file: Option<&P>) -> Result<(), String> {
+    match (text, file) {
+        (Some(_), Some(_)) => Err("pass the text or --file, not both".into()),
+        (None, None) => Err("pass the text or --file".into()),
+        (None, Some(_)) => Err("send the text, not a path".into()),
+        (Some(text), None) if text.len() > TEXT_MAX => {
+            Err(format!("text is over {} MiB", TEXT_MAX >> 20))
         }
+        (Some(_), None) => Ok(()),
+    }
+}
+
+fn search(op: &ThreadOp) -> Result<(), String> {
+    match op {
+        ThreadOp::Search { text, .. } if text.trim().is_empty() => Err("search needs text".into()),
+        ThreadOp::Search { text, .. } if text.chars().count() > SEARCH_TEXT_MAX => Err(format!(
+            "search text is longer than {SEARCH_TEXT_MAX} characters"
+        )),
         ThreadOp::Search {
             limit: Some(limit), ..
-        } if !(1..=SEARCH_LIMIT).contains(limit) => Err("--limit must be from 1 to 200"),
+        } if !(1..=SEARCH_LIMIT).contains(limit) => {
+            Err(format!("--limit must be from 1 to {SEARCH_LIMIT}"))
+        }
         _ => Ok(()),
     }
 }
 
-fn plain(id: &ThreadId) -> Result<(), &'static str> {
+fn plain(id: &ThreadId) -> Result<(), String> {
     if id.plain() {
         Ok(())
     } else {
-        Err("thread id must be a plain identifier")
+        Err("thread id must be a plain identifier".into())
     }
 }
 
-fn plain_opt(id: Option<&ThreadId>) -> Result<(), &'static str> {
+fn plain_opt(id: Option<&ThreadId>) -> Result<(), String> {
     id.map_or(Ok(()), plain)
 }
 
@@ -164,11 +181,15 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
     }
 }
 
-fn environment_thread(op: &EnvironmentOp) -> Result<(), &'static str> {
+fn environment_thread(op: &EnvironmentOp) -> Result<(), String> {
     match op {
         EnvironmentOp::Restore { thread_id } => plain(thread_id),
+        EnvironmentOp::Setup { rev, .. } if rev.starts_with('-') => {
+            Err("a revision cannot start with -".into())
+        }
         EnvironmentOp::Get { .. }
         | EnvironmentOp::Branches { .. }
+        | EnvironmentOp::Setup { .. }
         | EnvironmentOp::SetBase { .. }
         | EnvironmentOp::Remove { .. } => Ok(()),
     }

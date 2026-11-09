@@ -4,13 +4,10 @@ use std::time::Duration;
 
 use gpui_kit::{AsyncApp, Context, Task, WeakEntity};
 use kg_domain::PluginId;
-use serde_json::Map;
 
 use crate::PluginHost;
-use crate::jobs::Ended;
+use crate::ask::{Job, TOOL_TIMEOUT, Unanswered, ask};
 use crate::manifest::Schedule;
-
-const TIMEOUT: Duration = Duration::from_mins(2);
 
 /// One loop per schedule. Each run waits for the last one to finish, so a run never overlaps
 /// the next. Dropping the tasks stops the loops.
@@ -37,40 +34,24 @@ pub(crate) fn start(
         .collect()
 }
 
-/// `None` once kagan has dropped the host.
+// `None` once kagan has dropped the host.
 async fn tick(
     host: &WeakEntity<PluginHost>,
     plugin: &PluginId,
     name: &str,
     cx: &mut AsyncApp,
 ) -> Option<()> {
-    let jobs = match host.update(cx, |host, cx| host.load(plugin, cx)).ok()? {
-        Ok(jobs) => jobs,
-        Err(error) => return report(host, plugin, &error.to_string(), cx),
-    };
-    let job = Map::from_iter([
-        ("kind".to_owned(), "schedule".into()),
-        ("name".to_owned(), name.into()),
-    ]);
-    let Some((id, replied)) = jobs.send(job) else {
-        return Some(());
-    };
-    let timer = cx.background_executor().timer(TIMEOUT);
-    let outcome = jobs.settled(&id, &replied, timer).await;
-    // A timeout may leave a dead job loop behind, so that load must not be reused. Only the
-    // reply channel is gone; a slow handler can still finish what it was doing.
-    if matches!(outcome, Err(Ended::TimedOut)) {
-        host.update(cx, |host, cx| host.unload(plugin, cx)).ok()?;
-    }
-    match outcome {
-        Ok(Ok(_)) | Err(Ended::Unloaded) => Some(()),
+    let entity = host.upgrade()?;
+    match ask(&entity, plugin, &Job::Schedule { name }, cx).await {
+        Ok(Ok(_)) | Err(Unanswered::Unloaded(_)) => Some(()),
         Ok(Err(message)) => report(host, plugin, &message, cx),
-        Err(Ended::TimedOut) => report(
+        Err(Unanswered::NotLoaded(error)) => report(host, plugin, &error.to_string(), cx),
+        Err(Unanswered::TimedOut(_)) => report(
             host,
             plugin,
             &format!(
                 "schedule {name} did not finish within {} seconds",
-                TIMEOUT.as_secs()
+                TOOL_TIMEOUT.as_secs()
             ),
             cx,
         ),
@@ -83,5 +64,9 @@ fn report(
     message: &str,
     cx: &mut AsyncApp,
 ) -> Option<()> {
-    host.update(cx, |host, _| host.report(plugin, message)).ok()
+    host.update(cx, |host, cx| {
+        host.secrets
+            .note_later(plugin, crate::Level::Warn, message, cx);
+    })
+    .ok()
 }

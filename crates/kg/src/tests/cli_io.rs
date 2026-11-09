@@ -50,13 +50,13 @@ fn a_setting_left_off_the_command_line_is_read_as_text_and_never_parsed() {
 
 #[test]
 fn paste_reads_a_file_or_stdin_and_sends_the_text() {
-    use crate::cli::take_paste_from;
+    use crate::cli::take_file_text;
     let id = ThreadId("thr_1".into());
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("note.txt");
     let body = "say \"hi\" and `date`";
     std::fs::write(&path, body).unwrap();
-    let from_file = take_paste_from(
+    let from_file = take_file_text(
         Op::Thread(ThreadOp::Paste {
             id: id.clone(),
             text: None,
@@ -74,7 +74,7 @@ fn paste_reads_a_file_or_stdin_and_sends_the_text() {
     });
     assert_eq!(from_file, sent);
     assert_eq!(
-        take_paste_from(
+        take_file_text(
             Op::Thread(ThreadOp::Paste {
                 id: id.clone(),
                 text: None,
@@ -93,7 +93,7 @@ fn paste_reads_a_file_or_stdin_and_sends_the_text() {
         terminal: None,
     });
     assert_eq!(
-        take_paste_from(unchanged.clone(), std::io::empty()).unwrap(),
+        take_file_text(unchanged.clone(), std::io::empty()).unwrap(),
         unchanged
     );
     assert_eq!(
@@ -122,7 +122,7 @@ fn paste_reads_a_file_or_stdin_and_sends_the_text() {
         .unwrap()
         .set_len(1024 * 1024 + 8)
         .unwrap();
-    let err = take_paste_from(
+    let err = take_file_text(
         Op::Thread(ThreadOp::Paste {
             id,
             text: None,
@@ -140,7 +140,7 @@ fn paste_reads_a_file_or_stdin_and_sends_the_text() {
 
 #[test]
 fn paste_rejects_invalid_utf8_from_a_file_or_stdin() {
-    use crate::cli::take_paste_from;
+    use crate::cli::take_file_text;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("bad");
     std::fs::write(&path, [0xff, 0xfe]).unwrap();
@@ -150,9 +150,9 @@ fn paste_rejects_invalid_utf8_from_a_file_or_stdin() {
         file: Some(path.display().to_string()),
         terminal: None,
     });
-    let from_file = take_paste_from(pasted, std::io::empty()).unwrap_err();
+    let from_file = take_file_text(pasted, std::io::empty()).unwrap_err();
     assert!(from_file.to_string().contains("UTF-8"), "{from_file}");
-    let from_stdin = take_paste_from(
+    let from_stdin = take_file_text(
         Op::Thread(ThreadOp::Paste {
             id: ThreadId("thr_1".into()),
             text: None,
@@ -170,7 +170,7 @@ fn paste_rejects_invalid_utf8_from_a_file_or_stdin() {
 fn paste_rejects_a_fifo_past_the_cap() {
     use std::io::Write;
 
-    use crate::cli::take_paste_from;
+    use crate::cli::take_file_text;
     let dir = tempfile::tempdir().unwrap();
     let fifo = dir.path().join("paste.fifo");
     assert!(
@@ -194,7 +194,7 @@ fn paste_rejects_a_fifo_past_the_cap() {
             sent += chunk.len();
         }
     });
-    let streamed = take_paste_from(
+    let streamed = take_file_text(
         Op::Thread(ThreadOp::Paste {
             id: ThreadId("thr_1".into()),
             text: None,
@@ -212,7 +212,7 @@ fn paste_rejects_a_fifo_past_the_cap() {
 
 #[test]
 fn browser_fill_reads_a_file_or_stdin_and_sends_the_text() {
-    use crate::cli::take_browser_text_from;
+    use crate::cli::take_file_text;
     let thread_id = ThreadId("thr_1".into());
     let fill = |ref_id: u32, text: Option<&str>, file: Option<std::path::PathBuf>| {
         Op::Browser(kg_domain::BrowserOp::Fill {
@@ -226,12 +226,11 @@ fn browser_fill_reads_a_file_or_stdin_and_sends_the_text() {
     let path = dir.path().join("note.txt");
     let body = "say \"hi\" and `date`";
     std::fs::write(&path, body).unwrap();
-    let from_file =
-        take_browser_text_from(fill(3, None, Some(path.clone())), std::io::empty()).unwrap();
+    let from_file = take_file_text(fill(3, None, Some(path.clone())), std::io::empty()).unwrap();
     let sent = fill(3, Some(body), None);
     assert_eq!(from_file, sent);
     assert_eq!(
-        take_browser_text_from(
+        take_file_text(
             fill(3, None, Some(std::path::PathBuf::from("-"))),
             std::io::Cursor::new(body),
         )
@@ -240,7 +239,7 @@ fn browser_fill_reads_a_file_or_stdin_and_sends_the_text() {
     );
     let plain = fill(2, Some("ada@example.com"), None);
     assert_eq!(
-        take_browser_text_from(plain.clone(), std::io::empty()).unwrap(),
+        take_file_text(plain.clone(), std::io::empty()).unwrap(),
         plain
     );
     assert!(Cli::try_parse_from(["kg", "browser", "fill", "3", "ada", "--file", "a"]).is_err());
@@ -249,17 +248,17 @@ fn browser_fill_reads_a_file_or_stdin_and_sends_the_text() {
         .unwrap()
         .set_len(1024 * 1024 + 8)
         .unwrap();
-    let err = take_browser_text_from(fill(3, None, Some(big)), std::io::empty()).unwrap_err();
+    let err = take_file_text(fill(3, None, Some(big)), std::io::empty()).unwrap_err();
     let message = err.to_string();
     assert!(matches!(err, OpError::Invalid(_)));
     assert!(message.contains("text is 1048584 bytes"), "{message}");
     assert!(message.contains("1 MiB"), "{message}");
     let bad = dir.path().join("bad");
     std::fs::write(&bad, [0xff, 0xfe]).unwrap();
-    let err = take_browser_text_from(fill(3, None, Some(bad)), std::io::empty()).unwrap_err();
+    let err = take_file_text(fill(3, None, Some(bad)), std::io::empty()).unwrap_err();
     assert!(err.to_string().contains("UTF-8"), "{err}");
     let missing = dir.path().join("missing");
-    let err = take_browser_text_from(fill(3, None, Some(missing)), std::io::empty()).unwrap_err();
+    let err = take_file_text(fill(3, None, Some(missing)), std::io::empty()).unwrap_err();
     assert!(err.to_string().contains("could not read"), "{err}");
 }
 

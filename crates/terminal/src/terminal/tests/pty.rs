@@ -125,7 +125,7 @@ fn the_reader_keeps_polling_its_own_fd_after_the_master_closes() {
     // The child prints nothing until it gets input, so the reader's next WouldBlock comes after this arms the gate.
     let (reached, at_poll) = mpsc::channel();
     let (resume, held) = mpsc::channel();
-    *lock(&terminal.shared.poll_gate) = Some((reached, held));
+    *lock(&terminal.view.shared.poll_gate) = Some((reached, held));
     terminal.write(b"go\n".to_vec()).unwrap();
     at_poll
         .recv_timeout(Duration::from_secs(5))

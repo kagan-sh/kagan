@@ -5,7 +5,9 @@ use std::collections::BTreeSet;
 use gpui_kit::component::input::InputState;
 use gpui_kit::{AppContext as _, Context, ScrollHandle, Task, Window};
 use kg_core::Workspace;
-use kg_domain::{DiffOp, Op, OpError, OpResult, ReviewRow, review_rows};
+use kg_domain::{DiffOp, Op, OpError, OpResult};
+
+use super::rows::{ReviewRow, review_rows};
 
 use super::{Pane, ReadExpect, Review};
 use crate::kagan::Kagan;
@@ -86,7 +88,7 @@ impl Kagan {
         self.focus_review(window, cx);
         if self.changes.viewed_checking.is_none() {
             let loaded = crate::kagan::layout::read::<std::collections::BTreeMap<String, String>>(
-                "review-viewed",
+                kg_domain::prefs::REVIEW_VIEWED,
                 cx,
             );
             cx.spawn(async move |this, cx| {
@@ -109,7 +111,7 @@ impl Kagan {
             .detach();
         }
         self.sync_panels_keeping_widths(window, cx);
-        self.replaced.forget_review();
+        self.slots.replaced.forget_review();
         self.refresh_review(cx);
         cx.notify();
     }

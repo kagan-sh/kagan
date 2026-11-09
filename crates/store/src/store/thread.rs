@@ -2,7 +2,7 @@ use kg_domain::{
     Conversation, EnvironmentId, EnvironmentStatus, Event, EventKind, Metadata, PluginId,
     ProjectId, Thread, ThreadId, ThreadMark, ThreadStatus, Timestamp,
 };
-use rusqlite::{Connection, OptionalExtension as _, Row, params};
+use rusqlite::{Connection, OptionalExtension as _, Row, named_params, params};
 use serde_json::Value;
 
 use super::environment::personal_folders;
@@ -13,7 +13,7 @@ use crate::{Error, Result};
 
 const THREAD_COLUMNS: &str = "id, project_id, environment_id, title, provider, status, \
     visibility, parent_thread_id, lifecycle_owner_thread_id, section_id, pinned, last_read_at, \
-    latest_attention_at, archived_at, created_at, updated_at, title_locked, done";
+    latest_attention_at, archived_at, created_at, updated_at, title_locked, done, quiet";
 
 const OWNED_THREADS: &str = "WITH RECURSIVE owned(id) AS ( \
     SELECT id FROM threads WHERE id = ?1 \
@@ -60,8 +60,12 @@ impl super::Store {
         })?;
         let folder: std::path::PathBuf = tx
             .query_row(
-                "SELECT path FROM environments WHERE id = ?1 AND project_id = ?2 AND status = 'ready'",
-                params![Text(environment), Text(&thread.project_id)],
+                "SELECT path FROM environments WHERE id = ?1 AND project_id = ?2 AND status = ?3",
+                params![
+                    Text(environment),
+                    Text(&thread.project_id),
+                    Text(EnvironmentStatus::Ready)
+                ],
                 |row| Ok(row.get::<_, Text<_>>(0)?.0),
             )
             .optional()?
@@ -139,10 +143,17 @@ impl super::Store {
         let changed = self.conn.execute(
             "UPDATE threads SET status = ?2, updated_at = ?3,
                 latest_attention_at = CASE
-                    WHEN ?2 = 'error' AND status IN ('active', 'starting') THEN ?3
+                    WHEN ?2 = ?4 AND status IN (?5, ?6) THEN ?3
                     ELSE latest_attention_at END
              WHERE id = ?1",
-            params![Text(id), Text(status), at.0],
+            params![
+                Text(id),
+                Text(status),
+                at.0,
+                Text(ThreadStatus::Error),
+                Text(ThreadStatus::Active),
+                Text(ThreadStatus::Starting)
+            ],
         )?;
         found(changed, "thread", id)
     }
@@ -189,21 +200,26 @@ impl super::Store {
         since: Timestamp,
     ) -> Result<bool> {
         let changed = self.conn.execute(
-            "UPDATE threads SET conversation = ?1
+            &format!(
+                "UPDATE threads SET conversation = ?1
              WHERE id = ?2
-               AND status IN ('active', 'starting')
+               AND status IN (?5, ?6)
                AND ((?3 IS NULL AND conversation IS NULL) OR conversation = ?3)
                AND NOT EXISTS (
                  SELECT 1 FROM threads AS other
                  WHERE other.conversation = ?1 AND other.id != ?2
                )
-               AND (
-                 SELECT at FROM events
-                 WHERE thread_id = ?2
-                   AND json_extract(kind, '$.type') = 'started'
-                 ORDER BY seq DESC LIMIT 1
-               ) = ?4",
-            params![Text(conversation), Text(id), Text(expect), since.0],
+               AND (SELECT at FROM events WHERE thread_id = ?2 AND seq = {}) = ?4",
+                super::latest_start("?2")
+            ),
+            params![
+                Text(conversation),
+                Text(id),
+                Text(expect),
+                since.0,
+                Text(ThreadStatus::Active),
+                Text(ThreadStatus::Starting)
+            ],
         )?;
         Ok(changed == 1)
     }
@@ -401,68 +417,56 @@ pub(super) fn owned_threads(conn: &Connection, id: &ThreadId) -> Result<Vec<Thre
 
 fn thread_row(row: &Row) -> rusqlite::Result<Thread> {
     Ok(Thread {
-        id: row.get::<_, Text<_>>(0)?.0,
-        project_id: row.get::<_, Text<_>>(1)?.0,
-        environment_id: row.get::<_, Text<_>>(2)?.0,
-        title: row.get(3)?,
-        provider: row.get(4)?,
-        status: row.get::<_, Text<_>>(5)?.0,
-        visibility: row.get::<_, Text<_>>(6)?.0,
-        parent_thread_id: row.get::<_, Text<_>>(7)?.0,
-        lifecycle_owner_thread_id: row.get::<_, Text<_>>(8)?.0,
-        section_id: row.get::<_, Text<_>>(9)?.0,
-        pinned: row.get(10)?,
-        last_read_at: row.get::<_, Option<i64>>(11)?.map(Timestamp),
-        latest_attention_at: Timestamp(row.get(12)?),
-        mark: if row.get(17)? {
+        id: row.get::<_, Text<_>>("id")?.0,
+        project_id: row.get::<_, Text<_>>("project_id")?.0,
+        environment_id: row.get::<_, Text<_>>("environment_id")?.0,
+        title: row.get("title")?,
+        provider: row.get("provider")?,
+        status: row.get::<_, Text<_>>("status")?.0,
+        visibility: row.get::<_, Text<_>>("visibility")?.0,
+        parent_thread_id: row.get::<_, Text<_>>("parent_thread_id")?.0,
+        lifecycle_owner_thread_id: row.get::<_, Text<_>>("lifecycle_owner_thread_id")?.0,
+        section_id: row.get::<_, Text<_>>("section_id")?.0,
+        pinned: row.get("pinned")?,
+        last_read_at: row.get::<_, Option<i64>>("last_read_at")?.map(Timestamp),
+        latest_attention_at: Timestamp(row.get("latest_attention_at")?),
+        mark: if row.get("done")? {
             ThreadMark::Done
         } else {
             ThreadMark::None
         },
-        archived_at: row.get::<_, Option<i64>>(13)?.map(Timestamp),
-        created_at: Timestamp(row.get(14)?),
-        updated_at: Timestamp(row.get(15)?),
-        title_locked: row.get(16)?,
+        archived_at: row.get::<_, Option<i64>>("archived_at")?.map(Timestamp),
+        created_at: Timestamp(row.get("created_at")?),
+        updated_at: Timestamp(row.get("updated_at")?),
+        title_locked: row.get("title_locked")?,
+        quiet: row.get("quiet")?,
     })
 }
 
 fn put_thread(conn: &Connection, thread: &Thread) -> Result<()> {
     conn.execute(
-        &format!(
-            "INSERT INTO threads ({THREAD_COLUMNS})
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
-             ON CONFLICT(id) DO UPDATE SET project_id = excluded.project_id,
-                environment_id = excluded.environment_id, title = excluded.title,
-                title_locked = excluded.title_locked,
-                provider = excluded.provider, status = excluded.status,
-                visibility = excluded.visibility, parent_thread_id = excluded.parent_thread_id,
-                lifecycle_owner_thread_id = excluded.lifecycle_owner_thread_id,
-                section_id = excluded.section_id, pinned = excluded.pinned,
-                last_read_at = excluded.last_read_at,
-                latest_attention_at = excluded.latest_attention_at,
-                archived_at = excluded.archived_at, created_at = excluded.created_at,
-                updated_at = excluded.updated_at, done = excluded.done"
-        ),
-        params![
-            Text(&thread.id),
-            Text(&thread.project_id),
-            Text(&thread.environment_id),
-            thread.title,
-            thread.provider,
-            Text(thread.status),
-            Text(thread.visibility),
-            Text(&thread.parent_thread_id),
-            Text(&thread.lifecycle_owner_thread_id),
-            Text(&thread.section_id),
-            thread.pinned,
-            thread.last_read_at.map(|at| at.0),
-            thread.latest_attention_at.0,
-            thread.archived_at.map(|at| at.0),
-            thread.created_at.0,
-            thread.updated_at.0,
-            thread.title_locked,
-            thread.mark == ThreadMark::Done,
-        ],
+        &super::upsert("threads", THREAD_COLUMNS),
+        named_params! {
+            ":id": Text(&thread.id),
+            ":project_id": Text(&thread.project_id),
+            ":environment_id": Text(&thread.environment_id),
+            ":title": thread.title,
+            ":provider": thread.provider,
+            ":status": Text(thread.status),
+            ":visibility": Text(thread.visibility),
+            ":parent_thread_id": Text(&thread.parent_thread_id),
+            ":lifecycle_owner_thread_id": Text(&thread.lifecycle_owner_thread_id),
+            ":section_id": Text(&thread.section_id),
+            ":pinned": thread.pinned,
+            ":last_read_at": thread.last_read_at.map(|at| at.0),
+            ":latest_attention_at": thread.latest_attention_at.0,
+            ":archived_at": thread.archived_at.map(|at| at.0),
+            ":created_at": thread.created_at.0,
+            ":updated_at": thread.updated_at.0,
+            ":title_locked": thread.title_locked,
+            ":done": thread.mark == ThreadMark::Done,
+            ":quiet": thread.quiet,
+        },
     )?;
     Ok(())
 }

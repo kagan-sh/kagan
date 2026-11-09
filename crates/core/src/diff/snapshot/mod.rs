@@ -25,14 +25,6 @@ pub(super) struct Skipped {
     pub(super) object: String,
 }
 
-pub(super) fn trees(
-    root: &Path,
-    hint: Option<&str>,
-    query: &DiffQuery,
-) -> Result<(Snapshot, Snapshot, Option<String>)> {
-    ends(root, hint, query)
-}
-
 pub(super) fn snapshot_key(snapshot: &Snapshot) -> String {
     format!(
         "{}:{}",
@@ -276,6 +268,7 @@ struct TempIndex(PathBuf);
 
 impl Drop for TempIndex {
     fn drop(&mut self) {
+        // A temp file left behind is harmless.
         let _ = std::fs::remove_file(&self.0);
         let mut lock = self.0.clone().into_os_string();
         lock.push(".lock");

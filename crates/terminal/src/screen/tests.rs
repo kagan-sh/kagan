@@ -505,14 +505,14 @@ fn a_snapshot_keeps_unicode_wide_text_wrapping_and_history() {
     assert!(snap.replay.len() <= SNAPSHOT_MAX);
     let restored = crate::Finished::restore(snap.cols, snap.rows, &snap.replay).expect("restore");
     assert_eq!(
-        restored.transcript(),
+        restored.view().transcript(),
         original,
         "replay {:?}",
         String::from_utf8_lossy(&snap.replay)
     );
-    assert!(restored.grid().cursor.is_some());
-    restored.select(crate::SelectMode::Word, 0, 0, false);
-    assert!(restored.selection().is_some());
+    assert!(restored.view().grid().cursor.is_some());
+    restored.view().select(crate::SelectMode::Word, 0, 0, false);
+    assert!(restored.view().selection().is_some());
 }
 
 #[test]

@@ -107,14 +107,8 @@ pub(in crate::tests) fn placed(native: Option<bool>, note: &str) -> bool {
         || platform_note(note)
 }
 
-#[cfg(desktop)]
 pub(in crate::tests) const fn platform_note(_note: &str) -> bool {
     false
-}
-
-#[cfg(not(desktop))]
-pub(in crate::tests) fn platform_note(note: &str) -> bool {
-    note == crate::components::UNAVAILABLE
 }
 
 pub(in crate::tests) fn page_place(
@@ -311,6 +305,27 @@ fn a_web_panel_is_labeled_for_kg_ui(cx: &mut TestAppContext) {
     let center = web_panel_id(WEB_PANEL, "stage");
     wait_until(cx, |cx| shows(cx, window, &center));
     assert_eq!(label(cx, window, &center), "Web panel");
+}
+
+#[gpui_kit::test]
+fn a_web_panel_tells_kg_ui_it_cannot_drive_the_page(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_web_panel);
+    wide(cx, window);
+    open_surface(cx, WEB_PANEL, "board").unwrap();
+    let right = web_panel_id(WEB_PANEL, "board");
+    wait_until(cx, |cx| shows(cx, window, &right));
+    let hints = cx
+        .update_window(window, |_, window, cx| {
+            crate::ui_dispatch::render_frame(window, cx);
+            crate::ui_dispatch::snapshot(window, 0)
+                .elements
+                .into_iter()
+                .filter(|element| element.label.as_deref() == Some("Web panel"))
+                .map(|element| element.hint)
+                .collect::<Vec<_>>()
+        })
+        .unwrap();
+    assert_eq!(hints, vec![Some("kg ui cannot drive this page".to_owned())]);
 }
 
 #[cfg(target_os = "macos")]

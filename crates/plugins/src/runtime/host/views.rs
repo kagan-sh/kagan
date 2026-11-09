@@ -1,10 +1,9 @@
-use std::time::Duration;
-
-use gpui_kit::{AppContext as _, Context, Entity};
+use gpui_kit::{App, Context, Entity};
 use gpui_shell::ScriptView;
 use kg_domain::{OpError, PluginId};
 
 use crate::Result;
+use crate::ask::{Job, forget_later};
 
 use super::{MountError, PluginHost};
 
@@ -31,21 +30,12 @@ impl PluginHost {
         window: &mut gpui_kit::Window,
         cx: &mut Context<Self>,
     ) -> std::result::Result<Entity<ScriptView>, MountError> {
-        let found = self.active.get(id).and_then(|active| {
-            active
-                .manifest
-                .ui
-                .panels
-                .iter()
-                .find(|item| item.id == panel)
-                .map(|item| item.view.clone())
-        });
-        let Some(export) = found else {
+        let Some(found) = self.panel(id, panel) else {
             return Err(MountError::Missing(format!(
                 "plugin {id} has no panel {panel}"
             )));
         };
-        let Some(export) = export else {
+        let Some(export) = found.view.clone() else {
             return Err(MountError::Missing(format!("panel {panel} is a web panel")));
         };
         self.mount_named_view(id, &export, window, cx)
@@ -69,33 +59,23 @@ impl PluginHost {
     /// The HTML file panel `panel` shows, when that panel is a web panel.
     #[must_use]
     pub fn web_file(&self, id: &PluginId, panel: &str) -> Option<String> {
-        self.active.get(id).and_then(|active| {
-            active
-                .manifest
-                .ui
-                .panels
-                .iter()
-                .find(|item| item.id == panel)
-                .and_then(|item| item.web.clone())
-        })
+        self.panel(id, panel).and_then(|item| item.web.clone())
+    }
+
+    fn panel(&self, id: &PluginId, panel: &str) -> Option<&crate::PanelContribution> {
+        self.active
+            .get(id)?
+            .manifest
+            .ui
+            .panels
+            .iter()
+            .find(|item| item.id == panel)
     }
 
     /// Whether the panel keeps cookies and storage. Needs its `store` flag and an approved grant.
     #[must_use]
     pub fn web_store(&self, id: &PluginId, panel: &str) -> bool {
-        self.active
-            .get(id)
-            .filter(|active| active.grant.page_store)
-            .and_then(|active| {
-                active
-                    .manifest
-                    .ui
-                    .panels
-                    .iter()
-                    .find(|item| item.id == panel)
-                    .map(|item| item.store)
-            })
-            .unwrap_or(false)
+        self.allows_page_store(id) && self.panel(id, panel).is_some_and(|item| item.store)
     }
 
     /// Whether the approved grant lets this plugin keep page data.
@@ -138,18 +118,24 @@ impl PluginHost {
             .and_then(|active| active.loaded.as_ref())
             .map(|loaded| loaded.jobs.clone())
             .ok_or_else(|| OpError::Invalid(format!("plugin {id} is not loaded")))?;
-        let Some((job, replied)) = crate::page::enqueue(&jobs, panel, message, alive, raw.len())
-        else {
+        let job = Job::Page {
+            panel_id: panel,
+            message: &message,
+        };
+        let Some(queued) = jobs.send_page(&job, alive, raw.len()) else {
             return Err(OpError::Invalid(format!(
                 "plugin {id} cannot take another page message"
             )));
         };
-        cx.spawn(async move |_, cx| {
-            let timer = cx.background_executor().timer(Duration::from_secs(10));
-            let _ = jobs.settled(&job, &replied, timer).await;
-        })
-        .detach();
+        forget_later(jobs, queued, job.timeout(), cx);
         Ok(())
+    }
+
+    /// Writes a line to the plugin's log: something kagan did with the plugin's request, such as
+    /// refusing a key the window already uses.
+    pub fn report(&self, plugin: &PluginId, message: &str, cx: &App) {
+        self.secrets
+            .note_later(plugin, crate::Level::Warn, message, cx);
     }
 
     /// Bytes of page payloads still held for `next()` on this plugin.
@@ -159,12 +145,6 @@ impl PluginHost {
             .get(id)
             .and_then(|active| active.loaded.as_ref())
             .map_or(0, |loaded| loaded.jobs.pending_page_bytes())
-    }
-
-    /// Writes a line to the plugin's log: something kagan did with the plugin's request, such as
-    /// refusing a key the window already uses.
-    pub fn report(&self, plugin: &PluginId, message: &str) {
-        let _ = self.secrets.log(plugin, crate::Level::Warn, message);
     }
 }
 impl PluginHost {
@@ -296,21 +276,9 @@ impl PluginHost {
         if let Some(active) = self.active.get_mut(id) {
             active.fault = Some(error.to_owned());
         }
-        let secrets = self.secrets.clone();
-        let plugin = id.clone();
-        let message = error.to_owned();
         self.unload(id, cx);
-        cx.spawn(async move |_, cx| {
-            if let Err(error) = cx
-                .background_spawn(async move {
-                    secrets.log(&plugin, crate::log::Level::Error, &message)
-                })
-                .await
-            {
-                eprintln!("kg: plugin log: {error}");
-            }
-        })
-        .detach();
+        self.secrets
+            .note_later(id, crate::log::Level::Error, error, cx);
         cx.notify();
     }
 }

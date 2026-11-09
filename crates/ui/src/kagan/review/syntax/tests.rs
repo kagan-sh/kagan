@@ -1,8 +1,8 @@
 use gpui_kit::component::highlighter::HighlightTheme;
-use gpui_kit::hsla;
+use gpui_kit::{Hsla, hsla};
 use kg_domain::{DiffFileView, DiffHunk, DiffLine, DiffLineKind, DiffSide};
 
-use super::{captures, runs};
+use super::{captures, language_of, recorded_name, runs};
 
 fn line_of(kind: DiffLineKind, old: Option<u32>, new: Option<u32>, text: &str) -> DiffLine {
     DiffLine {
@@ -240,4 +240,147 @@ fn a_changed_word_keeps_its_tint_over_the_syntax_color() {
 
     assert!(runs(source, &[], Some(&(0..0)), Some(tint), theme.as_ref()).is_empty());
     assert!(runs("    ", &[], Some(&(0..4)), Some(tint), theme.as_ref()).is_empty());
+}
+
+#[test]
+fn each_added_line_keeps_its_own_number_and_its_own_text() {
+    let syntax = captures(
+        &view(
+            "src/lib.rs",
+            None,
+            vec![DiffHunk {
+                old_start: 0,
+                new_start: 1,
+                lines: vec![
+                    line_of(DiffLineKind::Add, None, Some(1), "// first"),
+                    line_of(DiffLineKind::Add, None, Some(2), "fn second() {}"),
+                ],
+            }],
+        ),
+        "src/lib.rs",
+        None,
+    );
+    assert_token(&syntax, DiffSide::New, 2, "fn second() {}", "fn", "keyword");
+}
+
+#[test]
+fn the_old_side_skips_added_lines_and_counts_context_lines() {
+    let syntax = captures(
+        &view(
+            "src/lib.rs",
+            Some("fn added() {}\nfn kept() {}\n"),
+            vec![DiffHunk {
+                old_start: 1,
+                new_start: 1,
+                lines: vec![
+                    line_of(DiffLineKind::Add, None, Some(1), "fn added() {}"),
+                    line_of(DiffLineKind::Context, Some(1), Some(2), "fn kept() {}"),
+                ],
+            }],
+        ),
+        "src/lib.rs",
+        None,
+    );
+    assert_token(&syntax, DiffSide::Old, 1, "fn kept() {}", "fn", "keyword");
+    assert!(syntax.spans(DiffSide::Old, 2).is_empty());
+}
+
+#[test]
+fn a_binary_truncated_or_large_file_is_never_colored() {
+    for (binary, truncated, too_large) in [
+        (true, false, false),
+        (false, true, false),
+        (false, false, true),
+    ] {
+        let mut file = view("src/lib.rs", Some("fn main() {}\n"), vec![]);
+        file.binary = binary;
+        file.truncated = truncated;
+        file.too_large = too_large;
+        let syntax = captures(&file, "src/lib.rs", None);
+        assert!(syntax.spans(DiffSide::New, 1).is_empty());
+    }
+}
+
+#[test]
+fn clearing_drops_every_span() {
+    let mut syntax = captures(
+        &view("src/lib.rs", Some("fn main() {}\n"), vec![]),
+        "src/lib.rs",
+        None,
+    );
+    assert_token(&syntax, DiffSide::New, 1, "fn main() {}", "fn", "keyword");
+    syntax.clear();
+    assert!(syntax.spans(DiffSide::New, 1).is_empty());
+}
+
+#[test]
+fn only_the_marker_colors_name_a_capture() {
+    let names = vec!["keyword".to_owned()];
+    let marker = Hsla {
+        h: 0.,
+        s: 0.,
+        l: 0.,
+        a: 0.,
+    };
+    assert_eq!(recorded_name(&names, marker), Some("keyword".to_owned()));
+    for color in [
+        Hsla {
+            h: 0.,
+            s: 0.5,
+            l: 0.,
+            a: 0.,
+        },
+        Hsla {
+            h: 0.,
+            s: 0.5,
+            l: 0.5,
+            a: 0.,
+        },
+        Hsla {
+            h: 0.,
+            s: 0.,
+            l: 0.,
+            a: 0.5,
+        },
+    ] {
+        assert_eq!(recorded_name(&names, color), None);
+    }
+}
+
+#[test]
+fn a_plain_text_file_is_never_colored() {
+    let syntax = captures(
+        &view("notes.txt", Some("fn main() {}\n"), vec![]),
+        "notes.txt",
+        None,
+    );
+    assert!(syntax.spans(DiffSide::New, 1).is_empty());
+}
+
+#[test]
+fn makefiles_and_cmake_lists_get_their_own_language() {
+    assert_eq!(language_of("Makefile"), "make");
+    assert_eq!(language_of("src/GNUmakefile"), "make");
+    assert_eq!(language_of("CMakeLists.txt"), "cmake");
+}
+
+#[test]
+fn hunks_longer_than_the_file_do_not_panic() {
+    let hunks = vec![
+        DiffHunk {
+            old_start: 1,
+            new_start: 1,
+            lines: vec![
+                line_of(DiffLineKind::Add, None, Some(1), "a"),
+                line_of(DiffLineKind::Add, None, Some(2), "b"),
+                line_of(DiffLineKind::Add, None, Some(3), "c"),
+            ],
+        },
+        DiffHunk {
+            old_start: 1,
+            new_start: 10,
+            lines: vec![line_of(DiffLineKind::Context, Some(1), Some(10), "z")],
+        },
+    ];
+    captures(&view("src/lib.rs", Some("a\n"), hunks), "src/lib.rs", None);
 }

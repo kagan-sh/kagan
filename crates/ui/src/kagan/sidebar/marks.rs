@@ -3,6 +3,7 @@ use std::path::Component;
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -15,7 +16,7 @@ use kg_domain::{Project, ProjectId, ProjectKind, ThreadId};
 use super::rows::icon_command;
 use crate::kagan::{ArchiveThread, ThreadActions};
 
-use crate::kagan::controls::{menu_item, menu_popup, tip};
+use crate::kagan::controls::{menu_popup, tip};
 use crate::theme::Tone;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -90,9 +91,16 @@ pub(super) fn row_actions<
     .on_click(cx.listener(move |_, _, _, cx| cx.emit(activate_event(&click))))
 }
 
+// At the narrowest sidebar a row is 175 points wide. Past three levels the indent alone would push
+// the row's actions off the edge, so deeper threads share the third level's indent.
+const INDENT_STEP: f32 = 24.;
+const MAX_INDENT_LEVELS: u16 = 3;
+
 pub(super) fn thread_indent(kind: &Kind) -> Option<f32> {
     match kind {
-        Kind::Thread { depth, .. } if *depth > 0 => Some(24. * f32::from(*depth)),
+        Kind::Thread { depth, .. } if *depth > 0 => {
+            Some(INDENT_STEP * f32::from((*depth).min(MAX_INDENT_LEVELS)))
+        }
         _ => None,
     }
 }
@@ -200,19 +208,6 @@ pub(super) fn thread_controls(
                 }),
         );
     Some(controls.into_any_element())
-}
-
-pub(super) fn entry(
-    sidebar: &WeakEntity<Sidebar>,
-    id: &'static str,
-    label: &'static str,
-    event: impl Fn(ThreadId) -> Event + 'static,
-    thread: &ThreadId,
-) -> PopupMenuItem {
-    let (sidebar, thread) = (sidebar.clone(), thread.clone());
-    PopupMenuItem::element(move |_, _| menu_item(id, label)).on_click(move |_, _, cx| {
-        _ = sidebar.update(cx, |_, cx| cx.emit(event(thread.clone())));
-    })
 }
 
 pub(super) fn project_menu(
@@ -323,14 +318,17 @@ pub(super) fn row_text(
 }
 
 pub(super) fn thread_marks(id: &ThreadId, tone: Tone, cx: &mut App) -> AnyElement {
+    let word = tone.word();
     div()
         .id(ElementId::Name(format!("thread-mark-{id}").into()))
         .ui_container()
-        .w_4()
+        .size_4()
         .flex()
         .flex_shrink_0()
         .justify_center()
-        .aria_label(tone.word())
+        .items_center()
+        .aria_label(word)
+        .tooltip(move |window, cx| Tooltip::new(word).build(window, cx))
         .child(tone.mark(cx))
         .into_any_element()
 }

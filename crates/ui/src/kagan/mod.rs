@@ -2,6 +2,8 @@ use changes::Changes;
 use layout::Layout;
 use plugin_actions::Plugins;
 mod activity;
+#[cfg(test)]
+pub(crate) use activity::Part as ActivityPart;
 mod archived;
 mod ask_form;
 pub(crate) mod attention;
@@ -10,13 +12,12 @@ pub(crate) mod changes;
 pub(crate) mod commands;
 mod controls;
 mod details;
+pub(crate) mod dispatch;
 #[cfg(target_os = "macos")]
 mod dock;
 pub(crate) mod header;
 mod keys;
 mod layout;
-#[cfg(test)]
-pub(crate) use layout::read as layout_read;
 pub(crate) mod menus;
 mod navigation;
 mod needs;
@@ -28,15 +29,9 @@ mod preview;
 mod question;
 pub(crate) mod quit;
 mod replace;
-#[cfg(test)]
-pub(crate) use replace::read as replace_read;
 mod review;
-#[cfg(test)]
-pub(crate) use review::read as review_read;
 mod right;
 mod screen;
-#[cfg(test)]
-pub(crate) mod screen_read;
 mod settings;
 mod shown;
 mod sidebar;
@@ -46,8 +41,6 @@ mod tabs;
 mod update;
 mod web_panel;
 pub(crate) use web_panel::drop_plugin as drop_web_panel;
-#[cfg(all(test, target_os = "macos"))]
-pub(crate) use web_panel::{forget, inject, mark_stale, post, queue_page, testing_page};
 
 mod events;
 mod files;
@@ -56,45 +49,32 @@ mod host;
 mod render;
 mod startup;
 #[cfg(test)]
-mod test_support;
+mod tests;
 mod threads;
+#[cfg(test)]
+pub(crate) use tests::*;
 mod toast;
 use toast::Toast;
 
 pub(crate) use keys::bind;
-#[cfg(test)]
-pub(crate) use keys::chord_for;
 pub(crate) use keys::install_keys;
-#[cfg(test)]
-pub(crate) use keys::is_chord;
-#[cfg(test)]
-pub(crate) use needs::QUIET;
 pub(crate) use surface::Commit as SurfaceCommit;
 pub(crate) use surface::paint_then_settle;
-#[cfg(test)]
-pub(crate) use tabs::{CloseTerminal, NewTerminal, NextTerminal, OpenLocalLink, PreviousTerminal};
 mod window;
 
-#[cfg(test)]
-pub(crate) use threads::description;
-#[cfg(test)]
-pub(crate) use window::open;
 pub(crate) use window::shows;
-#[cfg(test)]
-pub(crate) use window::window_options;
 pub(crate) use window::{
     front, show, show_plugin_settings, show_preview, show_settings, start_plugin, watch_waiting,
 };
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use crate::terminal::TerminalView;
 use gpui_kit::component::input::InputState;
-use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::resizable::ResizableState;
 use gpui_kit::{
-    AnyWindowHandle, App, ElementId, Entity, FocusHandle, ScrollHandle, SharedString, Subscription,
-    Task, Window, actions,
+    AnyWindowHandle, App, ElementId, Entity, FocusHandle, SharedString, Subscription, Task, Window,
+    actions,
 };
 use kg_domain::{PendingInteractionId, ProjectId, Thread, ThreadId};
 
@@ -123,6 +103,8 @@ actions!(
         RestoreThread,
         ToggleSidebar,
         ToggleRightSidebar,
+        ToggleActivityLog,
+        CloseActivityLog,
         DismissRightOverlay,
         DismissLeftOverlay,
         OpenSettings,
@@ -164,69 +146,41 @@ pub(crate) struct Kagan {
     plugin_prompt_notice: Option<ThreadId>,
     focus: FocusHandle,
     surface_close_focus: FocusHandle,
-    // While a surface open or close waits for its frame, sidebar and collapse preferences stay as they were.
-    surface_hold: bool,
+    slots: surface::SlotState,
     typing: bool,
     quiet: Task<()>,
-    /// The questions that were on screen when the person started typing. They stay up.
     on_screen: BTreeSet<PendingInteractionId>,
-    /// The person-only questions already seen, so a new one opens the panels once.
     announced: BTreeSet<PendingInteractionId>,
     typed_watch: Option<Subscription>,
     changes: Changes,
     details: details::Details,
     tabs: tabs::Tabs,
     review_drafts: review::Drafts,
-    replaced: replace::Replaced,
     plugins: Plugins,
-    panels: Vec<right::Panel>,
-    right_slots: Vec<surface::Slot>,
-    right_tab: Option<right::Tab>,
-    right_menu: Option<(Entity<PopupMenu>, Subscription)>,
-    right_add_focus: FocusHandle,
-    right_fill: right::Fill,
-    right_panels: Vec<surface::Declared>,
-    tool: Option<surface::Slot>,
-    surface_check: Option<surface::Check>,
-    surface_epoch: u64,
+    right: right::Sidebar,
     layout: Layout,
     viewport: gpui_kit::Pixels,
     prefs: Entity<settings::Prefs>,
     _settings_watch: [Subscription; 3],
     panes: layout::Panes,
-    right_toggle_focus: FocusHandle,
     left_overlay_focus: FocusHandle,
-    /// Enter on a project is waiting for the picker to load its program.
     start_on_load: Option<ProjectId>,
-    settings_scroll: ScrollHandle,
-    settings_approvals: usize,
-    settings_drafts: settings::Drafts,
-    keyboard: settings::Recorder,
-    /// Set while a sidebar change made on leaving Settings is still being delivered
+    settings: settings::SettingsState,
     settling: bool,
-    /// A plugin's own settings view, with the plugin's load generation it was mounted from
-    settings_views: BTreeMap<kg_domain::PluginId, (u64, Entity<gpui_shell::ScriptView>)>,
     columns: Entity<ResizableState>,
     window: AnyWindowHandle,
-    actions_menu: Option<(Entity<PopupMenu>, Subscription)>,
+    title: shown::TitleState,
     open_thread: Option<Thread>,
     retired_load: Task<()>,
     archive_query: Entity<InputState>,
     _archive_watch: Subscription,
     browser: browser::Browser,
-    title_input: Option<Entity<InputState>>,
-    title_watch: Option<Subscription>,
     _subscriptions: [Subscription; 5],
     _sidebar_watch: [Subscription; 2],
     _appearance: Subscription,
     _theme_paint: Subscription,
     _theme_notice: Subscription,
-    plugin_watch: Option<Subscription>,
-    host_events: Vec<Subscription>,
-    overlays: Vec<overlays::Overlay>,
-    ask_drafts: BTreeMap<PendingInteractionId, ask_form::Draft>,
-    ask_hidden: BTreeSet<PendingInteractionId>,
-    ask_popup: Option<FocusHandle>,
+    asks: ask_form::AskState,
     toast: Option<Toast>,
     toast_epoch: u64,
     activity: activity::Strip,

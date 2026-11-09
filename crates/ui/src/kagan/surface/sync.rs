@@ -13,26 +13,27 @@ impl Kagan {
     }
 
     pub(in crate::kagan) fn flip_slot_details(&mut self, id: &str) {
-        if let Some(slot) = self.tool.as_mut().filter(|slot| slot.id == id) {
+        if let Some(slot) = self.slots.tool.as_mut().filter(|slot| slot.id == id) {
             slot.details = !slot.details;
         }
         if let Some(slot) = self.screen.page_mut().filter(|slot| slot.id == id) {
             slot.details = !slot.details;
         }
-        if let Some(slot) = self.right_slots.iter_mut().find(|slot| slot.id == id) {
+        if let Some(slot) = self.right.slots.iter_mut().find(|slot| slot.id == id) {
             slot.details = !slot.details;
         }
     }
 
     pub(in crate::kagan) fn sync_slots(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.right_panels = panels(cx)
+        self.right.panels = panels(cx)
             .into_iter()
             .filter(|item| item.placement == SurfacePlacement::Right)
             .collect();
-        let tool_held = holds_focus(self.tool.as_ref(), window, cx);
+        let tool_held = holds_focus(self.slots.tool.as_ref(), window, cx);
         let page_held = holds_focus(self.screen.page(), window, cx);
         let right_held = self
-            .right_slots
+            .right
+            .slots
             .iter()
             .any(|slot| slot.focus.contains_focused(window, cx));
         let close_held = self.surface_close_focus.is_focused(window);
@@ -56,7 +57,7 @@ impl Kagan {
 
     fn sync_one(&mut self, tool: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let Some(slot) = (if tool {
-            self.tool.as_ref()
+            self.slots.tool.as_ref()
         } else {
             self.screen.page()
         }) else {
@@ -73,7 +74,7 @@ impl Kagan {
         }
         let next = declared.map(|declared| mount(&declared, slot.details, window, cx));
         if tool {
-            self.tool = next;
+            self.slots.tool = next;
         } else if let Some(next) = next {
             if let Some(page) = self.screen.page_mut() {
                 *page = next;
@@ -87,8 +88,8 @@ impl Kagan {
 
     fn sync_right_slots(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let mut changed = false;
-        let mut next = Vec::with_capacity(self.right_slots.len());
-        for slot in std::mem::take(&mut self.right_slots) {
+        let mut next = Vec::with_capacity(self.right.slots.len());
+        for slot in std::mem::take(&mut self.right.slots) {
             let declared = find_declared(&slot.plugin, &slot.contribution, cx);
             let generation =
                 PluginHost::try_global(cx).and_then(|host| host.read(cx).generation(&slot.plugin));
@@ -108,14 +109,15 @@ impl Kagan {
                 next.push(mount(&declared, slot.details, window, cx));
             }
         }
-        self.right_slots = next;
+        self.right.slots = next;
         if changed
             && self
-                .right_tab
+                .right
+                .tab
                 .as_ref()
                 .is_some_and(|id| !id.available(self, cx))
         {
-            self.right_tab = self.default_right_tab(cx);
+            self.right.tab = self.default_right_tab(cx);
         }
         changed
     }

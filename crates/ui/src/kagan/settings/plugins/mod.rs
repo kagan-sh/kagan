@@ -1,6 +1,3 @@
-//! A plugin's settings page: its declared settings as rows, then its own view when it has one.
-//! A save reply is applied only when that save is still the latest and the plugin activation is still the one captured when the save started.
-
 use std::collections::{BTreeMap, BTreeSet};
 
 use gpui_kit::component::input::InputState;
@@ -55,7 +52,7 @@ pub(super) enum Change {
     Clear,
 }
 
-/// A secret's field starts empty and empties after each save: it never holds a saved value.
+// A secret's field starts empty and empties after each save: it never holds a saved value.
 pub(super) struct Secret {
     input: Entity<InputState>,
     _enter: Subscription,
@@ -209,7 +206,6 @@ fn sync_text(
     }
 }
 
-/// A plugin's declared settings, as one group named after the plugin.
 pub(super) fn groups(kagan: &Kagan, id: &PluginId, cx: &mut Context<Kagan>) -> Vec<Group> {
     let Some(host) = PluginHost::try_global(cx) else {
         return Vec::new();
@@ -245,7 +241,8 @@ fn plugin_row(
 ) -> Option<Row> {
     let scope = format!("{}/{key}", id.0);
     let fault = kagan
-        .settings_drafts
+        .settings
+        .drafts
         .fault
         .get(&scope)
         .map(|fault| fault.message.clone())
@@ -271,7 +268,7 @@ fn plugin_row(
             )
         }
         Setting::String { title, .. } | Setting::Number { title, .. } => {
-            let field = kagan.settings_drafts.text.get(&scope)?.field.clone();
+            let field = kagan.settings.drafts.text.get(&scope)?.field.clone();
             let (note, control) = string_control(title, &scope, &field, cx);
             (title, note, control)
         }
@@ -294,7 +291,7 @@ fn plugin_row(
             (title, note, control)
         }
         Setting::Secret { title } => {
-            let input = kagan.settings_drafts.secret.get(&scope)?.input.clone();
+            let input = kagan.settings.drafts.secret.get(&scope)?.input.clone();
             let warning =
                 PluginHost::try_global(cx).and_then(|host| host.read(cx).secret_warning());
             let note = Some(fault).filter(|fault| !fault.is_empty()).or(warning);
@@ -324,7 +321,8 @@ pub(super) fn save_value(
 ) {
     let _ = kagan.update(cx, |kagan, cx| {
         kagan
-            .settings_drafts
+            .settings
+            .drafts
             .begin(scope, plugin, key, change, None, cx);
     });
 }
@@ -397,7 +395,7 @@ impl Drafts {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             let _ = this.update(cx, |kagan, cx| {
-                kagan.settings_drafts.land(scope, request, result, cx);
+                kagan.settings.drafts.land(scope, request, result, cx);
             });
         })
         .detach();

@@ -9,6 +9,14 @@ use crate::{
     EnvironmentId, PendingInteractionId, PluginId, ProjectId, SectionId, ThreadId, Timestamp,
 };
 
+/// The start of a plugin source that is a git address: `git:<url>@<ref>`.
+pub const GIT_SOURCE: &str = "git:";
+
+#[must_use]
+pub fn is_git_source(source: &str) -> bool {
+    source.starts_with(GIT_SOURCE)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectKind {
@@ -51,6 +59,18 @@ pub enum ThreadStatus {
     Active,
     Stopping,
     Error,
+}
+
+impl ThreadStatus {
+    #[must_use]
+    pub fn running(self) -> bool {
+        matches!(self, Self::Starting | Self::Active | Self::Stopping)
+    }
+
+    #[must_use]
+    pub fn live(self) -> bool {
+        matches!(self, Self::Starting | Self::Active)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
@@ -153,6 +173,9 @@ pub struct Thread {
     pub status: ThreadStatus,
     pub visibility: Visibility,
     pub parent_thread_id: Option<ThreadId>,
+    /// The parent is not told when this thread's turn ends, asks the person, exits or fails.
+    #[serde(default)]
+    pub quiet: bool,
     pub lifecycle_owner_thread_id: Option<ThreadId>,
     pub section_id: Option<SectionId>,
     pub pinned: bool,
@@ -243,6 +266,17 @@ pub struct PendingInteraction {
 pub struct InteractionOption {
     pub id: String,
     pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<OptionRole>,
+}
+
+/// What an option does, for the host to draw: the safe choice takes focus, the destructive one
+/// is drawn as a danger.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OptionRole {
+    Safe,
+    Destructive,
 }
 
 /// The longest text an ask field or answer holds, in characters. Decision 144.
@@ -386,7 +420,26 @@ pub struct Plugin {
     pub commit: Option<String>,
     pub enabled: bool,
     pub approved: Value,
+    /// The skill folders the manifest names, relative to `root`. Stored with the record.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skills: Vec<PathBuf>,
     /// Why the plugin did not start. Filled when plugins are listed; never stored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+/// What a plugin's log file holds, as its recent lines are counted.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LogCounts {
+    Missing,
+    Unreadable,
+    Counted { warn: u32, error: u32 },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginLog {
+    pub id: PluginId,
+    pub counts: LogCounts,
 }

@@ -302,7 +302,7 @@ async fn a_paste_of_quotes_and_backticks_reaches_the_program(cx: &mut TestAppCon
     )
     .await
     .unwrap_err();
-    assert!(refused.to_string().contains("not a path"), "{refused}");
+    assert!(refused.to_string().contains("not both"), "{refused}");
     for _ in 0..20 {
         cx.executor()
             .advance_clock(std::time::Duration::from_millis(50));

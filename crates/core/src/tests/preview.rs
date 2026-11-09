@@ -1,4 +1,5 @@
 use super::{Fixture, op, program};
+use crate::preview::preview_image;
 use gpui_kit::TestAppContext;
 use kg_domain::{
     Op, OpError, OpResult, PreviewFile, PreviewImageFormat, PreviewKind, PreviewOp, ThreadId,
@@ -28,6 +29,45 @@ async fn preview(
         OpResult::Preview(file) => Ok(file),
         _ => panic!("preview"),
     }
+}
+
+#[gpui_kit::test]
+async fn a_socket_preview_asks_the_window_for_its_tab_and_a_plugin_preview_does_not(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    std::fs::write(fixture.dir.path().join("notes.txt"), "one\n").unwrap();
+    let thread = started(&fixture, cx).await;
+    let jobs = std::rc::Rc::new(std::cell::RefCell::new(Vec::<crate::UiJob>::new()));
+    let sink = jobs.clone();
+    cx.update(|cx| {
+        fixture.workspace.update(cx, |workspace, _| {
+            workspace.set_ui_driver(std::rc::Rc::new(
+                move |job: crate::UiJob, _: &mut gpui_kit::App| {
+                    sink.borrow_mut().push(job);
+                    gpui_kit::Task::ready(Ok::<_, OpError>(OpResult::Done))
+                },
+            ));
+        });
+    });
+    let (_gone, gone) = async_channel::bounded::<()>(1);
+    let socket = Op::Preview(PreviewOp::Show {
+        thread_id: Some(thread.clone()),
+        path: "notes.txt".into(),
+    });
+    cx.update(|cx| crate::Workspace::dispatch_for(socket, Some(crate::Requester::new(gone)), cx))
+        .await
+        .unwrap();
+    let shown = jobs.borrow().clone();
+    assert!(
+        matches!(
+            shown.as_slice(),
+            [crate::UiJob::Preview { thread: Some(id), path }] if *id == thread && path == "notes.txt"
+        ),
+        "{shown:?}"
+    );
+    preview(Some(&thread), "notes.txt", cx).await.unwrap();
+    assert_eq!(jobs.borrow().len(), 1, "a plugin read shows no tab");
 }
 
 #[gpui_kit::test]
@@ -362,6 +402,24 @@ async fn csv_and_image_exactly_at_the_caps_are_accepted(cx: &mut TestAppContext)
     assert!(matches!(file.kind, PreviewKind::Image { .. }));
     let file = preview(Some(&thread), "many.png", cx).await.unwrap();
     assert!(matches!(file.kind, PreviewKind::Image { .. }));
+}
+
+#[test]
+fn a_window_image_stays_in_its_root_and_under_the_caps() {
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let inside = root.path().join("pixel.png");
+    let secret = outside.path().join("secret.png");
+    let heavy = root.path().join("heavy.png");
+    std::fs::write(&inside, png(2, 2)).unwrap();
+    std::fs::write(&secret, png(2, 2)).unwrap();
+    let mut bytes = png(2, 2);
+    bytes.resize(8 * 1024 * 1024 + 1, 0);
+    std::fs::write(&heavy, bytes).unwrap();
+    assert!(preview_image(Some(root.path()), &inside).is_some());
+    assert!(preview_image(Some(root.path()), &secret).is_none());
+    assert!(preview_image(None, &secret).is_some());
+    assert!(preview_image(Some(root.path()), &heavy).is_none());
 }
 
 fn png(width: u32, height: u32) -> Vec<u8> {

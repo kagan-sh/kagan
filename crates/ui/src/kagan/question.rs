@@ -10,14 +10,15 @@ use gpui_kit::{
     SharedString, Styled as _, WeakEntity, Window, div, px,
 };
 use kg_core::{Approval, Workspace};
-use kg_domain::{InteractionOption, PendingInteraction, PendingInteractionId, ThreadId};
+use kg_domain::{
+    InteractionOption, OptionRole, PendingInteraction, PendingInteractionId, ThreadId,
+};
 
 use super::Kagan;
 use super::ask_form::{self, Draft};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-/// A question waiting for the person: on a thread, or a standalone approval.
 pub(super) struct Question {
     thread: Option<ThreadId>,
     id: PendingInteractionId,
@@ -82,6 +83,10 @@ pub(super) fn form_card(
     body(Question::thread(asked), form, kagan, window, cx)
 }
 
+pub(super) fn answer_focus(question: &str, option: &str) -> String {
+    format!("answer-focus-{question}-{option}")
+}
+
 fn body(
     question: Question,
     form: Option<AnyElement>,
@@ -94,7 +99,7 @@ fn body(
         let focus = super::tab_stop(
             window,
             cx,
-            ElementId::Name(format!("answer-focus-{}-{}", question.id.0, option.id).into()),
+            ElementId::Name(answer_focus(&question.id.0, &option.id).into()),
         );
         let answer_now: Rc<dyn Fn(&mut App)> =
             match (question.asked.clone(), question.thread.clone()) {
@@ -140,7 +145,7 @@ fn body(
                         .small()
                         .tab_stop(false)
                         .label(option.label.clone());
-                    button = if matches!(option.label.as_str(), "Delete" | "Remove") {
+                    button = if option.role == Some(OptionRole::Destructive) {
                         button.danger()
                     } else {
                         button.outline()

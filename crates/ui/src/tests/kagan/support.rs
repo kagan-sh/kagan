@@ -20,21 +20,38 @@ pub(in crate::tests) fn host_then(
     cx: &mut TestAppContext,
     install: impl FnOnce(&Path),
 ) -> tempfile::TempDir {
-    let data = tempfile::tempdir().unwrap();
-    seed(data.path());
-    install(data.path());
-    let opened =
-        cx.update(|cx| Workspace::open(data.path().into(), std::env::current_exe().unwrap(), cx));
-    cx.foreground_executor().block_test(opened).unwrap();
+    let data = app_then(cx, install);
     let started = cx.update(|cx| {
-        gpui_kit::init(cx);
-        gpui_shell::init(cx);
-        crate::init(cx);
         let mut catalog = gpui_shell::components::registry().unwrap();
         crate::register_components(&mut catalog).unwrap();
         kg_plugins::init(cx, catalog.freeze().unwrap())
     });
     cx.foreground_executor().block_test(started).unwrap();
+    data
+}
+
+/// The workspace and app, as `host_then` builds them, but with no plugin host.
+pub(in crate::tests) fn app_then(
+    cx: &mut TestAppContext,
+    install: impl FnOnce(&Path),
+) -> tempfile::TempDir {
+    let data = tempfile::tempdir().unwrap();
+    seed(data.path());
+    install(data.path());
+    let opened = cx.update(|cx| {
+        Workspace::open(
+            data.path().into(),
+            std::env::current_exe().unwrap(),
+            None,
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(opened).unwrap();
+    cx.update(|cx| {
+        gpui_kit::init(cx);
+        gpui_shell::init(cx);
+        crate::init(cx);
+    });
     data
 }
 
@@ -82,8 +99,14 @@ pub(crate) fn open(cx: &mut TestAppContext) -> (Entity<Kagan>, AnyWindowHandle, 
 pub(in crate::tests) fn setup(cx: &mut TestAppContext) -> tempfile::TempDir {
     let data = tempfile::tempdir().unwrap();
     seed(data.path());
-    let opened =
-        cx.update(|cx| Workspace::open(data.path().into(), std::env::current_exe().unwrap(), cx));
+    let opened = cx.update(|cx| {
+        Workspace::open(
+            data.path().into(),
+            std::env::current_exe().unwrap(),
+            None,
+            cx,
+        )
+    });
     cx.foreground_executor().block_test(opened).unwrap();
     cx.update(|cx| {
         gpui_kit::init(cx);
@@ -118,6 +141,7 @@ pub(in crate::tests) fn run_program(cx: &mut TestAppContext, program: &str) -> T
         environment: EnvironmentSpec::Personal,
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };
@@ -138,6 +162,7 @@ pub(in crate::tests) fn run_child(cx: &mut TestAppContext, parent: &ThreadId) ->
         environment: EnvironmentSpec::Personal,
         visibility: Some(Visibility::Visible),
         parent_thread_id: Some(parent.clone()),
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };
@@ -280,4 +305,20 @@ pub(in crate::tests) fn wait_for_shell(
         );
         std::thread::sleep(Duration::from_millis(20));
     }
+}
+
+// In a short window the controls below the fields sit below the fold, so a person scrolls the form to them.
+pub(in crate::tests) fn scroll_form_to_end(cx: &mut TestAppContext, window: AnyWindowHandle) {
+    cx.update_window(window, |_, window, cx| {
+        crate::ui_dispatch::scroll_within(
+            window,
+            &ElementId::Name("start-fields".into()),
+            None,
+            gpui_kit::ScrollDelta::Pixels(gpui_kit::point(gpui_kit::px(0.), gpui_kit::px(-1000.))),
+            cx,
+        )
+        .unwrap();
+    })
+    .unwrap();
+    cx.run_until_parked();
 }

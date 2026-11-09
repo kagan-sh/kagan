@@ -20,6 +20,11 @@ impl Permit {
     pub fn new(activation: u64, gate: Arc<Mutex<Option<u64>>>) -> Self {
         Self { activation, gate }
     }
+
+    #[must_use]
+    pub fn activation(&self) -> u64 {
+        self.activation
+    }
 }
 fn write_plugin_config(
     store: &mut Store,
@@ -140,13 +145,14 @@ impl Workspace {
         source: String,
         commit: Option<String>,
         mut approved: Value,
+        skills: Vec<PathBuf>,
     ) -> impl Future<Output = Result<Option<Plugin>>> + use<> {
         self.call(move |store| {
             let Some(existing) = store.plugins()?.into_iter().find(|plugin| plugin.id == id) else {
                 return Ok(None);
             };
             copy_kept_paths(&mut approved, &existing.approved);
-            store.keep_plugin_checkout(&id, &root, &source, &commit, &approved)?;
+            store.keep_plugin_checkout(&id, &root, &source, &commit, &approved, &skills)?;
             Ok(Some(Plugin {
                 id,
                 root,
@@ -154,9 +160,20 @@ impl Workspace {
                 commit,
                 enabled: existing.enabled,
                 approved,
+                skills,
                 error: None,
             }))
         })
+    }
+
+    /// # Errors
+    /// When the database is closed, the plugin is missing, or the query fails.
+    pub fn set_plugin_skills(
+        &self,
+        id: PluginId,
+        skills: Vec<PathBuf>,
+    ) -> impl Future<Output = Result<()>> + use<> {
+        self.call(move |store| store.set_plugin_skills(&id, &skills))
     }
     /// # Errors
     /// When the database is closed or removing the plugin fails.

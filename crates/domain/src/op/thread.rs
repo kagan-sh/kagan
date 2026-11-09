@@ -320,6 +320,10 @@ pub struct Run {
     #[arg(long)]
     #[serde(default)]
     pub parent_thread_id: Option<ThreadId>,
+    /// With a parent, do not type a note into the parent's terminal when this thread's turn ends, asks the person, exits or fails
+    #[arg(long)]
+    #[serde(default)]
+    pub quiet: bool,
     #[arg(long)]
     #[serde(default)]
     pub lifecycle_owner_thread_id: Option<ThreadId>,
@@ -411,6 +415,8 @@ pub const SEARCH_LIMIT: u32 = 200;
 pub const SEARCH_DEFAULT: u32 = 50;
 /// The longest search text, in characters. Its refusal names this number.
 pub const SEARCH_TEXT_MAX: usize = 256;
+/// The most bytes a paste, a send or a browser fill carries.
+pub const TEXT_MAX: usize = 1024 * 1024;
 
 fn parse_option(raw: &str) -> Result<InteractionOption, &'static str> {
     let (id, label) = raw.split_once('=').ok_or("an option is id=label")?;
@@ -420,6 +426,7 @@ fn parse_option(raw: &str) -> Result<InteractionOption, &'static str> {
     Ok(InteractionOption {
         id: id.to_owned(),
         label: label.to_owned(),
+        role: None,
     })
 }
 
@@ -434,6 +441,7 @@ mod tests {
             Ok(InteractionOption {
                 id: "allow".into(),
                 label: "Allow once".into(),
+                role: None,
             })
         );
         for raw in ["allow", "=label", "id=", "="] {

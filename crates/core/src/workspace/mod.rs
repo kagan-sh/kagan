@@ -24,17 +24,39 @@ pub(crate) mod entity;
 mod lifecycle;
 mod plugins;
 mod questions;
-mod recovery;
+pub(crate) mod recovery;
 mod screens;
 mod state;
 
-pub(crate) use clock::{closed, database, id, missing, now, time};
+pub(crate) use clock::{changed, closed, database, id, missing, now, time};
 pub(crate) use data::open_data;
 pub use plugins::Permit;
+pub(crate) use questions::{Waiting, approve};
 
 use recovery::interrupted;
 
-pub(crate) const GRACE: i64 = 10_000;
+/// A step that waits in tests until a value is sent; outside tests `hold` returns at once.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Hold {
+    Removal,
+    Run,
+    Delete,
+    Screen,
+}
+
+#[cfg(any(test, feature = "test"))]
+pub(crate) async fn hold(this: &WeakEntity<Workspace>, which: Hold, cx: &mut AsyncApp) {
+    if let Ok(Some(held)) = this.update(cx, |workspace, _| workspace.holds.get(&which).cloned()) {
+        // A dropped sender also releases the hold.
+        let _ = held.recv().await;
+    }
+}
+
+#[cfg(not(any(test, feature = "test")))]
+pub(crate) fn hold(_: &WeakEntity<Workspace>, _: Hold, _: &mut AsyncApp) -> std::future::Ready<()> {
+    std::future::ready(())
+}
+
 const QUIT_DEADLINE: Duration = Duration::from_secs(3);
 pub(crate) enum Request {
     Op(Op),
@@ -89,6 +111,8 @@ pub enum PluginRequest {
         thread_id: ThreadId,
         project_id: ProjectId,
     },
+    /// The log counts of each installed plugin, for diagnostics.
+    Logs,
     Plugin(PluginOp, Option<Requester>),
     /// A shortcut of a plugin's command, named `<plugin-id>:<command>`
     Keymap(KeymapOp),
@@ -98,69 +122,39 @@ pub enum PluginRequest {
 pub type PluginDispatch = Rc<dyn Fn(PluginRequest, &mut App) -> Task<Result<OpResult>>>;
 
 pub struct Workspace {
-    pub(crate) approvals: BTreeMap<PendingInteractionId, crate::workspace::approval::Waiting>,
-    pub(crate) replies: BTreeMap<PendingInteractionId, Sender<String>>,
-    pub(crate) for_a_person: BTreeSet<PendingInteractionId>,
-    pub(crate) asks: BTreeMap<ThreadId, (PendingInteractionId, async_channel::Receiver<String>)>,
-    /// Which thread owns each reply. Taking one thread drops only its waits.
-    pub(crate) interaction_thread: BTreeMap<PendingInteractionId, ThreadId>,
+    pub(crate) pending: BTreeMap<PendingInteractionId, Waiting>,
     pub(crate) database: Database,
     pub(crate) data_dir: PathBuf,
     pub(crate) cli: PathBuf,
+    /// Where this app listens for `kg`; every process it starts gets it as `KG_SOCKET`.
+    pub(crate) socket: Option<std::ffi::OsString>,
     pub(crate) projects: BTreeMap<ProjectId, Entity<Project>>,
     pub(crate) preparing_projects: BTreeMap<ProjectId, usize>,
     removing_projects: BTreeSet<ProjectId>,
     pub(crate) environments: BTreeMap<EnvironmentId, Entity<Environment>>,
     pub(crate) threads: BTreeMap<ThreadId, Entity<Thread>>,
     pub(crate) tasks: BTreeMap<ThreadId, Task<()>>,
-    pub(crate) terminals: BTreeMap<ThreadId, crate::thread::Shown>,
-    pub(crate) extras: BTreeMap<ThreadId, crate::thread::Extras>,
-    /// The size the window last gave each thread's program. A program started again takes it.
-    pub(crate) sizes: BTreeMap<ThreadId, (u16, u16)>,
+    pub(crate) runs: BTreeMap<ThreadId, crate::thread::Run>,
     /// Whether the task that watches `terminals` is running.
     pub(crate) watching: bool,
     /// Environments whose folder removal is running outside the operation loop.
     pub(crate) removing: BTreeSet<EnvironmentId>,
-    /// Programs whose exit is queued for the request loop, so the watcher reports each once.
-    pub(crate) exiting: BTreeSet<ThreadId>,
-    /// Threads whose program was asked to stop, and why. Quit skips `turn.ended` only.
-    pub(crate) stopping: BTreeMap<ThreadId, crate::thread::StopReason>,
-    /// The `Started` seq of the run now in progress, or the run a saved screen belongs to.
-    pub(crate) runs: BTreeMap<ThreadId, u64>,
-    pub(crate) ends: BTreeMap<ThreadId, crate::end::End>,
-    /// Loaded with the saved screen, so a reopen shows the same note.
-    pub(crate) losses: BTreeMap<ThreadId, crate::end::Loss>,
-    /// Runs whose settled screen was already offered to the store.
-    pub(crate) saved: BTreeSet<(ThreadId, u64)>,
     pub(crate) diffs: std::sync::Arc<crate::diff::Cache>,
     keymap: kg_domain::Keymap,
     pub(crate) plugins: Option<PluginDispatch>,
     /// Where this workspace finds programs, when a test has set it; None is the login PATH
+    #[cfg(any(test, feature = "test"))]
     pub(crate) program_environment: Option<crate::host::program::ProgramEnvironment>,
-    /// Where Claude Code keeps its conversations, when a test has set it; None is `CLAUDE_CONFIG_DIR` or `~/.claude`
-    pub(crate) claude_config: Option<std::path::PathBuf>,
-    /// Where Codex keeps its conversations, when a test has set it; None is `CODEX_HOME` or `~/.codex`
-    pub(crate) codex_home: Option<std::path::PathBuf>,
-    /// Where Cursor keeps its conversations, when a test has set it; None is `CURSOR_CONFIG_DIR`, `$XDG_CONFIG_HOME/cursor`, or `~/.cursor`
-    pub(crate) cursor_config: Option<std::path::PathBuf>,
-    /// Where Kimi Code keeps its sessions, when a test has set it; None is `KIMI_CODE_HOME` or `~/.kimi-code`
-    pub(crate) kimi_home: Option<std::path::PathBuf>,
-    /// Where BB keeps its skills, when a test has set it; None is `BB_DATA_DIR` or `~/.bb`
-    pub(crate) bb_data_dir: Option<std::path::PathBuf>,
+    /// Where a test says a program keeps its files, by the variable that names the folder.
+    #[cfg(any(test, feature = "test"))]
+    pub(crate) homes: BTreeMap<&'static str, PathBuf>,
     pub(crate) ui: Option<crate::dispatch::ui::UiDispatch>,
     sections: Vec<kg_domain::Section>,
     requests: Sender<Envelope>,
     // Wall time at open plus executor time, so grace deadlines follow GPUI's test clock.
     clock: (kg_domain::Timestamp, Instant),
-    /// When set, folder removal waits until a value is received (tests only).
-    #[cfg(test)]
-    pub(crate) removal_hold: Option<async_channel::Receiver<()>>,
-    #[cfg(test)]
-    pub(crate) run_hold: Option<async_channel::Receiver<()>>,
-    #[cfg(test)]
-    pub(crate) delete_hold: Option<async_channel::Receiver<()>>,
     #[cfg(any(test, feature = "test"))]
-    pub(crate) screen_hold: Option<async_channel::Receiver<()>>,
+    pub(crate) holds: BTreeMap<Hold, async_channel::Receiver<()>>,
     _database_task: Task<()>,
     _requests_task: Task<()>,
     _retire_task: Task<()>,
@@ -185,9 +179,6 @@ pub enum WorkspaceEvent {
 }
 impl EventEmitter<WorkspaceEvent> for Workspace {}
 
-/// Where this app listens for `kg`; every process it starts gets it as `KG_SOCKET`.
-pub struct SocketLocation(pub std::ffi::OsString);
-impl Global for SocketLocation {}
 pub(crate) struct WorkspaceGlobal(Entity<Workspace>);
 impl Global for WorkspaceGlobal {}
 impl Workspace {
@@ -203,7 +194,12 @@ impl Workspace {
     ///
     /// # Errors
     /// Returns an error if the data folder or database cannot be opened.
-    pub fn open(data_dir: PathBuf, cli: PathBuf, cx: &mut App) -> Task<Result<Entity<Self>>> {
+    pub fn open(
+        data_dir: PathBuf,
+        cli: PathBuf,
+        socket: Option<std::ffi::OsString>,
+        cx: &mut App,
+    ) -> Task<Result<Entity<Self>>> {
         let executor = cx.background_executor().clone();
         let opened = executor.spawn(async move { open_data(&data_dir) });
         cx.spawn(async move |cx| {
@@ -218,6 +214,7 @@ impl Workspace {
                     let requests_task = cx.spawn(async move |this, cx| {
                         while let Ok((request, reply)) = incoming.recv().await {
                             let result = Self::handle(&this, request, cx).await;
+                            // The caller dropped its task, so nobody reads the reply.
                             let _ = reply.send(result).await;
                         }
                     });
@@ -229,6 +226,8 @@ impl Workspace {
                             };
                             let task = workspace.update(cx, |workspace, _| {
                                 let (reply, receive) = async_channel::bounded(1);
+                                // The next sweep waits for this reply, so sweeps never pile up.
+                                // A closed queue means the workspace is going.
                                 let _ = workspace.requests.try_send((Request::Sweep, reply));
                                 receive
                             });
@@ -238,14 +237,11 @@ impl Workspace {
                         }
                     });
                     Self {
-                        approvals: BTreeMap::new(),
-                        replies: BTreeMap::new(),
-                        for_a_person: BTreeSet::new(),
-                        asks: BTreeMap::new(),
-                        interaction_thread: BTreeMap::new(),
+                        pending: BTreeMap::new(),
                         database,
                         data_dir,
                         cli,
+                        socket,
                         sections: Vec::new(),
                         projects: BTreeMap::new(),
                         preparing_projects: BTreeMap::new(),
@@ -253,37 +249,21 @@ impl Workspace {
                         environments: BTreeMap::new(),
                         threads: BTreeMap::new(),
                         tasks: BTreeMap::new(),
-                        terminals: BTreeMap::new(),
-                        extras: BTreeMap::new(),
-                        sizes: BTreeMap::new(),
+                        runs: BTreeMap::new(),
                         watching: false,
                         removing: BTreeSet::new(),
-                        exiting: BTreeSet::new(),
-                        stopping: BTreeMap::new(),
-                        runs: BTreeMap::new(),
-                        ends: BTreeMap::new(),
-                        losses: BTreeMap::new(),
-                        saved: BTreeSet::new(),
                         diffs: crate::diff::Cache::new(),
                         keymap: kg_domain::Keymap::default(),
                         plugins: None,
+                        #[cfg(any(test, feature = "test"))]
                         program_environment: None,
-                        claude_config: None,
-                        codex_home: None,
-                        cursor_config: None,
-                        kimi_home: None,
-                        bb_data_dir: None,
+                        #[cfg(any(test, feature = "test"))]
+                        homes: BTreeMap::new(),
                         ui: None,
                         requests,
                         clock: (now(), cx.background_executor().now()),
-                        #[cfg(test)]
-                        removal_hold: None,
-                        #[cfg(test)]
-                        run_hold: None,
-                        #[cfg(test)]
-                        delete_hold: None,
                         #[cfg(any(test, feature = "test"))]
-                        screen_hold: None,
+                        holds: BTreeMap::new(),
                         _database_task: database_task,
                         _requests_task: requests_task,
                         _retire_task: retire_task,
@@ -356,9 +336,10 @@ impl Workspace {
             }
         }
     }
-    /// Picks up what the previous process left: interrupted removals, then programs it left running.
+    // Picks up what the previous process left: interrupted removals, then programs it left running.
     async fn resume(this: &WeakEntity<Self>, cx: &mut AsyncApp) -> Result<()> {
         Self::refresh(this, cx).await?;
+        crate::environment::drop_expired_screens(this, cx).await?;
         crate::settings::remember_keymap(this, cx).await?;
         let submitted = this
             .update(cx, |workspace, _| workspace.submit(Request::Leftovers))
@@ -385,7 +366,7 @@ impl Workspace {
             title: title.clone(),
         });
         if let Err(message) = kg_domain::check(&op) {
-            return Task::ready(Err(OpError::Invalid(message.to_owned())));
+            return Task::ready(Err(OpError::Invalid(message)));
         }
         let Some(global) = cx.try_global::<WorkspaceGlobal>() else {
             return Task::ready(Err(OpError::Failed("workspace is not open".into())));
@@ -403,7 +384,7 @@ impl Workspace {
         cx: &mut App,
     ) -> Task<Result<OpResult>> {
         if let Err(message) = kg_domain::check(&op) {
-            return Task::ready(Err(OpError::Invalid(message.to_owned())));
+            return Task::ready(Err(OpError::Invalid(message)));
         }
         let Some(global) = cx.try_global::<WorkspaceGlobal>() else {
             return Task::ready(Err(OpError::Failed("workspace is not open".into())));
@@ -420,6 +401,12 @@ impl Workspace {
                 Task::ready(Err(OpError::Invalid(format!(
                     "{key} is set in Settings, or with kg plugin use, which asks a person"
                 ))))
+            }
+            Op::Thread(kg_domain::ThreadOp::Rename { id, title }) if requester.is_some() => {
+                Self::rename_once(id, title, cx)
+            }
+            Op::Preview(preview @ kg_domain::PreviewOp::Show { .. }) if requester.is_some() => {
+                shown_preview(&this, preview, requester, cx)
             }
             Op::Thread(kg_domain::ThreadOp::WaitEvent {
                 id,
@@ -491,21 +478,47 @@ impl Workspace {
         let (reply, receive) = async_channel::bounded(1);
         let sent = self.requests.try_send((request, reply));
         async move {
-            sent.map_err(|_| OpError::Failed("workspace closed".into()))?;
+            sent.map_err(|_| closed("workspace closed"))?;
             receive
                 .recv()
                 .await
-                .map_err(|_| OpError::Failed("workspace closed".into()))?
+                .map_err(|_| closed("workspace closed"))?
         }
     }
 }
-/// Runs work that the caller's task cannot cancel by being dropped.
+// A socket preview also asks the window to show its tab, once the read has succeeded.
+fn shown_preview(
+    this: &WeakEntity<Workspace>,
+    preview: kg_domain::PreviewOp,
+    requester: Option<Requester>,
+    cx: &mut App,
+) -> Task<Result<OpResult>> {
+    let this = this.clone();
+    detached(cx, async move |cx| {
+        let kg_domain::PreviewOp::Show { thread_id, path } = preview.clone();
+        let result = crate::dispatch::execute(&this, Op::Preview(preview), requester, cx).await?;
+        // Without a window there is no tab to show; the read itself still succeeded.
+        let _ = crate::dispatch::ui::drive(
+            &this,
+            crate::UiJob::Preview {
+                thread: thread_id,
+                path,
+            },
+            cx,
+        )
+        .await;
+        Ok(result)
+    })
+}
+
+// Runs work that the caller's task cannot cancel by being dropped.
 fn detached(
     cx: &mut App,
     work: impl AsyncFnOnce(&mut AsyncApp) -> Result<OpResult> + 'static,
 ) -> Task<Result<OpResult>> {
     let (reply, receive) = async_channel::bounded(1);
     cx.spawn(async move |cx| {
+        // The caller stopped waiting, but the work itself was meant to finish.
         let _ = reply.send(work(cx).await).await;
     })
     .detach();
@@ -513,6 +526,6 @@ fn detached(
         receive
             .recv()
             .await
-            .map_err(|_| OpError::Failed("workspace closed".into()))?
+            .map_err(|_| closed("workspace closed"))?
     })
 }

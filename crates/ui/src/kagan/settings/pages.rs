@@ -1,6 +1,3 @@
-//! The groups of each settings page. A control reads its value from state the window already
-//! holds, and saves through the Op that `kg` runs, so a change from either one shows on the page.
-
 use crate::theme::TypeScale as _;
 
 use gpui_kit::component::ThemeMode;
@@ -64,7 +61,6 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     out
 }
 
-/// The enabled plugins that have a settings page: declared settings, or their own view.
 pub(super) fn plugin_entries(cx: &App) -> Vec<(PluginId, String)> {
     let Some(host) = PluginHost::try_global(cx) else {
         return Vec::new();
@@ -108,7 +104,7 @@ fn general(agent: bool, notify: bool) -> Group {
                     |on, _, cx| {
                         save(
                             Op::Preference(PreferenceOp::Set {
-                                key: "agent-integration".into(),
+                                key: kg_domain::prefs::AGENT_INTEGRATION.into(),
                                 value: json!(on),
                             }),
                             cx,
@@ -123,7 +119,7 @@ fn general(agent: bool, notify: bool) -> Group {
                 switch("notify", "Notifications", notify, |on, _, cx| {
                     save(
                         Op::Preference(PreferenceOp::Set {
-                            key: "notify".into(),
+                            key: kg_domain::prefs::NOTIFY.into(),
                             value: json!(on),
                         }),
                         cx,
@@ -142,7 +138,7 @@ fn plugin_status_row(on: bool) -> Row {
         switch("plugin-status", "Plugin status", on, |on, _, cx| {
             save(
                 Op::Preference(PreferenceOp::Set {
-                    key: "plugin-status".into(),
+                    key: kg_domain::prefs::PLUGIN_STATUS.into(),
                     value: json!(on),
                 }),
                 cx,
@@ -158,7 +154,7 @@ fn terminal_size(kagan: &Kagan) -> Row {
         .child(control(
             "terminal-size-smaller",
             Facts {
-                disabled: size <= 9,
+                disabled: size <= kg_domain::prefs::TERMINAL_FONT_MIN,
                 ..Facts::button("Smaller terminal text")
             },
             Button::new("button-terminal-size-smaller")
@@ -166,14 +162,14 @@ fn terminal_size(kagan: &Kagan) -> Row {
                 .outline()
                 .label("−")
                 .accessibility_label("Smaller terminal text")
-                .disabled(size <= 9)
+                .disabled(size <= kg_domain::prefs::TERMINAL_FONT_MIN)
                 .on_click(super::super::controls::dispatch(super::super::Smaller)),
         ))
         .child(div().child(format!("{size} pt")))
         .child(control(
             "terminal-size-bigger",
             Facts {
-                disabled: size >= 24,
+                disabled: size >= kg_domain::prefs::TERMINAL_FONT_MAX,
                 ..Facts::button("Bigger terminal text")
             },
             Button::new("button-terminal-size-bigger")
@@ -181,7 +177,7 @@ fn terminal_size(kagan: &Kagan) -> Row {
                 .outline()
                 .label("+")
                 .accessibility_label("Bigger terminal text")
-                .disabled(size >= 24)
+                .disabled(size >= kg_domain::prefs::TERMINAL_FONT_MAX)
                 .on_click(super::super::controls::dispatch(super::super::Bigger)),
         ));
     row(
@@ -198,6 +194,7 @@ fn theme_group(window: &mut Window, cx: &mut App) -> Group {
         "Theme",
         vec![Row {
             wide: true,
+            alias: Some("theme"),
             ..row(
                 "theme",
                 "Theme",
@@ -386,7 +383,6 @@ fn save_theme(theme: String, cx: &mut App) {
     save(Op::Theme(ThemeOp::Set { theme, mode }), cx);
 }
 
-/// One of a theme's colors. The line border keeps a swatch that matches its card visible.
 fn swatch(color: Hsla, line: Hsla) -> impl IntoElement {
     div()
         .size(rems(0.875))
@@ -429,12 +425,15 @@ fn mode_group(cx: &mut App) -> Group {
     group(
         "mode",
         "Mode",
-        vec![row(
-            "mode",
-            "Mode",
-            "Follows the system appearance.",
-            control.into_any_element(),
-        )],
+        vec![Row {
+            alias: Some("mode"),
+            ..row(
+                "mode",
+                "Mode",
+                "Follows the system appearance.",
+                control.into_any_element(),
+            )
+        }],
     )
 }
 

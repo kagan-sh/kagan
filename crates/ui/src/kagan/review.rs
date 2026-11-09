@@ -1,9 +1,10 @@
 #[cfg(test)]
-pub(crate) mod read;
+pub(crate) mod tests;
 use crate::theme::TypeScale as _;
 mod actions;
 mod comment;
 mod page;
+mod rows;
 mod search;
 mod syntax;
 mod text;
@@ -11,6 +12,7 @@ pub(super) mod tree;
 
 pub(super) use comment::Drafts;
 
+use rows::ReviewRow;
 use text::renamed_from;
 
 use std::collections::BTreeSet;
@@ -23,7 +25,7 @@ use gpui_kit::{
     IntoElement, ParentElement as _, ScrollHandle, StatefulInteractiveElement as _, Styled as _,
     Subscription, Task, actions, div,
 };
-use kg_domain::{DiffScope, ReviewRow, ThreadId};
+use kg_domain::{DiffScope, ThreadId};
 
 use super::Kagan;
 use crate::ui_observe::UiObserveExt as _;
@@ -66,7 +68,7 @@ pub(super) struct Review {
     searching: Option<()>,
     selecting: Option<()>,
     focus: FocusHandle,
-    renamed_from: Option<String>,
+    pub(super) renamed_from: Option<String>,
     notice: Option<String>,
     hunks: Vec<u32>,
     at: Option<usize>,
@@ -106,6 +108,25 @@ impl Review {
     pub(super) fn clear_syntax(&mut self) {
         self.syntax.clear();
         self.syntax_revision.clear();
+    }
+
+    pub(super) fn retarget(
+        &mut self,
+        scope: DiffScope,
+        path: String,
+        renamed_from: Option<String>,
+        draft: Option<usize>,
+    ) {
+        self.scope = scope;
+        self.path = path;
+        self.renamed_from = renamed_from;
+        self.draft = draft;
+        self.shown.clear();
+        self.rows.clear();
+        self.clear_syntax();
+        self.expanded.clear();
+        self.loading = false;
+        self.generation = self.generation.wrapping_add(1);
     }
 }
 

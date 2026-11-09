@@ -16,6 +16,37 @@ pub(super) use tab::Tab;
 pub(super) const WIDTH: f32 = 320.;
 pub(super) const WIDTH_RANGE: (f32, f32) = (240., 560.);
 
+pub(super) struct Sidebar {
+    pub(super) slots: Vec<super::surface::Slot>,
+    pub(super) tab: Option<Tab>,
+    pub(super) menu: Option<(
+        gpui_kit::Entity<gpui_kit::component::menu::PopupMenu>,
+        gpui_kit::Subscription,
+    )>,
+    pub(super) add_focus: gpui_kit::FocusHandle,
+    pub(super) fill: Fill,
+    pub(super) panels: Vec<super::surface::Declared>,
+    pub(super) toggle_focus: gpui_kit::FocusHandle,
+}
+
+impl Sidebar {
+    pub(super) fn new(cx: &mut gpui_kit::App) -> Self {
+        Self {
+            slots: Vec::new(),
+            tab: None,
+            menu: None,
+            add_focus: cx.focus_handle().tab_stop(true),
+            fill: Fill::Column,
+            panels: Vec::new(),
+            toggle_focus: cx.focus_handle().tab_stop(true),
+        }
+    }
+}
+
+pub(super) fn header_focus(id: &str) -> String {
+    format!("{id}-header-focus")
+}
+
 #[derive(Clone, PartialEq, Eq, Action)]
 #[action(namespace = right, no_json)]
 pub(super) struct ToggleDetails {
@@ -24,7 +55,6 @@ pub(super) struct ToggleDetails {
 
 actions!(right, [ActivatePanelHeader, ToggleFill]);
 
-/// Enter and Space on a focused tab, or on the `+`, act on it.
 pub(crate) fn bindings() -> Vec<KeyBinding> {
     vec![
         KeyBinding::new("enter", ActivatePanelHeader, Some("PanelHeader")),
@@ -38,25 +68,11 @@ pub(super) enum Fill {
     Window,
 }
 
-#[derive(Clone)]
-pub(super) struct Panel {
-    pub(super) tab: Tab,
-    pub(super) title: String,
-}
-
-pub(super) fn built_in() -> Vec<Panel> {
-    [
-        (Tab::Questions, "Questions"),
-        (Tab::Changes, "Changes"),
-        (Tab::Details, "Details"),
-    ]
-    .into_iter()
-    .map(|(tab, title)| Panel {
-        tab,
-        title: title.into(),
-    })
-    .collect()
-}
+pub(super) const BUILT_IN: [(Tab, &str); 3] = [
+    (Tab::Questions, "Questions"),
+    (Tab::Changes, "Changes"),
+    (Tab::Details, "Details"),
+];
 
 pub(super) fn plugin_panel_id(plugin: &PluginId, panel: &str) -> String {
     format!("panel-{}-{panel}", plugin.0)
@@ -90,7 +106,8 @@ pub(super) fn render(
 
 pub(super) fn selected_tab(kagan: &Kagan, cx: &App) -> Option<Tab> {
     let want = kagan
-        .right_tab
+        .right
+        .tab
         .clone()
         .or_else(|| kagan.default_right_tab(cx))?;
     if want.available(kagan, cx) {

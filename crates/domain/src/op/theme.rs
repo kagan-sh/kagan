@@ -18,6 +18,15 @@ pub struct ThemeSettings {
     pub mode: Appearance,
 }
 
+impl Default for ThemeSettings {
+    fn default() -> Self {
+        Self {
+            theme: "fjord".into(),
+            mode: Appearance::System,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
 #[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum ThemeOp {
@@ -55,9 +64,7 @@ pub fn valid_theme_id(id: &str) -> bool {
 #[must_use]
 pub fn valid_theme_choice(id: &str) -> bool {
     match id.split_once('/') {
-        Some((plugin, theme)) => {
-            valid_theme_id(theme) && plugin.contains('.') && plugin.split('.').all(valid_theme_id)
-        }
+        Some((plugin, theme)) => valid_theme_id(theme) && crate::PluginId(plugin.into()).valid(),
         None => valid_theme_id(id),
     }
 }

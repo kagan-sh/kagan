@@ -4,8 +4,8 @@ use serde_json::{Value, json};
 use crate::manifest::Grant;
 
 use super::{
-    ID, check_plugin, home, installed, plugin_dir, read_manifest, sample_manifest, unique,
-    write_plugin, write_theme_files,
+    ID, check_plugin, home, plugin_dir, read_manifest, sample_manifest, unique, write_plugin,
+    write_theme_files,
 };
 
 #[test]
@@ -617,23 +617,6 @@ fn a_manifest_declares_theme_files_inside_the_plugin() {
 /// that leaves the plugin.
 
 #[test]
-fn an_approved_grant_reads_as_plain_lines() {
-    let plugin = plugin_dir();
-    let mut value = sample_manifest();
-    value["powers"] = json!({ "areas": ["threads"] });
-    write_plugin(plugin.path(), &value);
-    let approved = installed(plugin.path()).approved;
-    assert_eq!(
-        crate::power_lines(&approved).unwrap(),
-        [
-            "reads, starts and changes your threads, can type into threads and press Enter, reads their screen text, and reads their changed files",
-            "reads a folder you choose (Notes)",
-        ]
-    );
-    assert!(crate::power_lines(&json!("x")).is_err());
-}
-
-#[test]
 fn instruct_is_an_install_line_and_needs_approval_again() {
     let plugin = plugin_dir();
     let base = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
@@ -656,4 +639,78 @@ fn instruct_is_an_install_line_and_needs_approval_again() {
     );
     assert!(base.within(&with));
     assert!(!with.within(&base));
+}
+
+#[test]
+fn a_status_command_must_be_an_always_command_the_plugin_declares() {
+    let dir = plugin_dir();
+    let mut value = sample_manifest();
+    let rejected = |value: &mut Value, status: Value, commands: Value| {
+        value["ui"] = json!({ "status": status });
+        value["commands"] = commands;
+        std::fs::write(dir.path().join(crate::manifest::FILE), value.to_string()).unwrap();
+        read_manifest(dir.path()).unwrap_err().to_string()
+    };
+    let undeclared = rejected(
+        &mut value,
+        json!({ "title": "Usage", "command": "usage.refresh" }),
+        json!([]),
+    );
+    assert!(
+        undeclared.contains("must name one of this plugin's commands"),
+        "{undeclared}"
+    );
+    let thread_only = rejected(
+        &mut value,
+        json!({ "title": "Usage", "command": "usage.refresh" }),
+        json!([{ "id": "usage.refresh", "title": "Refresh", "when": "thread" }]),
+    );
+    assert!(
+        thread_only.contains("with \"when\": \"always\""),
+        "{thread_only}"
+    );
+
+    let bidi = rejected(
+        &mut value,
+        json!({ "title": "Usage", "command": "usage.refresh" }),
+        json!([{ "id": "usage.refresh", "title": "Refresh\u{202E}usage" }]),
+    );
+    assert!(
+        bidi.contains("must name one of this plugin's commands"),
+        "{bidi}"
+    );
+
+    value["commands"] = json!([{ "id": "usage.refresh", "title": "Refresh" }]);
+    value["ui"] = json!({ "status": { "title": "Usage", "command": "usage.refresh" } });
+    std::fs::write(dir.path().join(crate::manifest::FILE), value.to_string()).unwrap();
+    let read = read_manifest(dir.path()).unwrap();
+    assert_eq!(
+        read.ui
+            .status
+            .as_ref()
+            .and_then(|status| status.command.as_deref()),
+        Some("usage.refresh")
+    );
+    let grant = Grant::of(&read, dir.path());
+    assert_eq!(
+        grant
+            .status_command
+            .as_ref()
+            .map(|command| command.id.as_str()),
+        Some("usage.refresh")
+    );
+    assert!(
+        grant
+            .lines()
+            .iter()
+            .any(|line| line == "clicking that line runs Refresh"),
+        "{:?}",
+        grant.lines()
+    );
+
+    value["commands"] = json!([{ "id": "usage.refresh", "title": "Refresh" }, { "id": "usage.other", "title": "Other" }]);
+    value["ui"] = json!({ "status": { "title": "Usage", "command": "usage.other" } });
+    std::fs::write(dir.path().join(crate::manifest::FILE), value.to_string()).unwrap();
+    let changed = Grant::of(&read_manifest(dir.path()).unwrap(), dir.path());
+    assert!(!changed.within(&grant), "a changed command asks again");
 }

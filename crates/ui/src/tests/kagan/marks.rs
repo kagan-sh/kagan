@@ -40,10 +40,12 @@ fn a_thread_marks_busy_then_done_then_idle_once_read(cx: &mut TestAppContext) {
                     InteractionOption {
                         id: "yes".into(),
                         label: "Yes".into(),
+                        role: None,
                     },
                     InteractionOption {
                         id: "no".into(),
                         label: "No".into(),
+                        role: None,
                     },
                 ],
                 fields: None,
@@ -82,10 +84,12 @@ fn a_pending_question_stays_needs_you_after_the_thread_is_opened(cx: &mut TestAp
                     InteractionOption {
                         id: "yes".into(),
                         label: "Yes".into(),
+                        role: None,
                     },
                     InteractionOption {
                         id: "no".into(),
                         label: "No".into(),
+                        role: None,
                     },
                 ],
                 fields: None,
@@ -268,6 +272,7 @@ pub(in crate::tests) fn install_navigator(data: &Path) {
             approved: serde_json::json!({
                 "powers": { "areas": ["threads"] }, "downloads": {}, "folders": {}
             }),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();

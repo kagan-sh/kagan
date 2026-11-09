@@ -87,6 +87,7 @@ pub(crate) struct PreparedRun {
     program: String,
     visibility: kg_domain::Visibility,
     parent_thread_id: Option<ThreadId>,
+    quiet: bool,
     lifecycle_owner_thread_id: Option<ThreadId>,
     metadata: Option<kg_domain::Metadata>,
 }
@@ -131,6 +132,7 @@ pub(crate) async fn prepare(
         program,
         visibility: run.visibility.unwrap_or_default(),
         parent_thread_id: run.parent_thread_id,
+        quiet: run.quiet,
         lifecycle_owner_thread_id: run.lifecycle_owner_thread_id,
         metadata: run.metadata,
     })
@@ -150,6 +152,7 @@ pub(crate) async fn commit(
         program,
         visibility,
         parent_thread_id,
+        quiet,
         lifecycle_owner_thread_id,
         metadata,
     } = prepared;
@@ -167,15 +170,7 @@ pub(crate) async fn commit(
     }
     let (environment, notices) =
         crate::environment::commit(&database, &project, environment).await?;
-    #[cfg(test)]
-    {
-        let hold = this
-            .update(cx, |workspace, _| workspace.run_hold.clone())
-            .map_err(crate::workspace::closed)?;
-        if let Some(hold) = hold {
-            let _ = hold.recv().await;
-        }
-    }
+    crate::workspace::hold(this, crate::workspace::Hold::Run, cx).await;
     let at = time(this, cx)?;
     let record = kg_domain::Thread {
         id: thread_id,
@@ -187,6 +182,7 @@ pub(crate) async fn commit(
         status: ThreadStatus::Starting,
         visibility,
         parent_thread_id,
+        quiet,
         lifecycle_owner_thread_id,
         section_id: None,
         pinned: false,

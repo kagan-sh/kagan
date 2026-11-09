@@ -5,8 +5,8 @@ use kg_domain::{InteractionOption, Op, OpResult, PluginId, PluginOp, PreferenceO
 
 use kg_plugins::HostUi;
 
-use crate::kagan::QUIET;
 use crate::kagan::changes::POLL;
+use kg_core::TYPING_QUIET;
 
 use super::{
     PAGE, click, open, open_lines, open_surface, open_with_plugins, pending, repo_thread,
@@ -53,6 +53,7 @@ fn a_question_waits_while_the_person_types(cx: &mut TestAppContext) {
     let option = InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     };
     let _asked = cx.update(|cx| Workspace::ask(&id, "Ship the change?".into(), vec![option], cx));
     wait_until(cx, |cx| {
@@ -62,7 +63,7 @@ fn a_question_waits_while_the_person_types(cx: &mut TestAppContext) {
     assert!(shows(cx, window, "needs-held"));
     assert!(!shows(cx, window, &format!("answer-{question}-yes")));
 
-    cx.executor().advance_clock(QUIET);
+    cx.executor().advance_clock(TYPING_QUIET);
     cx.run_until_parked();
     assert!(!shows(cx, window, "needs-held"));
     assert!(shows(cx, window, &format!("answer-{question}-yes")));
@@ -77,6 +78,7 @@ fn dock_count_tracks_distinct_threads_after_the_window_closes(cx: &mut TestAppCo
     let option = InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     };
     let _one = cx.update(|cx| Workspace::ask(&first, "First?".into(), vec![option.clone()], cx));
     let _two = cx.update(|cx| Workspace::ask(&first, "Second?".into(), vec![option.clone()], cx));
@@ -108,6 +110,7 @@ fn questions_from_every_thread_wait_in_needs_you(cx: &mut TestAppContext) {
     let option = InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     };
     let _one = cx.update(|cx| Workspace::ask(&first, "Ship one?".into(), vec![option.clone()], cx));
     let _two = cx.update(|cx| Workspace::ask(&second, "Ship two?".into(), vec![option], cx));
@@ -160,7 +163,7 @@ fn an_open_diff_follows_the_disk_without_a_click(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn disabling_a_plugin_takes_its_panel_away(cx: &mut TestAppContext) {
-    let (kagan, window, _data) = open_with_plugins(cx, true);
+    let (_kagan, window, _data) = open_with_plugins(cx, true);
     cx.simulate_window_resize(window, size(px(1400.), px(900.)));
     cx.run_until_parked();
     open_surface(cx, &PluginId(PAGE.into()), "page");
@@ -176,10 +179,6 @@ fn disabling_a_plugin_takes_its_panel_away(cx: &mut TestAppContext) {
     });
     cx.foreground_executor().block_test(off).unwrap();
     wait_until(cx, |cx| !shows(cx, window, "page-button"));
-    assert_eq!(
-        cx.update(|cx| kagan.read(cx).panel_titles()),
-        ["Questions", "Changes", "Details"]
-    );
 }
 
 #[gpui_kit::test]
@@ -252,6 +251,7 @@ fn a_question_on_a_hidden_thread_waits_in_needs_you(cx: &mut TestAppContext) {
     let option = InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     };
     let _asked = cx.update(|cx| Workspace::ask(&id, "Hidden ask?".into(), vec![option], cx));
     wait_until(cx, |cx| {
@@ -271,6 +271,7 @@ fn a_question_already_on_screen_stays_up_while_the_person_types(cx: &mut TestApp
     let option = || InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     };
     let _first = cx.update(|cx| Workspace::ask(&id, "Ship one?".into(), vec![option()], cx));
     wait_until(cx, |cx| {
@@ -295,7 +296,7 @@ fn a_question_already_on_screen_stays_up_while_the_person_types(cx: &mut TestApp
     assert!(!shows(cx, window, &format!("answer-{second}-yes")));
     assert!(shows(cx, window, "needs-held"));
 
-    cx.executor().advance_clock(QUIET);
+    cx.executor().advance_clock(TYPING_QUIET);
     cx.run_until_parked();
     assert!(shows(cx, window, &format!("answer-{second}-yes")));
 }
@@ -365,27 +366,6 @@ fn tab_reaches_a_changed_file_and_enter_or_space_opens_it(cx: &mut TestAppContex
 }
 
 #[gpui_kit::test]
-fn the_right_sidebar_draws_from_its_registry(cx: &mut TestAppContext) {
-    let (kagan, window, _data) = open(cx);
-    let id = run_shell(cx);
-    click(cx, window, &format!("thread-{}", id.0));
-    let _asked =
-        cx.update(|cx| Workspace::ask_for_person(None, None, "Waiting?".into(), vec![], cx));
-    cx.run_until_parked();
-    cx.run_until_parked();
-    assert!(shows(cx, window, "changes"));
-    cx.update(|cx| {
-        kagan.update(cx, |kagan, cx| kagan.drop_panel_for_test("changes", cx));
-    });
-    cx.run_until_parked();
-    assert!(
-        !shows(cx, window, "changes"),
-        "a panel dropped from the registry is still drawn"
-    );
-    assert!(shows(cx, window, "needs-you"));
-}
-
-#[gpui_kit::test]
 fn a_question_answered_elsewhere_leaves_needs_you(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);
     let id = run_shell(cx);
@@ -393,6 +373,7 @@ fn a_question_answered_elsewhere_leaves_needs_you(cx: &mut TestAppContext) {
     let option = |id: &str| InteractionOption {
         id: id.into(),
         label: id.into(),
+        role: None,
     };
     let _asked = cx.update(|cx| {
         Workspace::ask(

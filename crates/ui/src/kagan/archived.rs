@@ -6,8 +6,8 @@ use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{IconName, Sizable as _, StyledExt as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, ElementId, Entity, Focusable as _,
-    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Role, SharedString,
+    AnyElement, App, Context, ElementId, Entity, Focusable as _, InteractiveElement as _,
+    IntoElement, KeyBinding, ParentElement as _, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, Subscription, Window, actions, div,
 };
 use kg_core::Workspace;
@@ -22,6 +22,10 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 actions!(archived, [OpenArchivedRow]);
+
+pub(in crate::kagan) fn in_archived_list(thread: &Thread) -> bool {
+    thread.visibility == Visibility::Visible && thread.archived_at.is_some()
+}
 
 pub(super) enum List {
     Loading,
@@ -69,9 +73,7 @@ impl Kagan {
             let Ok(OpResult::Threads(mut threads)) = listed.await else {
                 return;
             };
-            threads.retain(|thread| {
-                thread.visibility == Visibility::Visible && thread.archived_at.is_some()
-            });
+            threads.retain(in_archived_list);
             threads.sort_by(newest_first);
             _ = this.update(cx, |this, cx| {
                 if !this.shows_archived() {
@@ -262,13 +264,12 @@ fn retired_row(
                         .small()
                         .ghost()
                         .label("Restore")
-                        .on_click(cx.listener(move |_this, _, window, cx| {
-                            Kagan::run(
-                                ThreadOp::Unarchive {
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.run(
+                                Op::Thread(ThreadOp::Unarchive {
                                     id: restore.clone(),
-                                },
+                                }),
                                 "restore the thread",
-                                window,
                                 cx,
                             );
                         })),
@@ -320,27 +321,13 @@ fn removal_line(
             .small()
             .outline()
             .label("Remove again")
-            .on_click(cx.listener(move |_this, _, window, cx| {
-                remove_again(retry.clone(), window, cx);
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.run(
+                    Op::Environment(EnvironmentOp::Remove { id: retry.clone() }),
+                    "remove the worktree",
+                    cx,
+                );
             })),
         ))
         .into_any_element()
-}
-
-fn remove_again(id: EnvironmentId, window: &mut Window, cx: &mut Context<Kagan>) {
-    let task = Workspace::dispatch(Op::Environment(EnvironmentOp::Remove { id }), cx);
-    let window = window.window_handle();
-    cx.spawn(async move |this, cx| {
-        let result = task.await;
-        _ = cx.update_window(window, |_, window, cx| {
-            _ = this.update(cx, |this, cx| match result {
-                Ok(_) => this.refresh(window, cx),
-                Err(error) => {
-                    this.note = Some(format!("Could not remove the worktree: {error}").into());
-                    cx.notify();
-                }
-            });
-        });
-    })
-    .detach();
 }

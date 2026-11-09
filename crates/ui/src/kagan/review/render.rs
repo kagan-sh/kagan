@@ -1,3 +1,4 @@
+use crate::kagan::dispatch;
 use crate::theme::TypeScale as _;
 
 use gpui_kit::component::button::ButtonVariants as _;
@@ -8,7 +9,6 @@ use gpui_kit::{
     AnyElement, ClipboardItem, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     Role, StatefulInteractiveElement as _, Styled as _, Window, div,
 };
-use kg_core::Workspace;
 use kg_domain::Op;
 
 use super::{
@@ -59,7 +59,7 @@ impl Kagan {
             .on_action(cx.listener(|this, _: &PrevFile, _, cx| this.review_file(false, cx)))
             .on_action(cx.listener(|this, _: &ToggleViewed, _, cx| this.toggle_viewed(cx)))
             .on_action(cx.listener(|_, _: &ToggleWrap, _, cx| {
-                Workspace::dispatch(Op::Window(kg_domain::WindowOp::ToggleReviewWrap), cx).detach();
+                dispatch::logged(Op::Window(kg_domain::WindowOp::ToggleReviewWrap), cx);
             }))
             .on_action(cx.listener(|this, _: &SendReview, window, cx| {
                 if this.draft_focused(window, cx) {
@@ -83,15 +83,17 @@ impl Kagan {
             .on_action(
                 cx.listener(|this, _: &FindInDiff, window, cx| this.find_in_review(window, cx)),
             )
-            .on_action(cx.listener(|this, _: &NextMatch, window, cx| {
-                let _ = window;
+            .on_action(cx.listener(|this, _: &NextMatch, _, cx| {
                 this.search_match(true, cx);
             }))
-            .on_action(cx.listener(|this, _: &PrevMatch, window, cx| {
-                let _ = window;
+            .on_action(cx.listener(|this, _: &PrevMatch, _, cx| {
                 this.search_match(false, cx);
             }))
-            .child(div().key_context("ReviewNav").track_focus(&review.focus))
+            .child(
+                div()
+                    .key_context(crate::kagan::keys::NAV_CONTEXT)
+                    .track_focus(&review.focus),
+            )
             .child(self.review_summary(cx))
             .child(match replaced {
                 Some(body) => h_flex().flex_1().min_h_0().child(body),

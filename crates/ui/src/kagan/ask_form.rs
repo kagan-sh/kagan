@@ -1,5 +1,5 @@
 use crate::theme::TypeScale as _;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 use gpui_kit::component::ActiveTheme as _;
@@ -10,8 +10,9 @@ use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::{FocusTrapElement as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _,
-    IntoElement, ParentElement as _, Styled as _, Window, actions, div, px,
+    AnyElement, App, AppContext as _, Context, ElementId, Entity, FocusHandle,
+    InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window, actions, div,
+    px,
 };
 use kg_domain::{ASK_TEXT_MAX_CHARS, AskField, PendingInteraction, PendingInteractionId, ThreadId};
 use serde_json::{Value, json};
@@ -37,6 +38,13 @@ pub(super) struct Draft {
     error: Option<String>,
 }
 
+#[derive(Default)]
+pub(super) struct AskState {
+    pub(super) drafts: BTreeMap<PendingInteractionId, Draft>,
+    pub(super) hidden: BTreeSet<PendingInteractionId>,
+    pub(super) popup: Option<FocusHandle>,
+}
+
 impl Kagan {
     pub(super) fn sync_ask_drafts(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let live: BTreeMap<PendingInteractionId, Vec<AskField>> = self
@@ -51,29 +59,30 @@ impl Kagan {
                     .map(|fields| (asked.id.clone(), fields.clone()))
             })
             .collect();
-        self.ask_drafts.retain(|id, _| live.contains_key(id));
-        self.ask_hidden.retain(|id| live.contains_key(id));
+        self.asks.drafts.retain(|id, _| live.contains_key(id));
+        self.asks.hidden.retain(|id| live.contains_key(id));
         for (id, fields) in live {
-            self.ask_drafts
+            self.asks
+                .drafts
                 .entry(id)
                 .or_insert_with(|| Draft::new(&fields, window, cx));
         }
         let open = self.popup_ask(cx).is_some();
-        if open && self.ask_popup.is_none() {
+        if open && self.asks.popup.is_none() {
             let focus = cx.focus_handle().tab_stop(true);
-            self.ask_popup = Some(focus.clone());
+            self.asks.popup = Some(focus.clone());
             cx.defer_in(window, move |_, window, cx| {
                 window.focus(&focus, cx);
             });
-        } else if !open && self.ask_popup.take().is_some() && self.terminal_thread(cx).is_some() {
+        } else if !open && self.asks.popup.take().is_some() && self.terminal_thread(cx).is_some() {
             self.focus_work(window, cx);
         }
     }
 
     pub(super) fn dismiss_ask_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.popup_ask(cx).map(|asked| asked.id.clone()) {
-            self.ask_hidden.insert(id);
-            self.ask_popup = None;
+            self.asks.hidden.insert(id);
+            self.asks.popup = None;
             self.focus_work(window, cx);
             cx.notify();
         }
@@ -89,10 +98,9 @@ impl Kagan {
             .questions
             .iter()
             .find(|asked| asked.thread_id == shown && asked.fields.is_some())
-            .filter(|asked| !self.ask_hidden.contains(&asked.id))
+            .filter(|asked| !self.asks.hidden.contains(&asked.id))
     }
 
-    /// The thread whose terminal is the center. A review, a page, Archived or Settings covers it.
     pub(super) fn terminal_thread(&self, cx: &App) -> Option<kg_domain::ThreadId> {
         match self.screen.current() {
             Center::Work(Shown::Thread(view)) => Some(view.read(cx).thread().clone()),
@@ -176,7 +184,6 @@ impl Draft {
         self.error = None;
     }
 
-    /// The first field that cannot be sent, with its message.
     fn values(
         &self,
         fields: &[AskField],
@@ -338,7 +345,7 @@ fn flag_field(
                     .on_click(move |checked: &bool, _, cx: &mut App| {
                         let checked = *checked;
                         kagan.update(cx, |kagan, cx| {
-                            if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
+                            if let Some(draft) = kagan.asks.drafts.get_mut(&ask_id) {
                                 draft.flags.insert(field_id.clone(), checked);
                                 draft.clear_errors();
                                 cx.notify();
@@ -421,7 +428,7 @@ fn select_field(
                     })
                     .on_click(move |_, _, cx| {
                         kagan.update(cx, |kagan, cx| {
-                            if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
+                            if let Some(draft) = kagan.asks.drafts.get_mut(&ask_id) {
                                 draft.picks.insert(field_id.clone(), pick.clone());
                                 draft.clear_errors();
                                 cx.notify();
@@ -458,12 +465,12 @@ pub(super) fn popup(
 ) -> Option<AnyElement> {
     kagan.sync_ask_drafts(window, cx);
     let asked = kagan.popup_ask(cx)?.clone();
-    let draft = kagan.ask_drafts.get(&asked.id)?.clone();
+    let draft = kagan.asks.drafts.get(&asked.id)?.clone();
     let entity = cx.entity();
     let weak = entity.downgrade();
     let card =
         super::question::form_card(&asked, &draft, &entity, &weak, window, cx).into_any_element();
-    let focus = kagan.ask_popup.clone()?;
+    let focus = kagan.asks.popup.clone()?;
     let scrim = cx.theme().background.opacity(0.72);
     let dismiss = cx.listener(|this, _: &DismissAskPopup, window, cx| {
         this.dismiss_ask_popup(window, cx);
@@ -523,7 +530,7 @@ pub(super) fn answer_with_fields(
         Err((field, message)) => {
             let kagan = kagan.clone();
             _ = kagan.update(cx, |kagan, cx| {
-                if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
+                if let Some(draft) = kagan.asks.drafts.get_mut(&ask_id) {
                     draft.clear_errors();
                     draft.errors.insert(field, message);
                     cx.notify();
@@ -534,7 +541,7 @@ pub(super) fn answer_with_fields(
     };
     let kagan_clear = kagan.clone();
     _ = kagan_clear.update(cx, |kagan, _| {
-        if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
+        if let Some(draft) = kagan.asks.drafts.get_mut(&ask_id) {
             draft.clear_errors();
         }
     });
@@ -544,7 +551,7 @@ pub(super) fn answer_with_fields(
     cx.spawn(async move |cx| {
         if let Err(error) = answered.await {
             _ = kagan.update(cx, |kagan, cx| {
-                if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
+                if let Some(draft) = kagan.asks.drafts.get_mut(&ask_id) {
                     draft.error = Some(error.to_string());
                     cx.notify();
                 }
@@ -564,7 +571,7 @@ pub(super) fn answer_callback(
         let Some(entity) = kagan.upgrade() else {
             return;
         };
-        let draft = entity.read(cx).ask_drafts.get(&asked.id).cloned();
+        let draft = entity.read(cx).asks.drafts.get(&asked.id).cloned();
         let Some(draft) = draft else {
             kg_core::Workspace::answer(&thread, asked.id.clone(), option.clone(), cx).detach();
             return;

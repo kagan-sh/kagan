@@ -40,6 +40,7 @@ fn thread(id: &str, created_at: i64) -> Thread {
         status: ThreadStatus::Idle,
         visibility: Visibility::Visible,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         section_id: None,
         pinned: false,
@@ -56,6 +57,7 @@ fn owned(id: &str, owner: &str, created_at: i64) -> Thread {
     Thread {
         lifecycle_owner_thread_id: Some(ThreadId(owner.into())),
         parent_thread_id: Some(ThreadId(owner.into())),
+        quiet: false,
         ..thread(id, created_at)
     }
 }

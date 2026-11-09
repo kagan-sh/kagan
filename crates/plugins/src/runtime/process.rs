@@ -118,7 +118,7 @@ fn command(
     Ok(command)
 }
 
-/// Keeps only the absolute folders of `path`. A relative one would search inside the run's folder, which may be a cloned repo.
+// Keeps only the absolute folders of `path`. A relative one would search inside the run's folder, which may be a cloned repo.
 fn absolute_only(path: &OsStr) -> Option<OsString> {
     let dirs: Vec<PathBuf> = std::env::split_paths(path)
         .filter(|dir| dir.is_absolute())
@@ -126,7 +126,7 @@ fn absolute_only(path: &OsStr) -> Option<OsString> {
     std::env::join_paths(dirs).ok()
 }
 
-/// Sets `PATH` to the login shell's, so the program and the helpers it starts are found as they are in a terminal.
+// Sets `PATH` to the login shell's, so the program and the helpers it starts are found as they are in a terminal.
 fn with_path(
     mut env: Vec<(OsString, OsString)>,
     path: Option<&OsStr>,
@@ -252,6 +252,7 @@ fn run(module: HostModule, owner: &Entity<Processes>, grant: &Grant, root: &Path
             let finished = id.clone();
             let owner = run_owner.downgrade();
             let task = cx.spawn(async move |cx| {
+                // The caller may have stopped waiting, and the owner is gone once the plugin unloads.
                 let _ = done.send(task.await).await;
                 let _ = owner.update(cx, |owner, _| {
                     owner.running.remove(&finished);

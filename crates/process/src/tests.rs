@@ -4,6 +4,33 @@ use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 use crate::Process;
+#[cfg(unix)]
+use crate::{kill_tree, pid_of};
+
+#[cfg(unix)]
+#[test]
+fn pids_that_are_not_ours_are_refused() {
+    assert!(pid_of(0).is_none());
+    assert!(pid_of(1).is_none());
+    assert!(pid_of(u32::MAX).is_none());
+    assert!(pid_of(2).is_some());
+}
+
+#[cfg(unix)]
+#[test]
+fn killing_a_tree_walks_every_process_and_spares_the_rest() {
+    let mut running = std::process::Command::new("sleep")
+        .arg("30")
+        .spawn()
+        .unwrap();
+    kill_tree(running.id());
+    assert!(
+        running.try_wait().unwrap().is_none(),
+        "the sleep leads no sid of its own"
+    );
+    running.kill().unwrap();
+    running.wait().unwrap();
+}
 
 #[test]
 fn spawn_keeps_the_stdio_the_caller_set() -> std::io::Result<()> {
@@ -56,7 +83,11 @@ fn killing_the_process_kills_a_background_grandchild() -> std::io::Result<()> {
 #[test]
 fn waiting_past_the_limit_kills_the_child() -> std::io::Result<()> {
     let mut process = Process::spawn(long_command(), Stdio::null(), Stdio::null(), Stdio::null())?;
-    assert!(process.wait_within(Duration::from_millis(50))?.is_none());
+    assert!(
+        process
+            .wait_within(Duration::from_millis(50), || false)?
+            .is_none()
+    );
     assert!(!wait(&mut process)?.success());
     Ok(())
 }
@@ -249,7 +280,7 @@ fn capture_closes_descendant_output_after_the_parent_exits() -> std::io::Result<
     ]);
     command.arg(&path.0);
     let started = Instant::now();
-    let output = crate::capture_with_limit(command, Duration::from_secs(1))?;
+    let output = crate::capture(command, Duration::from_secs(1), || false)?;
     let pid = read_pid(&path.0)?;
     let _reap = Reap(pid);
     assert!(started.elapsed() < Duration::from_secs(2));
@@ -273,7 +304,7 @@ fn capture_timeout_kills_the_entire_tree() -> std::io::Result<()> {
     let limit = Duration::from_secs(15);
     #[cfg(not(windows))]
     let limit = Duration::from_secs(1);
-    let error = crate::capture_with_limit(tree_command(&path.0), limit)
+    let error = crate::capture(tree_command(&path.0), limit, || false)
         .expect_err("the tree waits for its child");
     let pid = read_pid(&path.0)?;
     let _reap = Reap(pid);

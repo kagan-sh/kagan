@@ -1,15 +1,13 @@
 use super::{Changes, Kagan, Layout, Plugins, Shown, TITLE, window::release_window};
 use super::{
-    activity, archived, attention, browser, changes, details, layout, picker, replace, review,
-    right, screen, settings, sidebar, start, surface, tabs,
+    activity, archived, attention, browser, changes, details, layout, picker, review, right,
+    screen, settings, shown, sidebar, start, surface, tabs,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::resizable::{ResizablePanelEvent, ResizableState};
-use gpui_kit::{
-    AnyElement, AppContext as _, Context, Entity, ScrollHandle, Subscription, Task, Window,
-};
+use gpui_kit::{AnyElement, AppContext as _, Context, Entity, Subscription, Task, Window};
 use kg_core::{Updater, Workspace, WorkspaceEvent};
 use kg_domain::ProjectId;
 
@@ -27,7 +25,7 @@ impl Kagan {
         let mut this = Self {
             start: start::StartState::default(),
             screen: screen::Screen::new(),
-            terminal_font_size: 12,
+            terminal_font_size: kg_domain::prefs::TERMINAL_FONT_DEFAULT,
             terminal_font_epoch: 0,
             window_title: TITLE.to_owned(),
             sidebar,
@@ -45,7 +43,7 @@ impl Kagan {
             plugin_prompt_notice: None,
             focus: cx.focus_handle(),
             surface_close_focus: cx.focus_handle().tab_stop(true),
-            surface_hold: false,
+            slots: surface::SlotState::default(),
             typing: false,
             quiet: Task::ready(()),
             on_screen: BTreeSet::new(),
@@ -55,18 +53,8 @@ impl Kagan {
             details: details::Details::default(),
             tabs: tabs::Tabs::default(),
             review_drafts: review::Drafts::default(),
-            replaced: replace::Replaced::default(),
             plugins: Plugins::new(window, cx),
-            panels: right::built_in(),
-            right_slots: Vec::new(),
-            right_tab: None,
-            right_menu: None,
-            right_add_focus: cx.focus_handle().tab_stop(true),
-            right_fill: right::Fill::Column,
-            right_panels: Vec::new(),
-            tool: None,
-            surface_check: None,
-            surface_epoch: 0,
+            right: right::Sidebar::new(cx),
             layout: Layout::default(),
             viewport: window.viewport_size().width,
             prefs: prefs.clone(),
@@ -75,39 +63,27 @@ impl Kagan {
                 left: true,
                 right: true,
             },
-            right_toggle_focus: cx.focus_handle().tab_stop(true),
             left_overlay_focus: cx.focus_handle().tab_stop(true),
             start_on_load: None,
-            settings_scroll: ScrollHandle::new(),
-            settings_approvals: 0,
-            settings_drafts: settings::Drafts::default(),
-            keyboard: settings::Recorder::default(),
-            settings_views: BTreeMap::new(),
+            settings: settings::SettingsState::default(),
             settling: false,
             columns,
             window: window.window_handle(),
-            actions_menu: None,
+            title: shown::TitleState::default(),
             open_thread: None,
             retired_load: Task::ready(()),
             _archive_watch: archived::watch(&archive_query, cx),
             archive_query,
             browser: browser::Browser::new(window, cx),
-            title_input: None,
-            title_watch: None,
             _subscriptions: subscriptions,
             _sidebar_watch: sidebar_watch,
             _appearance: crate::theme::watch_system(window, cx),
             _theme_paint: Self::theme_paint(cx),
             _theme_notice: Self::theme_notice(cx),
-            plugin_watch: None,
-            host_events: Vec::new(),
-            overlays: Vec::new(),
-            ask_drafts: std::collections::BTreeMap::new(),
-            ask_hidden: std::collections::BTreeSet::new(),
-            ask_popup: None,
+            asks: super::ask_form::AskState::default(),
             toast: None,
             toast_epoch: 0,
-            activity: activity::Strip::new(cx.focus_handle().tab_stop(true)),
+            activity: activity::Strip::new(cx),
             _update_watch: activity::watch(cx),
             _release: cx.on_release(release_window),
             _poll: changes::poll_open_changes(cx),
@@ -119,6 +95,8 @@ impl Kagan {
 
     fn started(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.start.branch_focus = Some(cx.focus_handle().tab_stop(true));
+        self.start.segments_focus = Some(cx.focus_handle().tab_stop(false));
+        self.start.form_focus = Some(cx.focus_handle().tab_stop(false));
         self.load_settings(cx);
         self.activity
             .update_state(Updater::global(cx).read(cx).state());
@@ -150,11 +128,14 @@ impl Kagan {
     }
 
     pub(super) fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.start.busy = start::FolderUse::of(self.compute_busy(cx));
         let approvals = Workspace::global(cx).read(cx).approvals().count();
-        if self.in_settings() && approvals > self.settings_approvals {
-            self.settings_scroll.scroll_to_top_of_item(1);
+        if self.in_settings() && approvals > self.settings.approvals {
+            self.settings
+                .scroll
+                .scroll_to_top_of_item(super::settings::QUESTIONS_ITEM);
         }
-        self.settings_approvals = approvals;
+        self.settings.approvals = approvals;
         self.announce_questions(window, cx);
         let listing = Workspace::global(cx).read(cx).sidebar(cx);
         let footer = sidebar::archived_footer(&Workspace::global(cx).read(cx).thread_records(cx));
@@ -182,11 +163,8 @@ impl Kagan {
         if self.shows_archived() {
             self.load_retired(cx);
         }
-        self.load_changes(cx);
-        self.load_details(cx);
-        self.sync_tabs(window, cx);
         self.refresh_plugins(cx);
-        self.tell_host(window, cx);
+        self.shown_changed(window, cx);
         cx.notify();
     }
 }
@@ -242,17 +220,10 @@ fn listen(
             },
         ),
         cx.subscribe_in(picker, window, |this, _, _: &picker::Start, window, cx| {
-            this.start(window, cx);
+            this.start_thread(window, cx);
         }),
         cx.subscribe_in(picker, window, |this, _, _: &picker::Close, window, cx| {
-            if this.close_branch_menu(window, cx) {
-                cx.notify();
-                return;
-            }
-            this.show_work(Shown::Nothing, window, cx);
-            window.focus(&this.focus, cx);
-            this.tell_host(window, cx);
-            cx.notify();
+            this.escape_start(window, cx);
         }),
         cx.observe_in(picker, window, |this, picker, window, cx| {
             if this.start_on_load.is_some() && picker.read(cx).command(cx).is_ok() {

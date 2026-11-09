@@ -1,8 +1,10 @@
 use super::screen;
+use super::shown::ThreadPick;
 use super::{
-    ArchiveThread, Kagan, NewThread, RestoreThread, SaveDiagnostics, Shown, StartAgain, StopThread,
-    TogglePinned, toast::Toast,
+    ArchiveThread, Kagan, NewThread, RenameThread, RestoreThread, SaveDiagnostics, Shown,
+    StartAgain, StopThread, TogglePinned, toast::Toast,
 };
+use crate::kagan::dispatch;
 use std::collections::BTreeSet;
 
 use crate::terminal::{TerminalView, Typed};
@@ -15,7 +17,6 @@ use kg_domain::{
 };
 
 impl Kagan {
-    /// Threads on the sidebar, newest first.
     pub(super) fn listed<'a>(&'a self, cx: &'a App) -> impl Iterator<Item = &'a Thread> {
         self.sidebar
             .read(cx)
@@ -25,7 +26,6 @@ impl Kagan {
             .filter(|thread| thread.archived_at.is_none())
     }
 
-    /// The thread on screen. The settings page covers the terminal, so none is shown then.
     pub(crate) fn shown_thread(&self, cx: &App) -> Option<ThreadId> {
         match self.screen.shown() {
             Shown::Thread(view) if !self.in_settings() => Some(view.read(cx).thread().clone()),
@@ -33,8 +33,6 @@ impl Kagan {
         }
     }
 
-    /// The project on screen: the shown thread's, or the project a new thread would start in. The
-    /// settings page covers the window, so no project is on screen then.
     pub(crate) fn shown_project(&self, cx: &App) -> Option<ProjectId> {
         if self.in_settings() {
             return None;
@@ -56,10 +54,7 @@ impl Kagan {
     }
 
     pub(super) fn note_shown(&mut self, cx: &App) {
-        let Some(id) = (match self.screen.shown() {
-            Shown::Thread(view) => Some(view.read(cx).thread().clone()),
-            Shown::Nothing | Shown::Start(_) => None,
-        }) else {
+        let Some(id) = self.screen.covered_thread(cx) else {
             self.open_thread = None;
             return;
         };
@@ -84,7 +79,7 @@ impl Kagan {
     pub(super) fn waited(&mut self, id: &ThreadId, window: &mut Window, cx: &mut Context<Self>) {
         if matches!(self.screen.current(), screen::Center::Work(Shown::Thread(view)) if view.read(cx).thread() == id)
         {
-            Workspace::dispatch(Op::Thread(ThreadOp::MarkRead { id: id.clone() }), cx).detach();
+            dispatch::logged(Op::Thread(ThreadOp::MarkRead { id: id.clone() }), cx);
         } else {
             self.refresh(window, cx);
         }
@@ -98,7 +93,7 @@ impl Kagan {
                 .thread(&id)
                 .is_some_and(|thread| thread.read(cx).record().mark == kg_domain::ThreadMark::Done)
             {
-                Workspace::dispatch(Op::Thread(ThreadOp::MarkRead { id }), cx).detach();
+                dispatch::logged(Op::Thread(ThreadOp::MarkRead { id }), cx);
             }
         }
     }
@@ -115,18 +110,33 @@ impl Kagan {
         self.focus_work(window, cx);
         self.typed_watch = Some(cx.subscribe(&view, |this, _, _: &Typed, cx| this.typed(cx)));
         self.sidebar.update(cx, |sidebar, _| sidebar.choose(None));
+        self.shown_changed(window, cx);
+        self.note_shown(cx);
+        dispatch::logged(Op::Thread(ThreadOp::MarkRead { id }), cx);
+        cx.notify();
+    }
+
+    pub(super) fn shown_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.load_changes(cx);
         self.load_details(cx);
         self.sync_tabs(window, cx);
         self.tell_host(window, cx);
-        self.note_shown(cx);
-        Workspace::dispatch(Op::Thread(ThreadOp::MarkRead { id }), cx).detach();
-        cx.notify();
     }
 
     pub(super) fn show_start(
         &mut self,
         project: ProjectId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_start(&project, window, cx);
+        self.load_branches(project, cx);
+    }
+
+    // Opens the new-thread screen for a project. It does not read the project's branches.
+    pub(super) fn open_start(
+        &mut self,
+        project: &ProjectId,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -136,7 +146,7 @@ impl Kagan {
         self.sidebar
             .update(cx, |sidebar, _| sidebar.choose(Some(project.clone())));
         self.start.reset();
-        self.load_branches(project, cx);
+        self.remember_worktree_root(cx);
         self.picker.update(cx, |picker, cx| picker.load(window, cx));
         self.picker
             .update(cx, |picker, cx| picker.focus(window, cx));
@@ -144,14 +154,25 @@ impl Kagan {
         cx.notify();
     }
 
-    /// Runs a thread operation; a thread it returns is shown, a failure is said.
-    pub(super) fn run(op: ThreadOp, action: &'static str, window: &Window, cx: &mut Context<Self>) {
-        let task = Workspace::dispatch(Op::Thread(op), cx);
-        let window = window.window_handle();
+    pub(super) fn run(&self, op: Op, action: &'static str, cx: &mut Context<Self>) {
+        self.run_then(op, cx, move |this, result, window, cx| {
+            this.finish(result, action, window, cx);
+        });
+    }
+
+    pub(super) fn run_then(
+        &self,
+        op: Op,
+        cx: &mut Context<Self>,
+        then: impl FnOnce(&mut Self, Result<OpResult, OpError>, &mut Window, &mut Context<Self>)
+        + 'static,
+    ) {
+        let task = Workspace::dispatch(op, cx);
+        let window = self.window;
         cx.spawn(async move |this, cx| {
             let result = task.await;
             _ = cx.update_window(window, |_, window, cx| {
-                _ = this.update(cx, |this, cx| this.finish(result, action, window, cx));
+                _ = this.update(cx, |this, cx| then(this, result, window, cx));
             });
         })
         .detach();
@@ -205,25 +226,22 @@ impl Kagan {
         }
     }
 
-    pub(super) fn stop(&mut self, _: &StopThread, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn stop(&mut self, _: &StopThread, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.shown_thread(cx) {
-            Self::run(ThreadOp::Stop { id }, "stop the thread", window, cx);
+            self.run(Op::Thread(ThreadOp::Stop { id }), "stop the thread", cx);
         }
     }
 
     pub(super) fn save_diagnostics(
-        _: &mut Self,
+        &mut self,
         _: &SaveDiagnostics,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let task = Workspace::dispatch(
+        self.run_then(
             kg_domain::Op::Diagnostics(kg_domain::DiagnosticsOp::Export { path: None }),
             cx,
-        );
-        cx.spawn_in(window, async move |this, cx| {
-            let result = task.await;
-            _ = this.update(cx, |this, cx| {
+            |this, result, _, cx| {
                 match result {
                     Ok(kg_domain::OpResult::Diagnostics { path }) => {
                         this.note = None;
@@ -242,22 +260,15 @@ impl Kagan {
                     Ok(_) => {}
                 }
                 cx.notify();
-            });
-        })
-        .detach();
+            },
+        );
     }
 
-    pub(super) fn start_again(
-        &mut self,
-        _: &StartAgain,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(super) fn start_again(&mut self, _: &StartAgain, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.shown_thread(cx) {
-            Self::run(
-                ThreadOp::StartAgain { id },
+            self.run(
+                Op::Thread(ThreadOp::StartAgain { id }),
                 "start the thread again",
-                window,
                 cx,
             );
         }
@@ -266,25 +277,52 @@ impl Kagan {
     pub(super) fn toggle_pinned(
         &mut self,
         _: &TogglePinned,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(thread) = self
-            .shown_thread(cx)
-            .and_then(|id| self.record(&id, cx).cloned())
-        else {
+        if let Some(id) = self.shown_thread(cx) {
+            self.set_pinned(&id, cx);
+        }
+    }
+
+    fn set_pinned(&self, id: &ThreadId, cx: &mut Context<Self>) {
+        let Some(thread) = self.record(id, cx).cloned() else {
             return;
         };
         let pin = ThreadOp::SetPinned {
             id: thread.id,
             pinned: !thread.pinned,
         };
-        Self::run(pin, "change the pin", window, cx);
+        self.run(Op::Thread(pin), "change the pin", cx);
     }
 
-    pub(crate) fn restore(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn thread_pick(
+        &mut self,
+        id: &ThreadId,
+        pick: ThreadPick,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match pick {
+            ThreadPick::Pin => self.set_pinned(id, cx),
+            ThreadPick::Archive => self.archive_thread(id, window, cx),
+            ThreadPick::Rename => {
+                if self.shown_thread(cx).as_ref() != Some(id) {
+                    self.select(id.clone(), window, cx);
+                }
+                self.begin_rename(&RenameThread, window, cx);
+            }
+            ThreadPick::SaveDiagnostics => self.save_diagnostics(&SaveDiagnostics, window, cx),
+        }
+    }
+
+    pub(crate) fn restore(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.shown_thread(cx) {
-            Self::run(ThreadOp::Unarchive { id }, "restore the thread", window, cx);
+            self.run(
+                Op::Thread(ThreadOp::Unarchive { id }),
+                "restore the thread",
+                cx,
+            );
         }
     }
 
@@ -303,15 +341,23 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(thread) = self
-            .shown_thread(cx)
-            .and_then(|id| self.record(&id, cx).cloned())
-        else {
+        if let Some(id) = self.shown_thread(cx) {
+            self.archive_thread(&id, window, cx);
+        }
+    }
+
+    pub(super) fn archive_thread(
+        &mut self,
+        id: &ThreadId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(thread) = self.record(id, cx).cloned() else {
             return;
         };
         let confirm = Workspace::dispatch(
             Op::Preference(PreferenceOp::Get {
-                key: "confirm-archive".into(),
+                key: kg_domain::prefs::CONFIRM_ARCHIVE.into(),
             }),
             cx,
         );
@@ -327,7 +373,7 @@ impl Kagan {
             );
             _ = cx.update_window(handle, |_, window, cx| {
                 if ask {
-                    confirm_archive(this, thread, text, window, cx);
+                    confirm_archive(this, thread.id, thread.title, text, window, cx);
                 } else {
                     _ = this.update(cx, |this, cx| this.archive_now(&thread, window, cx));
                 }
@@ -344,15 +390,22 @@ impl Kagan {
     ) {
         let id = thread.id.clone();
         let leaving = archived_with(&Workspace::global(cx).read(cx).thread_records(cx), &id);
-        let next = self.next_thread(&id, &leaving, cx);
+        let shown_leaves = self
+            .shown_thread(cx)
+            .is_some_and(|shown| leaving.contains(&shown));
+        let next = shown_leaves
+            .then(|| self.next_thread(&id, &leaving, cx))
+            .flatten();
         self.dismiss_thread_menus(cx);
-        self.close_rename();
-        if let Some(next) = next {
-            self.select(next, window, cx);
-        } else {
-            self.cancel_plugin_start();
-            self.show_work(Shown::Nothing, window, cx);
-            window.focus(&self.focus, cx);
+        if shown_leaves {
+            self.close_rename();
+            if let Some(next) = next {
+                self.select(next, window, cx);
+            } else {
+                self.cancel_plugin_start();
+                self.show_work(Shown::Nothing, window, cx);
+                window.focus(&self.focus, cx);
+            }
         }
         self.show_toast(
             Toast {
@@ -362,7 +415,11 @@ impl Kagan {
             },
             cx,
         );
-        Self::run(ThreadOp::Archive { id }, "archive the thread", window, cx);
+        self.run(
+            Op::Thread(ThreadOp::Archive { id }),
+            "archive the thread",
+            cx,
+        );
     }
 
     pub(super) fn undo_archive(
@@ -376,7 +433,11 @@ impl Kagan {
             self.select(id.clone(), window, cx);
         }
         for id in ids {
-            Self::run(ThreadOp::Unarchive { id }, "restore the thread", window, cx);
+            self.run(
+                Op::Thread(ThreadOp::Unarchive { id }),
+                "restore the thread",
+                cx,
+            );
         }
     }
 
@@ -442,21 +503,24 @@ pub(super) fn archived_with(threads: &[Thread], id: &ThreadId) -> Vec<ThreadId> 
 
 fn confirm_archive(
     kagan: gpui_kit::WeakEntity<Kagan>,
-    thread: Thread,
+    id: ThreadId,
+    title: String,
     text: String,
     window: &mut Window,
     cx: &mut App,
 ) {
     window.open_alert_dialog(cx, move |dialog, _, _| {
         let kagan = kagan.clone();
-        let archived = thread.clone();
+        let id = id.clone();
         dialog
-            .title(format!("Archive “{}”?", thread.title))
+            .title(format!("Archive “{title}”?"))
             .description(text.clone())
             .ok_text("Archive")
             .on_ok(move |_, window, cx| {
                 _ = kagan.update(cx, |kagan, cx| {
-                    kagan.archive_now(&archived, window, cx);
+                    if let Some(thread) = kagan.record(&id, cx).cloned() {
+                        kagan.archive_now(&thread, window, cx);
+                    }
                 });
                 true
             })
@@ -465,10 +529,7 @@ fn confirm_archive(
 
 pub(crate) fn description(status: ThreadStatus, extra: usize) -> String {
     let mut sentences = Vec::new();
-    if matches!(
-        status,
-        ThreadStatus::Starting | ThreadStatus::Active | ThreadStatus::Stopping
-    ) {
+    if status.running() {
         sentences.push("This will stop current work.".to_owned());
     }
     sentences.extend(match extra {

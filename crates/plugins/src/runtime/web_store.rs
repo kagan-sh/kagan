@@ -7,7 +7,7 @@ use gpui_kit::AsyncApp;
 use kg_domain::{OpError, PluginId};
 
 #[must_use]
-pub fn store_dir(data: &Path, page: &str) -> PathBuf {
+pub(crate) fn store_dir(data: &Path, page: &str) -> PathBuf {
     data.join("pages").join(store_name(page))
 }
 
@@ -21,11 +21,7 @@ pub fn keep_store(data: &Path, page: &str) -> Result<[u8; 16], OpError> {
     std::fs::create_dir_all(&dir)
         .map_err(|error| OpError::Failed(format!("{}: {error}", dir.display())))?;
     let path = dir.join("store.id");
-    if let Ok(bytes) = std::fs::read(&path)
-        && bytes.len() == 16
-    {
-        let mut id = [0u8; 16];
-        id.copy_from_slice(&bytes);
+    if let Some(id) = read_id(&path) {
         return Ok(id);
     }
     let id = *uuid::Uuid::new_v4().as_bytes();
@@ -36,33 +32,25 @@ pub fn keep_store(data: &Path, page: &str) -> Result<[u8; 16], OpError> {
 
 /// Skips folders without a valid 16-byte `store.id`.
 #[must_use]
-pub fn read_store_ids(data: &Path) -> Vec<[u8; 16]> {
+pub(crate) fn read_store_ids(data: &Path) -> Vec<[u8; 16]> {
     let pages = data.join("pages");
     let Ok(entries) = std::fs::read_dir(&pages) else {
         return Vec::new();
     };
     let mut ids = Vec::new();
     for entry in entries.flatten() {
-        let path = entry.path().join("store.id");
-        if let Ok(bytes) = std::fs::read(&path)
-            && bytes.len() == 16
-        {
-            let mut id = [0u8; 16];
-            id.copy_from_slice(&bytes);
-            ids.push(id);
-        }
+        ids.extend(read_id(&entry.path().join("store.id")));
     }
     ids
 }
 
-/// Removes every page store folder. Errors are ignored.
-pub fn clear_stores(data: &Path) {
-    let _ = std::fs::remove_dir_all(data.join("pages"));
+fn read_id(path: &Path) -> Option<[u8; 16]> {
+    std::fs::read(path).ok()?.try_into().ok()
 }
 
 /// Deletes `pages/<page>/` only when its `store.id` is in `removed`. Other folders stay, so a later
 /// start can ask `WebKit` again.
-pub fn clear_removed_stores(data: &Path, removed: &[[u8; 16]]) {
+pub(crate) fn clear_removed_stores(data: &Path, removed: &[[u8; 16]]) {
     if removed.is_empty() {
         return;
     }
@@ -72,27 +60,20 @@ pub fn clear_removed_stores(data: &Path, removed: &[[u8; 16]]) {
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        let id_path = path.join("store.id");
-        let Ok(bytes) = std::fs::read(&id_path) else {
-            continue;
-        };
-        if bytes.len() != 16 {
-            continue;
-        }
-        let mut id = [0u8; 16];
-        id.copy_from_slice(&bytes);
-        if removed.contains(&id) {
+        if read_id(&path.join("store.id")).is_some_and(|id| removed.contains(&id)) {
+            // A folder that stays keeps its `store.id`, so the next start tries again.
             let _ = std::fs::remove_dir_all(&path);
         }
     }
     if std::fs::read_dir(&pages).is_ok_and(|mut entries| entries.next().is_none()) {
+        // Only an empty folder goes; one that is not empty is left as it is.
         let _ = std::fs::remove_dir(&pages);
     }
 }
 
-pub struct StoreRemoval {
-    pub removed: Vec<[u8; 16]>,
-    pub warnings: Vec<String>,
+pub(crate) struct StoreRemoval {
+    pub(crate) removed: Vec<[u8; 16]>,
+    pub(crate) warnings: Vec<String>,
 }
 
 // Wait before a store delete so GPUI drops the native `WebView` and its frame mouse listener.
@@ -120,7 +101,6 @@ thread_local! {
     static REMOVE_HOOK: std::cell::RefCell<Option<RemoveHook>> = const { std::cell::RefCell::new(None) };
 }
 
-// Replaces `remove_data_store` in tests until the guard drops.
 #[cfg(test)]
 pub(crate) fn set_remove_hook(
     hook: impl FnMut([u8; 16]) -> StoreAttempt + 'static,
@@ -143,9 +123,7 @@ impl Drop for RemoveHookGuard {
     }
 }
 
-// Retries `DataStoreInUse` with growing waits, for about 3 seconds after the first release wait.
-// Ids still held stay out of `removed`, so their `store.id` files
-// stay for a later start.
+// Ids still held stay out of `removed`, so their `store.id` files stay for a later start.
 pub(crate) async fn remove_web_stores_after_release(
     ids: Vec<[u8; 16]>,
     cx: &mut AsyncApp,
@@ -196,6 +174,7 @@ async fn remove_one_native(id: [u8; 16], cx: &mut AsyncApp) -> StoreAttempt {
     let (send, receive) = futures::channel::oneshot::channel();
     cx.update(|_| {
         wry::WebView::remove_data_store(&id, move |result| {
+            // The task waiting for the result may have been dropped.
             let _ = send.send(result);
         });
     });
@@ -216,7 +195,6 @@ fn remove_one_native(
     std::future::ready(StoreAttempt::Removed)
 }
 
-// Deletes each store once, with no wait or retry.
 pub(crate) async fn remove_web_stores(ids: Vec<[u8; 16]>, cx: &mut AsyncApp) -> StoreRemoval {
     if let Some(done) = no_stores(&ids) {
         return done;
@@ -235,7 +213,7 @@ pub(crate) async fn remove_web_stores(ids: Vec<[u8; 16]>, cx: &mut AsyncApp) -> 
 const IN_USE_WARNING: &str =
     "the plugin is removed, but WebKit still held a page store (DataStoreInUse)";
 
-/// The answer for an empty list or an old macOS, where custom stores do not exist.
+// The answer for an empty list or an old macOS, where custom stores do not exist.
 fn no_stores(ids: &[[u8; 16]]) -> Option<StoreRemoval> {
     if ids.is_empty() {
         return Some(StoreRemoval {
@@ -253,7 +231,6 @@ fn no_stores(ids: &[[u8; 16]]) -> Option<StoreRemoval> {
     None
 }
 
-/// Splits attempts into deleted ids, ids `WebKit` still holds, and failures.
 fn tally(attempts: Vec<([u8; 16], StoreAttempt)>) -> (Vec<[u8; 16]>, Vec<[u8; 16]>, Vec<String>) {
     let mut removed = Vec::new();
     #[cfg_attr(
@@ -285,8 +262,7 @@ pub(crate) async fn retry_orphan_stores(
     known: &BTreeSet<PluginId>,
     cx: &mut AsyncApp,
 ) {
-    let plugins = data_dir.join("plugins");
-    let Ok(entries) = std::fs::read_dir(&plugins) else {
+    let Ok(entries) = std::fs::read_dir(kg_core::plugins_dir(data_dir)) else {
         return;
     };
     for entry in entries.flatten() {
@@ -294,10 +270,11 @@ pub(crate) async fn retry_orphan_stores(
         let Some(name) = name.to_str() else {
             continue;
         };
-        if known.contains(&PluginId(name.into())) {
+        let id = PluginId(name.into());
+        if known.contains(&id) {
             continue;
         }
-        let data = entry.path().join("data");
+        let data = kg_core::plugin_data_dir(data_dir, &id);
         let ids = read_store_ids(&data);
         if ids.is_empty() {
             continue;
@@ -326,6 +303,7 @@ fn store_name(page: &str) -> String {
         let mut name = String::with_capacity(page.len() * 2);
         for byte in page.as_bytes() {
             use std::fmt::Write as _;
+            // Writing to a String cannot fail.
             let _ = write!(name, "{byte:02x}");
         }
         name
@@ -343,8 +321,6 @@ mod store_tests {
         let second = keep_store(data.path(), "board").expect("second");
         assert_eq!(first, second);
         assert!(store_dir(data.path(), "board").join("store.id").is_file());
-        clear_stores(data.path());
-        assert!(!data.path().join("pages").exists());
     }
 
     #[test]

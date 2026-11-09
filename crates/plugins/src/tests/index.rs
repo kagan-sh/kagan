@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use gpui_kit::TestAppContext;
-use kg_domain::{IndexEntry, IndexOp, Op, OpResult, PluginId, PluginOp};
+use kg_domain::{IndexEntry, IndexOp, Op, OpError, OpResult, PluginId, PluginOp};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -502,6 +502,25 @@ fn install_by_name_reads_the_index_and_still_asks_a_person(cx: &mut TestAppConte
         "update reads the recorded source, not the index"
     );
     assert_eq!(records(cx)[0].source, source);
+}
+
+#[gpui_kit::test]
+fn share_refuses_a_plugin_that_is_not_in_a_git_repository(cx: &mut TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().join("echo");
+    write_plugin(&folder, &sample_manifest());
+    open(cx, &[]);
+    let error = run(
+        cx,
+        Op::Plugin(PluginOp::Share {
+            path: folder.as_path().into(),
+        }),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error,
+        OpError::Invalid(format!("{} is not in a git repository", folder.display()))
+    );
 }
 
 #[gpui_kit::test]

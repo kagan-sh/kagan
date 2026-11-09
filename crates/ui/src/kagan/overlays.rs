@@ -13,7 +13,7 @@ use super::surface::mount_error;
 use super::{Kagan, Shown};
 use crate::ui_observe::UiObserveExt as _;
 
-/// A plugin's paint-only view drawn over the center (decision 100).
+// A plugin's paint-only view drawn over the center (decision 100).
 pub(super) struct Overlay {
     plugin: PluginId,
     activation: Option<u64>,
@@ -22,8 +22,6 @@ pub(super) struct Overlay {
 }
 
 impl Kagan {
-    /// Mounts the overlay of each enabled plugin that declares one. A reload mounts it again, and
-    /// a disable or removal drops it. A failed mount waits for the plugin's next start.
     pub(super) fn sync_overlays(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(host) = PluginHost::try_global(cx) else {
             return;
@@ -40,25 +38,30 @@ impl Kagan {
             let host = host.read(cx);
             (host.activation(plugin), host.generation(plugin))
         };
-        self.overlays.retain(|overlay| {
+        self.slots.overlays.retain(|overlay| {
             let (activation, generation) = current(&overlay.plugin, cx);
             declared.contains(&overlay.plugin)
                 && activation == overlay.activation
                 && (overlay.view.is_none() || generation == overlay.generation)
         });
         for plugin in declared {
-            if self.overlays.iter().any(|overlay| overlay.plugin == plugin) {
+            if self
+                .slots
+                .overlays
+                .iter()
+                .any(|overlay| overlay.plugin == plugin)
+            {
                 continue;
             }
             let view = host
                 .update(cx, |host, cx| host.mount_overlay(&plugin, window, cx))
                 .inspect_err(|error| {
                     let message = format!("could not draw the overlay: {}", mount_error(error));
-                    host.read(cx).report(&plugin, &message);
+                    host.read(cx).report(&plugin, &message, cx);
                 })
-                .ok();
+                .ok(); // The error is logged above.
             let (activation, generation) = current(&plugin, cx);
-            self.overlays.push(Overlay {
+            self.slots.overlays.push(Overlay {
                 plugin,
                 activation,
                 generation,
@@ -69,8 +72,6 @@ impl Kagan {
     }
 }
 
-/// Overlays draw only over a running terminal or a plugin page, and not while anything waits for
-/// the person, so they can never sit over a question, an approval or kagan's own forms.
 fn drawn_over(kagan: &Kagan, cx: &App) -> bool {
     let work = match kagan.screen.current() {
         Center::Work(Shown::Thread(_)) | Center::Page(_) => true,
@@ -95,6 +96,7 @@ pub(super) fn render(kagan: &Kagan, cx: &App) -> Option<AnyElement> {
         return None;
     }
     let drawn: Vec<_> = kagan
+        .slots
         .overlays
         .iter()
         .filter_map(|overlay| Some((overlay, overlay.view.clone()?)))
@@ -144,8 +146,8 @@ pub(super) fn render(kagan: &Kagan, cx: &App) -> Option<AnyElement> {
     )
 }
 
-/// Paints a paint-only view, or nothing once its build failed: the error box would cover the
-/// terminal. Any hitbox inside is clipped to nothing as well, though a paint-only view has none.
+// Paints a paint-only view, or nothing once its build failed: the error box would cover the
+// terminal. Any hitbox inside is clipped to nothing as well, though a paint-only view has none.
 struct Inert {
     view: Entity<ScriptView>,
     child: AnyElement,

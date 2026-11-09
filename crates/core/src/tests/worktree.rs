@@ -124,6 +124,58 @@ async fn a_local_base_worktree_does_not_track_and_needs_no_setup(cx: &mut TestAp
 
 #[cfg(unix)]
 #[gpui_kit::test]
+async fn the_start_screen_reads_the_setup_script_at_a_revision(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = repo_dir(&fixture);
+    empty_repo(&repo);
+    commit_file(&repo, ".kagan/setup", "touch setup-ran\n");
+    let read = EnvironmentOp::Setup {
+        project_id: fixture.project.clone(),
+        rev: "HEAD".into(),
+    };
+    let OpResult::Setup(Some(setup)) = op(Op::Environment(read), cx).await.unwrap() else {
+        panic!("setup")
+    };
+    assert_eq!(setup.mode, Some(SetupFile::Script));
+    assert_eq!(setup.text, "touch setup-ran");
+    assert!(!setup.truncated);
+    assert_eq!(setup.commit.len(), 40);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn the_start_screen_reads_a_setup_link_as_a_link(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = repo_dir(&fixture);
+    empty_repo(&repo);
+    std::fs::create_dir_all(repo.join(".kagan")).unwrap();
+    std::os::unix::fs::symlink("touch-nothing", repo.join(".kagan/setup")).unwrap();
+    git_in(&repo, &["add", "--", ".kagan/setup"]);
+    git_in(
+        &repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.test",
+            "commit",
+            "-qm",
+            "link",
+        ],
+    );
+    let read = EnvironmentOp::Setup {
+        project_id: fixture.project.clone(),
+        rev: "HEAD".into(),
+    };
+    let OpResult::Setup(Some(setup)) = op(Op::Environment(read), cx).await.unwrap() else {
+        panic!("setup")
+    };
+    assert_eq!(setup.mode, Some(SetupFile::Link));
+    assert_eq!(setup.text, "");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
 async fn a_setup_script_that_exits_zero_starts_the_program(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let repo = repo_dir(&fixture);
@@ -680,6 +732,11 @@ async fn a_setup_blob_that_does_not_match_is_not_run(cx: &mut TestAppContext) {
         message.contains("Start will use the version shown on screen now"),
         "{message}"
     );
+    assert!(matches!(error, OpError::SetupChanged(_)), "{error}");
+    assert_eq!(
+        serde_json::to_value(&error).unwrap()["error"]["kind"],
+        "setup-changed"
+    );
     assert_eq!(worktree_count(fixture.dir.path()), 0);
     assert!(error_rows(&fixture).is_empty());
     let OpResult::Threads(threads) = op(
@@ -1027,6 +1084,7 @@ fn project_on(fixture: &Fixture, title: Option<&str>, branch: ProjectBranch) -> 
         environment: EnvironmentSpec::ProjectOn { branch },
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     }))
@@ -1099,4 +1157,44 @@ async fn a_retry_after_the_setup_file_changes_drops_the_worktree(cx: &mut TestAp
     assert_ne!(fresh[0].id, old_id);
     assert_eq!(fresh[0].path, old_path);
     assert!(fresh[0].path.exists());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn set_base_stores_a_branch_of_the_repository_and_refuses_another(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = repo_dir(&fixture);
+    empty_repo(&repo);
+    git_in(&repo, &["branch", "-M", "main"]);
+    let OpResult::Thread(started) = op(worktree_run(&fixture, Some("notes"), None), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("thread")
+    };
+    let id = started.environment_id.clone().unwrap();
+    let set_base = |id: EnvironmentId, base: &str| {
+        Op::Environment(EnvironmentOp::SetBase {
+            id,
+            base: base.to_owned(),
+        })
+    };
+    let OpResult::Environment(saved) = op(set_base(id.clone(), "main"), cx).await.unwrap() else {
+        panic!("environment")
+    };
+    assert_eq!(saved.base_branch.as_deref(), Some("main"));
+    assert_eq!(
+        environment_of(&id, cx).await.base_branch.as_deref(),
+        Some("main")
+    );
+    assert_eq!(
+        op(set_base(id.clone(), "nope"), cx).await,
+        Err(OpError::Invalid(
+            "base branch nope is not in this repository".into()
+        ))
+    );
+    assert!(matches!(
+        op(set_base(EnvironmentId("env_missing".into()), "main"), cx).await,
+        Err(OpError::NotFound(_))
+    ));
 }

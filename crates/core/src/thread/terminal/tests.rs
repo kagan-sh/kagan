@@ -125,6 +125,7 @@ fn running() -> kg_domain::Thread {
         status: ThreadStatus::Active,
         visibility: Visibility::Visible,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         section_id: None,
         pinned: false,

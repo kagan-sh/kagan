@@ -24,6 +24,13 @@ pub(crate) fn closed(error: impl std::fmt::Display) -> OpError {
 pub(crate) fn missing(what: &str, id: &impl std::fmt::Display) -> OpError {
     OpError::NotFound(format!("{what} {id} not found"))
 }
+pub(crate) fn changed(this: &WeakEntity<Workspace>, cx: &mut AsyncApp) -> Result<()> {
+    this.update(cx, |_, cx| {
+        cx.emit(super::WorkspaceEvent::Changed);
+        cx.notify();
+    })
+    .map_err(closed)
+}
 pub(crate) fn database(this: &WeakEntity<Workspace>, cx: &mut AsyncApp) -> Result<Database> {
     this.update(cx, |workspace, _| workspace.database.clone())
         .map_err(closed)

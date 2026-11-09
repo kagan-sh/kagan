@@ -1,3 +1,4 @@
+use super::FolderUse;
 use gpui_kit::{App, AppContext as _, Context, Window};
 use kg_core::Workspace;
 use kg_domain::{
@@ -6,8 +7,8 @@ use kg_domain::{
 };
 
 use super::{
-    BranchPick, Branches, ProjectIntent, StartFolder, base_of, project_kind, project_path,
-    read_setup,
+    BranchPick, Branches, ProjectIntent, StartFolder, base_of, pinned_setup, project_kind,
+    project_path,
 };
 use crate::kagan::{
     Kagan, RetryBranches, RetryPrograms, Shown, ToggleCustomCommand, UseProjectFolder,
@@ -16,7 +17,6 @@ use crate::kagan::{
 impl Kagan {
     pub(in crate::kagan) fn load_branches(&mut self, project: ProjectId, cx: &mut Context<Self>) {
         let epoch = self.start.setup_epoch;
-        let path = project_path(&project, cx);
         let task = Workspace::dispatch(
             Op::Environment(EnvironmentOp::Branches {
                 project_id: project.clone(),
@@ -33,16 +33,14 @@ impl Kagan {
                 Branches::Loaded(list) => base_of(list),
                 Branches::Loading | Branches::Failed(_) => None,
             };
-            let setup = match (path, rev) {
-                (Some(path), Some(rev)) => {
-                    cx.background_spawn(async move { read_setup(&path, &rev) })
-                        .await
-                }
-                _ => None,
+            let setup = match rev {
+                Some(rev) => pinned_setup(project.clone(), rev, cx).await,
+                None => None,
             };
             _ = this.update(cx, |this, cx| {
                 if matches!(this.screen.shown(), Shown::Start(shown) if *shown == project) {
                     this.start.branches = branches;
+                    this.start.busy = FolderUse::of(this.compute_busy(cx));
                     if this.start.setup_epoch == epoch
                         && matches!(this.start.pick, BranchPick::Current)
                     {
@@ -75,6 +73,9 @@ impl Kagan {
     }
 
     pub(super) fn setup_ready(&self) -> bool {
+        if self.start.reuse.is_some() {
+            return true;
+        }
         match self.chosen_folder() {
             Some(StartFolder::Worktree) => self.start.setup.is_some(),
             Some(StartFolder::Project) | None => true,
@@ -93,11 +94,16 @@ impl Kagan {
         }
     }
 
-    pub(super) fn start_environment(&self, kind: ProjectKind, cx: &App) -> Option<EnvironmentSpec> {
+    pub(super) fn start_environment(&self, kind: ProjectKind) -> Option<EnvironmentSpec> {
+        if let Some(reuse) = &self.start.reuse {
+            return Some(EnvironmentSpec::Reuse {
+                environment_id: reuse.environment.clone(),
+            });
+        }
         match kind {
             ProjectKind::Personal => Some(EnvironmentSpec::Personal),
             ProjectKind::Standard => match self.chosen_folder()? {
-                StartFolder::Project => self.project_environment(cx),
+                StartFolder::Project => self.project_environment(),
                 StartFolder::Worktree => {
                     if !matches!(&self.start.branches, Branches::Loaded(_)) {
                         return None;
@@ -113,11 +119,11 @@ impl Kagan {
         }
     }
 
-    fn project_environment(&self, cx: &App) -> Option<EnvironmentSpec> {
+    fn project_environment(&self) -> Option<EnvironmentSpec> {
         let Branches::Loaded(list) = &self.start.branches else {
             return None;
         };
-        if self.switches(list) && self.switch_block(cx).is_some() {
+        if self.switches(list) && self.switch_block().is_some() {
             return None;
         }
         match &self.start.pick {
@@ -142,7 +148,7 @@ impl Kagan {
         }
     }
 
-    pub(super) fn switch_block(&self, cx: &App) -> Option<String> {
+    pub(super) fn switch_block(&self) -> Option<String> {
         if self.chosen_folder() != Some(StartFolder::Project) {
             return None;
         }
@@ -153,11 +159,13 @@ impl Kagan {
             (self.switches(list), list.checkout_block.clone())
         };
         moving
-            .then(|| branch_move_block(blocked, self.folder_busy(cx)))
+            .then(|| branch_move_block(blocked, self.start.busy.is_busy()))
             .flatten()
     }
 
-    pub(super) fn folder_busy(&self, cx: &App) -> bool {
+    /// Whether a thread is running in the project's folder. Read on the window thread, so it is
+    /// kept in `start.busy` and set again whenever the window refreshes.
+    pub(in crate::kagan) fn compute_busy(&self, cx: &App) -> bool {
         let Shown::Start(project) = self.screen.shown() else {
             return false;
         };
@@ -204,15 +212,11 @@ impl Kagan {
         };
         let project = project.clone();
         let rev = self.base_rev();
-        let path = project_path(&project, cx);
         self.start.setup = None;
         self.start.setup_task = Some(cx.spawn(async move |this, cx| {
-            let setup = match (path, rev) {
-                (Some(path), Some(rev)) => {
-                    cx.background_spawn(async move { read_setup(&path, &rev) })
-                        .await
-                }
-                _ => None,
+            let setup = match rev {
+                Some(rev) => pinned_setup(project.clone(), rev, cx).await,
+                None => None,
             };
             _ = this.update(cx, |this, cx| {
                 if this.start.setup_epoch == epoch
@@ -318,7 +322,7 @@ impl Kagan {
         let Some(kind) = project_kind(&project_id, cx) else {
             return;
         };
-        let Some(environment) = self.start_environment(kind, cx) else {
+        let Some(environment) = self.start_environment(kind) else {
             return;
         };
         let run = ThreadOp::Run(Run {
@@ -328,6 +332,7 @@ impl Kagan {
             environment,
             visibility: None,
             parent_thread_id: None,
+            quiet: false,
             lifecycle_owner_thread_id: None,
             metadata: None,
         });
@@ -343,7 +348,7 @@ impl Kagan {
                     if let Err(error) = &result
                         && error.to_string().contains(".kagan/setup")
                     {
-                        this.start.setup_failure = Some(error.to_string());
+                        this.start.setup_failure = Some(error.clone());
                         cx.notify();
                     } else {
                         this.finish(result, "start the thread", window, cx);

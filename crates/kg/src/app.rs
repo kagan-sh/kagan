@@ -1,3 +1,6 @@
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
+
 use anyhow::{Context as _, Result};
 use async_channel::Sender;
 use gpui_kit::QuitMode;
@@ -29,6 +32,30 @@ fn desktop() -> gpui_kit::Application {
     gpui_kit::application()
 }
 
+/// The data folder: `KG_DATA_DIR`, else `HOME/.kagan`, else `USERPROFILE/.kagan`.
+pub(crate) fn data_dir_from_env() -> Result<PathBuf> {
+    data_dir_of(
+        std::env::var_os("KG_DATA_DIR"),
+        std::env::var_os("HOME"),
+        std::env::var_os("USERPROFILE"),
+    )
+}
+
+pub(crate) fn data_dir_of(
+    data: Option<OsString>,
+    home: Option<OsString>,
+    profile: Option<OsString>,
+) -> Result<PathBuf> {
+    let set = |value: Option<OsString>| value.filter(|value| !value.is_empty());
+    if let Some(dir) = set(data) {
+        return Ok(PathBuf::from(dir));
+    }
+    let home = set(home)
+        .or_else(|| set(profile))
+        .context("HOME or USERPROFILE is not set")?;
+    Ok(Path::new(&home).join(".kagan"))
+}
+
 pub(crate) fn run() -> Result<()> {
     let location = socket::location()?;
     let Some(listener) = socket::open(&location).context("cannot open the kg socket")? else {
@@ -44,15 +71,7 @@ pub(crate) fn run() -> Result<()> {
             .recv_blocking()
             .map_err(|_| OpError::Failed("kagan dropped the request".into()))?
     });
-    let data_dir = if let Some(dir) = std::env::var_os("KG_DATA_DIR") {
-        std::path::PathBuf::from(dir)
-    } else {
-        let home = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .context("HOME or USERPROFILE is not set")?;
-        std::path::Path::new(&home).join(".kagan")
-    };
-    use_keychain();
+    let data_dir = data_dir_from_env()?;
     let cli = std::env::current_exe()?;
     kg_process::warm_user_path();
     let components = component_catalog()?;
@@ -71,8 +90,7 @@ pub(crate) fn run() -> Result<()> {
     app.run(move |cx| {
         #[cfg(target_os = "macos")]
         crate::icon::install();
-        cx.set_global(kg_core::SocketLocation(location));
-        let open = kg_core::Workspace::open(data_dir, cli, cx);
+        let open = kg_core::Workspace::open(data_dir, cli, Some(location), cx);
         cx.spawn(async move |cx| {
             if let Err(error) = open.await {
                 eprintln!("kg: {error}");
@@ -83,6 +101,7 @@ pub(crate) fn run() -> Result<()> {
                     }
                 });
                 while let Ok((_, _, reply)) = incoming.recv().await {
+                    // The client may have hung up already.
                     let _ = reply.send(Err(error.clone())).await;
                 }
                 return;
@@ -105,15 +124,8 @@ pub(crate) fn run() -> Result<()> {
             }
             cx.update(kg_ui::plugins_ready);
             while let Ok((op, requester, reply)) = incoming.recv().await {
-                let task = cx.update(|cx| match op {
-                    Op::Thread(kg_domain::ThreadOp::Rename { id, title }) => {
-                        kg_core::Workspace::rename_once(id, title, cx)
-                    }
-                    Op::Preview(op @ kg_domain::PreviewOp::Show { .. }) => {
-                        preview(op, requester, cx)
-                    }
-                    op => kg_core::Workspace::dispatch_for(op, Some(requester), cx),
-                });
+                let task =
+                    cx.update(|cx| kg_core::Workspace::dispatch_for(op, Some(requester), cx));
                 cx.spawn(async move |_| reply.send(task.await).await)
                     .detach();
             }
@@ -121,73 +133,6 @@ pub(crate) fn run() -> Result<()> {
         .detach();
     });
     Ok(())
-}
-
-fn preview(
-    op: kg_domain::PreviewOp,
-    requester: kg_core::Requester,
-    cx: &mut gpui_kit::App,
-) -> gpui_kit::Task<Result<OpResult, OpError>> {
-    let shown = op.clone();
-    let read = kg_core::Workspace::dispatch_for(Op::Preview(op), Some(requester), cx);
-    cx.spawn(async move |cx| {
-        let result = read.await;
-        if result.is_ok()
-            && let kg_domain::PreviewOp::Show { thread_id, path } = shown
-        {
-            cx.update(|cx| kg_ui::show_preview(thread_id, path, cx));
-        }
-        result
-    })
-}
-
-/// Plugin secrets go to the system keychain, opened on first use: a Linux D-Bus can take
-/// long to answer, and nothing should wait on it before a secret is needed.
-fn use_keychain() {
-    keyring_core::set_default_store(std::sync::Arc::new(Keychain(std::sync::OnceLock::new())));
-}
-
-/// The system keychain, opened by the first secret read or write and kept for the whole run.
-/// Without one, it answers `NoDefaultStore`, and the plugin host keeps secrets in a file.
-struct Keychain(std::sync::OnceLock<Option<std::sync::Arc<keyring_core::CredentialStore>>>);
-
-impl keyring_core::api::CredentialStoreApi for Keychain {
-    fn vendor(&self) -> String {
-        "kagan".to_owned()
-    }
-
-    fn id(&self) -> String {
-        "kagan".to_owned()
-    }
-
-    fn build(
-        &self,
-        service: &str,
-        user: &str,
-        modifiers: Option<&std::collections::HashMap<&str, &str>>,
-    ) -> keyring_core::Result<keyring_core::Entry> {
-        self.0
-            .get_or_init(open_keychain)
-            .as_ref()
-            .ok_or(keyring_core::Error::NoDefaultStore)?
-            .build(service, user, modifiers)
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-}
-
-fn open_keychain() -> Option<std::sync::Arc<keyring_core::CredentialStore>> {
-    #[cfg(target_os = "macos")]
-    let store = apple_native_keyring_store::keychain::Store::new();
-    #[cfg(windows)]
-    let store = windows_native_keyring_store::Store::new();
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let store = zbus_secret_service_keyring_store::Store::new();
-    store
-        .ok()
-        .map(|store| store as std::sync::Arc<keyring_core::CredentialStore>)
 }
 
 fn component_catalog() -> Result<gpui_shell::FrozenComponentRegistry> {

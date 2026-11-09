@@ -418,6 +418,7 @@ pub(in crate::tests) fn repo_thread(
         environment: EnvironmentSpec::ProjectDefault,
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };
@@ -439,6 +440,7 @@ pub(in crate::tests) fn run_hidden_shell(cx: &mut TestAppContext) -> ThreadId {
         environment: EnvironmentSpec::Personal,
         visibility: Some(Visibility::Hidden),
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };
@@ -452,7 +454,7 @@ pub(in crate::tests) fn run_hidden_shell(cx: &mut TestAppContext) -> ThreadId {
 
 #[gpui_kit::test]
 fn a_plugin_panel_shows_beside_the_built_in_panels(cx: &mut TestAppContext) {
-    let (kagan, window, _data) = open_with_plugins(cx, true);
+    let (_kagan, window, _data) = open_with_plugins(cx, true);
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
     let _asked =
@@ -464,10 +466,6 @@ fn a_plugin_panel_shows_beside_the_built_in_panels(cx: &mut TestAppContext) {
     assert!(!shows(cx, window, "plugins"));
     assert!(shows(cx, window, "plugins-manage"));
     assert!(!shows(cx, window, PAGE_FRAME));
-    assert_eq!(
-        cx.update(|cx| kagan.read(cx).panel_titles()),
-        ["Questions", "Changes", "Details"]
-    );
 }
 
 pub(in crate::tests) const PAGE: &str = "dev.test.page";
@@ -508,6 +506,7 @@ export class Page extends View {
             commit: None,
             enabled: true,
             approved: serde_json::json!({"powers": {}, "downloads": {}, "folders": {}}),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();

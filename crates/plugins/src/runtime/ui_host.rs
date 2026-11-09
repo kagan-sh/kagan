@@ -7,16 +7,14 @@ use gpui_kit::{
     AnyWindowHandle, App, AppContext as _, Context, Entity, EventEmitter, Global, Pixels, Size,
     WindowId,
 };
-use gpui_shell::{HostArguments, HostError, HostModule, HostValue, with_current_app};
+use gpui_shell::{HostArguments, HostError, HostModule, HostValue};
 use kg_core::Workspace;
 use kg_domain::{DiffSide, Op, PluginId, ProjectId, ThreadId, ThreadOp};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::area::{from_host, to_host};
-
-/// Same cap as `kg thread paste` (`crates/kg/src/development.rs`).
-const PASTE_CAP: usize = 1024 * 1024;
+use crate::area::{awaited, from_host, to_host, with_app};
+use crate::authoring::contributions::StatusContribution;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -166,6 +164,7 @@ impl HostUi {
 
     /// The thread and project a window's plugin context names, or `None` when the window is not
     /// known to the host.
+    #[cfg(any(test, feature = "test"))]
     #[must_use]
     pub fn window_thread(&self, window: WindowId) -> Option<(Option<ThreadId>, Option<ProjectId>)> {
         self.windows
@@ -220,6 +219,7 @@ impl HostUi {
         if let Some(waiters) = self.waiting.remove(plugin) {
             let context = self.context_for(plugin);
             for waiting in waiters {
+                // A waiter that went away has nothing to wake.
                 let _ = waiting.try_send(context.clone());
             }
         }
@@ -260,6 +260,7 @@ impl HostUi {
         for (plugin, waiters) in waiting {
             let context = self.context_for(&plugin);
             for waiting in waiters {
+                // A waiter that went away has nothing to wake.
                 let _ = waiting.try_send(context.clone());
             }
         }
@@ -269,18 +270,17 @@ impl HostUi {
 pub(crate) fn app<R>(
     run: impl FnOnce(Entity<HostUi>, &mut App) -> Result<R, HostError>,
 ) -> Result<R, HostError> {
-    with_current_app(|cx| {
+    with_app(|cx| {
         let ui = HostUi::global(cx)
             .ok_or_else(|| HostError::new("the plugin UI host is unavailable"))?;
         run(ui, cx)
-    })
-    .ok_or_else(|| HostError::new("the application context is unavailable"))?
+    })?
 }
 
 pub(crate) fn extend(
     module: HostModule,
     plugin: &PluginId,
-    status: Option<&str>,
+    status: Option<&StatusContribution>,
     secrets: &crate::secret::Store,
 ) -> HostModule {
     let declarations = format!(
@@ -295,7 +295,7 @@ pub(crate) fn extend(
     let images = plugin.clone();
     let urls = plugin.clone();
     let statuses = plugin.clone();
-    let status_title = status.map(str::to_owned);
+    let status = status.cloned();
     let status_secrets = secrets.clone();
     module
         .async_function("openThread", open_thread)
@@ -310,12 +310,7 @@ pub(crate) fn extend(
             crate::clipboard::write(&images, arguments)
         })
         .function("setStatus", move |arguments| {
-            crate::strip::set_status(
-                &statuses,
-                status_title.as_deref(),
-                &status_secrets,
-                arguments,
-            )
+            crate::strip::set_status(&statuses, status.as_ref(), &status_secrets, arguments)
         })
 }
 
@@ -362,17 +357,10 @@ fn paste_into_thread(
     if text.is_empty() {
         return Err(HostError::new("paste needs text"));
     }
-    if text.len() > PASTE_CAP {
-        return Err(HostError::new(format!(
-            "paste is {} bytes; the cap is 1 MiB",
-            text.len()
-        )));
-    }
-    let receive = with_current_app(|cx| {
+    let pasted = with_app(|cx| {
         if Workspace::global(cx).read(cx).thread(&id).is_none() {
             return Err(HostError::new("thread does not exist"));
         }
-        let (sender, receive) = async_channel::bounded(1);
         let task = Workspace::dispatch(
             Op::Thread(ThreadOp::Paste {
                 id,
@@ -382,18 +370,11 @@ fn paste_into_thread(
             }),
             cx,
         );
-        cx.spawn(async move |_| {
-            let _ = sender.send(task.await).await;
-        })
-        .detach();
-        Ok(receive)
-    })
-    .ok_or_else(|| HostError::new("the application context is unavailable"))??;
+        Ok(awaited(task, cx))
+    })??;
     Ok(async move {
-        receive
-            .recv()
-            .await
-            .map_err(|_| HostError::new("the plugin was unloaded"))?
+        pasted
+            .await?
             .map_err(|error| HostError::new(error.to_string()))?;
         Ok(HostValue::Null)
     })
@@ -444,7 +425,7 @@ fn open_url(
 ) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
     let url = arguments.string(0)?;
     http_url(url)?;
-    let opened = with_current_app(|cx| {
+    with_app(|cx| {
         let allowed = crate::PluginHost::try_global(cx)
             .is_some_and(|host| host.read(cx).allows_open_url(plugin));
         if !allowed {
@@ -452,11 +433,7 @@ fn open_url(
         }
         cx.open_url(url);
         Ok(())
-    });
-    match opened {
-        Some(result) => result?,
-        None => return Err(HostError::new("the application context is unavailable")),
-    }
+    })??;
     Ok(async { Ok(HostValue::Null) })
 }
 

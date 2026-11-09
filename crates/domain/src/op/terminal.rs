@@ -48,3 +48,5 @@ pub enum SelectMode {
 pub const TERMINAL_COLS: std::ops::RangeInclusive<u16> = 2..=1000;
 /// The rows a terminal may have.
 pub const TERMINAL_ROWS: std::ops::RangeInclusive<u16> = 1..=500;
+/// The most bytes a saved screen keeps, history and the visible redraw together.
+pub const SCREEN_MAX_BYTES: usize = 4 * 1024 * 1024;

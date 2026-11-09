@@ -114,5 +114,5 @@ if errors:
         print(f"crate-boundaries: {line}", file=sys.stderr)
     sys.exit(1)
 
-print("crate-boundaries: workspace graph matches docs/architecture.md")
+print("crate-boundaries: workspace graph matches the EXPECTED table in this script")
 PY

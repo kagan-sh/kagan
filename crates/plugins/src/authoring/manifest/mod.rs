@@ -21,7 +21,6 @@ pub use settings::{AgentChoice, Setting};
 
 pub(crate) const FILE: &str = "kagan.json";
 
-/// Why `kagan.json` is refused or a grant cannot be used.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error("cannot read it: {source}")]
@@ -45,6 +44,10 @@ pub(crate) enum Error {
     Entry(String),
     #[error("commands need unique nonempty ids and titles")]
     Commands,
+    #[error(
+        "ui.status command {0:?} must name one of this plugin's commands, with \"when\": \"always\""
+    )]
+    StatusCommand(String),
     #[error("a header command needs when thread")]
     HeaderCommand,
     #[error("a menu command needs when thread")]
@@ -229,7 +232,6 @@ pub(crate) fn read(root: &Path, data_dir: &Path) -> Result<Manifest, OpError> {
     check_setting_fields(&value).map_err(invalid)?;
     let mut manifest: Manifest =
         serde_json::from_str(&text).map_err(|error| invalid(error.into()))?;
-    manifest.check(root, data_dir).map_err(invalid)?;
     for key in manifest
         .commands
         .iter_mut()
@@ -238,6 +240,7 @@ pub(crate) fn read(root: &Path, data_dir: &Path) -> Result<Manifest, OpError> {
         *key = crate::commands::checked_key(key)
             .map_err(|error| invalid(Error::CommandKey(error.to_string())))?;
     }
+    manifest.check(root, data_dir).map_err(invalid)?;
     Ok(manifest)
 }
 
@@ -254,6 +257,7 @@ impl Manifest {
         self.check_entry(root)?;
         self.check_skills(root)?;
         self.check_commands()?;
+        self.check_status_command()?;
         self.check_hotkeys()?;
         self.check_events()?;
         self.check_schedules()?;
@@ -294,6 +298,28 @@ impl Manifest {
         Ok(())
     }
 
+    fn check_status_command(&self) -> Result<(), Error> {
+        let Some(id) = self
+            .ui
+            .status
+            .as_ref()
+            .and_then(|status| status.command.as_deref())
+        else {
+            return Ok(());
+        };
+        let plain = |text: &str| !text.chars().any(crate::strip::forbidden_status_char);
+        match self.commands.iter().find(|command| command.id == id) {
+            Some(command)
+                if command.when == crate::commands::CommandWhen::Always
+                    && plain(&command.id)
+                    && plain(&command.title) =>
+            {
+                Ok(())
+            }
+            _ => Err(Error::StatusCommand(id.to_owned())),
+        }
+    }
+
     fn check_commands(&self) -> Result<(), Error> {
         let mut command_ids = BTreeSet::new();
         for command in &self.commands {
@@ -308,10 +334,6 @@ impl Manifest {
             }
             if command.menu && command.when != crate::commands::CommandWhen::Thread {
                 return Err(Error::MenuCommand);
-            }
-            if let Some(key) = &command.key {
-                crate::commands::checked_key(key)
-                    .map_err(|error| Error::CommandKey(error.to_string()))?;
             }
         }
         Ok(())
@@ -510,7 +532,6 @@ impl Manifest {
         Ok(())
     }
 
-    /// The manifest text the approval screen shows.
     fn shown(&self) -> impl Iterator<Item = &str> {
         let powers = &self.powers;
         [self.name.as_str(), self.version.as_str()]

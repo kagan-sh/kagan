@@ -4,7 +4,7 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use kg_domain::{Environment, EnvironmentStatus, OpError};
+use kg_domain::{Environment, EnvironmentStatus, OpError, PinnedSetup, SetupFile};
 
 use super::Provisioned;
 use crate::host::database::Result;
@@ -12,6 +12,73 @@ use crate::host::database::Result;
 pub(crate) const SCRIPT_LIMIT: Duration = Duration::from_mins(10);
 
 const SETUP: &str = ".kagan/setup";
+
+const SHOWN_LINES: usize = 40;
+const SHOWN_CHARS: usize = 2_000;
+const SHOWN_LINE: usize = 200;
+
+pub(crate) fn pinned_setup(root: &Path, rev: &str) -> Option<PinnedSetup> {
+    let object = format!("{rev}^{{commit}}");
+    let commit = crate::host::git::git(root, &["rev-parse", "--verify", "--quiet", &object])
+        .ok()?
+        .trim()
+        .to_owned();
+    if commit.is_empty() {
+        return None;
+    }
+    let file = listed(root, &commit, SETUP).ok().flatten();
+    let mode = file.as_ref().and_then(|file| setup_file(&file.mode));
+    let (text, truncated) = match (mode, file) {
+        (Some(SetupFile::Script), Some(file)) => {
+            let raw =
+                crate::host::git::git(root, &["cat-file", "blob", &file.blob]).unwrap_or_default();
+            shown_text(&raw)
+        }
+        _ => (String::new(), false),
+    };
+    Some(PinnedSetup {
+        commit,
+        mode,
+        text,
+        truncated,
+    })
+}
+
+fn setup_file(mode: &str) -> Option<SetupFile> {
+    match mode {
+        "120000" => Some(SetupFile::Link),
+        "100644" | "100755" => Some(SetupFile::Script),
+        _ => None,
+    }
+}
+
+fn shown_text(raw: &str) -> (String, bool) {
+    let mut out = String::new();
+    let mut truncated = false;
+    for (index, line) in raw.lines().enumerate() {
+        if index == SHOWN_LINES {
+            truncated = true;
+            break;
+        }
+        let short: String = line.chars().take(SHOWN_LINE).collect();
+        if short.chars().count() < line.chars().count() {
+            truncated = true;
+        }
+        let gap = usize::from(!out.is_empty());
+        if out.len() + gap + short.len() > SHOWN_CHARS {
+            truncated = true;
+            break;
+        }
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&short);
+    }
+    if !truncated && raw.lines().nth(out.lines().count()).is_some() {
+        truncated = true;
+    }
+    (out, truncated)
+}
 const TEARDOWN: &str = ".kagan/teardown";
 
 static LOGS: AtomicU64 = AtomicU64::new(0);
@@ -37,19 +104,13 @@ pub(crate) fn become_ready(mut environment: Environment) -> SetupEnd {
             return SetupEnd::Failed(Box::new((environment, error)));
         }
     };
-    match dunce::canonicalize(&environment.path) {
-        Ok(path) => environment.path = path,
-        Err(error) => {
-            environment.status = EnvironmentStatus::Error;
-            return SetupEnd::Failed(Box::new((
-                environment,
-                OpError::Failed(format!("{SETUP} could not finish: {error}")),
-            )));
-        }
+    if let Err(error) = super::make_ready(&mut environment) {
+        environment.status = EnvironmentStatus::Error;
+        return SetupEnd::Failed(Box::new((
+            environment,
+            OpError::Failed(format!("{SETUP} could not finish: {error}")),
+        )));
     }
-    environment.status = EnvironmentStatus::Ready;
-    environment.retire_at = None;
-    environment.error = None;
     SetupEnd::Ready(Provisioned {
         environment,
         notices,
@@ -103,9 +164,7 @@ fn confirmed(environment: &Environment) -> std::result::Result<Vec<String>, Chec
     }
     match expected {
         None => Ok(Vec::new()),
-        Some(object) if object.mode == "120000" => {
-            Ok(vec![format!("{SETUP} is a link, so kagan did not run it.")])
-        }
+        Some(object) if object.mode == "120000" => Ok(link_notice(SETUP)),
         Some(_) => {
             run_script(root, &root.join(SETUP), SETUP, SCRIPT_LIMIT)?;
             Ok(Vec::new())
@@ -124,7 +183,7 @@ fn expected_setup(root: &Path, base: Option<&str>) -> std::result::Result<Option
 }
 
 fn mismatch_message() -> OpError {
-    OpError::Failed(format!(
+    OpError::SetupChanged(format!(
         "{SETUP} changed. Start will use the version shown on screen now."
     ))
 }
@@ -231,7 +290,7 @@ fn file_mode(meta: &std::fs::Metadata) -> &'static str {
 fn apply(root: &Path, name: &str) -> Result<Vec<String>> {
     match repo_file(root, name)? {
         RepoFile::Absent => Ok(Vec::new()),
-        RepoFile::Link => Ok(vec![format!("{name} is a link, so kagan did not run it.")]),
+        RepoFile::Link => Ok(link_notice(name)),
         RepoFile::File(path) => {
             run_script(root, &path, name, SCRIPT_LIMIT)?;
             Ok(Vec::new())
@@ -250,6 +309,10 @@ fn repo_file(root: &Path, name: &str) -> Result<RepoFile> {
         Ok(meta) if meta.is_file() => Ok(RepoFile::File(path)),
         Ok(_) => Ok(RepoFile::Absent),
     }
+}
+
+fn link_notice(name: &str) -> Vec<String> {
+    vec![format!("{name} is a link, so kagan did not run it.")]
 }
 
 pub(crate) fn shell_from(path: Option<&std::ffi::OsStr>, name: &str) -> Result<PathBuf> {
@@ -287,7 +350,7 @@ enum Wait {
 }
 
 fn wait_child(process: &mut kg_process::Process, limit: Duration) -> Wait {
-    match process.wait_within(limit) {
+    match process.wait_within(limit, || false) {
         Ok(Some(status)) => Wait::Exited(status),
         Ok(None) => {
             let deadline = Instant::now() + Duration::from_secs(2);
@@ -357,6 +420,7 @@ impl StderrFile {
 
 impl Drop for StderrFile {
     fn drop(&mut self) {
+        // A temp file left behind is harmless.
         let _ = std::fs::remove_file(&self.path);
     }
 }

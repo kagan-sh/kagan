@@ -26,6 +26,7 @@ fn guide_names_every_command() {
 
 #[test]
 fn cli_reference_matches_help() {
+    super::socket::drop_inherited_ids();
     let mut root = Cli::command().styles(Styles::plain()).term_width(100);
     root.set_bin_name("kg");
     let mut discard = Vec::new();

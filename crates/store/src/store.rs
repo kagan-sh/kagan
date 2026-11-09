@@ -147,6 +147,8 @@ UPDATE projects SET sort = (
 ",
     "ALTER TABLE pending_interactions ADD COLUMN fields TEXT;",
     REPAIR_THREAD_COLUMNS,
+    "ALTER TABLE plugins ADD COLUMN skills TEXT NOT NULL DEFAULT '[]';",
+    "ALTER TABLE threads ADD COLUMN quiet INTEGER NOT NULL DEFAULT 0;",
 ];
 
 pub(crate) const REPAIR_THREAD_COLUMNS: &str = "-- repair conflicting thread migrations";
@@ -210,6 +212,34 @@ impl Store {
             .conn
             .pragma_query_value(None, "user_version", |row| row.get(0))?)
     }
+}
+
+// An insert of `columns` into `table` with `:column` placeholders that replaces the row with the
+// same `id`.
+fn upsert(table: &str, columns: &str) -> String {
+    let names: Vec<&str> = columns.split(", ").collect();
+    let values = names
+        .iter()
+        .map(|name| format!(":{name}"))
+        .collect::<Vec<_>>();
+    let updates = names
+        .iter()
+        .filter(|name| **name != "id")
+        .map(|name| format!("{name} = excluded.{name}"))
+        .collect::<Vec<_>>();
+    format!(
+        "INSERT INTO {table} ({columns}) VALUES ({}) ON CONFLICT(id) DO UPDATE SET {}",
+        values.join(", "),
+        updates.join(", ")
+    )
+}
+
+// The `seq` of the latest `started` event of the thread named by the SQL expression `thread`.
+fn latest_start(thread: &str) -> String {
+    format!(
+        "(SELECT MAX(seq) FROM events AS start WHERE start.thread_id = {thread} \
+         AND json_extract(start.kind, '$.type') = 'started')"
+    )
 }
 
 fn found(changed: usize, what: &'static str, id: &impl Display) -> Result<()> {

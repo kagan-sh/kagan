@@ -294,7 +294,7 @@ fn a_call_that_is_never_answered_times_out(cx: &mut TestAppContext) {
     });
     cx.run_until_parked();
     cx.executor()
-        .advance_clock(crate::call::CALL_TIMEOUT + Duration::from_secs(1));
+        .advance_clock(crate::ask::CALL_TIMEOUT + Duration::from_secs(1));
     cx.run_until_parked();
     match cx.foreground_executor().block_test(pending).unwrap() {
         OpResult::ToolReply { text, is_error } => {

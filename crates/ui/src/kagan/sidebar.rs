@@ -12,10 +12,14 @@ use kg_domain::{PluginId, Project, ProjectId, ProjectKind, Thread, ThreadId};
 mod brand_menu;
 mod order;
 
+use super::shown::{ThreadPick, thread_menu};
 use super::surface::OpenSurface;
 use order::Place;
 
 use crate::theme::Tone;
+
+pub(in crate::kagan) const THREAD_ROW: &str = "thread-";
+pub(in crate::kagan) const PROJECT_ROW: &str = "project-";
 
 actions!(
     sidebar,
@@ -49,7 +53,6 @@ pub(super) enum ArchivedFooter {
     Shown,
 }
 
-// What the person chose in the sidebar. Kagan acts on it.
 pub(super) enum Event {
     Thread(ThreadId),
     Project(ProjectId),
@@ -61,10 +64,7 @@ pub(super) enum Event {
         id: ProjectId,
         before: Option<ProjectId>,
     },
-    RowPin(ThreadId),
-    RowArchive(ThreadId),
-    RowRename(ThreadId),
-    RowSaveDiagnostics(ThreadId),
+    RowPick(ThreadId, ThreadPick),
     RowMenuClosed,
     OpenSurface(OpenSurface),
     ClosePage,
@@ -82,7 +82,6 @@ pub(super) struct Shows {
     pub(super) tool: Option<PluginId>,
     pub(super) archived: bool,
     pub(super) in_settings: bool,
-    // What waits for the person, shown on the rail while a plugin draws the thread rows.
     pub(super) waiting: Option<usize>,
 }
 
@@ -94,7 +93,6 @@ pub(super) fn surface_event(page: bool, selected: bool, open: &OpenSurface) -> E
     }
 }
 
-// The sidebar's listing and what it shows of it: folds, the chosen project, row focus and scroll.
 pub(super) struct Sidebar {
     pub(super) listing: kg_domain::Sidebar,
     archived_footer: ArchivedFooter,
@@ -321,24 +319,16 @@ impl Sidebar {
             return;
         }
         let sidebar = cx.entity().downgrade();
-        let shown = thread.id.clone();
-        let pin = if thread.pinned { "Unpin" } else { "Pin" };
-        let rows = [
-            ("thread-pin", pin, Event::RowPin as fn(ThreadId) -> Event),
-            ("thread-archive", "Archive", Event::RowArchive),
-            ("thread-rename", "Rename…", Event::RowRename),
-            (
-                "save-diagnostics",
-                "Save diagnostics",
-                Event::RowSaveDiagnostics,
-            ),
-        ];
-        let menu = PopupMenu::build(window, cx, move |menu, _, _| {
-            rows.into_iter().fold(menu, |menu, (id, label, event)| {
-                menu.item(entry(&sidebar, id, label, event, &shown))
-                    .separator()
-            })
-        });
+        let id = thread.id.clone();
+        let menu = thread_menu(
+            thread,
+            move |pick, _, cx| {
+                _ = sidebar.update(cx, |_, cx| cx.emit(Event::RowPick(id.clone(), pick)));
+            },
+            |menu| menu,
+            window,
+            cx,
+        );
         let dismiss = cx.subscribe_in(&menu, window, |this, _, _: &DismissEvent, _, cx| {
             this.row_menu = None;
             cx.emit(Event::RowMenuClosed);
@@ -375,7 +365,7 @@ impl Sidebar {
         let Kind::Thread { id, .. } = &rows[index].kind else {
             return;
         };
-        let id = format!("thread-{id}");
+        let id = format!("{THREAD_ROW}{id}");
         if self.scroll_thread.as_deref() == Some(id.as_str()) {
             return;
         }
@@ -424,7 +414,6 @@ mod rail;
 mod rows;
 
 use list::{sidebar_rows, thread_scroll_index};
-use marks::entry;
 
 pub(super) use list::list;
 pub(super) use rail::{archived_footer, rail};

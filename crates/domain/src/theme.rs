@@ -391,8 +391,8 @@ fn in_range(
     })
 }
 
-/// Checks what GPUI Kit's Zed `HighlightTheme` deserialization requires, so a theme that
-/// passes also loads there, and names the field that is wrong.
+// Checks what GPUI Kit's Zed `HighlightTheme` deserialization requires, so a theme that
+// passes also loads there, and names the field that is wrong.
 fn check_highlight(field: &str, value: &serde_json::Value) -> Result<(), ThemeFileError> {
     const COLOR: &str = "#RGB, #RGBA, #RRGGBB or #RRGGBBAA";
     let bad = ThemeFileError::Highlight;

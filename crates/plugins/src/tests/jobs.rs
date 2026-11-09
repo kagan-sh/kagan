@@ -5,8 +5,9 @@ use kg_core::Workspace;
 use kg_domain::{Op, OpError, OpResult, Plugin, PluginId, PluginOp, ProjectId, ThreadOp};
 use serde_json::json;
 
+use crate::PluginHostGlobal;
+use crate::ask::{INSTRUCT_TIMEOUT, TOOL_TIMEOUT};
 use crate::manifest::Grant;
-use crate::{INSTRUCT_TIMEOUT, PluginHostGlobal, TOOL_TIMEOUT};
 
 use super::{
     CLI_PROBE, COMMAND_PROBE, ID, THREAD, answered, ask_instruct, call, cli_plugin, hanging_calls,
@@ -212,6 +213,60 @@ fn a_hung_plugin_reports_the_same_timeout_to_tools_and_cli(cx: &mut TestAppConte
     }
 }
 
+const LEAKING_COMMAND: &str = r#"
+import { View } from "gpui-kit";
+import { next, fail } from "kagan/jobs";
+import { settings } from "kagan/host";
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        const job = await next();
+        fail(job.id, `401 for ${settings().token}`);
+      }
+    });
+  }
+  render() { return "commands"; }
+}
+"#;
+
+#[gpui_kit::test]
+fn a_failed_command_hides_the_plugin_secrets(cx: &mut TestAppContext) {
+    const SECRET: &str = "lin_api_7f3c9d1e";
+    let plugin = probe_plugin(&[], LEAKING_COMMAND);
+    let path = plugin.path().join(crate::manifest::FILE);
+    let mut value: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    value["settings"] = json!({ "token": { "type": "secret", "title": "Token" } });
+    std::fs::write(path, value.to_string()).unwrap();
+    open(cx, &[installed(plugin.path())]);
+    run(
+        cx,
+        Op::Plugin(PluginOp::Config {
+            id: PluginId(ID.into()),
+            op: kg_domain::ConfigOp::Set {
+                key: "token".into(),
+                value: Some(json!(SECRET)),
+            },
+            thread_id: None,
+        }),
+    )
+    .unwrap();
+    let error = run(
+        cx,
+        Op::Plugin(PluginOp::Command {
+            id: PluginId(ID.into()),
+            command: "ping".into(),
+            thread_id: Some(thread()),
+            project_id: None,
+        }),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("401 for [secret]"), "{error}");
+    assert!(!error.contains(SECRET), "{error}");
+}
+
 #[gpui_kit::test]
 fn commands_run_as_jobs_and_need_a_thread_when_they_are_asked_to(cx: &mut TestAppContext) {
     let plugin = probe_plugin(&[], COMMAND_PROBE);
@@ -293,6 +348,7 @@ fn a_cli_command_two_plugins_declare_is_refused(cx: &mut TestAppContext) {
             root,
             commit: None,
             enabled: true,
+            skills: Vec::new(),
             error: None,
         }
     };

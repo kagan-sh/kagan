@@ -84,6 +84,7 @@ fn scheduled(dir: &Path) -> Plugin {
         root,
         commit: None,
         enabled: true,
+        skills: Vec::new(),
         error: None,
     }
 }

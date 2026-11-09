@@ -1,5 +1,7 @@
+mod browser;
 mod call;
 mod contributions;
+mod diagnostics;
 mod files;
 mod host;
 mod index;
@@ -12,6 +14,7 @@ mod schedule;
 mod script;
 mod secret;
 mod settings;
+mod skills;
 mod status;
 
 use std::path::Path;
@@ -143,6 +146,7 @@ fn installed(root: &Path) -> Plugin {
         root,
         commit: None,
         enabled: true,
+        skills: Vec::new(),
         error: None,
     }
 }
@@ -181,6 +185,7 @@ fn open_kept(cx: &mut TestAppContext, data: &Path, keep: TempDir, plugins: &[Plu
             status: ThreadStatus::Idle,
             visibility: Visibility::Visible,
             parent_thread_id: None,
+            quiet: false,
             lifecycle_owner_thread_id: None,
             section_id: None,
             pinned: false,
@@ -196,8 +201,14 @@ fn open_kept(cx: &mut TestAppContext, data: &Path, keep: TempDir, plugins: &[Plu
         store.insert_plugin(plugin).unwrap();
     }
     drop(store);
-    let opened =
-        cx.update(|cx| Workspace::open(data.to_path_buf(), std::env::current_exe().unwrap(), cx));
+    let opened = cx.update(|cx| {
+        Workspace::open(
+            data.to_path_buf(),
+            std::env::current_exe().unwrap(),
+            None,
+            cx,
+        )
+    });
     cx.foreground_executor().block_test(opened).unwrap();
     let started = cx.update(|cx| {
         gpui_kit::init(cx);
@@ -320,38 +331,11 @@ fn activation_of(cx: &mut TestAppContext) -> Option<u64> {
     })
 }
 
-fn hold_commits(cx: &mut TestAppContext) -> async_channel::Sender<()> {
+fn hold_at(cx: &mut TestAppContext, which: crate::host::Hold) -> async_channel::Sender<()> {
     let (release, hold) = async_channel::bounded(1);
     cx.update(|cx| {
         let host = cx.global::<PluginHostGlobal>().0.clone();
-        host.update(cx, |host, _| host.commit_hold = Some(hold));
-    });
-    release
-}
-
-fn hold_writes(cx: &mut TestAppContext) -> async_channel::Sender<()> {
-    let (release, hold) = async_channel::bounded(1);
-    cx.update(|cx| {
-        let host = cx.global::<PluginHostGlobal>().0.clone();
-        host.update(cx, |host, _| host.write_hold = Some(hold));
-    });
-    release
-}
-
-fn hold_activation(cx: &mut TestAppContext) -> async_channel::Sender<()> {
-    let (release, hold) = async_channel::bounded(1);
-    cx.update(|cx| {
-        let host = cx.global::<PluginHostGlobal>().0.clone();
-        host.update(cx, |host, _| host.activation_hold = Some(hold));
-    });
-    release
-}
-
-fn hold_lifecycle(cx: &mut TestAppContext) -> async_channel::Sender<()> {
-    let (release, hold) = async_channel::bounded(1);
-    cx.update(|cx| {
-        let host = cx.global::<PluginHostGlobal>().0.clone();
-        host.update(cx, |host, _| host.lifecycle_hold = Some(hold));
+        host.update(cx, |host, _| host.holds.insert(which, hold));
     });
     release
 }
@@ -548,7 +532,7 @@ fn queue_folder(
     tempfile::TempDir,
 ) {
     let notes = tempfile::tempdir().unwrap();
-    let release = hold_writes(cx);
+    let release = hold_at(cx, crate::host::Hold::Write);
     let setting = plugin_op(
         cx,
         PluginOp::Config {
@@ -1084,6 +1068,51 @@ fn start_tree(
     (pids, receive)
 }
 
+fn example_roots() -> Vec<std::path::PathBuf> {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins");
+    let mut roots: Vec<_> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.join(crate::manifest::FILE).is_file())
+        .collect();
+    roots.sort();
+    roots
+}
+
+#[test]
+fn bundled_examples_pass_check() {
+    let roots = example_roots();
+    let names: Vec<_> = roots
+        .iter()
+        .map(|root| root.file_name().unwrap().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "cli",
+            "header",
+            "instruct",
+            "overlay",
+            "panel",
+            "review",
+            "schedule",
+            "sidebar",
+            "status",
+            "theme",
+            "web-panel",
+        ]
+    );
+    for root in &roots {
+        let data = tempfile::tempdir().unwrap();
+        crate::development::check(
+            root,
+            data.path(),
+            &gpui_shell::components::components().unwrap(),
+        )
+        .unwrap();
+    }
+}
+
 fn installed_example(root: &Path) -> Plugin {
     let root = dunce::canonicalize(root).unwrap();
     let manifest = read_manifest(&root).unwrap();
@@ -1094,6 +1123,7 @@ fn installed_example(root: &Path) -> Plugin {
         root,
         commit: None,
         enabled: true,
+        skills: Vec::new(),
         error: None,
     }
 }
@@ -1132,6 +1162,7 @@ fn installed_at(root: &Path) -> Plugin {
         root,
         commit: None,
         enabled: true,
+        skills: Vec::new(),
         error: None,
     }
 }

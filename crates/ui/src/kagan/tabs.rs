@@ -13,7 +13,7 @@ use kg_domain::{Op, OpResult, TerminalOp, ThreadId, ThreadOp, WindowOp};
 
 use super::controls::{control, dispatch, tip};
 use super::right::{ActivatePanelHeader, Tab};
-use super::{Kagan, Shown};
+use super::{Kagan, window};
 use crate::terminal::{TerminalView, Typed};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -30,32 +30,19 @@ actions!(
 );
 
 pub(super) fn bind(cx: &mut App) {
-    cx.on_action(|_: &NextTerminal, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::NextTerminal), cx).detach();
-    });
-    cx.on_action(|_: &PreviousTerminal, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::PreviousTerminal), cx).detach();
-    });
-    cx.on_action(|_: &OpenLocalLink, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::OpenLocalLink), cx).detach();
-    });
+    window::bind::<NextTerminal>(cx, WindowOp::NextTerminal);
+    window::bind::<PreviousTerminal>(cx, WindowOp::PreviousTerminal);
+    window::bind::<OpenLocalLink>(cx, WindowOp::OpenLocalLink);
 }
 
 pub(super) fn perform(op: WindowOp, cx: &mut App) {
-    let Some((handle, kagan)) = super::front(cx) else {
-        return;
-    };
-    let _ = cx.update_window(handle, |_, window, cx| {
-        kagan.update(cx, |this, cx| match (op, this.tabs.local.clone()) {
-            (WindowOp::OpenLocalLink, Some(link)) => cx.open_url(&link),
-            (WindowOp::OpenLocalLink, None) => window.play_system_bell(),
-            _ => this.step_tab(op == WindowOp::NextTerminal, window, cx),
-        });
+    window::with_front(cx, |this, window, cx| match (op, this.tabs.local.clone()) {
+        (WindowOp::OpenLocalLink, Some(link)) => cx.open_url(&link),
+        (WindowOp::OpenLocalLink, None) => window.play_system_bell(),
+        _ => this.step_tab(op == WindowOp::NextTerminal, window, cx),
     });
 }
 
-/// The extra terminals of the thread on screen, whether its Browser tab is open, and the newest
-/// local link its terminals printed.
 #[derive(Default)]
 pub(super) struct Tabs {
     thread: Option<ThreadId>,
@@ -86,17 +73,8 @@ impl Tabs {
 }
 
 impl Kagan {
-    fn tabbed_thread(&self, cx: &App) -> Option<ThreadId> {
-        match self.screen.shown() {
-            Shown::Thread(view) => Some(view.read(cx).thread().clone()),
-            Shown::Nothing | Shown::Start(_) => None,
-        }
-    }
-
-    /// Follows the host's list of extra terminals. When a closed one had the keyboard, the right
-    /// sidebar takes it.
     pub(super) fn sync_tabs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let thread = self.tabbed_thread(cx);
+        let thread = self.screen.covered_thread(cx);
         if self.tabs.thread != thread {
             self.tabs = Tabs {
                 thread: thread.clone(),
@@ -104,14 +82,14 @@ impl Kagan {
             };
             self.browser.leave_thread(window, cx);
             if self
-                .right_tab
+                .right
+                .tab
                 .as_ref()
                 .is_some_and(|tab| matches!(tab, Tab::Browser | Tab::Terminal(_) | Tab::Preview))
             {
-                self.right_tab = None;
+                self.right.tab = None;
             }
             // A thread's page outlives the switch; the tab comes back with the thread.
-            #[cfg(desktop)]
             if self
                 .tabs
                 .thread
@@ -145,18 +123,16 @@ impl Kagan {
                 self.tabs.views.push((*number, view, typed));
             }
         }
-        if self.right_tab.as_ref().is_some_and(
+        if self.right.tab.as_ref().is_some_and(
             |shown| matches!(shown, Tab::Terminal(number) if !numbers.contains(number)),
         ) {
-            self.right_tab = self.default_right_tab(cx);
+            self.right.tab = self.default_right_tab(cx);
         }
         if held {
             self.focus_right_tab(window, cx);
         }
     }
 
-    /// Selects a tab of the right sidebar, opens the sidebar if it is not drawn, and gives the
-    /// tab the keyboard.
     pub(super) fn show_right_tab(&mut self, tab: Tab, window: &mut Window, cx: &mut Context<Self>) {
         self.select_right_tab(tab, cx);
         if !self.right_drawn() {
@@ -165,7 +141,6 @@ impl Kagan {
         self.focus_right_tab(window, cx);
     }
 
-    /// Steps the keyboard through the program's terminal and the extra terminals.
     fn step_tab(&mut self, forward: bool, window: &mut Window, cx: &mut Context<Self>) {
         let order: Vec<Option<u32>> = std::iter::once(None)
             .chain(self.tabs.numbers().map(Some))
@@ -187,40 +162,28 @@ impl Kagan {
         }
     }
 
-    pub(super) fn new_terminal(
-        &mut self,
-        _: &NewTerminal,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(super) fn new_terminal(&mut self, _: &NewTerminal, _: &mut Window, cx: &mut Context<Self>) {
         let Some(thread) = self.shown_open_thread(cx) else {
             return;
         };
-        let opened = Workspace::dispatch(
+        self.run_then(
             Op::Thread(ThreadOp::Terminal(TerminalOp::New { id: thread.id })),
             cx,
+            |this, result, window, cx| match result {
+                Ok(OpResult::Terminals(opened)) => {
+                    this.note = None;
+                    this.sync_tabs(window, cx);
+                    if let Some(extra) = opened.first() {
+                        this.show_right_tab(Tab::Terminal(extra.number), window, cx);
+                    }
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    this.note = Some(format!("Could not open a terminal: {error}").into());
+                    cx.notify();
+                }
+            },
         );
-        let window = window.window_handle();
-        cx.spawn(async move |this, cx| {
-            let opened = opened.await;
-            _ = cx.update_window(window, |_, window, cx| {
-                _ = this.update(cx, |this, cx| match opened {
-                    Ok(OpResult::Terminals(opened)) => {
-                        this.note = None;
-                        this.sync_tabs(window, cx);
-                        if let Some(extra) = opened.first() {
-                            this.show_right_tab(Tab::Terminal(extra.number), window, cx);
-                        }
-                    }
-                    Ok(_) => {}
-                    Err(error) => {
-                        this.note = Some(format!("Could not open a terminal: {error}").into());
-                        cx.notify();
-                    }
-                });
-            });
-        })
-        .detach();
     }
 
     pub(super) fn close_terminal(
@@ -234,9 +197,8 @@ impl Kagan {
         }
     }
 
-    /// The keyboard is in the right sidebar, which a hidden sidebar would strand.
     pub(super) fn right_holds_focus(&self, window: &Window, cx: &App) -> bool {
-        self.right_add_focus.is_focused(window)
+        self.right.add_focus.is_focused(window)
             || self.browser.holds_focus(window, cx)
             || self
                 .tabs
@@ -245,7 +207,8 @@ impl Kagan {
                 .is_some_and(|preview| preview.holds_focus(window, cx))
             || self.focused_terminal(window, cx).is_some()
             || self
-                .right_slots
+                .right
+                .slots
                 .iter()
                 .any(|slot| slot.focus.contains_focused(window, cx))
     }
@@ -258,26 +221,20 @@ impl Kagan {
             .map(|(number, ..)| *number)
     }
 
-    fn close_right_terminal(&mut self, number: u32, window: &mut Window, cx: &mut Context<Self>) {
+    fn close_right_terminal(&mut self, number: u32, _: &mut Window, cx: &mut Context<Self>) {
         let Some(id) = self.shown_thread(cx) else {
             return;
         };
-        let closed = Workspace::dispatch(
+        self.run_then(
             Op::Thread(ThreadOp::Terminal(TerminalOp::Close { id, number })),
             cx,
+            |this, result, window, cx| {
+                if result.is_ok() {
+                    this.sync_tabs(window, cx);
+                    this.focus_right_tab(window, cx);
+                }
+            },
         );
-        let window = window.window_handle();
-        cx.spawn(async move |this, cx| {
-            if closed.await.is_ok() {
-                _ = cx.update_window(window, |_, window, cx| {
-                    _ = this.update(cx, |this, cx| {
-                        this.sync_tabs(window, cx);
-                        this.focus_right_tab(window, cx);
-                    });
-                });
-            }
-        })
-        .detach();
     }
 
     pub(super) fn can_open_browser(&self, cx: &App) -> bool {
@@ -296,14 +253,13 @@ impl Kagan {
     fn close_browser(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.tabs.browser = false;
         self.browser.close(window, cx);
-        if self.right_tab == Some(Tab::Browser) {
-            self.right_tab = self.default_right_tab(cx);
+        if self.right.tab == Some(Tab::Browser) {
+            self.right.tab = self.default_right_tab(cx);
         }
         self.focus_right_tab(window, cx);
         cx.notify();
     }
 
-    /// Browser, Preview, and each extra terminal, for the right sidebar's tab row.
     pub(super) fn right_tabs(
         &self,
         selected: Option<&Tab>,
@@ -367,7 +323,6 @@ impl Kagan {
             .collect()
     }
 
-    /// The row over the program's terminal, drawn only while it offers a local link.
     pub(super) fn render_strip(&self, cx: &App) -> Option<AnyElement> {
         let chip = self.local_link_chip(cx)?;
         Some(
@@ -411,7 +366,6 @@ impl Kagan {
         }));
     }
 
-    /// "Open localhost:3000" at the end of the tab row, for the newest local link the thread printed.
     fn local_link_chip(&self, cx: &App) -> Option<AnyElement> {
         let host = local_host(self.tabs.local.as_deref()?)?;
         let label = format!("Open {host}");
@@ -431,7 +385,6 @@ impl Kagan {
     }
 }
 
-/// The host and port of a link to this machine, such as `localhost:3000`.
 pub(super) fn local_host(link: &str) -> Option<&str> {
     let (_, rest) = link.split_once("://")?;
     let host = rest.split(['/', '?', '#']).next()?;

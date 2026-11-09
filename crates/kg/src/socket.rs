@@ -399,10 +399,15 @@ impl Client {
         Stream::connect(name).map(|stream| Self(BufReader::new(stream)))
     }
 
+    /// Connects to the app listening at `location`, after checking a fallback folder there.
+    pub(crate) fn open(location: &std::ffi::OsStr) -> io::Result<Self> {
+        before_connect(location)?;
+        Self::connect(name(location)?)
+    }
+
     pub(crate) fn connect_or_start() -> io::Result<Self> {
         let location = location()?;
-        before_connect(&location)?;
-        if let Ok(client) = Self::connect(name(&location)?) {
+        if let Ok(client) = Self::open(&location) {
             return Ok(client);
         }
         if non_empty("KG_NO_START").is_some() {
@@ -436,8 +441,7 @@ impl Client {
 pub(crate) fn wait_for_socket(location: &std::ffi::OsStr, timeout: Duration) -> io::Result<Client> {
     let deadline = Instant::now() + timeout;
     loop {
-        before_connect(location)?;
-        match Client::connect(name(location)?) {
+        match Client::open(location) {
             Ok(client) => return Ok(client),
             Err(error) if Instant::now() > deadline => return Err(error),
             Err(_) => thread::sleep(Duration::from_millis(50)),
@@ -457,8 +461,7 @@ fn start_headless(location: &std::ffi::OsStr) -> io::Result<()> {
     std::os::unix::process::CommandExt::process_group(&mut command, 0);
     #[cfg(windows)]
     {
-        const DETACHED_PROCESS: u32 = 0x0000_0008;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        use windows_sys::Win32::System::Threading::{CREATE_NO_WINDOW, DETACHED_PROCESS};
         std::os::windows::process::CommandExt::creation_flags(
             &mut command,
             DETACHED_PROCESS | CREATE_NO_WINDOW,

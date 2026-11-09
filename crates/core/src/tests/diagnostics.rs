@@ -64,18 +64,6 @@ async fn diagnostics_omits_secrets_and_names_bad_geometry(cx: &mut TestAppContex
     let fixture = Fixture::new(cx).await;
     let project = fixture.project.clone();
     let dir = fixture.dir.path().to_path_buf();
-    let log_dir = dir.join("plugins").join("demo-plugin");
-    std::fs::create_dir_all(&log_dir).unwrap();
-    std::fs::write(
-        log_dir.join("logs.jsonl"),
-        "\
-{\"at\":1,\"level\":\"debug\",\"message\":\"pw-debug-9f3a\"}\n\
-{\"at\":2,\"level\":\"info\",\"message\":\"pw-info-9f3a\"}\n\
-{\"at\":3,\"level\":\"warn\",\"message\":\"pw-log-9f3a\"}\n\
-{\"at\":4,\"level\":\"error\",\"message\":\"bearer pw-error-9f3a\"}\n\
-not-json pw-raw-9f3a\n",
-    )
-    .unwrap();
     let db = dir.join("kagan.sqlite3");
     let root = dir.clone();
     let fixture = fixture

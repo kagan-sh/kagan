@@ -31,7 +31,7 @@ use serde_json::Value;
 
 use crate::{
     AgentTool, Environment, EnvironmentId, Event, IndexEntry, Listing, PendingInteraction, Plugin,
-    PreviewOp, ProgramList, Project, ProjectId, Sidebar, Thread, ThreadId,
+    PluginLog, PreviewOp, ProgramList, Project, ProjectId, Sidebar, Thread, ThreadId,
 };
 
 pub use browser::{BrowserControl, BrowserOp, BrowserSnapshot, BrowserView};
@@ -39,7 +39,10 @@ pub use check::check;
 pub use config::ConfigOp;
 pub use diagnostics::DiagnosticsOp;
 pub use diff::{DiffOp, DiffQuery, DiffScope};
-pub use environment::{BranchList, EnvironmentOp, EnvironmentSpec, FOLDER_IN_USE, ProjectBranch};
+pub use environment::{
+    BranchList, EnvironmentOp, EnvironmentSpec, FOLDER_IN_USE, PinnedSetup, ProjectBranch,
+    SetupFile,
+};
 pub use guide::GuideChapter;
 pub use index::IndexOp;
 pub use keymap::{
@@ -54,11 +57,13 @@ pub use section::SectionOp;
 pub use settings::SettingsOp;
 pub use skill::{Skill, SkillOp, SkillSource};
 pub use surface::{Slot, SlotChoice, SlotChoiceError, SurfaceItem, SurfaceOp, SurfacePlacement};
-pub use terminal::{ExtraTerminal, SelectMode, TERMINAL_COLS, TERMINAL_ROWS, TerminalOp};
+pub use terminal::{
+    ExtraTerminal, SCREEN_MAX_BYTES, SelectMode, TERMINAL_COLS, TERMINAL_ROWS, TerminalOp,
+};
 pub use theme::{Appearance, ThemeOp, ThemeSettings, valid_theme_choice, valid_theme_id};
 pub use thread::{
-    Metadata, Order, Run, SEARCH_DEFAULT, SEARCH_LIMIT, SEARCH_TEXT_MAX, ThreadOp, WaitOutcome,
-    branch_slug,
+    Metadata, Order, Run, SEARCH_DEFAULT, SEARCH_LIMIT, SEARCH_TEXT_MAX, TEXT_MAX, ThreadOp,
+    WaitOutcome, branch_slug,
 };
 pub use ui::{
     DropSide, UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,
@@ -171,6 +176,7 @@ pub enum OpResult {
     },
     Files(Vec<PathBuf>),
     Plugins(Vec<Plugin>),
+    PluginLogs(Vec<PluginLog>),
     Indexes(Vec<String>),
     /// An index entry for a shared plugin, and the line a teammate runs
     Shared {
@@ -215,6 +221,7 @@ pub enum OpResult {
     Programs(ProgramList),
     Environment(Environment),
     Branches(BranchList),
+    Setup(Option<PinnedSetup>),
     Setting(Value),
     Tools {
         instructions: Option<String>,
@@ -249,6 +256,8 @@ pub enum OpError {
     Invalid(String),
     #[error("{0}")]
     Failed(String),
+    #[error("{0}")]
+    SetupChanged(String),
 }
 
 impl From<std::io::Error> for OpError {
@@ -274,6 +283,7 @@ enum Body {
     NotFound(String),
     Invalid(String),
     Failed(String),
+    SetupChanged(String),
 }
 
 impl From<OpError> for Wire {
@@ -282,6 +292,7 @@ impl From<OpError> for Wire {
             OpError::NotFound(message) => Body::NotFound(message),
             OpError::Invalid(message) => Body::Invalid(message),
             OpError::Failed(message) => Body::Failed(message),
+            OpError::SetupChanged(message) => Body::SetupChanged(message),
         };
         Self { error }
     }
@@ -293,6 +304,7 @@ impl From<Wire> for OpError {
             Body::NotFound(message) => Self::NotFound(message),
             Body::Invalid(message) => Self::Invalid(message),
             Body::Failed(message) => Self::Failed(message),
+            Body::SetupChanged(message) => Self::SetupChanged(message),
         }
     }
 }

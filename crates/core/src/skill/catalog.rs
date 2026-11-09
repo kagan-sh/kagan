@@ -23,6 +23,7 @@ impl Loaded {
     }
 }
 
+#[derive(Default)]
 pub(crate) struct Catalog {
     pub(super) skills: BTreeMap<String, Loaded>,
     pub(super) errors: Vec<String>,
@@ -53,10 +54,7 @@ impl Catalog {
     }
 }
 pub(super) fn shared(plugins: Vec<kg_domain::Plugin>) -> Result<Catalog> {
-    let mut catalog = Catalog {
-        skills: BTreeMap::new(),
-        errors: Vec::new(),
-    };
+    let mut catalog = Catalog::default();
     for &(name, text) in BUNDLED {
         let (skill, body) = Skill::parse(name, text, SkillSource::Bundled, None)?;
         catalog.skills.insert(
@@ -73,20 +71,15 @@ pub(super) fn shared(plugins: Vec<kg_domain::Plugin>) -> Result<Catalog> {
     for plugin in plugins.into_iter().filter(|plugin| plugin.enabled) {
         let result = (|| -> Result<()> {
             let root = dunce::canonicalize(&plugin.root)?;
-            let manifest: serde_json::Value =
-                serde_json::from_str(&std::fs::read_to_string(root.join("kagan.json"))?)?;
-            if let Some(skills) = manifest.get("skills") {
-                let skills: Vec<PathBuf> = serde_json::from_value(skills.clone())?;
-                for path in skills {
-                    let path = dunce::canonicalize(root.join(path))?;
-                    if !path.starts_with(&root) {
-                        return Err(OpError::Invalid(format!(
-                            "plugin {} skill escapes its folder",
-                            plugin.id
-                        )));
-                    }
-                    paths.push(path);
+            for skill in &plugin.skills {
+                let path = dunce::canonicalize(root.join(skill))?;
+                if !path.starts_with(&root) {
+                    return Err(OpError::Invalid(format!(
+                        "plugin {} skill escapes its folder",
+                        plugin.id
+                    )));
                 }
+                paths.push(path);
             }
             Ok(())
         })();
@@ -171,7 +164,7 @@ impl Catalog {
                 .push(format!("duplicate {source:?} skill {name}; both dropped"));
         }
         for (name, loaded) in tier {
-            if matches!(source, SkillSource::User | SkillSource::Project) && name.starts_with("kg-")
+            if matches!(source, SkillSource::User | SkillSource::Project) && super::reserved(&name)
             {
                 self.errors.push(format!(
                     "{source:?} skill {name} uses the reserved kg- prefix; dropped"

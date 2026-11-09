@@ -1,5 +1,5 @@
 #[cfg(test)]
-pub(crate) mod read;
+pub(crate) mod tests;
 use std::future::Future;
 
 use gpui_kit::component::ActiveTheme as _;
@@ -22,8 +22,6 @@ const WINDOW: &str = "main";
 const LEFT_DEFAULT: f32 = 256.;
 pub(super) const LEFT_RANGE: (f32, f32) = (200., 420.);
 
-/// The narrowest the center may get. When the open sidebars would squeeze it below this, the
-/// right sidebar is hidden first, then the left one. The window cannot be made narrower.
 pub(super) const CENTER_MIN: f32 = 480.;
 pub(super) const RAIL_WIDTH: f32 = 48.;
 
@@ -67,12 +65,11 @@ pub(super) struct Panes {
     pub(super) right: bool,
 }
 
-/// The index of the right sidebar in the columns group. The left sidebar, when open, comes first.
 pub(super) fn right_index(left_open: bool) -> usize {
     if left_open { 2 } else { 1 }
 }
 
-fn key(name: &str) -> String {
+pub(super) fn key(name: &str) -> String {
     format!("{WINDOW}.{name}")
 }
 
@@ -103,14 +100,13 @@ fn saved_or<T>(read: Result<Option<T>, OpError>, fallback: T) -> T {
 
 pub(super) fn save(key: &str, value: impl Serialize, cx: &mut App) {
     if let Ok(value) = serde_json::to_value(value) {
-        Workspace::dispatch(
+        super::dispatch::logged(
             Op::Preference(PreferenceOp::Set {
                 key: key.into(),
                 value,
             }),
             cx,
-        )
-        .detach();
+        );
     }
 }
 
@@ -137,7 +133,7 @@ fn toggle(
     div().id(id).occlude().ui_observe_as(facts).child(button)
 }
 
-fn bar_button(
+pub(super) fn bar_button(
     id: &str,
     name: SharedString,
     icon: IconName,

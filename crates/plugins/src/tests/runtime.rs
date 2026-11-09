@@ -118,24 +118,13 @@ fn logs_rotate_and_reset_the_cursor() {
 }
 
 #[test]
-fn bounded_programs_capture_output_and_stop_on_timeout() {
+fn bounded_git_captures_its_output() {
     let mut command = Command::new("git");
     command.arg("--version");
     let (_keep, never) = async_channel::bounded::<()>(1);
-    let output = crate::source::run(command, Duration::from_secs(5), &never).unwrap();
-    assert!(output.status.success());
-    assert!(
-        String::from_utf8(output.stdout)
-            .unwrap()
-            .starts_with("git version")
-    );
-    let started = std::time::Instant::now();
-    let error = crate::source::run(sleep_command(), Duration::from_millis(30), &never).unwrap_err();
-    assert!(
-        matches!(error, crate::source::RunError::Timeout),
-        "{error:?}"
-    );
-    assert!(started.elapsed() < Duration::from_secs(5));
+    let output = source::run_git(command, Duration::from_secs(5), &never).unwrap();
+    assert_eq!(output.code, 0);
+    assert!(output.stdout.starts_with(b"git version"));
 }
 
 #[cfg(unix)]
@@ -153,13 +142,22 @@ fn a_stopped_git_step_ends_at_once_with_a_plain_message() {
     assert!(started.elapsed() < Duration::from_secs(10));
 }
 
+#[cfg(unix)]
+#[test]
+fn a_stop_sent_as_a_message_also_ends_a_git_step() {
+    let (stop, stopped) = async_channel::bounded::<()>(1);
+    stop.try_send(()).unwrap();
+    let error = source::run_git(sleep_command(), Duration::from_secs(30), &stopped).unwrap_err();
+    assert_eq!(error, OpError::Failed("the install was stopped".into()));
+}
+
 #[test]
 fn a_git_step_past_its_limit_says_so() {
     let (_keep, never) = async_channel::bounded::<()>(1);
     let error = source::run_git(sleep_command(), Duration::from_millis(30), &never).unwrap_err();
     assert_eq!(
         error,
-        OpError::Failed("git took longer than 2 minutes; check the host and try again".into())
+        OpError::Failed("git took too long; check the host and try again".into())
     );
 }
 
@@ -324,6 +322,7 @@ fn created_and_deleted_events_carry_the_project(cx: &mut TestAppContext) {
             environment: EnvironmentSpec::ProjectDefault,
             visibility: None,
             parent_thread_id: None,
+            quiet: false,
             lifecycle_owner_thread_id: None,
             metadata: None,
         })),

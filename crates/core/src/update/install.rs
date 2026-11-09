@@ -184,7 +184,7 @@ impl Target {
     }
 }
 
-/// A shell that waits for this process to end, then runs `then` with the arguments added later.
+// A shell that waits for this process to end, then runs `then` with the arguments added later.
 fn waiting(then: &str) -> Command {
     let mut command = Command::new("/bin/sh");
     command
@@ -221,6 +221,7 @@ fn cask(app: &Path, brew: &[PathBuf]) -> bool {
 }
 
 fn remove(path: &Path) {
+    // Best-effort cleanup: a leftover file is harmless and the install already finished.
     let _ = if path.is_dir() {
         std::fs::remove_dir_all(path)
     } else {

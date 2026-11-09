@@ -1,5 +1,5 @@
 Third-party notices for the kg binary.
-cargo-lock 32d3f9b3a1d72154b4465b1d9f2973753d9705c57bde60193d0bb1686eab7467
+cargo-lock 47af37747063e0fc88cdf695fa15ab1fc2ef996d69eb1e84a8895f5bb81e46ba
 
 kagan itself is Apache-2.0. See LICENSE.
 
@@ -243,7 +243,7 @@ PERFORMANCE OF THIS SOFTWARE.
 
 ================================================================================
 0BSD
-interprocess 2.4.7
+interprocess 2.4.8
 
 BSD Zero Clause License
 
@@ -1361,11 +1361,14 @@ quickjs-jit-stdlib 0.14.1
 Apache-2.0
 as-raw-xcb-connection 1.0.1
 cmov 0.5.4
-ctutils 0.4.7
+crc32c 0.6.9
+ctutils 0.4.8
 encoding_rs 0.8.44
 halfbrown 0.4.0
 kurbo 0.11.3
 kurbo 0.13.1
+multiversion-macros 0.8.1
+multiversion 0.8.1
 multiversion_no_op 1.0.0
 nohash-hasher 0.2.0
 polycool 0.4.0
@@ -1373,6 +1376,7 @@ raw-window-metal 1.1.0
 simd-json 0.18.1
 siphasher 1.0.4
 static_assertions 1.1.0
+target-features 0.1.6
 tinyvec 1.13.3
 utf8_iter 1.1.0
 utf_types 1.0.0
@@ -2338,6 +2342,7 @@ windows-strings 0.3.1
 windows-strings 0.4.2
 windows-strings 0.5.1
 windows-sys 0.48.0
+windows-sys 0.52.0
 windows-sys 0.59.0
 windows-sys 0.60.2
 windows-sys 0.61.2
@@ -3819,12 +3824,12 @@ clap 4.6.7
 clap_builder 4.6.7
 clap_derive 4.6.7
 clap_lex 1.1.1
-serde_spanned 1.1.2
-toml 1.1.8+spec-1.1.0
-toml_datetime 1.1.2+spec-1.1.0
-toml_edit 0.25.17+spec-1.1.0
+serde_spanned 1.1.3
+toml 1.2.1+spec-1.1.0
+toml_datetime 1.1.3+spec-1.1.0
+toml_edit 0.25.19+spec-1.1.0
 toml_parser 1.1.5+spec-1.1.0
-toml_writer 1.1.3+spec-1.1.0
+toml_writer 1.2.0+spec-1.1.0
 
                                  Apache License
                            Version 2.0, January 2004
@@ -4241,7 +4246,7 @@ cosmic-text 0.19.0
 Apache-2.0
 bit_field 0.10.3
 bytecount 0.6.9
-notify-rust 4.18.2
+notify-rust 4.19.0
 unicode-general-category 1.1.0
 winapi 0.3.9
 wio 0.2.2
@@ -4458,7 +4463,7 @@ anstyle-wincon 3.0.11
 anstyle 1.0.14
 cobs 0.3.0
 colorchoice 1.0.5
-crc32fast 1.5.3
+crc32fast 1.5.4
 fallible-iterator 0.3.0
 fallible-streaming-iterator 0.1.9
 float-ord 0.3.2
@@ -7998,7 +8003,7 @@ limitations under the License.
 
 ================================================================================
 Apache-2.0
-notify-types 2.2.0
+notify-types 2.3.0
 
                               Apache License
                         Version 2.0, January 2004
@@ -8836,13 +8841,13 @@ addr2line 0.27.1
 ahash 0.8.12
 ambient-authority 0.0.2
 arbitrary 1.5.0
-arc-swap 1.9.3
+arc-swap 1.9.4
 arrayvec 0.7.8
 async-channel 2.5.0
-async-executor 1.14.0
+async-executor 1.14.1
 async-fs 2.2.0
 async-io 2.6.0
-async-lock 3.4.2
+async-lock 3.5.0
 async-net 2.0.0
 async-process 2.5.0
 async-signal 0.2.14
@@ -8860,7 +8865,7 @@ bstr 1.13.1
 bumpalo 3.20.3
 cap-primitives 4.0.3
 cap-std 4.0.3
-cc 1.10.0
+cc 1.11.1
 cfg-if 1.0.5
 concurrent-queue 2.5.0
 const-random-macro 0.1.16
@@ -8888,8 +8893,8 @@ event-listener 5.4.2
 fastrand 2.5.0
 filetime 0.2.29
 find-msvc-tools 0.1.15
-fixedbitset 0.5.7
-flate2 1.1.10
+fixedbitset 0.5.9
+flate2 1.1.11
 fnv 1.0.7
 form_urlencoded 1.2.2
 fraction 0.17.0
@@ -8930,8 +8935,7 @@ lock_api 0.4.14
 log 0.4.35
 markup5ever 0.12.1
 markup5ever_rcdom 0.3.0
-metal 0.33.0
-mime 0.3.17
+mime 0.3.18
 num-bigint-dig 0.9.1
 num-bigint 0.4.8
 num-complex 0.4.6
@@ -8987,10 +8991,10 @@ security-framework-sys 2.17.0
 security-framework 3.7.0
 shellexpand 3.1.2
 signal-hook-registry 1.4.8
-signal-hook 0.4.5
+signal-hook 0.4.6
 similar 2.7.0
 simplecss 0.2.2
-smallvec 1.16.4
+smallvec 1.16.5
 smol 2.0.2
 smol_str 0.3.7
 socket2 0.6.5
@@ -8998,7 +9002,7 @@ stable_deref_trait 1.2.1
 string_cache 0.8.9
 string_cache_codegen 0.5.4
 svgtypes 0.15.3
-svgtypes 0.16.1
+svgtypes 0.16.2
 swash 0.2.10
 syn 1.0.109
 system-configuration-sys 0.6.0
@@ -9020,7 +9024,7 @@ unicode-segmentation 1.13.3
 unicode-vo 0.1.0
 unicode-width 0.2.3
 url 2.5.8
-uuid 1.29.0
+uuid 1.29.2
 version_check 0.9.5
 wait-timeout 0.2.1
 waker-fn 1.2.0
@@ -10073,7 +10077,7 @@ limitations under the License.
 Apache-2.0
 aes-gcm 0.11.1
 aes 0.8.4
-aes 0.9.3
+aes 0.9.4
 base16ct 1.0.0
 base64ct 1.8.3
 block-buffer 0.10.4
@@ -10090,7 +10094,7 @@ const-oid 0.10.2
 cpubits 0.1.1
 cpufeatures 0.2.17
 cpufeatures 0.3.1
-crypto-bigint 0.7.10
+crypto-bigint 0.7.11
 crypto-common 0.1.7
 crypto-common 0.2.2
 cshake 0.2.1
@@ -10105,7 +10109,7 @@ hmac 0.12.1
 hmac 0.13.0
 hybrid-array 0.4.15
 inout 0.1.4
-inout 0.2.5
+inout 0.2.6
 keccak 0.2.2
 md-5 0.10.6
 md-5 0.11.0
@@ -10115,7 +10119,7 @@ p521 0.14.0
 pbkdf2 0.12.2
 pbkdf2 0.13.0
 pem-rfc7468 1.0.0
-pkcs1 0.8.0-rc.5
+pkcs1 0.8.0
 pkcs8 0.11.0
 poly1305 0.9.1
 polyval 0.7.3
@@ -11785,7 +11789,7 @@ limitations under the License.
 
 ================================================================================
 Apache-2.0
-unicode-script 0.5.8
+unicode-script 0.5.9
 
                               Apache License
                         Version 2.0, January 2004
@@ -12407,7 +12411,7 @@ limitations under the License.
 ================================================================================
 Apache-2.0
 miow 0.6.1
-yazi 0.2.1
+yazi 0.2.2
 zeno 0.3.3
 
                               Apache License
@@ -14300,11 +14304,11 @@ limitations under the License.
 
 ================================================================================
 Apache-2.0
-gpui-fast-windows 0.1.12
-gpui-kit 0.8.1
-gpui-fps 0.8.1
-gpui-kit-assets 0.8.1
-gpui-webview 0.8.1
+gpui-fast-windows 0.1.14
+gpui-kit 0.9.1
+gpui-fps 0.9.1
+gpui-kit-assets 0.9.1
+gpui-webview 0.9.1
 kg-core 0.1.0
 kg-domain 0.1.0
 kg 0.1.0
@@ -14325,7 +14329,6 @@ arraydeque 0.5.1
 async-trait 0.1.92
 cranelift-bitset 0.116.1
 cranelift-isle 0.116.1
-crc32c 0.6.8
 dirs-sys 0.4.1
 dirs-sys 0.5.0
 dirs 5.0.1
@@ -14339,19 +14342,19 @@ etagere 0.2.15
 fdeflate 0.3.7
 field-offset 0.3.6
 gl_generator 0.14.0
-gpui-fast-apple 0.1.12
-gpui-fast-linux 0.1.12
-gpui-fast-macos 0.1.12
-gpui-fast-macros 0.1.12
-gpui-fast-platform 0.1.12
-gpui-fast-wgpu 0.1.12
-gpui-fast 0.1.12
+gpui-fast-apple 0.1.14
+gpui-fast-linux 0.1.14
+gpui-fast-macos 0.1.14
+gpui-fast-macros 0.1.14
+gpui-fast-platform 0.1.14
+gpui-fast-wgpu 0.1.14
+gpui-fast 0.1.14
 granit-parser 1.3.0
 half 2.7.1
 image-webp 0.2.4
 image 0.25.10
 inventory 0.3.25
-itoa 1.0.18
+itoa 1.0.19
 khronos_api 3.1.0
 libc 0.2.191
 linebender_resource_handle 0.1.1
@@ -14385,6 +14388,7 @@ objc2-io-kit 0.3.2
 objc2-metal 0.3.2
 objc2-quartz-core 0.3.2
 objc2-security 0.3.2
+objc2-uniform-type-identifiers 0.3.2
 objc2-user-notifications 0.3.2
 objc2-web-kit 0.3.2
 paste 1.0.15
@@ -14424,13 +14428,13 @@ serde_json 1.0.154
 serde_repr 0.1.21
 serde_urlencoded 0.7.1
 serde_yaml 0.9.34+deprecated
-serial2 0.2.38
+serial2 0.2.39
 shlex 2.0.1
 simdutf8 0.1.5
 spirv 0.4.0+sdk-1.4.341.0
 svg_fmt 0.4.5
 syn 2.0.119
-syn 3.0.9
+syn 3.0.10
 sync_wrapper 1.0.2
 tauri-winrt-notification 0.8.1
 thiserror-impl 1.0.69
@@ -14538,24 +14542,24 @@ limitations under the License.
 
 ================================================================================
 Apache-2.0
-gpui-pre-apple 0.3.10
-gpui-pre-collections 0.3.10
-gpui-pre-derive-refineable 0.3.10
-gpui-pre-http-client 0.3.10
-gpui-pre-linux 0.3.10
-gpui-pre-macos 0.3.10
-gpui-pre-macros 0.3.10
-gpui-pre-platform 0.3.10
-gpui-pre-refineable 0.3.10
-gpui-pre-scheduler 0.3.10
-gpui-pre-shared-string 0.3.10
-gpui-pre-sum-tree 0.3.10
-gpui-pre-util 0.3.10
-gpui-pre-wgpu 0.3.10
-gpui-pre-windows 0.3.10
-gpui-pre-ztracing-macro 0.3.10
-gpui-pre-ztracing 0.3.10
-gpui-pre 0.3.10
+gpui-pre-apple 0.3.12
+gpui-pre-collections 0.3.12
+gpui-pre-derive-refineable 0.3.12
+gpui-pre-http-client 0.3.12
+gpui-pre-linux 0.3.12
+gpui-pre-macos 0.3.12
+gpui-pre-macros 0.3.12
+gpui-pre-platform 0.3.12
+gpui-pre-refineable 0.3.12
+gpui-pre-scheduler 0.3.12
+gpui-pre-shared-string 0.3.12
+gpui-pre-sum-tree 0.3.12
+gpui-pre-util 0.3.12
+gpui-pre-wgpu 0.3.12
+gpui-pre-windows 0.3.12
+gpui-pre-ztracing-macro 0.3.12
+gpui-pre-ztracing 0.3.12
+gpui-pre 0.3.12
 
 Copyright 2022 - 2025 Zed Industries, Inc.
 
@@ -14783,10 +14787,10 @@ Apache License
 
 ================================================================================
 Apache-2.0
-gpui-base 0.8.1
-gpui-component-macros 0.8.1
-gpui-component 0.8.1
-gpui-shell 0.8.1
+gpui-base 0.9.1
+gpui-component-macros 0.9.1
+gpui-component 0.9.1
+gpui-shell 0.9.1
 
 Copyright 2024 - 2026 Longbridge <https://longbridge.com>
 
@@ -15359,7 +15363,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ================================================================================
 BSD-3-Clause
 alloc-no-stdlib 3.0.0
-brotli-decompressor 6.2.0
+brotli-decompressor 6.3.1
 brotli 9.1.1
 
 Copyright (c) 2016 Dropbox, Inc.
@@ -15583,7 +15587,7 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ================================================================================
 BSD-3-Clause
 alloc-stdlib 0.3.0
-exr 1.74.2
+exr 1.74.3
 sha1_smol 1.0.1
 
 Copyright (c) <year> <owner>. 
@@ -15633,7 +15637,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ================================================================================
 CC0-1.0
-notify 8.2.1
+notify 8.2.2
 
 Creative Commons CC0 1.0 Universal
 
@@ -17233,8 +17237,8 @@ THE SOFTWARE.
 
 ================================================================================
 MIT
-libsqlite3-sys 0.38.2
-rusqlite 0.40.2
+libsqlite3-sys 0.39.1
+rusqlite 0.41.1
 
 Copyright (c) 2014 The rusqlite developers
 
@@ -18015,8 +18019,11 @@ SOFTWARE.
 ================================================================================
 MIT
 zbus 5.19.0
+zbus 6.2.1
 zbus_macros 5.19.0
+zbus_macros 6.2.1
 zbus_names 4.3.5
+zbus_utils 6.1.0
 zbus_xml 5.2.1
 zvariant 5.15.1
 zvariant_derive 5.15.1
@@ -18103,6 +18110,43 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
+
+
+================================================================================
+MIT
+zruntime 0.2.2
+
+Copyright (c) 2026 Zeeshan Ali Khan & zruntime contributors
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+The broadcast channel (`src/broadcast.rs`), its tests (`src/tests/broadcast.rs`) and its
+benchmark (`benches/broadcast.rs`) come from the async-broadcast crate
+(https://github.com/smol-rs/async-broadcast), under the license above and this notice:
+
+Copyright (c) 2020 Yoshua Wuyts, Stjepan Glavina & Zeeshan Ali Khan
 
 
 ================================================================================
@@ -18709,33 +18753,6 @@ SOFTWARE.
 
 ================================================================================
 MIT
-pulp 0.22.3
-
-MIT License
-
-Copyright (c) 2021 sarah
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-
-================================================================================
-MIT
 postage 0.5.0
 
 MIT License
@@ -18813,33 +18830,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-================================================================================
-MIT
-reborrow 0.5.5
-
-MIT License
-
-Copyright (c) 2022 sarah
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
 
 ================================================================================
 MIT
@@ -18980,14 +18970,12 @@ SOFTWARE.
 MIT
 base64-simd 0.8.0
 block2 0.6.2
-block 0.1.6
 dpi 0.1.2
 harfrust 0.5.2
 hex-simd 0.8.0
 jsonschema-regex 0.60.2
 jsonschema-value 0.60.2
 libm 0.2.16
-malloc_buf 0.0.6
 minisign-verify 0.3.0
 minisign 0.10.0
 objc-sys 0.3.5
@@ -18997,7 +18985,6 @@ objc2-foundation 0.2.2
 objc2-foundation 0.3.2
 objc2 0.5.3
 objc2 0.6.5
-pulp-wasm-simd-flag 0.1.1
 quickjs-jit-core 0.14.1
 quickjs-jit-macro 0.14.1
 quickjs-jit-runtime 0.14.1
@@ -19052,33 +19039,6 @@ LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE A
 EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-
-================================================================================
-MIT
-objc 0.2.7
-
-MIT License
-
-Copyright (c) Steven Sheldon
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
 
 
 ================================================================================
@@ -19282,7 +19242,7 @@ DEALINGS IN THE SOFTWARE.
 MIT
 winnow 0.5.40
 winnow 0.7.15
-winnow 1.0.4
+winnow 1.0.5
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -19724,32 +19684,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-
-================================================================================
-MIT
-raw-cpuid 11.6.0
-
-The MIT License (MIT)
-
-Copyright (c) 2015 Gerd Zellweger
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
 
 ================================================================================
 MIT
@@ -21298,11 +21232,15 @@ authorization of the copyright holder.
 Unicode-3.0
 icu_collections 2.4.0
 icu_locale_core 2.4.0
+icu_locale_fallback 2.4.0
+icu_locale_fallback_data 2.4.0
 icu_normalizer 2.4.0
 icu_normalizer_data 2.4.0
 icu_properties 2.4.0
 icu_properties_data 2.4.0
 icu_provider 2.4.0
+icu_segmenter 2.4.0
+icu_segmenter_data 2.4.0
 litemap 0.8.3
 potential_utf 0.1.6
 tinystr 0.8.5

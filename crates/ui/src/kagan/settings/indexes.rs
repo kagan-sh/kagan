@@ -1,7 +1,3 @@
-//! The Indexes card: the lists of plugins a team publishes. Add or remove an index, search them,
-//! and install a plugin by name. Install is the same operation as `kg plugin install <name>`, so
-//! the person still approves its powers.
-
 use gpui_kit::component::button::Button;
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::{Disableable as _, Sizable as _, h_flex};
@@ -114,7 +110,6 @@ pub(super) fn group(kagan: &Kagan, cx: &mut Context<Kagan>) -> Group {
     row_group("indexes", "Indexes", rows)
 }
 
-/// The last search's plugins, each with Install, and a line for each index it could not read.
 fn found_rows(kagan: &Kagan, cx: &mut Context<Kagan>) -> Vec<Row> {
     let Some((listings, warnings)) = &kagan.plugins.found else {
         return Vec::new();

@@ -1,5 +1,3 @@
-//! The scrolling settings page. Esc or Close returns to the window.
-
 use crate::theme::{SpaceStep, TypeScale as _, control_height, radius_md, space};
 
 mod indexes;
@@ -18,8 +16,8 @@ use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, Hsla, InteractiveElement as _,
-    IntoElement, KeyBinding, ParentElement as _, StatefulInteractiveElement as _, Styled as _,
-    Subscription, Window, actions, div, px, rems,
+    IntoElement, KeyBinding, ParentElement as _, ScrollHandle, StatefulInteractiveElement as _,
+    Styled as _, Subscription, Window, actions, div, px, rems,
 };
 use kg_core::{Approval, Workspace};
 use kg_domain::PluginId;
@@ -41,12 +39,13 @@ actions!(
 
 pub(super) const CONTEXT: &str = "KaganSettings";
 
-/// The context of a control the keyboard can reach: a menu entry, a theme card.
 pub(super) const ITEM: &str = "SettingsItem";
+// Items in order: header, Questions, Appearance, Agents, Updates, then the shortcut groups.
+pub(super) const QUESTIONS_ITEM: usize = 1;
+const FIRST_SHORTCUT_ITEM: usize = 5;
 
 const CLOSE: &str = "SettingsClose";
 
-/// Esc goes back. Enter and Space activate the focused control, and the arrows move focus.
 pub(crate) fn bindings() -> Vec<KeyBinding> {
     vec![
         KeyBinding::new("escape", CloseSettings, Some(CONTEXT)),
@@ -68,8 +67,15 @@ pub(super) struct Prefs {
     pub(super) notify: bool,
     pub(super) plugin_status: bool,
     pub(super) update_check: bool,
-    /// Whether the stored preferences have been read once.
     pub(super) loaded: bool,
+}
+
+#[derive(Default)]
+pub(super) struct SettingsState {
+    pub(super) scroll: ScrollHandle,
+    pub(super) approvals: usize,
+    pub(super) drafts: Drafts,
+    pub(super) keyboard: Recorder,
 }
 
 pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
@@ -112,20 +118,20 @@ impl Kagan {
         self.dismiss_thread_menus(cx);
         window.focus(&self.focus, cx);
         self.sync_panels_keeping_widths(window, cx);
-        plugins::sync(&mut self.settings_drafts, window, cx);
+        plugins::sync(&mut self.settings.drafts, window, cx);
         for (id, _) in pages::plugin_entries(cx) {
             self.mount_settings_view(&id, window, cx);
         }
     }
 
-    /// Opens Settings on the Installed page, where plugins are managed.
     pub(super) fn manage_plugins(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open_settings(window, cx);
         let kagan = cx.entity();
         window.defer(cx, move |_, cx| {
             kagan.update(cx, |this, cx| {
-                this.settings_scroll
-                    .scroll_to_top_of_item(5 + keyboard::count(cx));
+                this.settings
+                    .scroll
+                    .scroll_to_top_of_item(FIRST_SHORTCUT_ITEM + keyboard::count(cx));
                 cx.notify();
             });
         });
@@ -153,10 +159,10 @@ impl Kagan {
     }
 
     pub(super) fn reconcile_plugin_views(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        plugins::sync(&mut self.settings_drafts, window, cx);
+        plugins::sync(&mut self.settings.drafts, window, cx);
         let entries = pages::plugin_entries(cx);
         let host = PluginHost::try_global(cx);
-        self.settings_views.retain(|id, (generation, _)| {
+        self.slots.settings_views.retain(|id, (generation, _)| {
             entries.iter().any(|(entry, _)| entry == id)
                 && host
                     .as_ref()
@@ -170,8 +176,6 @@ impl Kagan {
         cx.notify();
     }
 
-    /// Mounts a plugin's own settings view, when it declares one. A view is mounted again when
-    /// its plugin has loaded since, and dropped when the plugin declares none.
     fn mount_settings_view(&mut self, id: &PluginId, window: &mut Window, cx: &mut Context<Self>) {
         let Some(host) = PluginHost::try_global(cx) else {
             return;
@@ -182,11 +186,12 @@ impl Kagan {
                 .and_then(|(_, ui)| ui.settings.as_deref().map(str::to_owned))
         });
         let Some(export) = export else {
-            self.settings_views.remove(id);
+            self.slots.settings_views.remove(id);
             return;
         };
         let generation = host.read(cx).generation(id);
         let mounted = self
+            .slots
             .settings_views
             .get(id)
             .is_some_and(|(have, _)| Some(*have) == generation);
@@ -198,7 +203,9 @@ impl Kagan {
         }) {
             Ok(view) => {
                 let generation = host.read(cx).generation(id).unwrap_or_default();
-                self.settings_views.insert(id.clone(), (generation, view));
+                self.slots
+                    .settings_views
+                    .insert(id.clone(), (generation, view));
             }
             Err(error) => {
                 self.note = Some(
@@ -213,7 +220,6 @@ impl Kagan {
         }
     }
 
-    /// Reads the sidebar layout and the preferences the window shows, at start and on each change.
     pub(super) fn load_settings(&mut self, cx: &mut Context<Self>) {
         Self::load_layout(cx);
         self.load_prefs(cx);
@@ -221,12 +227,11 @@ impl Kagan {
         self.load_terminal_size(cx);
     }
 
-    /// Reads the preferences the page shows, so a change from `kg` shows at once.
     pub(super) fn load_prefs(&self, cx: &mut Context<Self>) {
-        let agent = super::layout::read::<bool>("agent-integration", cx);
-        let notify = super::layout::read::<bool>("notify", cx);
-        let plugin_status = super::layout::read::<bool>("plugin-status", cx);
-        let update = super::layout::read::<bool>("update-check", cx);
+        let agent = super::layout::read::<bool>(kg_domain::prefs::AGENT_INTEGRATION, cx);
+        let notify = super::layout::read::<bool>(kg_domain::prefs::NOTIFY, cx);
+        let plugin_status = super::layout::read::<bool>(kg_domain::prefs::PLUGIN_STATUS, cx);
+        let update = super::layout::read::<bool>(kg_domain::prefs::UPDATE_CHECK, cx);
         let prefs = self.prefs.clone();
         cx.spawn(async move |_, cx| {
             let on = agent.await.ok().flatten().unwrap_or(true);
@@ -273,6 +278,7 @@ pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) 
         .into_iter()
         .filter_map(|(id, name)| {
             kagan
+                .slots
                 .settings_views
                 .get(&id)
                 .map(|(_, view)| (id, name, view))
@@ -327,12 +333,12 @@ pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) 
                 .items_center()
                 .p(px(space(SpaceStep::Xl, cx)))
                 .gap(px(space(SpaceStep::Xl, cx)))
-                .track_scroll(&kagan.settings_scroll)
+                .track_scroll(&kagan.settings.scroll)
                 .overflow_y_scroll()
                 .children(items.map(|item| div().w_full().max_w(rems(39.5)).child(item)))
                 .ui_container(),
         )
-        .vertical_scrollbar(&kagan.settings_scroll)
+        .vertical_scrollbar(&kagan.settings.scroll)
         .into_any_element()
 }
 
@@ -371,8 +377,8 @@ fn group_block(group: row::Group, cx: &App) -> AnyElement {
     let card = cx.theme().group_box;
     let muted = cx.theme().muted_foreground;
     let rows = group.rows.len();
-    let shortcut = group.key.starts_with("shortcuts-");
-    let first_shortcut = group.key == "shortcuts-window";
+    let shortcut = group.style != row::GroupStyle::Plain;
+    let first_shortcut = group.style == row::GroupStyle::FirstShortcuts;
     let title = group.title.clone();
     let block =
         v_flex()
@@ -429,8 +435,6 @@ fn group_block(group: row::Group, cx: &App) -> AnyElement {
     }
 }
 
-/// One row of a card. A wide control, such as the theme cards, sits under its title instead of
-/// beside it, so the title keeps its width.
 fn row_element(
     row: row::Row,
     last: bool,
@@ -439,15 +443,9 @@ fn row_element(
     shortcut: bool,
     cx: &App,
 ) -> AnyElement {
-    let show_text = row.id != "setting-row-install-form";
+    let show_text = !row.bare;
     let noted = !row.note.is_empty();
-    let alias = if row.id == "setting-row-theme" {
-        Some("theme")
-    } else if row.id == "setting-row-mode" {
-        Some("mode")
-    } else {
-        None
-    };
+    let alias = row.alias;
     let note = row
         .note_content
         .unwrap_or_else(|| row.note.clone().into_any_element());

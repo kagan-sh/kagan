@@ -10,7 +10,7 @@ use kg_plugins::{MountError, PluginHost};
 use serde_json::Value;
 
 use super::right::plugin_body;
-use super::{ClosePage, Declared, Expect, Focus, Slot};
+use super::{ClosePage, Declared, Expect, Focus, Slot, body_id};
 use crate::kagan::Kagan;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::{Facts, Located, locate};
@@ -30,17 +30,9 @@ pub(in crate::kagan) fn mount(
             Err(error) => (None, Some(mount_error(&error))),
         };
         return Slot {
-            id: declared.surface_id(),
-            plugin: declared.plugin.clone(),
-            contribution: declared.id.clone(),
-            title: declared.title.clone(),
-            details,
-            view: None,
-            _snapshot_watch: None,
             web,
             error,
-            generation: host.read(cx).generation(&declared.plugin).unwrap_or(0),
-            focus: cx.focus_handle(),
+            ..Slot::new(declared, details, cx)
         };
     }
     let mounted = host.update(cx, |host, cx| {
@@ -58,17 +50,10 @@ pub(in crate::kagan) fn mount(
         )
     });
     Slot {
-        id: declared.surface_id(),
-        plugin: declared.plugin.clone(),
-        contribution: declared.id.clone(),
-        title: declared.title.clone(),
-        details,
         view,
         _snapshot_watch: snapshot_watch,
-        web: None,
         error,
-        generation: host.read(cx).generation(&declared.plugin).unwrap_or(0),
-        focus: cx.focus_handle(),
+        ..Slot::new(declared, details, cx)
     }
 }
 
@@ -78,7 +63,7 @@ pub(super) fn matching_slot<'a>(
     right: &'a [Slot],
     declared: &Declared,
 ) -> Option<&'a Slot> {
-    let same = |slot: &&Slot| slot.contribution == declared.id && slot.plugin == declared.plugin;
+    let same = |slot: &&Slot| slot.is(declared);
     match declared.placement {
         SurfacePlacement::Left => tool.filter(same),
         SurfacePlacement::Center => page.filter(same),
@@ -93,10 +78,6 @@ pub(super) fn focus_for(placement: SurfacePlacement, open: bool) -> Focus {
         (SurfacePlacement::Left, _) => Focus::Tool,
         (SurfacePlacement::Right, _) => Focus::Right,
     }
-}
-
-pub(super) fn body_id(id: &str) -> String {
-    format!("{id}-body")
 }
 
 pub(super) fn expect_of(
@@ -140,7 +121,7 @@ pub(in crate::kagan) fn tool_region(
     window: &mut Window,
     cx: &mut Context<Kagan>,
 ) -> Option<AnyElement> {
-    kagan.tool.as_ref().map(|slot| {
+    kagan.slots.tool.as_ref().map(|slot| {
         div()
             .id("surface-tool")
             .child(

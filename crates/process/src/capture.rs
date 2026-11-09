@@ -10,11 +10,12 @@ pub struct Captured {
     pub stderr: String,
 }
 
-/// Runs `command` in an owned process tree, killing it after `limit`.
+/// Runs `command` in an owned process tree, killing it after `limit` or when `stop` returns true.
 ///
 /// # Errors
-/// When the program cannot start, output cannot be read, or it runs past `limit`.
-pub fn capture_with_limit(command: Command, limit: Duration) -> io::Result<Captured> {
+/// When the program cannot start, output cannot be read, it runs past `limit` (`TimedOut`), or
+/// `stop` returns true first (`Interrupted`).
+pub fn capture(command: Command, limit: Duration, stop: impl Fn() -> bool) -> io::Result<Captured> {
     use io::{Read as _, Seek as _};
 
     let mut stdout = tempfile::tempfile()?;
@@ -26,7 +27,7 @@ pub fn capture_with_limit(command: Command, limit: Duration) -> io::Result<Captu
         stderr.try_clone()?.into(),
     )?;
     let status = process
-        .wait_within(limit)?
+        .wait_within(limit, &stop)?
         .ok_or_else(|| io::Error::new(io::ErrorKind::TimedOut, "the program ran too long"))?;
     process.kill();
     stdout.rewind()?;
@@ -47,7 +48,7 @@ mod tests {
     use std::process::Command;
     use std::time::Duration;
 
-    use super::capture_with_limit;
+    use super::capture;
 
     #[cfg(unix)]
     fn shell(script: &str) -> Command {
@@ -79,7 +80,7 @@ mod tests {
         let command = shell("printf out; printf err >&2; exit 3");
         #[cfg(windows)]
         let command = shell("echo out & echo err 1>&2 & exit /b 3");
-        let output = capture_with_limit(command, Duration::from_secs(5)).unwrap();
+        let output = capture(command, Duration::from_secs(5), || false).unwrap();
         assert_eq!(output.code, 3);
         #[cfg(unix)]
         {
@@ -94,20 +95,25 @@ mod tests {
     }
 
     #[test]
-    fn capture_with_limit_returns_a_fast_command() {
+    fn capture_returns_a_fast_command() {
         #[cfg(unix)]
         let command = shell("printf fast");
         #[cfg(windows)]
         let command = shell("echo fast");
-        let output = capture_with_limit(command, Duration::from_secs(5)).unwrap();
+        let output = capture(command, Duration::from_secs(5), || false).unwrap();
         assert_eq!(output.code, 0);
         assert!(String::from_utf8_lossy(&output.stdout).contains("fast"));
     }
 
     #[test]
-    fn capture_with_limit_reports_a_timeout_and_kills_the_command() {
-        let error =
-            capture_with_limit(slow(), Duration::from_millis(50)).expect_err("slow command");
+    fn capture_reports_a_timeout_and_kills_the_command() {
+        let error = capture(slow(), Duration::from_millis(50), || false).expect_err("slow command");
         assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+    }
+
+    #[test]
+    fn capture_reports_a_stop_as_interrupted() {
+        let error = capture(slow(), Duration::from_secs(5), || true).expect_err("stopped");
+        assert_eq!(error.kind(), std::io::ErrorKind::Interrupted);
     }
 }

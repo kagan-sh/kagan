@@ -5,15 +5,17 @@ mod details;
 mod extra;
 mod halt;
 mod interaction;
+pub(crate) mod notify;
 mod read;
 mod run;
 mod search;
 mod terminal;
 
 pub(crate) use agent::{note_with, read_instructions};
-pub(crate) use extra::{Extras, end as end_extras};
+
+pub(crate) use extra::Extras;
 pub(crate) use halt::{retire, stop};
-pub(crate) use interaction::{answer, insert_reply, raise, withdraw};
+pub(crate) use interaction::{answer, clear_pending, raise, withdraw};
 pub(crate) use read::{wait, wait_event};
 pub(crate) use run::resolve_program;
 pub(crate) use run::{PreparedRun, commit as commit_run, prepare as prepare_run};
@@ -24,7 +26,7 @@ pub(crate) use terminal::exited;
 pub(crate) use terminal::remember;
 pub(crate) use terminal::start as start_terminal;
 pub(crate) use terminal::start_again;
-pub(crate) use terminal::{Shown, release_ended};
+pub(crate) use terminal::{Run, Shown};
 
 use gpui_kit::{AsyncApp, Entity, WeakEntity};
 use kg_domain::{OpError, OpResult, ThreadId, ThreadOp};
@@ -34,7 +36,6 @@ use crate::workspace::{closed, missing, time};
 use crate::{Requester, Thread, Workspace};
 
 use archive::{archive, delete, unarchive};
-use read::read_thread;
 
 pub(crate) async fn dispatch_thread(
     this: &WeakEntity<Workspace>,
@@ -44,7 +45,12 @@ pub(crate) async fn dispatch_thread(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     match op {
-        ThreadOp::Run(_) => Err(OpError::Invalid("run must use Workspace::dispatch".into())),
+        ThreadOp::Run(_)
+        | ThreadOp::Wait { .. }
+        | ThreadOp::WaitEvent { .. }
+        | ThreadOp::Search { .. } => Err(OpError::Invalid(
+            "this operation must use Workspace::dispatch".into(),
+        )),
         ThreadOp::Stop { id } => {
             let thread = thread(this, &id, cx)?;
             stop(this, &thread, cx).await?;
@@ -58,22 +64,7 @@ pub(crate) async fn dispatch_thread(
         | ThreadOp::Copy { .. }
         | ThreadOp::Paste { .. }
         | ThreadOp::Report { .. }) => terminal::run(this, op, cx),
-        ThreadOp::Send { id, text } => {
-            let typed = terminal::submit(this, &id, &text, cx).await?;
-            crate::Workspace::events(
-                this,
-                id,
-                vec![kg_domain::EventKind::Message {
-                    role: kg_domain::Role::User,
-                    text: typed,
-                    message_id: None,
-                    attachments: Vec::new(),
-                }],
-                cx,
-            )
-            .await?;
-            Ok(OpResult::Done)
-        }
+        ThreadOp::Send { id, text } => terminal::send(this, id, &text, cx).await,
         ThreadOp::Terminal(op) => extra::run(this, op, cx).await,
         ThreadOp::Details { id } => details::read(database, id, cx).await,
         ThreadOp::Links { id } => extra::links(this, id, cx).await,
@@ -112,24 +103,32 @@ pub(crate) async fn dispatch_thread(
             database
                 .call(move |store| store.set_thread_metadata(&id, &plugin_id, &value))
                 .await?;
-            this.update(cx, |_, cx| {
-                cx.emit(crate::WorkspaceEvent::Changed);
-                cx.notify();
-            })
-            .map_err(closed)?;
+            crate::workspace::changed(this, cx)?;
             Ok(OpResult::Done)
         }
         ThreadOp::StartAgain { id } => terminal::start_again(this, id, cx).await,
-        op @ (ThreadOp::Get { .. }
-        | ThreadOp::List { .. }
-        | ThreadOp::Metadata { .. }
-        | ThreadOp::Events { .. }
-        | ThreadOp::Tools { .. }
-        | ThreadOp::CallTool { .. }
-        | ThreadOp::Interactions { .. }
-        | ThreadOp::Wait { .. }
-        | ThreadOp::WaitEvent { .. }
-        | ThreadOp::Search { .. }) => read_thread(this, database, op, cx).await,
+        ThreadOp::Get { id } => read::get(this, &id, cx),
+        ThreadOp::List {
+            project_id,
+            archived,
+            limit,
+            before,
+        } => read::list(database, project_id, archived, limit, before).await,
+        ThreadOp::Metadata { id, plugin_id } => {
+            read::metadata(this, database, id, plugin_id, cx).await
+        }
+        ThreadOp::Events {
+            id,
+            after_seq,
+            limit,
+            order,
+        } => read::events(this, database, id, after_seq, limit, order, cx).await,
+        ThreadOp::Tools { id } => {
+            let entity = thread(this, &id, cx)?;
+            crate::skill::tools(this, &entity, cx).await
+        }
+        ThreadOp::CallTool { id, name, input } => read::call_tool(this, id, name, input, cx).await,
+        ThreadOp::Interactions { id } => read::interactions(this, database, id, cx).await,
     }
 }
 

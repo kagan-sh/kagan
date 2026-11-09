@@ -1,4 +1,6 @@
-use gpui_kit::{Action, App, Context, Entity, FocusHandle, KeyBinding, Window, actions};
+use std::collections::BTreeMap;
+
+use gpui_kit::{App, Context, Entity, FocusHandle, KeyBinding, Subscription, Window, actions};
 use gpui_shell::ScriptView;
 use kg_domain::{OpError, OpResult, PluginId, SurfacePlacement};
 use kg_plugins::{Placement, PluginHost};
@@ -6,14 +8,28 @@ use serde_json::Value;
 
 use super::Kagan;
 use super::right::{self};
+use super::{overlays, replace};
 
 actions!(surface, [ClosePage]);
 
-#[derive(Clone, PartialEq, Eq, Action)]
-#[action(namespace = surface, no_json)]
+#[derive(Clone)]
 pub(super) struct OpenSurface {
-    pub plugin: String,
+    pub plugin: PluginId,
     pub id: String,
+}
+
+#[derive(Default)]
+pub(super) struct SlotState {
+    pub(super) tool: Option<Slot>,
+    pub(super) replaced: replace::Replaced,
+    pub(super) overlays: Vec<overlays::Overlay>,
+    pub(super) settings_views: BTreeMap<PluginId, (u64, Entity<ScriptView>)>,
+    pub(super) surface_check: Option<Check>,
+    pub(super) surface_epoch: u64,
+    // While a surface open or close waits for its frame, sidebar and collapse preferences stay as they were.
+    pub(super) surface_hold: bool,
+    pub(super) plugin_watch: Option<Subscription>,
+    pub(super) host_events: Vec<Subscription>,
 }
 
 #[derive(Clone)]
@@ -31,10 +47,35 @@ pub(super) struct Slot {
     _snapshot_watch: Option<std::rc::Rc<gpui_kit::Subscription>>,
 }
 
+impl Slot {
+    pub(super) fn is(&self, declared: &Declared) -> bool {
+        self.plugin == declared.plugin && self.contribution == declared.id
+    }
+
+    pub(super) fn new(declared: &Declared, details: bool, cx: &mut App) -> Self {
+        Self {
+            id: declared.surface_id(),
+            plugin: declared.plugin.clone(),
+            contribution: declared.id.clone(),
+            title: declared.title.clone(),
+            details,
+            view: None,
+            _snapshot_watch: None,
+            web: None,
+            error: None,
+            generation: PluginHost::global(cx)
+                .read(cx)
+                .generation(&declared.plugin)
+                .unwrap_or(0),
+            focus: cx.focus_handle(),
+        }
+    }
+}
+
 struct Hold {
     tool: Option<Slot>,
-    right_slots: Vec<Slot>,
-    right_tab: Option<right::Tab>,
+    slots: Vec<Slot>,
+    tab: Option<right::Tab>,
     layout: super::layout::Layout,
 }
 
@@ -135,7 +176,7 @@ pub(super) fn row_id(plugin: &PluginId, id: &str) -> String {
 }
 
 pub(super) fn nav_items(cx: &App) -> Vec<NavItem> {
-    destinations(cx)
+    panels(cx)
         .into_iter()
         .filter_map(|item| {
             let placement = item.placement;
@@ -168,10 +209,6 @@ fn panels(cx: &App) -> Vec<Declared> {
         .collect()
 }
 
-fn destinations(cx: &App) -> Vec<Declared> {
-    panels(cx)
-}
-
 fn drawn(placement: Placement) -> Option<SurfacePlacement> {
     match placement {
         Placement::Left => Some(SurfacePlacement::Left),
@@ -184,15 +221,17 @@ fn drawn(placement: Placement) -> Option<SurfacePlacement> {
 fn reuse(slot: &Slot, declared: &Declared, cx: &App) -> bool {
     let generation =
         PluginHost::try_global(cx).and_then(|host| host.read(cx).generation(&declared.plugin));
-    slot.plugin == declared.plugin
-        && slot.contribution == declared.id
-        && generation == Some(slot.generation)
+    slot.is(declared) && generation == Some(slot.generation)
 }
 
 fn find_declared(plugin: &PluginId, id: &str, cx: &App) -> Option<Declared> {
     panels(cx)
         .into_iter()
         .find(|item| item.plugin == *plugin && item.id == id)
+}
+
+pub(super) fn body_id(id: &str) -> String {
+    format!("{id}-body")
 }
 
 mod commit;

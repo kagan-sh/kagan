@@ -1,7 +1,6 @@
 use gpui_kit::Modifiers;
 use kg_core::{Motion, Mouse};
 
-/// A button a program can hear about. The wheel's steps are buttons too.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Button {
     Left,
@@ -18,7 +17,6 @@ pub(crate) enum Phase {
     Move,
 }
 
-/// A cell on the view, counted from the top left.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Spot {
     pub(crate) column: u16,
@@ -37,9 +35,9 @@ impl Button {
     }
 }
 
-/// The bytes that report a mouse event to a program that asked for them. `button` is the one
-/// pressed, or held while a move happens. `None` means the program does not want this event, or
-/// the legacy form cannot hold the cell.
+// The bytes that report a mouse event to a program that asked for them. `button` is the one
+// pressed, or held while a move happens. `None` means the program does not want this event, or
+// the legacy form cannot hold the cell.
 pub(crate) fn report(
     button: Option<Button>,
     phase: Phase,

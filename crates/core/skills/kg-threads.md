@@ -21,7 +21,7 @@ Keep the work here when it is one task, the person is talking to you, or you are
 
 Start another thread when the work is a separate helper, reviewer, or parallel worker, or when the person asked for one. A thread is one program in one folder. The child does not inherit this conversation. Give it a prompt that names the outcome, the constraints, what to check, and what to report back.
 
-A success does not notify the parent. A failed or interrupted child appends a notice on its parent. A stop the person asked for stays quiet.
+A parent is told by a line typed into its terminal when the child's turn ends, the child asks the person a question, its program exits, or it fails. The line names the child and says `kg thread screen <id>` to read it. A stop the person asked for stays quiet. Pass `--quiet` to `kg thread run` to turn the line off for that child. `kg thread wait` is still there when this thread has to block until the child's reply ends. A wait that returns the child's end replaces its line, so the parent is not told twice.
 
 Report the new thread id. Do not build a URL for it.
 

@@ -17,7 +17,6 @@ const MAX_LIST_NAME_BYTES: usize = 1024 * 1024;
 
 pub(crate) const DECLARATIONS: &str = "export function read(path: string, options: { offset: number; maxBytes: number }): Promise<{ text: string; next: number; size: number }>;\nexport function list(dir: string): Promise<{ path: string; size: number; modifiedMs: number }[]>;";
 
-/// Why a `kagan/files` call failed.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error("{path}: {source}", path = .path.display())]
@@ -63,7 +62,7 @@ pub(crate) fn module(
     let id = id.clone();
     let secrets = secrets.clone();
     let held = Arc::new(open_roots(roots, |error| {
-        let _ = secrets.log(&id, crate::log::Level::Error, &error.to_string());
+        secrets.note(&id, crate::log::Level::Error, &error.to_string());
     }));
     let list_roots = Arc::clone(&held);
     module
@@ -83,18 +82,9 @@ pub(crate) fn module(
 fn spawn(
     work: impl FnOnce() -> Result<serde_json::Value, Error> + Send + 'static,
 ) -> Result<impl std::future::Future<Output = Result<HostValue, HostError>> + Send, HostError> {
-    let (sender, receiver) = async_channel::bounded(1);
-    with_app(|cx| {
-        cx.background_spawn(async move {
-            let _ = sender.send(work()).await;
-        })
-        .detach();
-    })?;
+    let read = with_app(|cx| cx.background_spawn(async move { work() }))?;
     Ok(async move {
-        receiver
-            .recv()
-            .await
-            .map_err(|_| HostError::new("the read was dropped"))?
+        read.await
             .map(to_host)
             .map_err(|error| HostError::new(error.to_string()))
     })
@@ -519,9 +509,7 @@ mod tests {
             .unwrap();
         });
         assert!(roots.is_empty());
-        let text =
-            std::fs::read_to_string(data.path().join("plugins").join(&id.0).join("logs.jsonl"))
-                .unwrap();
+        let text = std::fs::read_to_string(kg_core::plugin_log_file(data.path(), &id)).unwrap();
         assert!(text.contains(&reason.to_string()), "{text}");
     }
 }

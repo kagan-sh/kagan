@@ -1,7 +1,7 @@
 use super::ask_form;
 use super::{
-    AddProject, CONTEXT, DismissLeftOverlay, DismissRightOverlay, Kagan, NewTheme, OpenThemes,
-    Shown, commands, settings, web_panel,
+    AddProject, CONTEXT, CloseActivityLog, DismissLeftOverlay, DismissRightOverlay, Kagan,
+    NewTheme, OpenThemes, Shown, commands, settings, web_panel,
 };
 use super::{archived, layout, overlays, right, screen, surface, update};
 use crate::theme::{SpaceStep, TypeScale as _, space};
@@ -19,14 +19,14 @@ use gpui_kit::{
 use kg_domain::{Op, ThemeOp};
 
 impl Kagan {
-    /// Plugin views that are in this frame, so a native page can hide with its panel.
     pub(super) fn shown_plugin_views(&self, cx: &App) -> Vec<gpui_kit::EntityId> {
         let mut ids = Vec::new();
-        let full = self.right_fill == right::Fill::Window && self.panes.right;
+        let full = self.right.fill == right::Fill::Window && self.panes.right;
         if self.right_drawn()
             && let Some(right::Tab::Plugin(tab)) = right::selected_tab(self, cx)
             && let Some(view) = self
-                .right_slots
+                .right
+                .slots
                 .iter()
                 .find(|slot| slot.id == tab)
                 .and_then(|slot| slot.view.as_ref())
@@ -35,10 +35,10 @@ impl Kagan {
         }
         let left = !full
             && (self.panes.left || (self.screen.drawn(screen::Side::Left) && !self.in_settings()));
-        if left && let Some(view) = self.tool.as_ref().and_then(|slot| slot.view.as_ref()) {
+        if left && let Some(view) = self.slots.tool.as_ref().and_then(|slot| slot.view.as_ref()) {
             ids.push(view.entity_id());
         }
-        if left && let Some(view) = self.replaced.mounted_view(kg_domain::Slot::Threads) {
+        if left && let Some(view) = self.slots.replaced.mounted_view(kg_domain::Slot::Threads) {
             ids.push(view.entity_id());
         }
         if !full {
@@ -49,12 +49,12 @@ impl Kagan {
                     }
                 }
                 screen::Center::Review(_) => {
-                    if let Some(view) = self.replaced.mounted_view(kg_domain::Slot::Review) {
+                    if let Some(view) = self.slots.replaced.mounted_view(kg_domain::Slot::Review) {
                         ids.push(view.entity_id());
                     }
                 }
                 screen::Center::Settings => {
-                    for (_, view) in self.settings_views.values() {
+                    for (_, view) in self.slots.settings_views.values() {
                         ids.push(view.entity_id());
                     }
                 }
@@ -69,11 +69,10 @@ impl Render for Kagan {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let main = self.center_body(window, cx);
         self.fit_to_window(window, cx);
-        #[cfg(desktop)]
         self.sync_browser(cx);
         crate::components::sync_pages(&self.shown_plugin_views(cx), cx);
         web_panel::sync(self, cx);
-        let columns = if self.right_fill == right::Fill::Window && self.panes.right {
+        let columns = if self.right.fill == right::Fill::Window && self.panes.right {
             div()
                 .id("right-full-column")
                 .size_full()
@@ -108,6 +107,7 @@ impl Render for Kagan {
             .on_action(cx.listener(Self::restore_thread))
             .on_action(cx.listener(Self::toggle_sidebar))
             .on_action(cx.listener(Self::toggle_right))
+            .on_action(cx.listener(|this, _: &CloseActivityLog, _, cx| this.close_log(cx)))
             .on_action(cx.listener(Self::bigger))
             .on_action(cx.listener(Self::smaller))
             .on_action(cx.listener(Self::actual_size))
@@ -156,6 +156,7 @@ fn window_body(
         .flex_1()
         .min_h_0()
         .relative()
+        .overflow_hidden()
         .child(kagan.rail_side(window, cx))
         .child(div().flex_1().min_w_0().h_full().child(columns))
         .children(kagan.left_layer(window, cx))
@@ -255,14 +256,12 @@ impl Kagan {
                 self.render_thread(view, cx).into_any_element()
             }
             screen::Center::Work(Shown::Start(project)) => {
-                self.render_start(project, cx).into_any_element()
+                self.render_start(project, window, cx).into_any_element()
             }
             screen::Center::Work(Shown::Nothing) => Self::render_welcome(cx).into_any_element(),
         }
     }
 }
-/// The key context of the window: its settings context, and what is on screen, so a plugin's
-/// command bound to `thread` or `project` fires only while that is shown.
 fn window_context(kagan: &Kagan, cx: &App) -> String {
     let mut context = if kagan.in_settings() {
         format!("{CONTEXT} {}", settings::CONTEXT)
@@ -270,13 +269,14 @@ fn window_context(kagan: &Kagan, cx: &App) -> String {
         CONTEXT.to_owned()
     };
     if kagan.shown_thread(cx).is_some() {
-        context.push_str(" thread=true");
+        context = format!("{context} {}=true", crate::plugins::THREAD);
     }
     if kagan.shown_project(cx).is_some() {
-        context.push_str(" project=true");
+        context = format!("{context} {}=true", crate::plugins::PROJECT);
     }
     if kagan.screen.drawn(screen::Side::Right) {
-        context.push_str(" RightOverlay");
+        context.push(' ');
+        context.push_str(layout::RIGHT_OVERLAY);
     }
     context
 }

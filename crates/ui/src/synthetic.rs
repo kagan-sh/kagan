@@ -34,8 +34,6 @@ pub(crate) fn with_active<R>(run: impl FnOnce() -> R) -> R {
     run()
 }
 
-/// True when `kg ui` input is driving this click. The caller then does nothing, and the
-/// command answers that only a person can do it.
 pub(crate) fn refuse_for_person() -> bool {
     let synthetic = ARMED.get() || DEPTH.get() > 0;
     if synthetic {

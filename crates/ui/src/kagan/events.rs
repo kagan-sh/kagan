@@ -1,14 +1,11 @@
 use super::screen::{Activation, Side};
 use super::sidebar::{Event, Shows};
 use super::surface::ClosePage;
-use super::{
-    ArchiveThread, FocusSidebar, Kagan, OpenSettings, RenameThread, SaveDiagnostics, TogglePinned,
-};
+use super::{FocusSidebar, Kagan, OpenSettings};
 use kg_domain::ProjectOp;
 
-use gpui_kit::{App, AppContext as _, Context, Window};
-use kg_core::Workspace;
-use kg_domain::{Op, PluginId, ProjectId, SurfaceOp};
+use gpui_kit::{App, Context, Window};
+use kg_domain::{Op, ProjectId, SurfaceOp};
 
 impl Kagan {
     pub(super) fn sidebar_event(
@@ -32,20 +29,19 @@ impl Kagan {
             }
             Event::Archive(id) => {
                 self.select(id.clone(), window, cx);
-                self.archive(&ArchiveThread, window, cx);
+                self.archive_thread(id, window, cx);
             }
             Event::ThreadActions(id) => {
-                // Selecting closes the narrow overlay, which holds this row, so keep it open.
-                let overlay = self.screen.drawn(Side::Left);
-                self.select(id.clone(), window, cx);
-                if overlay {
-                    self.open_overlay(Side::Left, Activation::Focus, window, cx);
-                }
-                if let Some(shown) = self.shown_open_thread(cx) {
-                    self.actions_menu = None;
-                    self.sidebar
-                        .update(cx, |sidebar, cx| sidebar.open_row_menu(&shown, window, cx));
-                }
+                let Some(thread) = self
+                    .record(id, cx)
+                    .filter(|thread| thread.archived_at.is_none())
+                    .cloned()
+                else {
+                    return;
+                };
+                self.title.menu = None;
+                self.sidebar
+                    .update(cx, |sidebar, cx| sidebar.open_row_menu(&thread, window, cx));
             }
             Event::RemoveProject(id) => self.remove_project(id.clone(), cx),
             Event::Reorder { id, before } => {
@@ -53,7 +49,7 @@ impl Kagan {
             }
             Event::OpenSurface(open) => {
                 let op = SurfaceOp::Open {
-                    plugin: PluginId(open.plugin.clone()),
+                    plugin: open.plugin.clone(),
                     id: open.id.clone(),
                 };
                 self.run_surface(op, window, cx);
@@ -63,40 +59,25 @@ impl Kagan {
             Event::ManagePlugins => self.manage_plugins(window, cx),
             Event::NewPlugin => self.add_plugin(window, cx),
             Event::Settings => self.toggle_settings(&OpenSettings, window, cx),
-            Event::RowPin(id)
-            | Event::RowArchive(id)
-            | Event::RowRename(id)
-            | Event::RowSaveDiagnostics(id)
-                if self.shown_thread(cx).as_ref() != Some(id) => {}
-            Event::RowPin(_) => self.toggle_pinned(&TogglePinned, window, cx),
-            Event::RowArchive(_) => self.archive(&ArchiveThread, window, cx),
-            Event::RowRename(_) => self.begin_rename(&RenameThread, window, cx),
-            Event::RowSaveDiagnostics(_) => {
-                Kagan::save_diagnostics(self, &SaveDiagnostics, window, cx);
-            }
+            Event::RowPick(id, pick) => self.thread_pick(id, *pick, window, cx),
             Event::RowMenuClosed => self.close_thread_actions(window, cx),
             Event::Archived => self.show_archived(window, cx),
         }
     }
 
     fn remove_project(&mut self, project: ProjectId, cx: &mut Context<Self>) {
-        let task = Workspace::dispatch(Op::Project(ProjectOp::Remove { id: project }), cx);
-        let window = self.window;
-        cx.spawn(async move |this, cx| {
-            let result = task.await;
-            _ = cx.update_window(window, |_, window, cx| {
-                _ = this.update(cx, |this, cx| match result {
-                    Ok(kg_domain::OpResult::Warnings(warnings)) => {
-                        this.refresh(window, cx);
-                        this.note =
-                            Some(format!("Project removed. {}", warnings.join("; ")).into());
-                        cx.notify();
-                    }
-                    result => this.finish(result, "remove project", window, cx),
-                });
-            });
-        })
-        .detach();
+        self.run_then(
+            Op::Project(ProjectOp::Remove { id: project }),
+            cx,
+            |this, result, window, cx| match result {
+                Ok(kg_domain::OpResult::Warnings(warnings)) => {
+                    this.refresh(window, cx);
+                    this.note = Some(format!("Project removed. {}", warnings.join("; ")).into());
+                    cx.notify();
+                }
+                result => this.finish(result, "remove project", window, cx),
+            },
+        );
     }
 
     fn reorder_project(
@@ -105,17 +86,11 @@ impl Kagan {
         before: Option<ProjectId>,
         cx: &mut Context<Self>,
     ) {
-        let task = Workspace::dispatch(Op::Project(ProjectOp::Reorder { id, before }), cx);
-        let window = self.window;
-        cx.spawn(async move |this, cx| {
-            let result = task.await;
-            _ = cx.update_window(window, |_, window, cx| {
-                _ = this.update(cx, |this, cx| {
-                    this.finish(result, "move project", window, cx);
-                });
-            });
-        })
-        .detach();
+        self.run(
+            Op::Project(ProjectOp::Reorder { id, before }),
+            "move project",
+            cx,
+        );
     }
 
     pub(super) fn shows(&self, cx: &App) -> Shows {
@@ -125,10 +100,11 @@ impl Kagan {
                 .screen
                 .page()
                 .map(|slot| (slot.plugin.clone(), slot.contribution.clone())),
-            tool: self.tool.as_ref().map(|slot| slot.plugin.clone()),
+            tool: self.slots.tool.as_ref().map(|slot| slot.plugin.clone()),
             archived: self.shows_archived(),
             in_settings: self.in_settings(),
             waiting: self
+                .slots
                 .replaced
                 .chosen(kg_domain::Slot::Threads)
                 .map(|_| self.waiting_count(cx))
@@ -142,9 +118,9 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.tool.is_some() || self.in_settings() {
+        if self.slots.tool.is_some() || self.in_settings() {
             self.run_surface(SurfaceOp::Threads, window, cx);
-            if self.tool.is_some() {
+            if self.slots.tool.is_some() {
                 return;
             }
             let kagan = cx.entity();
@@ -172,8 +148,12 @@ impl Kagan {
             Some("archived".to_owned())
         } else {
             self.shown_thread(cx)
-                .map(|id| format!("thread-{id}"))
-                .or_else(|| sidebar.chosen().map(|project| format!("project-{project}")))
+                .map(|id| format!("{}{id}", super::sidebar::THREAD_ROW))
+                .or_else(|| {
+                    sidebar
+                        .chosen()
+                        .map(|project| format!("{}{project}", super::sidebar::PROJECT_ROW))
+                })
         };
         sidebar.row_or_first(candidate)
     }

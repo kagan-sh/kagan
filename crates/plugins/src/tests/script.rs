@@ -102,3 +102,10 @@ fn check_names_the_script_that_imports_a_missing_export() {
     assert!(error.contains("ui/panel.js"), "{error}");
     assert!(error.contains("onSettingsChanged"), "{error}");
 }
+
+#[test]
+fn check_applies_a_state_constructor_called_without_a_receiver() {
+    let error =
+        checked("import { TextareaState } from \"gpui-component\";\nTextareaState({ rows: 4 });");
+    assert!(error.contains("not an object"), "{error}");
+}

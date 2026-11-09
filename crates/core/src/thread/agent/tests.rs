@@ -1,3 +1,4 @@
+use super::files::toml;
 use super::*;
 
 #[test]
@@ -60,4 +61,41 @@ fn read_instructions_caps_on_a_char_boundary() {
     assert_eq!(text, "é".repeat(2047));
     assert!(!text.contains('€'));
     assert!(!text.contains("TAIL"));
+}
+
+fn line(items: &[&str]) -> Vec<OsString> {
+    items.iter().map(OsString::from).collect()
+}
+
+#[test]
+fn a_value_flag_hides_the_word_after_it_from_the_subcommand_check() {
+    assert!(!subcommand(&Known::Pi, &line(&["--model", "update"])));
+    assert!(subcommand(&Known::Pi, &line(&["--model=x", "update"])));
+}
+
+#[test]
+fn a_flag_that_takes_no_value_leaves_the_next_word_a_subcommand() {
+    assert!(subcommand(&Known::Pi, &line(&["--verbose", "update"])));
+    assert!(!subcommand(&Known::Pi, &line(&["--verbose", "build"])));
+}
+
+#[test]
+fn a_word_after_a_double_dash_is_the_subcommand_word() {
+    assert!(subcommand(&Known::Kimi, &line(&["--", "doctor"])));
+    assert!(subcommand(&Known::Cursor, &line(&["--", "login"])));
+    assert!(!subcommand(&Known::Cursor, &line(&["--", "fix the bug"])));
+}
+
+#[test]
+fn every_agent_kind_has_a_name_in_the_picker_list() {
+    for (_, kind) in AGENTS {
+        let listed = AGENTS.iter().any(|(name, other)| {
+            std::mem::discriminant(other) == std::mem::discriminant(kind)
+                && kg_domain::KNOWN_PROGRAMS
+                    .iter()
+                    .any(|(command, _)| command == name)
+        });
+        assert!(listed, "an agent kind has no name in KNOWN_PROGRAMS");
+    }
+    assert!(known(Path::new("agent")).is_some());
 }

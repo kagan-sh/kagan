@@ -45,26 +45,12 @@ pub(crate) async fn execute(
             project_id,
             environment_id,
         } => crate::dispatch::guide::status(this, thread_id, project_id, environment_id, cx).await,
-        Op::Open => {
-            this.update(cx, |_, cx| cx.emit(crate::WorkspaceEvent::Open))
-                .map_err(closed)?;
-            Ok(OpResult::Done)
-        }
-        Op::Settings(SettingsOp::Open) => {
-            this.update(cx, |_, cx| cx.emit(crate::WorkspaceEvent::Settings))
-                .map_err(closed)?;
-            Ok(OpResult::Done)
-        }
+        Op::Open => announce(this, crate::WorkspaceEvent::Open, cx),
+        Op::Settings(SettingsOp::Open) => announce(this, crate::WorkspaceEvent::Settings, cx),
         Op::Settings(SettingsOp::Plugins) => {
-            this.update(cx, |_, cx| cx.emit(crate::WorkspaceEvent::SettingsPlugins))
-                .map_err(closed)?;
-            Ok(OpResult::Done)
+            announce(this, crate::WorkspaceEvent::SettingsPlugins, cx)
         }
-        Op::Window(op) => {
-            this.update(cx, |_, cx| cx.emit(crate::WorkspaceEvent::Window(op)))
-                .map_err(closed)?;
-            Ok(OpResult::Done)
-        }
+        Op::Window(op) => announce(this, crate::WorkspaceEvent::Window(op), cx),
         Op::Sidebar => database.call(read_sidebar).await,
         Op::Project(op) => project_op(this, &database, op, requester, cx).await,
         Op::Environment(EnvironmentOp::Get { id }) => {
@@ -83,6 +69,9 @@ pub(crate) async fn execute(
         Op::Environment(EnvironmentOp::Branches { project_id }) => {
             crate::host::git::branches(&database, project_id, cx).await
         }
+        Op::Environment(EnvironmentOp::Setup { project_id, rev }) => {
+            crate::host::git::setup(&database, project_id, rev, cx).await
+        }
         Op::Program(ProgramOp::List) => crate::host::program::list(this, &database, true, cx).await,
         Op::Program(ProgramOp::Discover) => {
             crate::host::program::list(this, &database, false, cx).await
@@ -96,19 +85,22 @@ pub(crate) async fn execute(
         Op::Theme(op) => theme(this, database, op, cx).await,
         Op::Keymap(op) => keymap(this, database, op, cx).await,
         Op::Preference(op) => preference(this, database, op, cx).await,
-        Op::Ui(op) => crate::dispatch::ui::run(this, op, cx).await,
-        Op::Browser(op) => crate::browser::run(this, op, cx).await,
+        Op::Ui(op) => crate::dispatch::ui::drive(this, crate::UiJob::Op(op), cx).await,
+        Op::Browser(op) => crate::dispatch::ui::drive(this, crate::UiJob::Browser(op), cx).await,
         Op::Surface(op) => crate::dispatch::ui::drive(this, crate::UiJob::Surface(op), cx).await,
-        Op::Diff(op) => crate::diff::run(database, op, cx).await,
+        Op::Diff(op) => {
+            let cache = this
+                .update(cx, |workspace, _| workspace.diffs.clone())
+                .map_err(closed)?;
+            crate::diff::run(database, cache, op, cx).await
+        }
         Op::Preview(op) => crate::preview::run(database, op, cx).await,
         Op::Diagnostics(op) => crate::dispatch::diagnostics::export(this, op, cx).await,
         Op::Update(op) => crate::update::run(&database, op, cx).await,
         Op::Thread(op) => dispatch_thread(this, database, op, requester, cx).await,
         Op::Section(op) => section(this, database, op, cx).await,
         Op::Plugin(kg_domain::PluginOp::Start) => {
-            this.update(cx, |_, cx| cx.emit(crate::WorkspaceEvent::NewPlugin))
-                .map_err(closed)?;
-            Ok(OpResult::Done)
+            announce(this, crate::WorkspaceEvent::NewPlugin, cx)
         }
         Op::Plugin(op) => forward(this, PluginRequest::Plugin(op, requester), cx).await,
     }
@@ -157,6 +149,15 @@ async fn project_op(
     }
 }
 
+fn announce(
+    this: &WeakEntity<Workspace>,
+    event: crate::WorkspaceEvent,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    this.update(cx, |_, cx| cx.emit(event)).map_err(closed)?;
+    Ok(OpResult::Done)
+}
+
 /// Whether `op` runs on the one-at-a-time request queue.
 ///
 /// A serialized handler must finish without waiting for a person or for another request:
@@ -175,7 +176,11 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Sidebar
         | Op::Project(ProjectOp::List | ProjectOp::Get { .. } | ProjectOp::Remove { .. })
         | Op::Program(ProgramOp::List | ProgramOp::Discover)
-        | Op::Environment(EnvironmentOp::Get { .. } | EnvironmentOp::Branches { .. })
+        | Op::Environment(
+            EnvironmentOp::Get { .. }
+            | EnvironmentOp::Branches { .. }
+            | EnvironmentOp::Setup { .. },
+        )
         | Op::Theme(ThemeOp::Get | ThemeOp::New { .. } | ThemeOp::Folder)
         | Op::Keymap(KeymapOp::Get)
         | Op::Preference(PreferenceOp::Get { .. })
@@ -255,6 +260,7 @@ pub(crate) async fn forward(
             "agent tool {name} is unavailable; no plugin host is loaded"
         ))),
         (None, PluginRequest::Instruct { .. }) => Ok(OpResult::Output(Some(String::new()))),
+        (None, PluginRequest::Logs) => Ok(OpResult::PluginLogs(Vec::new())),
         (None, PluginRequest::Keymap(KeymapOp::Get)) => {
             Ok(OpResult::Setting(serde_json::json!({})))
         }

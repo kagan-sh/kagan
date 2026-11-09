@@ -5,7 +5,7 @@ use kg_domain::{Conversation, ThreadId};
 
 use crate::Workspace;
 
-use super::{codex_kept, codex_matches, home, kimi_kept, kimi_matches, kimi_root};
+use super::{codex_kept, codex_matches, kimi_kept, kimi_matches};
 
 pub(super) fn note_when_written(
     this: &WeakEntity<Workspace>,
@@ -42,8 +42,12 @@ pub(super) fn note_when_written(
             else {
                 continue;
             };
-            let Ok((codex_home, kimi_home)) = this.update(cx, |workspace, _| {
-                (workspace.codex_home.clone(), workspace.kimi_home.clone())
+            let Ok(root) = this.update(cx, |workspace, _| {
+                if kimi {
+                    workspace.home("KIMI_CODE_HOME", ".kimi-code")
+                } else {
+                    workspace.home("CODEX_HOME", ".codex")
+                }
             }) else {
                 return;
             };
@@ -51,7 +55,7 @@ pub(super) fn note_when_written(
             let look = cx
                 .background_spawn(async move {
                     if kimi {
-                        let Some(root) = kimi_root(kimi_home) else {
+                        let Some(root) = root else {
                             return Look::Missing;
                         };
                         if stored.is_some_and(|conversation| kimi_kept(&root, conversation)) {
@@ -59,7 +63,7 @@ pub(super) fn note_when_written(
                         }
                         Look::Files(kimi_matches(&root, &folder, since))
                     } else {
-                        let Some(root) = codex_home.or_else(|| home("CODEX_HOME", ".codex")) else {
+                        let Some(root) = root else {
                             return Look::Missing;
                         };
                         let sessions = root.join("sessions");
@@ -109,12 +113,10 @@ enum Look {
 
 fn running(this: &WeakEntity<Workspace>, id: &ThreadId, cx: &mut AsyncApp) -> bool {
     this.update(cx, |workspace, cx| {
-        workspace.threads.get(id).is_some_and(|thread| {
-            matches!(
-                thread.read(cx).record.status,
-                kg_domain::ThreadStatus::Active | kg_domain::ThreadStatus::Starting
-            )
-        })
+        workspace
+            .threads
+            .get(id)
+            .is_some_and(|thread| thread.read(cx).record.status.live())
     })
     .unwrap_or(false)
 }
