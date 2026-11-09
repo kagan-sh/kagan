@@ -34,7 +34,7 @@ impl Kagan {
         v_flex()
             .w_full()
             .gap_1()
-            .items_start()
+            .items_stretch()
             .child(control(
                 "branch-from",
                 Facts {
