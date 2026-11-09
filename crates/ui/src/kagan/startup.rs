@@ -235,19 +235,7 @@ fn listen(
             this.start(window, cx);
         }),
         cx.subscribe_in(picker, window, |this, _, _: &picker::Close, window, cx| {
-            if this.close_branch_menu(window, cx) {
-                cx.notify();
-                return;
-            }
-            if let Some(thread) = this.start.take_reuse_thread() {
-                this.select(thread, window, cx);
-                cx.notify();
-                return;
-            }
-            this.show_work(Shown::Nothing, window, cx);
-            window.focus(&this.focus, cx);
-            this.tell_host(window, cx);
-            cx.notify();
+            this.leave_start(window, cx);
         }),
         cx.observe_in(picker, window, |this, picker, window, cx| {
             if this.start_on_load.is_some() && picker.read(cx).command(cx).is_ok() {

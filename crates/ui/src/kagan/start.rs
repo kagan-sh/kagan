@@ -1,7 +1,7 @@
 use gpui_kit::component::input::InputState;
 use gpui_kit::{
     AnyWindowHandle, App, AppContext as _, AsyncApp, Context, Entity, FocusHandle, Subscription,
-    Task, WeakEntity, Window,
+    Task, WeakEntity, Window, actions,
 };
 use kg_core::Workspace;
 use kg_domain::{
@@ -11,7 +11,7 @@ use kg_domain::{
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use super::Kagan;
+use super::{Kagan, Shown};
 
 pub(super) const PLUGIN_PROMPT: &str = "Build a kagan plugin that ";
 const NO_AGENT: &str = "No agent is installed, so kagan cannot start a plugin thread. Install Claude Code or Codex, then try again.";
@@ -237,7 +237,28 @@ mod setup;
 
 pub(super) use menu::{BRANCH_CONTEXT, CloseBranchMenu};
 
+pub(crate) const START_CONTEXT: &str = "NewThreadScreen";
+
+actions!(kagan, [LeaveStart]);
+
 impl Kagan {
+    // Escape and Cancel both leave the screen here. A branch menu open over it closes first.
+    pub(super) fn leave_start(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.close_branch_menu(window, cx) {
+            cx.notify();
+            return;
+        }
+        if let Some(thread) = self.start.take_reuse_thread() {
+            self.select(thread, window, cx);
+            cx.notify();
+            return;
+        }
+        self.show_work(Shown::Nothing, window, cx);
+        window.focus(&self.focus, cx);
+        self.tell_host(window, cx);
+        cx.notify();
+    }
+
     pub(super) fn remember_worktree_root(&mut self, cx: &App) {
         let root = Workspace::global(cx).read(cx).data_dir().join("worktrees");
         self.start.worktree_root = folder::shown_path(&root);

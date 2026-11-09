@@ -10,7 +10,7 @@ use kg_core::Workspace;
 use kg_domain::{Op, OpResult, ProjectId, ProjectKind, ProjectOp};
 use std::path::PathBuf;
 
-use super::project_kind;
+use super::{LeaveStart, START_CONTEXT, project_kind};
 use crate::kagan::Kagan;
 use crate::kagan::controls::{control, note};
 use crate::kagan::picker::Close;
@@ -38,6 +38,10 @@ impl Kagan {
             .id("start-form")
             .size_full()
             .items_center()
+            .key_context(START_CONTEXT)
+            .on_action(cx.listener(|this, _: &LeaveStart, window, cx| {
+                this.leave_start(window, cx);
+            }))
             .child(
                 v_flex()
                     .w_full()

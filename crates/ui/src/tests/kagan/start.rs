@@ -238,6 +238,31 @@ fn escape_in_new_thread_here_goes_back_to_the_ended_thread(cx: &mut TestAppConte
     wait_until(cx, |cx| shown(cx, &kagan) == Some(ended.clone()));
 }
 
+#[gpui_kit::test]
+fn escape_leaves_the_new_thread_screen_from_a_choice(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let (_repo, project) = committed_repo(cx, data.path());
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "folder-project"));
+    for _ in 0..40 {
+        if choice_focused(cx, window, "folder-project-button") == Some(true) {
+            break;
+        }
+        cx.update_window(window, |_, window, cx| window.focus_next(cx))
+            .unwrap();
+        cx.run_until_parked();
+    }
+    assert_eq!(
+        choice_focused(cx, window, "folder-project-button"),
+        Some(true)
+    );
+    press_key(cx, window, "escape");
+    wait_until(cx, |cx| {
+        cx.update(|cx| screen_read::start_project(kagan.read(cx)))
+            .is_none()
+    });
+}
+
 /// Whether the element named `name` is checked, and whether it has focus.
 pub(in crate::tests) fn choice_checked(
     cx: &mut TestAppContext,
