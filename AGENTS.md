@@ -26,7 +26,7 @@ At every step, make the best decision that will elevate all three: the user expe
 ## Crates
 
 - `kg` is the binary (CLI, app start, socket, MCP); `kg-ui` the GPUI window; `kg-plugins` the plugin host; `kg-core` the `Workspace`, entities, and thread lifecycle; `kg-store` SQLite; `kg-domain` ids, records, and `Op`; `kg-terminal` the terminal; `kg-process` the process tree.
-- Only `kg-core` may have a normal dependency on `kg-store`; `kg-domain` must not reach GPUI. `scripts/crate-boundaries.sh` enforces the exact graph in `docs/architecture.md`.
+- Only `kg-core` may have a normal dependency on `kg-store`; `kg-domain` must not reach GPUI. `scripts/crate-boundaries.sh` enforces the graph in its `EXPECTED` table. The diagram in `docs/architecture.md` is a picture of that table, and review checks that they match.
 - Every user-visible feature is an `Op` dispatched by `Workspace::dispatch`; the CLI is derived from `Op`.
 - SQLite migrations are the `MIGRATIONS` array in `crates/store/src/store.rs`: append a new entry and never edit an applied one; `user_version` is the count applied.
 
@@ -58,7 +58,7 @@ Where a skill disagrees with this file, this file wins. Known overrides:
 - Errors: `Result` and `?`; `thiserror` in library crates, `anyhow` only in the `kg` binary. No `unwrap`/`expect` outside tests unless the invariant is stated in the message.
 - States are enums, matched exhaustively. Parse at the boundary, pass typed values inside.
 - Borrow before you clone; iterators before index loops; `impl Trait` in argument position for single-use generics.
-- Visibility is the smallest that compiles: `pub(crate)` by default, `pub` only for the crate's interface in `docs/architecture.md`.
+- Visibility is the smallest that compiles: `pub(crate)` by default. The workspace lint `unreachable_pub` (in the root `Cargo.toml`) warns on a `pub` item no other crate can reach.
 
 ## GPUI
 
