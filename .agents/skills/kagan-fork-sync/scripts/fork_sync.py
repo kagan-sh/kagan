@@ -72,11 +72,17 @@ def save_state(work, state):
     (work / "state.json").write_text(json.dumps(state, indent=2) + "\n")
 
 
+MARK = "kagan-fork-sync"
+
+
 def clone(work, org, name, upstream):
     path = work / name
     if not (path / ".git").exists():
         run(["git", "clone", "--filter=blob:none", "--no-checkout",
              f"https://github.com/{org}/{name}.git", str(path)])
+        (path / ".git" / MARK).touch()
+    if not (path / ".git" / MARK).exists():
+        sys.exit(f"fork-sync: {path} is not a clone this script made; point --work at an empty folder")
     remotes = run(["git", "remote"], cwd=path).stdout.split()
     if "upstream" not in remotes:
         run(["git", "remote", "add", "upstream", f"https://github.com/{upstream}.git"], cwd=path)
@@ -154,7 +160,7 @@ def cmd_merge(args):
             continue
         merging = (path / ".git" / "MERGE_HEAD").exists()
         if not merging:
-            # The clone belongs to this script, so a half checkout from an interrupted run is safe to reset.
+            # clone() refuses any clone it did not make, so a half checkout from an interrupted run is safe to reset.
             run(["git", "reset", "--quiet", "--hard"], cwd=path, check=False)
             if run(["git", "rev-parse", "-q", "--verify", f"refs/heads/{branch}"], cwd=path, check=False).returncode:
                 run(["git", "checkout", "--quiet", "--force", "-b", branch, entry["pin"]], cwd=path)
