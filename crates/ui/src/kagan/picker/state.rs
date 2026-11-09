@@ -162,6 +162,7 @@ impl Picker {
             }
             let selected = rows.selected.map(IndexPath::new);
             state.set_selected_index(selected, window, cx);
+            state.scroll_to_selected_item(window, cx);
         });
     }
 

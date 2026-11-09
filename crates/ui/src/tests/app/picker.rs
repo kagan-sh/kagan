@@ -803,6 +803,57 @@ fn an_offscreen_default_program_is_visible_when_the_picker_opens(cx: &mut TestAp
     assert_eq!(selected_of(cx, window, &row), Some(true));
 }
 
+/// Whether the row sits fully inside the program list's visible rows.
+#[cfg(unix)]
+fn in_program_list(cx: &mut TestAppContext, window: AnyWindowHandle, row: &str) -> bool {
+    let (Some((_, y, _, height)), Some((_, list_y, _, list_height))) =
+        (bounds(cx, window, row), bounds(cx, window, "program-list"))
+    else {
+        return false;
+    };
+    y >= list_y && y + height <= list_y + list_height
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_selected_program_below_the_cap_is_in_view_on_every_open(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let bin = fixture_programs(cx, data.path(), &ROW_NAMES);
+    let shell = bin.join("fixture-shell").display().to_string();
+    let run = Run {
+        project_id: ProjectId("personal".into()),
+        program: shell.clone(),
+        title: None,
+        environment: EnvironmentSpec::Personal,
+        visibility: None,
+        parent_thread_id: None,
+        lifecycle_owner_thread_id: None,
+        metadata: None,
+    };
+    let started = cx.update(|cx| Workspace::dispatch(Op::Thread(ThreadOp::Run(run)), cx));
+    cx.foreground_executor().block_test(started).unwrap();
+    cx.run_until_parked();
+    let project = start_in_plain_folder(cx, window, data.path());
+    let row = format!("program-{shell}");
+    wait_until(cx, |cx| in_program_list(cx, window, &row));
+    // The person scrolls the list up, then leaves and comes back.
+    cx.update_window(window, |_, window, cx| {
+        crate::ui_dispatch::scroll_within(
+            window,
+            &ElementId::Name("program-list".into()),
+            None,
+            gpui_kit::ScrollDelta::Pixels(gpui_kit::point(gpui_kit::px(0.), gpui_kit::px(2000.))),
+            cx,
+        )
+        .unwrap();
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.simulate_keystrokes(window, "escape");
+    click(cx, window, &format!("project-new-{}", project.0));
+    wait_until(cx, |cx| in_program_list(cx, window, &row));
+}
+
 #[cfg(unix)]
 #[gpui_kit::test]
 fn programs_show_while_versions_are_loading_and_keep_the_choice(cx: &mut TestAppContext) {
