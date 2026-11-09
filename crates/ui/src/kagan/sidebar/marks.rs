@@ -15,7 +15,7 @@ use kg_domain::{Project, ProjectId, ProjectKind, ThreadId};
 use super::rows::icon_command;
 use crate::kagan::{ArchiveThread, ThreadActions};
 
-use crate::kagan::controls::{menu_item, menu_popup, tip};
+use crate::kagan::controls::{menu_popup, tip};
 use crate::theme::Tone;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -200,19 +200,6 @@ pub(super) fn thread_controls(
                 }),
         );
     Some(controls.into_any_element())
-}
-
-pub(super) fn entry(
-    sidebar: &WeakEntity<Sidebar>,
-    id: &'static str,
-    label: &'static str,
-    event: impl Fn(ThreadId) -> Event + 'static,
-    thread: &ThreadId,
-) -> PopupMenuItem {
-    let (sidebar, thread) = (sidebar.clone(), thread.clone());
-    PopupMenuItem::element(move |_, _| menu_item(id, label)).on_click(move |_, _, cx| {
-        _ = sidebar.update(cx, |_, cx| cx.emit(event(thread.clone())));
-    })
 }
 
 pub(super) fn project_menu(

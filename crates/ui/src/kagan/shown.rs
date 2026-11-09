@@ -2,7 +2,7 @@ use crate::theme::TypeScale as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Escape, Input, InputEvent, InputState};
-use gpui_kit::component::menu::PopupMenu;
+use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -16,8 +16,8 @@ use kg_plugins::RunCommand;
 
 use super::controls::{bound_keys, control, dispatch, menu_item, menu_popup, tip};
 use super::{
-    AddProject, ArchiveThread, Kagan, NewThread, RenameThread, SaveDiagnostics, StartAgain,
-    StopThread, ThreadActions, TogglePinned,
+    AddProject, Kagan, NewThread, RenameThread, SaveDiagnostics, StartAgain, StopThread,
+    ThreadActions,
 };
 use crate::terminal::TerminalView;
 use crate::theme::terminal_color;
@@ -37,6 +37,43 @@ fn ended_text(id: &ThreadId, cx: &gpui_kit::App) -> String {
         line.push_str(note);
     }
     line
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum ThreadPick {
+    Pin,
+    Archive,
+    Rename,
+    SaveDiagnostics,
+}
+
+// The title bar and a sidebar row show the same menu. `tail` adds items after Rename.
+pub(super) fn thread_menu(
+    thread: &Thread,
+    on_pick: impl Fn(ThreadPick, &mut Window, &mut App) + Clone + 'static,
+    tail: impl FnOnce(PopupMenu) -> PopupMenu + 'static,
+    window: &mut Window,
+    cx: &mut App,
+) -> Entity<PopupMenu> {
+    let pin = if thread.pinned { "Unpin" } else { "Pin" };
+    let item = move |pick: ThreadPick, id: &'static str, label: &'static str| {
+        let on_pick = on_pick.clone();
+        PopupMenuItem::element(move |_, _| menu_item(id, label))
+            .on_click(move |_, window, cx| on_pick(pick, window, cx))
+    };
+    PopupMenu::build(window, cx, move |menu, _, _| {
+        let menu = menu
+            .item(item(ThreadPick::Pin, "thread-pin", pin))
+            .separator()
+            .item(item(ThreadPick::Archive, "thread-archive", "Archive"))
+            .separator()
+            .item(item(ThreadPick::Rename, "thread-rename", "Rename…"));
+        tail(menu).separator().item(item(
+            ThreadPick::SaveDiagnostics,
+            "save-diagnostics",
+            "Save diagnostics",
+        ))
+    })
 }
 
 impl Kagan {
@@ -61,44 +98,37 @@ impl Kagan {
         };
         self.sidebar
             .update(cx, |sidebar, _| sidebar.close_row_menu());
+        let kagan = cx.entity().downgrade();
+        let id = thread.id.clone();
         let focus = self.focus.clone();
-        let pinned = thread.pinned;
-        let pin = if pinned { "Unpin" } else { "Pin" };
         let plugin_commands = super::header::menu(cx);
-        let menu = PopupMenu::build(window, cx, move |menu, _, _| {
-            let menu = menu
-                .action_context(focus)
-                .menu_element(Box::new(TogglePinned), move |_, _| {
-                    menu_item("thread-pin", pin)
-                })
-                .separator()
-                .menu_element(Box::new(ArchiveThread), |_, _| {
-                    menu_item("thread-archive", "Archive")
-                })
-                .separator()
-                .menu_element(Box::new(RenameThread), |_, _| {
-                    menu_item("thread-rename", "Rename…")
-                });
-            let menu = plugin_commands.into_iter().fold(menu, |menu, command| {
-                let run = RunCommand::new(command.plugin.clone(), command.id.clone());
-                let row = super::header::menu_id_for(&command.plugin, &command.id);
-                let title = command.title;
-                menu.separator().menu_element(Box::new(run), move |_, _| {
-                    control(
-                        row.clone(),
-                        Facts {
-                            role: Role::MenuItem,
-                            ..Facts::button(title.clone())
-                        },
-                        title.clone(),
-                    )
-                })
-            });
-            menu.separator()
-                .menu_element(Box::new(SaveDiagnostics), |_, _| {
-                    menu_item("save-diagnostics", "Save diagnostics")
-                })
-        });
+        let menu = thread_menu(
+            &thread,
+            move |pick, window, cx| {
+                _ = kagan.update(cx, |kagan, cx| kagan.thread_pick(&id, pick, window, cx));
+            },
+            move |menu| {
+                plugin_commands
+                    .into_iter()
+                    .fold(menu.action_context(focus), |menu, command| {
+                        let run = RunCommand::new(command.plugin.clone(), command.id.clone());
+                        let row = super::header::menu_id_for(&command.plugin, &command.id);
+                        let title = command.title;
+                        menu.separator().menu_element(Box::new(run), move |_, _| {
+                            control(
+                                row.clone(),
+                                Facts {
+                                    role: Role::MenuItem,
+                                    ..Facts::button(title.clone())
+                                },
+                                title.clone(),
+                            )
+                        })
+                    })
+            },
+            window,
+            cx,
+        );
         let dismiss = cx.subscribe_in(&menu, window, |this, _, _: &DismissEvent, window, cx| {
             this.close_thread_actions(window, cx);
         });

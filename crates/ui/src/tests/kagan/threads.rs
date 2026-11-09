@@ -538,6 +538,54 @@ fn escape_closes_the_thread_actions_menu_without_pinning(cx: &mut TestAppContext
 }
 
 #[gpui_kit::test]
+fn archive_from_a_row_menu_archives_that_row(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let row = run_shell(cx);
+    let other = run_shell(cx);
+    click(cx, window, &format!("thread-{}", other.0));
+    crate::tests::sidebar::layout::hover_row(cx, window, &format!("thread-{}", row.0));
+    click(cx, window, &format!("thread-actions-{}", row.0));
+    cx.run_until_parked();
+    click(cx, window, "thread-archive");
+    wait_until(cx, |cx| thread_record(cx, &row).archived_at.is_some());
+    assert_eq!(cx.update(|cx| kagan.read(cx).shown_thread(cx)), Some(other));
+}
+
+#[gpui_kit::test]
+fn rename_from_a_row_menu_renames_that_row(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let row = run_shell(cx);
+    let other = run_shell(cx);
+    click(cx, window, &format!("thread-{}", other.0));
+    crate::tests::sidebar::layout::hover_row(cx, window, &format!("thread-{}", row.0));
+    click(cx, window, &format!("thread-actions-{}", row.0));
+    click(cx, window, "thread-rename");
+    cx.simulate_input(window, "Notes");
+    cx.simulate_keystrokes(window, "enter");
+    wait_until(cx, |cx| thread_record(cx, &row).title == "Notes");
+    assert_ne!(thread_record(cx, &other).title, "Notes");
+}
+
+#[gpui_kit::test]
+fn save_diagnostics_from_a_row_menu_writes_the_report(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let row = run_shell(cx);
+    let other = run_shell(cx);
+    click(cx, window, &format!("thread-{}", other.0));
+    crate::tests::sidebar::layout::hover_row(cx, window, &format!("thread-{}", row.0));
+    click(cx, window, &format!("thread-actions-{}", row.0));
+    click(cx, window, "save-diagnostics");
+    let dir = data.path().join("diagnostics");
+    wait_until(cx, |_cx| {
+        std::fs::read_dir(&dir).is_ok_and(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .any(|entry| entry.path().extension().is_some_and(|ext| ext == "txt"))
+        })
+    });
+}
+
+#[gpui_kit::test]
 fn archive_asks_first_when_the_preference_is_on(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);
     let id = run_shell(cx);
