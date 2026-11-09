@@ -194,7 +194,10 @@ pub(crate) fn read(
                 .parse()
                 .map_err(|_| OpError::Invalid(format!("{FILE} is not a file")))?;
             if size > LIMIT {
-                return Err(OpError::Invalid("the index is larger than 1 MiB".into()));
+                return Err(OpError::Invalid(format!(
+                    "the index is larger than {} MiB",
+                    LIMIT >> 20
+                )));
             }
             parse(&run(&["show", &blob])?, None)?
         }
@@ -234,7 +237,10 @@ pub(crate) fn read(
 /// back absolute; an index read from git lists only git sources.
 pub(crate) fn parse(text: &str, folder: Option<&Path>) -> Result<(String, Vec<IndexEntry>)> {
     if text.len() > LIMIT {
-        return Err(OpError::Invalid("the index is larger than 1 MiB".into()));
+        return Err(OpError::Invalid(format!(
+            "the index is larger than {} MiB",
+            LIMIT >> 20
+        )));
     }
     let index: Index<IndexEntry> =
         serde_json::from_str(text).map_err(|error| OpError::Invalid(format!("{FILE}: {error}")))?;

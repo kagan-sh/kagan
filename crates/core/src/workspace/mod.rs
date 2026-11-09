@@ -362,7 +362,7 @@ impl Workspace {
             title: title.clone(),
         });
         if let Err(message) = kg_domain::check(&op) {
-            return Task::ready(Err(OpError::Invalid(message.to_owned())));
+            return Task::ready(Err(OpError::Invalid(message)));
         }
         let Some(global) = cx.try_global::<WorkspaceGlobal>() else {
             return Task::ready(Err(OpError::Failed("workspace is not open".into())));
@@ -380,7 +380,7 @@ impl Workspace {
         cx: &mut App,
     ) -> Task<Result<OpResult>> {
         if let Err(message) = kg_domain::check(&op) {
-            return Task::ready(Err(OpError::Invalid(message.to_owned())));
+            return Task::ready(Err(OpError::Invalid(message)));
         }
         let Some(global) = cx.try_global::<WorkspaceGlobal>() else {
             return Task::ready(Err(OpError::Failed("workspace is not open".into())));

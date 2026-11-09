@@ -185,8 +185,9 @@ pub(crate) async fn submit(
     }
     if text.len() > kg_domain::TEXT_MAX {
         return Err(OpError::Invalid(format!(
-            "send is {} bytes; the cap is 1 MiB",
-            text.len()
+            "send is {} bytes; the cap is {} MiB",
+            text.len(),
+            kg_domain::TEXT_MAX >> 20
         )));
     }
     let (typed, written) = this
