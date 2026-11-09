@@ -88,45 +88,29 @@ impl Process {
         limit: Duration,
         stop: impl Fn() -> bool,
     ) -> io::Result<Option<ExitStatus>> {
-        poll_child(
-            self,
-            |process| process.child.try_status(),
-            Process::kill,
-            limit,
-            stop,
-        )
+        let started = Instant::now();
+        loop {
+            if let Some(status) = self.child.try_status()? {
+                return Ok(Some(status));
+            }
+            if stop() {
+                self.kill();
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "the program was stopped",
+                ));
+            }
+            if started.elapsed() > limit {
+                self.kill();
+                return Ok(None);
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
     }
 }
 
 impl Drop for Process {
     fn drop(&mut self) {
         self.kill();
-    }
-}
-
-pub(super) fn poll_child<T>(
-    child: &mut T,
-    mut try_wait: impl FnMut(&mut T) -> io::Result<Option<ExitStatus>>,
-    mut kill: impl FnMut(&mut T),
-    limit: Duration,
-    stop: impl Fn() -> bool,
-) -> io::Result<Option<ExitStatus>> {
-    let started = Instant::now();
-    loop {
-        match try_wait(child)? {
-            Some(status) => return Ok(Some(status)),
-            None if stop() => {
-                kill(child);
-                return Err(io::Error::new(
-                    io::ErrorKind::Interrupted,
-                    "the program was stopped",
-                ));
-            }
-            None if started.elapsed() > limit => {
-                kill(child);
-                return Ok(None);
-            }
-            None => std::thread::sleep(Duration::from_millis(20)),
-        }
     }
 }
