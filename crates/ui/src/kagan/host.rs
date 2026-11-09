@@ -14,19 +14,20 @@ impl Kagan {
         // The plugin host starts after the UI's own setup, so the key bindings for its commands are
         // installed here, once the host exists. Installing them again does nothing.
         crate::plugins::init(cx);
-        if self.plugin_watch.is_none()
+        if self.slots.plugin_watch.is_none()
             && let Some(strip) = kg_plugins::PluginStrip::global(cx)
         {
-            self.host_events
+            self.slots
+                .host_events
                 .push(cx.observe(&strip, |_, _, cx| cx.notify()));
         }
-        if self.plugin_watch.is_some() {
+        if self.slots.plugin_watch.is_some() {
             return;
         }
         let Some(host) = kg_plugins::PluginHost::try_global(cx) else {
             return;
         };
-        self.plugin_watch = Some(cx.observe_in(&host, window, |this, host, window, cx| {
+        self.slots.plugin_watch = Some(cx.observe_in(&host, window, |this, host, window, cx| {
             this.activity
                 .installing(host.read(cx).installing().as_deref());
             this.sync_slots(window, cx);
@@ -39,7 +40,7 @@ impl Kagan {
             .installing(host.read(cx).installing().as_deref());
         self.sync_overlays(window, cx);
         if let Some(ui) = HostUi::global(cx) {
-            self.host_events.push(cx.subscribe_in(
+            self.slots.host_events.push(cx.subscribe_in(
                 &ui,
                 window,
                 |this, _, event: &HostUiEvent, window, cx| this.host_ui(event, window, cx),

@@ -121,7 +121,7 @@ pub(in crate::kagan) fn tool_region(
     window: &mut Window,
     cx: &mut Context<Kagan>,
 ) -> Option<AnyElement> {
-    kagan.tool.as_ref().map(|slot| {
+    kagan.slots.tool.as_ref().map(|slot| {
         div()
             .id("surface-tool")
             .child(

@@ -457,7 +457,7 @@ fn listed(kagan: &Kagan, cx: &App) -> Vec<(String, bool)> {
     }
     let left = !full
         && (kagan.panes.left || (kagan.screen.drawn(screen::Side::Left) && !kagan.in_settings()));
-    if let Some(slot) = &kagan.tool
+    if let Some(slot) = &kagan.slots.tool
         && slot.web.is_some()
     {
         open.push((slot.id.clone(), left));

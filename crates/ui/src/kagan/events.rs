@@ -100,10 +100,11 @@ impl Kagan {
                 .screen
                 .page()
                 .map(|slot| (slot.plugin.clone(), slot.contribution.clone())),
-            tool: self.tool.as_ref().map(|slot| slot.plugin.clone()),
+            tool: self.slots.tool.as_ref().map(|slot| slot.plugin.clone()),
             archived: self.shows_archived(),
             in_settings: self.in_settings(),
             waiting: self
+                .slots
                 .replaced
                 .chosen(kg_domain::Slot::Threads)
                 .map(|_| self.waiting_count(cx))
@@ -117,9 +118,9 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.tool.is_some() || self.in_settings() {
+        if self.slots.tool.is_some() || self.in_settings() {
             self.run_surface(SurfaceOp::Threads, window, cx);
-            if self.tool.is_some() {
+            if self.slots.tool.is_some() {
                 return;
             }
             let kagan = cx.entity();

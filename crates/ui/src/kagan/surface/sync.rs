@@ -13,7 +13,7 @@ impl Kagan {
     }
 
     pub(in crate::kagan) fn flip_slot_details(&mut self, id: &str) {
-        if let Some(slot) = self.tool.as_mut().filter(|slot| slot.id == id) {
+        if let Some(slot) = self.slots.tool.as_mut().filter(|slot| slot.id == id) {
             slot.details = !slot.details;
         }
         if let Some(slot) = self.screen.page_mut().filter(|slot| slot.id == id) {
@@ -29,7 +29,7 @@ impl Kagan {
             .into_iter()
             .filter(|item| item.placement == SurfacePlacement::Right)
             .collect();
-        let tool_held = holds_focus(self.tool.as_ref(), window, cx);
+        let tool_held = holds_focus(self.slots.tool.as_ref(), window, cx);
         let page_held = holds_focus(self.screen.page(), window, cx);
         let right_held = self
             .right
@@ -57,7 +57,7 @@ impl Kagan {
 
     fn sync_one(&mut self, tool: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let Some(slot) = (if tool {
-            self.tool.as_ref()
+            self.slots.tool.as_ref()
         } else {
             self.screen.page()
         }) else {
@@ -74,7 +74,7 @@ impl Kagan {
         }
         let next = declared.map(|declared| mount(&declared, slot.details, window, cx));
         if tool {
-            self.tool = next;
+            self.slots.tool = next;
         } else if let Some(next) = next {
             if let Some(page) = self.screen.page_mut() {
                 *page = next;

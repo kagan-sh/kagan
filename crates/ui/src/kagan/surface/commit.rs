@@ -23,14 +23,14 @@ impl Kagan {
                 self.surface_list(window, cx),
             ))));
         }
-        if self.surface_check.is_some() && matches!(op, SurfaceOp::Threads) {
+        if self.slots.surface_check.is_some() && matches!(op, SurfaceOp::Threads) {
             self.supersede_surface();
-            self.tool = None;
+            self.slots.tool = None;
             self.show_left(window, cx);
             cx.notify();
             return Ok(Commit::Ready(Box::new(OpResult::Done)));
         }
-        if self.surface_check.is_some() {
+        if self.slots.surface_check.is_some() {
             return Err(OpError::Failed(
                 "a surface change is already waiting for its frame".into(),
             ));
@@ -41,7 +41,7 @@ impl Kagan {
                 self.open_center(Center::Work(work), window, cx);
             }
             self.show_left(window, cx);
-            let Some(slot) = self.tool.as_ref() else {
+            let Some(slot) = self.slots.tool.as_ref() else {
                 cx.notify();
                 return Ok(Commit::Ready(Box::new(OpResult::Done)));
             };
@@ -52,7 +52,7 @@ impl Kagan {
         }
         self.viewport = window.viewport_size().width;
         let hold = Hold {
-            tool: self.tool.clone(),
+            tool: self.slots.tool.clone(),
             slots: self.right.slots.clone(),
             tab: self.right.tab.clone(),
             layout: self.layout,
@@ -65,19 +65,19 @@ impl Kagan {
         {
             self.screen.remember_center(window, cx);
         }
-        self.surface_hold = true;
+        self.slots.surface_hold = true;
         let expect = match self.apply(op, props, window, cx) {
             Ok(expect) => expect,
             Err(error) => {
                 self.screen.rollback();
-                self.surface_hold = false;
+                self.slots.surface_hold = false;
                 return Err(error);
             }
         };
-        self.surface_check = Some(Check {
+        self.slots.surface_check = Some(Check {
             hold,
             expect,
-            epoch: self.surface_epoch,
+            epoch: self.slots.surface_epoch,
         });
         Ok(Commit::Paint)
     }
@@ -91,13 +91,13 @@ impl Kagan {
             hold,
             expect,
             epoch,
-        }) = self.surface_check.take()
+        }) = self.slots.surface_check.take()
         else {
             return Err(OpError::Failed("no surface is waiting for a frame".into()));
         };
-        if epoch != self.surface_epoch {
+        if epoch != self.slots.surface_epoch {
             self.screen.commit();
-            self.surface_hold = false;
+            self.slots.surface_hold = false;
             return Err(OpError::Failed(
                 "a newer change replaced this surface request before its frame".into(),
             ));
@@ -105,7 +105,7 @@ impl Kagan {
         if painted(window, &expect.id) == expect.present {
             self.screen.commit();
             self.save_open_change(hold.layout, cx);
-            self.surface_hold = false;
+            self.slots.surface_hold = false;
             match expect.focus {
                 Focus::Page => window.focus(&self.surface_close_focus, cx),
                 Focus::Tool => self.focus_tool_or_work(window, cx),
@@ -128,7 +128,7 @@ impl Kagan {
             self.sidebar
                 .update(cx, |sidebar, _| sidebar.set_return_tool(None));
             self.screen.rollback();
-            self.tool = hold.tool;
+            self.slots.tool = hold.tool;
             self.right.slots = hold.slots;
             self.right.tab = hold.tab;
             if self.layout.left_open != hold.layout.left_open {
@@ -139,7 +139,7 @@ impl Kagan {
             }
             self.sync_panels_keeping_widths(window, cx);
             cx.notify();
-            self.surface_hold = false;
+            self.slots.surface_hold = false;
             Err(OpError::Failed(format!("{id} is not on screen")))
         }
     }
@@ -195,7 +195,7 @@ impl Kagan {
                     let row = row_id(&declared.plugin, &declared.id);
                     self.sidebar
                         .update(cx, |sidebar, _| sidebar.set_return_tool(Some(row)));
-                    self.tool = None;
+                    self.slots.tool = None;
                 }
                 SurfacePlacement::Center => {
                     self.screen.close();
@@ -235,11 +235,12 @@ impl Kagan {
             }
             SurfacePlacement::Left => {
                 if !self
+                    .slots
                     .tool
                     .as_ref()
                     .is_some_and(|slot| reuse(slot, &declared, cx))
                 {
-                    self.tool = Some(mount(&declared, false, window, cx));
+                    self.slots.tool = Some(mount(&declared, false, window, cx));
                 }
             }
             SurfacePlacement::Right => {
@@ -263,7 +264,7 @@ impl Kagan {
     fn drop_page(&self, declared: &Declared, cx: &mut Context<Self>) {
         let id = match declared.placement {
             SurfacePlacement::Right => Some(declared.surface_id()),
-            SurfacePlacement::Left => self.tool.as_ref().map(|slot| slot.id.clone()),
+            SurfacePlacement::Left => self.slots.tool.as_ref().map(|slot| slot.id.clone()),
             SurfacePlacement::Center => self.screen.page().map(|slot| slot.id.clone()),
         };
         if let Some(id) = id {
@@ -273,7 +274,7 @@ impl Kagan {
 
     fn is_open(&self, declared: &Declared) -> bool {
         matching_slot(
-            self.tool.as_ref(),
+            self.slots.tool.as_ref(),
             self.screen.page(),
             &self.right.slots,
             declared,

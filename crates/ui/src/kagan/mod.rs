@@ -64,7 +64,7 @@ pub(crate) use window::{
     front, show, show_plugin_settings, show_preview, show_settings, start_plugin, watch_waiting,
 };
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use crate::terminal::TerminalView;
 use gpui_kit::component::input::InputState;
@@ -141,8 +141,7 @@ pub(crate) struct Kagan {
     plugin_prompt_notice: Option<ThreadId>,
     focus: FocusHandle,
     surface_close_focus: FocusHandle,
-    // While a surface open or close waits for its frame, sidebar and collapse preferences stay as they were.
-    surface_hold: bool,
+    slots: surface::SlotState,
     typing: bool,
     quiet: Task<()>,
     on_screen: BTreeSet<PendingInteractionId>,
@@ -152,12 +151,8 @@ pub(crate) struct Kagan {
     details: details::Details,
     tabs: tabs::Tabs,
     review_drafts: review::Drafts,
-    replaced: replace::Replaced,
     plugins: Plugins,
     right: right::Sidebar,
-    tool: Option<surface::Slot>,
-    surface_check: Option<surface::Check>,
-    surface_epoch: u64,
     layout: Layout,
     viewport: gpui_kit::Pixels,
     prefs: Entity<settings::Prefs>,
@@ -167,7 +162,6 @@ pub(crate) struct Kagan {
     start_on_load: Option<ProjectId>,
     settings: settings::SettingsState,
     settling: bool,
-    settings_views: BTreeMap<kg_domain::PluginId, (u64, Entity<gpui_shell::ScriptView>)>,
     columns: Entity<ResizableState>,
     window: AnyWindowHandle,
     title: shown::TitleState,
@@ -181,9 +175,6 @@ pub(crate) struct Kagan {
     _appearance: Subscription,
     _theme_paint: Subscription,
     _theme_notice: Subscription,
-    plugin_watch: Option<Subscription>,
-    host_events: Vec<Subscription>,
-    overlays: Vec<overlays::Overlay>,
     asks: ask_form::AskState,
     toast: Option<Toast>,
     toast_epoch: u64,

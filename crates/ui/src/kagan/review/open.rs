@@ -111,7 +111,7 @@ impl Kagan {
             .detach();
         }
         self.sync_panels_keeping_widths(window, cx);
-        self.replaced.forget_review();
+        self.slots.replaced.forget_review();
         self.refresh_review(cx);
         cx.notify();
     }

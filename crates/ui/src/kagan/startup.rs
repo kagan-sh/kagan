@@ -1,9 +1,9 @@
 use super::{Changes, Kagan, Layout, Plugins, Shown, TITLE, window::release_window};
 use super::{
-    activity, archived, attention, browser, changes, details, layout, picker, replace, review,
-    right, screen, settings, shown, sidebar, start, surface, tabs,
+    activity, archived, attention, browser, changes, details, layout, picker, review, right,
+    screen, settings, shown, sidebar, start, surface, tabs,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::resizable::{ResizablePanelEvent, ResizableState};
@@ -43,7 +43,7 @@ impl Kagan {
             plugin_prompt_notice: None,
             focus: cx.focus_handle(),
             surface_close_focus: cx.focus_handle().tab_stop(true),
-            surface_hold: false,
+            slots: surface::SlotState::default(),
             typing: false,
             quiet: Task::ready(()),
             on_screen: BTreeSet::new(),
@@ -53,12 +53,8 @@ impl Kagan {
             details: details::Details::default(),
             tabs: tabs::Tabs::default(),
             review_drafts: review::Drafts::default(),
-            replaced: replace::Replaced::default(),
             plugins: Plugins::new(window, cx),
             right: right::Sidebar::new(cx),
-            tool: None,
-            surface_check: None,
-            surface_epoch: 0,
             layout: Layout::default(),
             viewport: window.viewport_size().width,
             prefs: prefs.clone(),
@@ -70,7 +66,6 @@ impl Kagan {
             left_overlay_focus: cx.focus_handle().tab_stop(true),
             start_on_load: None,
             settings: settings::SettingsState::default(),
-            settings_views: BTreeMap::new(),
             settling: false,
             columns,
             window: window.window_handle(),
@@ -85,9 +80,6 @@ impl Kagan {
             _appearance: crate::theme::watch_system(window, cx),
             _theme_paint: Self::theme_paint(cx),
             _theme_notice: Self::theme_notice(cx),
-            plugin_watch: None,
-            host_events: Vec::new(),
-            overlays: Vec::new(),
             asks: super::ask_form::AskState::default(),
             toast: None,
             toast_epoch: 0,

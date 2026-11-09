@@ -38,14 +38,19 @@ impl Kagan {
             let host = host.read(cx);
             (host.activation(plugin), host.generation(plugin))
         };
-        self.overlays.retain(|overlay| {
+        self.slots.overlays.retain(|overlay| {
             let (activation, generation) = current(&overlay.plugin, cx);
             declared.contains(&overlay.plugin)
                 && activation == overlay.activation
                 && (overlay.view.is_none() || generation == overlay.generation)
         });
         for plugin in declared {
-            if self.overlays.iter().any(|overlay| overlay.plugin == plugin) {
+            if self
+                .slots
+                .overlays
+                .iter()
+                .any(|overlay| overlay.plugin == plugin)
+            {
                 continue;
             }
             let view = host
@@ -56,7 +61,7 @@ impl Kagan {
                 })
                 .ok(); // The error is logged above.
             let (activation, generation) = current(&plugin, cx);
-            self.overlays.push(Overlay {
+            self.slots.overlays.push(Overlay {
                 plugin,
                 activation,
                 generation,
@@ -91,6 +96,7 @@ pub(super) fn render(kagan: &Kagan, cx: &App) -> Option<AnyElement> {
         return None;
     }
     let drawn: Vec<_> = kagan
+        .slots
         .overlays
         .iter()
         .filter_map(|overlay| Some((overlay, overlay.view.clone()?)))

@@ -74,6 +74,7 @@ impl Kagan {
             .update(cx, |sidebar, _| sidebar.take_return_tool());
         let sidebar = self.sidebar.read(cx);
         let row = self
+            .slots
             .tool
             .as_ref()
             .map(|slot| row_id(&slot.plugin, &slot.contribution))

@@ -7,10 +7,10 @@ use crate::kagan::Kagan;
 
 impl Kagan {
     pub(in crate::kagan) fn supersede_surface(&mut self) {
-        if self.surface_check.is_some() {
+        if self.slots.surface_check.is_some() {
             self.screen.commit();
-            self.surface_epoch = self.surface_epoch.wrapping_add(1);
-            self.surface_hold = false;
+            self.slots.surface_epoch = self.slots.surface_epoch.wrapping_add(1);
+            self.slots.surface_hold = false;
         }
     }
 
@@ -20,12 +20,12 @@ impl Kagan {
             .map(|declared| {
                 let placement = declared.placement;
                 let current = matching_slot(
-                    self.tool.as_ref(),
+                    self.slots.tool.as_ref(),
                     self.screen.page(),
                     &self.right.slots,
                     &declared,
                 );
-                let committed = self.surface_check.as_ref().map_or(current, |check| {
+                let committed = self.slots.surface_check.as_ref().map_or(current, |check| {
                     matching_slot(
                         check.hold.tool.as_ref(),
                         self.screen.committed_page(),

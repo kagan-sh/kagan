@@ -159,7 +159,7 @@ impl Kagan {
         plugins::sync(&mut self.settings.drafts, window, cx);
         let entries = pages::plugin_entries(cx);
         let host = PluginHost::try_global(cx);
-        self.settings_views.retain(|id, (generation, _)| {
+        self.slots.settings_views.retain(|id, (generation, _)| {
             entries.iter().any(|(entry, _)| entry == id)
                 && host
                     .as_ref()
@@ -183,11 +183,12 @@ impl Kagan {
                 .and_then(|(_, ui)| ui.settings.as_deref().map(str::to_owned))
         });
         let Some(export) = export else {
-            self.settings_views.remove(id);
+            self.slots.settings_views.remove(id);
             return;
         };
         let generation = host.read(cx).generation(id);
         let mounted = self
+            .slots
             .settings_views
             .get(id)
             .is_some_and(|(have, _)| Some(*have) == generation);
@@ -199,7 +200,9 @@ impl Kagan {
         }) {
             Ok(view) => {
                 let generation = host.read(cx).generation(id).unwrap_or_default();
-                self.settings_views.insert(id.clone(), (generation, view));
+                self.slots
+                    .settings_views
+                    .insert(id.clone(), (generation, view));
             }
             Err(error) => {
                 self.note = Some(
@@ -272,6 +275,7 @@ pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) 
         .into_iter()
         .filter_map(|(id, name)| {
             kagan
+                .slots
                 .settings_views
                 .get(&id)
                 .map(|(_, view)| (id, name, view))

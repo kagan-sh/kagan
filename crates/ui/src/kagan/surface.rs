@@ -1,4 +1,6 @@
-use gpui_kit::{App, Context, Entity, FocusHandle, KeyBinding, Window, actions};
+use std::collections::BTreeMap;
+
+use gpui_kit::{App, Context, Entity, FocusHandle, KeyBinding, Subscription, Window, actions};
 use gpui_shell::ScriptView;
 use kg_domain::{OpError, OpResult, PluginId, SurfacePlacement};
 use kg_plugins::{Placement, PluginHost};
@@ -6,6 +8,7 @@ use serde_json::Value;
 
 use super::Kagan;
 use super::right::{self};
+use super::{overlays, replace};
 
 actions!(surface, [ClosePage]);
 
@@ -13,6 +16,20 @@ actions!(surface, [ClosePage]);
 pub(super) struct OpenSurface {
     pub plugin: PluginId,
     pub id: String,
+}
+
+#[derive(Default)]
+pub(super) struct SlotState {
+    pub(super) tool: Option<Slot>,
+    pub(super) replaced: replace::Replaced,
+    pub(super) overlays: Vec<overlays::Overlay>,
+    pub(super) settings_views: BTreeMap<PluginId, (u64, Entity<ScriptView>)>,
+    pub(super) surface_check: Option<Check>,
+    pub(super) surface_epoch: u64,
+    // While a surface open or close waits for its frame, sidebar and collapse preferences stay as they were.
+    pub(super) surface_hold: bool,
+    pub(super) plugin_watch: Option<Subscription>,
+    pub(super) host_events: Vec<Subscription>,
 }
 
 #[derive(Clone)]

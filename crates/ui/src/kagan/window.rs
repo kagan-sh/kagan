@@ -120,8 +120,8 @@ pub(super) fn release_window(this: &mut Kagan, cx: &mut App) {
     web_panel::clear(cx);
     let id = this.window.window_id();
     this.cancel_plugin_start();
-    this.surface_check = None;
-    this.surface_hold = false;
+    this.slots.surface_check = None;
+    this.slots.surface_hold = false;
     if let Some(host) = HostUi::global(cx) {
         host.update(cx, |host, cx| host.remove_window(id, cx));
     }

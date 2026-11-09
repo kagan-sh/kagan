@@ -35,10 +35,10 @@ impl Kagan {
         }
         let left = !full
             && (self.panes.left || (self.screen.drawn(screen::Side::Left) && !self.in_settings()));
-        if left && let Some(view) = self.tool.as_ref().and_then(|slot| slot.view.as_ref()) {
+        if left && let Some(view) = self.slots.tool.as_ref().and_then(|slot| slot.view.as_ref()) {
             ids.push(view.entity_id());
         }
-        if left && let Some(view) = self.replaced.mounted_view(kg_domain::Slot::Threads) {
+        if left && let Some(view) = self.slots.replaced.mounted_view(kg_domain::Slot::Threads) {
             ids.push(view.entity_id());
         }
         if !full {
@@ -49,12 +49,12 @@ impl Kagan {
                     }
                 }
                 screen::Center::Review(_) => {
-                    if let Some(view) = self.replaced.mounted_view(kg_domain::Slot::Review) {
+                    if let Some(view) = self.slots.replaced.mounted_view(kg_domain::Slot::Review) {
                         ids.push(view.entity_id());
                     }
                 }
                 screen::Center::Settings => {
-                    for (_, view) in self.settings_views.values() {
+                    for (_, view) in self.slots.settings_views.values() {
                         ids.push(view.entity_id());
                     }
                 }
