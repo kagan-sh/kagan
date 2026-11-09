@@ -114,7 +114,6 @@ impl TerminalView {
         }
     }
 
-    // The wheel moves the view through the history, or is sent to a program that asked for it.
     // Partial steps wait for the next event.
     pub(super) fn scrolled(&mut self, event: &ScrollEvent, _: &mut Window, cx: &mut Context<Self>) {
         let Some(geometry) = self.pointer.geometry else {

@@ -192,7 +192,6 @@ impl Kagan {
         self.note = Some(format!("{line} ({plugin})").into());
     }
 
-    // Drops the plugin's view, saves the built-in, and keeps the keyboard somewhere it can type.
     fn empty(&mut self, slot: Slot, window: &mut Window, cx: &mut Context<Self>) {
         let held = self
             .slots
