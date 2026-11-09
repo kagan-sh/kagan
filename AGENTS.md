@@ -32,6 +32,8 @@ Agent skills on these topics help, and are optional for contributors:
 
 The GPUI Kit coding and design skills are in the `skills/` folder of [gpui-kit](https://github.com/aorumbayev/gpui-kit).
 
+`.agents/skills/kagan-fork-sync` merges upstream into the kagan-sh forks that `Cargo.toml` pins by rev (gpui-kit, gpui-fast, wry), re-pins kagan, and reports which fork changes upstream has taken.
+
 Where a skill disagrees with the spec, the spec wins. Known overrides:
 
 - No tokio in kagan's own code. Async runs on GPUI's executors (`cx.spawn`, `cx.background_spawn`); see decision 90.
