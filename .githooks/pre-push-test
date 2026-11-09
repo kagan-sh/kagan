@@ -93,7 +93,7 @@ new_repo() {
   cp "$root/scripts/mutants-diff.sh" "$repo/scripts/mutants-diff.sh"
   cp "$root/scripts/typos-version" "$repo/scripts/typos-version"
   cp "$root/scripts/cargo-mutants-version" "$repo/scripts/cargo-mutants-version"
-  for name in glossary-check size-budget crate-boundaries view-colors; do
+  for name in glossary-check decisions-check test-env-check size-budget crate-boundaries view-colors; do
     cat > "$repo/scripts/$name.sh" << EOF
 #!/bin/sh
 printf '%s\\n' "sh scripts/$name.sh" >> "\$LOG"
@@ -190,6 +190,8 @@ run_hook "$(line_for_head)"
 expect 0 "a ui change"
 logged 'typos' "ui"
 logged 'sh scripts/glossary-check.sh' "ui"
+logged 'sh scripts/decisions-check.sh' "ui"
+logged 'sh scripts/test-env-check.sh' "ui"
 logged 'sh scripts/size-budget.sh' "ui"
 logged 'sh scripts/crate-boundaries.sh' "ui"
 logged 'sh scripts/view-colors.sh' "ui"

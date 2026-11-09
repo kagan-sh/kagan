@@ -1,6 +1,6 @@
 # Behaviour
 
-What kagan should do, one rule per line, for a model suite that reads this file and the `Op` signatures and does not read the implementation.
+What each `Op` does, one rule per line, for a reader who has the `Op` signatures and not the implementation. If this file and a test disagree, the test is right and this file has a bug.
 
 Sources, in order: [CONTEXT], [decision N], [book:page], [docs:file], [op/] (the `crates/domain/src/op/` modules), [event.rs], [record.rs]. Help text is the CLI contract in [book:cli].
 

@@ -1,6 +1,6 @@
 # kagan plugin API
 
-Status: this file is the plugin contract. Decisions 48, 56, and 59 say which panels the window draws. Terms follow [CONTEXT.md](CONTEXT.md).
+Status: this file describes the plugin API. Decisions 48, 56, and 59 say which panels the window draws. Terms follow [CONTEXT.md](CONTEXT.md).
 
 ## Shape
 
