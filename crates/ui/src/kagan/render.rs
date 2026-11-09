@@ -156,6 +156,7 @@ fn window_body(
         .flex_1()
         .min_h_0()
         .relative()
+        .overflow_hidden()
         .child(kagan.rail_side(window, cx))
         .child(div().flex_1().min_w_0().h_full().child(columns))
         .children(kagan.left_layer(window, cx))
