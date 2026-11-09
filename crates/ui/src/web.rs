@@ -213,7 +213,6 @@ pub(crate) fn page_url(plugin: &str, file: &str) -> Result<String, String> {
     Ok(url.to_string())
 }
 
-// Reads the path from the raw URL and decodes it once.
 // A URL parser would strip `.` and `..` first, which hides traversal from the check.
 fn request_path(target: &str) -> Option<String> {
     let rest = target.split_once("://")?.1;
