@@ -1433,3 +1433,29 @@ fn an_update_status_survives_the_socket() {
     let text = serde_json::to_string(&status).unwrap();
     assert_eq!(serde_json::from_str::<OpResult>(&text).unwrap(), status);
 }
+
+#[test]
+fn terminal_ops_keep_their_exact_json() {
+    let wires = [
+        r#"{"input":{"id":"thr_1","text":"ls"}}"#,
+        r#"{"input":{"id":"thr_1","terminal":2,"text":"ls"}}"#,
+        r#"{"resize":{"id":"thr_1","cols":100,"rows":40}}"#,
+        r#"{"resize":{"id":"thr_1","terminal":2,"cols":100,"rows":40}}"#,
+        r#"{"screen":{"id":"thr_1","scrollback":false}}"#,
+        r#"{"screen":{"id":"thr_1","terminal":2,"scrollback":true,"lines":20}}"#,
+        r#"{"scroll":{"id":"thr_1","lines":-3}}"#,
+        r#"{"scroll":{"id":"thr_1","terminal":2,"lines":5}}"#,
+        r#"{"select":{"id":"thr_1","mode":"word","column":4,"row":1,"right":false}}"#,
+        r#"{"select":{"id":"thr_1","terminal":2,"mode":"extend","column":4,"row":1,"right":true}}"#,
+        r#"{"copy":{"id":"thr_1"}}"#,
+        r#"{"copy":{"id":"thr_1","terminal":2}}"#,
+        r#"{"report":{"id":"thr_1","bytes":[27,91,77]}}"#,
+        r#"{"report":{"id":"thr_1","terminal":2,"bytes":[27,91,77]}}"#,
+        r#"{"paste":{"id":"thr_1","text":"hi"}}"#,
+        r#"{"paste":{"id":"thr_1","terminal":2,"file":"-"}}"#,
+    ];
+    for wire in wires {
+        let op: ThreadOp = serde_json::from_str(wire).unwrap();
+        assert_eq!(serde_json::to_string(&op).unwrap(), wire);
+    }
+}
