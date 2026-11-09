@@ -130,6 +130,8 @@ jobs:
       - run: cargo shear
       - name: Crate boundaries
         run: sh scripts/crate-boundaries.sh
+      - name: Decision numbers
+        run: sh scripts/decisions-check.sh
 
   linux-clippy:
     needs: [scope, checks]

@@ -80,6 +80,8 @@ typos --config .config/typos.toml
 
 echo "pre-push: glossary" >&2
 sh scripts/glossary-check.sh
+echo "pre-push: decision numbers" >&2
+sh scripts/decisions-check.sh
 
 if [ "$skip" -eq 1 ]; then
   echo "pre-push: docs-only diff; rust checks left to match CI" >&2
