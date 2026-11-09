@@ -139,7 +139,7 @@ Rules out: a label or a `full` parameter for macOS and Windows, and a second CI 
 Why: a command that cannot show a page is surface with no user.
 Rules out: bringing that browser back, and a Linux web view as a way to replace it.
 
-**32. The page does not host a web view.** There is no load event, and nothing to fork a web view to fix. Superseded in part by 47: there is no page. The browser commands that assumed a view are removed (31).
+**32. The page does not host a web view.** There is no load event, and nothing to fork a web view to fix. Part of it is superseded by 47: there is no page. The browser commands that assumed a view are removed (31).
 Why: the cost would be a fork of someone else's web view, forever.
 Rules out: that fork.
 
@@ -167,13 +167,13 @@ Rules out: carrying `gpui_ios` or a community mobile backend in our fork, a web 
 Why: each is cheap to live with and expensive to close.
 Rules out: treating any of them as a bug report.
 
-**39. An unread diff can ask for a line, and nothing is forced.** Preference `predict` is off unless set. When it is on, opening an unread file hides the hunks behind one line. Reveal works with the line empty. A written line is a `file.predicted` event shown above the diff. No score is stored.
+**39. An unread diff can ask for a line, and nothing is forced.** Superseded by 43. Preference `predict` is off unless set. When it is on, opening an unread file hides the hunks behind one line. Reveal works with the line empty. A written line is a `file.predicted` event shown above the diff. No score is stored.
 Why: a forced gate is skipped and resented. A score invites gaming it. The baseline shows the diff at once.
-Rules out: blocking reveal on the line, turning the preference on by default, and any tally or comparison of what was written. Superseded by 43.
+Rules out: blocking reveal on the line, turning the preference on by default, and any tally or comparison of what was written.
 
-**40. Attention is three numbers from the event log.** `opened` is the one new event, because switching to a thread was not recorded. An empty answer is stored, because the line share had no denominator; the thread still does not show it.
+**40. Attention is three numbers from the event log.** Superseded by 43. `opened` is the one new event, because switching to a thread was not recorded. An empty answer is stored, because the line share had no denominator; the thread still does not show it.
 Why: the quiet features need a baseline, and a score would change the behavior it measures.
-Rules out: a separate event for answers, per-thread charts, and treating a permission as accepting the work. Superseded by 43.
+Rules out: a separate event for answers, per-thread charts, and treating a permission as accepting the work.
 
 **41. Archived threads leave the sidebar.** They are listed on Archived, and restored from there.
 Why: a retired thread is not current work. A permanent Unarchive control on every sidebar row is the wrong place for it.

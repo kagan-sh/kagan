@@ -43,6 +43,15 @@ missing = sorted(expected - present)
 if missing:
     fail(decisions_path, 1, f"gaps in numbering: {missing}")
 
+blocks = list(entry_re.finditer(decisions_text))
+for i, match in enumerate(blocks):
+    end = blocks[i + 1].start() if i + 1 < len(blocks) else len(decisions_text)
+    block = decisions_text[match.start():end]
+    line = decisions_text[: match.start()].count("\n") + 1
+    for sup in re.finditer(r"Superseded by \d+", block):
+        if sup.start() > 200:
+            fail(decisions_path, line, f"entry {match.group(1)}: 'Superseded by' must come right after the title")
+
 placeholder = re.compile(r"\bNNN\b")
 number_list = re.compile(
     r"\b[Dd]ecisions? (\d+(?:\s*(?:to|-|–)\s*\d+)?(?:(?:,\s*(?:and\s+|or\s+)?|\s+(?:and|or)\s+)\d+(?:\s*(?:to|-|–)\s*\d+)?)*)"
