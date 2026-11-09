@@ -206,7 +206,10 @@ fn new_thread_here_opens_the_start_screen_with_the_folder_fixed(cx: &mut TestApp
     wait_until(cx, |cx| shows(cx, window, "reuse-hint"));
     let hint = label(cx, window, "reuse-hint");
     assert!(hint.starts_with("Runs in "), "{hint}");
-    assert!(hint.contains("the folder of “"), "{hint}");
+    assert!(hint.ends_with(". Changes land there."), "{hint}");
+    let heading = label(cx, window, "start-prompt");
+    assert!(heading.starts_with("New thread beside “"), "{heading}");
+    assert!(heading.ends_with('”'), "{heading}");
     assert!(!shows(cx, window, "folder-worktree"));
     assert!(!shows(cx, window, "folder-project"));
     assert!(!shows(cx, window, "branch-from"));

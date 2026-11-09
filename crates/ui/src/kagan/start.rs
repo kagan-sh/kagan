@@ -267,6 +267,20 @@ impl Kagan {
             .is_some_and(|failure| !script_changed(failure))
     }
 
+    pub(super) fn start_heading(&self, project_name: &str, cx: &App) -> String {
+        match &self.start.reuse {
+            Some(reuse) => {
+                let title = Workspace::global(cx)
+                    .read(cx)
+                    .thread(&reuse.thread)
+                    .map(|thread| thread.read(cx).record().title.clone())
+                    .unwrap_or_default();
+                format!("New thread beside “{title}”")
+            }
+            None => format!("New thread in {project_name}"),
+        }
+    }
+
     pub(super) fn remember_worktree_root(&mut self, cx: &App) {
         let root = Workspace::global(cx).read(cx).data_dir().join("worktrees");
         self.start.worktree_root = folder::shown_path(&root);

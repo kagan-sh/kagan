@@ -136,20 +136,25 @@ impl Kagan {
     // The folder of the ended thread is the only choice, so one line says where the run writes.
     fn reuse_hint(reuse: &Reuse, cx: &App) -> AnyElement {
         let workspace = Workspace::global(cx).read(cx);
-        let folder = workspace
+        let path = workspace
             .environment(&reuse.environment)
-            .map(|environment| shown_path(&environment.read(cx).record().path))
+            .map(|environment| environment.read(cx).record().path.clone())
             .unwrap_or_default();
-        let title = workspace
-            .thread(&reuse.thread)
-            .map(|thread| thread.read(cx).record().title.clone())
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
-        note(
-            "reuse-hint",
-            format!("Runs in {folder}, the folder of “{title}”. Changes land there."),
-            cx.theme().muted_foreground,
-            cx,
-        )
+        let text = format!("Runs in {name}. Changes land there.");
+        let tip = shown_path(&path);
+        div()
+            .id("reuse-hint")
+            .ui_container()
+            .type_small(cx)
+            .text_color(cx.theme().muted_foreground)
+            .aria_label(text.clone())
+            .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+            .child(text)
+            .into_any_element()
     }
 
     pub(super) fn folder_toggles(&self, chosen: Option<StartFolder>, cx: &App) -> AnyElement {

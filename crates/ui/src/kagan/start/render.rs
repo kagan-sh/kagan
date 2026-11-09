@@ -28,6 +28,7 @@ impl Kagan {
             .project(project)
             .map_or_else(String::new, |project| project.name.clone());
         let kind = project_kind(project, cx);
+        let heading = self.start_heading(&name, cx);
         let ready = kind.is_some_and(|kind| self.start_environment(kind, cx).is_some())
             && self.setup_ready()
             && !self.start.starting
@@ -70,10 +71,10 @@ impl Kagan {
                                                 div()
                                                     .id("start-prompt")
                                                     .ui_container()
-                                                    .aria_label(format!("New thread in {name}"))
+                                                    .aria_label(heading.clone())
                                                     .type_title(cx)
                                                     .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                                    .child(format!("New thread in {name}")),
+                                                    .child(heading),
                                             )
                                             .child(
                                                 v_flex()
