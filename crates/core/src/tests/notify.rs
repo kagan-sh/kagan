@@ -293,7 +293,12 @@ async fn a_wait_on_the_child_drops_the_line_it_already_told_the_parent(cx: &mut 
     let (parent, _parent_run) =
         started(&fixture, &parent_until(fixture.dir.path(), &flag), cx).await;
     wait_until_busy(&fixture, &parent, cx);
-    let program = finishing(fixture.dir.path(), "finish");
+    // The child must outlive the test, or its exit sends a second, unwaited line.
+    let program = script(
+        fixture.dir.path(),
+        "linger",
+        "printf '\\033]0;\\342\\240\\213 working\\007'\nsleep 1\nprintf '\\033]0;ready\\007'\nsleep 600",
+    );
     let (child_id, _child_run) = child(&fixture, &program, &parent, false, cx).await;
     wait_until_busy(&fixture, &child_id, cx);
     let waited = begin_wait(&child_id, 20_000, cx);
