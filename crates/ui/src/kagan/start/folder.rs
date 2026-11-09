@@ -162,9 +162,11 @@ impl Kagan {
     ) -> AnyElement {
         let starting = self.start.starting;
         let focus = self.start.segments_focus.clone();
-        let focused = focus
-            .as_ref()
-            .is_some_and(|focus| focus.contains_focused(window, cx));
+        // Keyboard only, as GPUI's focus_visible: a mouse click moves focus but draws no ring.
+        let focused = window.last_input_was_keyboard()
+            && focus
+                .as_ref()
+                .is_some_and(|focus| focus.contains_focused(window, cx));
         let toggle = |id: &'static str,
                       button: &'static str,
                       name: SharedString,
