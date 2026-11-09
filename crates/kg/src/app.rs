@@ -1,3 +1,6 @@
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
+
 use anyhow::{Context as _, Result};
 use async_channel::Sender;
 use gpui_kit::QuitMode;
@@ -29,6 +32,30 @@ fn desktop() -> gpui_kit::Application {
     gpui_kit::application()
 }
 
+/// The data folder: `KG_DATA_DIR`, else `HOME/.kagan`, else `USERPROFILE/.kagan`.
+pub(crate) fn data_dir_from_env() -> Result<PathBuf> {
+    data_dir_of(
+        std::env::var_os("KG_DATA_DIR"),
+        std::env::var_os("HOME"),
+        std::env::var_os("USERPROFILE"),
+    )
+}
+
+pub(crate) fn data_dir_of(
+    data: Option<OsString>,
+    home: Option<OsString>,
+    profile: Option<OsString>,
+) -> Result<PathBuf> {
+    let set = |value: Option<OsString>| value.filter(|value| !value.is_empty());
+    if let Some(dir) = set(data) {
+        return Ok(PathBuf::from(dir));
+    }
+    let home = set(home)
+        .or_else(|| set(profile))
+        .context("HOME or USERPROFILE is not set")?;
+    Ok(Path::new(&home).join(".kagan"))
+}
+
 pub(crate) fn run() -> Result<()> {
     let location = socket::location()?;
     let Some(listener) = socket::open(&location).context("cannot open the kg socket")? else {
@@ -44,14 +71,7 @@ pub(crate) fn run() -> Result<()> {
             .recv_blocking()
             .map_err(|_| OpError::Failed("kagan dropped the request".into()))?
     });
-    let data_dir = if let Some(dir) = std::env::var_os("KG_DATA_DIR") {
-        std::path::PathBuf::from(dir)
-    } else {
-        let home = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .context("HOME or USERPROFILE is not set")?;
-        std::path::Path::new(&home).join(".kagan")
-    };
+    let data_dir = data_dir_from_env()?;
     let cli = std::env::current_exe()?;
     kg_process::warm_user_path();
     let components = component_catalog()?;

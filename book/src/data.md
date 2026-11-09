@@ -6,7 +6,7 @@ You choose the agents, programs, and plugins that may use the network. A program
 
 ## Where kagan writes
 
-The data folder is `~/.kagan`, or `%USERPROFILE%\.kagan` on Windows. Set `KG_DATA_DIR` to use another folder. `kg` finds the window through [the socket](#the-socket).
+The data folder is `~/.kagan`. kagan reads `HOME` first and `USERPROFILE` second, so on Windows it is `%USERPROFILE%\.kagan` unless `HOME` is set. Set `KG_DATA_DIR` to use another folder. `kg` finds the window through [the socket](#the-socket).
 
 That folder holds your projects, threads, and history, the git worktrees and Personal folders, installed skills, your themes, and plugin data. A plugin script reads its own folder there as `process.dataDir`.
 
