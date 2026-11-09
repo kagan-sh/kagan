@@ -263,6 +263,15 @@ fn escape_leaves_the_new_thread_screen_from_a_choice(cx: &mut TestAppContext) {
     });
 }
 
+#[gpui_kit::test]
+fn the_program_list_has_a_caption_like_runs_in(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let (_repo, project) = committed_repo(cx, data.path());
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "program-search"));
+    assert_eq!(label(cx, window, "program-caption"), "Program");
+}
+
 /// The bounds of an element, as x, y, width and height in points.
 fn bounds(
     cx: &mut TestAppContext,

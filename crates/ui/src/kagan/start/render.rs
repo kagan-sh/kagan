@@ -75,7 +75,20 @@ impl Kagan {
                                                     .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                     .child(format!("New thread in {name}")),
                                             )
-                                            .child(self.picker.clone()),
+                                            .child(
+                                                v_flex()
+                                                    .gap_2()
+                                                    .child(
+                                                        div()
+                                                            .id("program-caption")
+                                                            .ui_container()
+                                                            .type_caption(cx)
+                                                            .text_color(cx.theme().muted_foreground)
+                                                            .aria_label("Program")
+                                                            .child("Program"),
+                                                    )
+                                                    .child(self.picker.clone()),
+                                            ),
                                     )
                                     .children(kind.map(|kind| self.render_folder(kind, cx)))
                                     .children(self.setup_block(cx)),

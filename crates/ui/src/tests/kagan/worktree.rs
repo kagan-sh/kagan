@@ -298,6 +298,7 @@ fn a_dirty_project_folder_stays_on_its_branch(cx: &mut TestAppContext) {
     wait_until(cx, |cx| shows(cx, window, "folder-project"));
     click(cx, window, "folder-project");
     click(cx, window, "branch-from");
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "branch-block"));
     assert_eq!(
         label(cx, window, "branch-block"),
