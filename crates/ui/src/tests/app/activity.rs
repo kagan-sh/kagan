@@ -260,6 +260,19 @@ fn the_strip_starts_closed_and_quiet_at_the_bottom(cx: &mut TestAppContext) {
 fn the_open_strip_sits_under_the_center_and_inside_the_window(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "activity-toggle");
+    assert_open_strip_clears_center(cx, window);
+}
+
+#[gpui_kit::test]
+fn the_open_strip_clears_the_center_at_the_minimum_height(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    cx.simulate_window_resize(window, size(px(1120.), px(360.)));
+    cx.run_until_parked();
+    click(cx, window, "activity-toggle");
+    assert_open_strip_clears_center(cx, window);
+}
+
+fn assert_open_strip_clears_center(cx: &mut TestAppContext, window: AnyWindowHandle) {
     let (_, center_y, _, center_height) = bounds_of(cx, window, "center");
     let (_, strip_y, _, strip_height) = bounds_of(cx, window, "activity-strip");
     let viewport_height = cx
