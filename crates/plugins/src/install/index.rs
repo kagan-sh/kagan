@@ -4,7 +4,7 @@ use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 use gpui_kit::{AppContext as _, AsyncApp, Entity};
-use kg_domain::{IndexEntry, IndexOp, Listing, OpError, OpResult};
+use kg_domain::{GIT_SOURCE, IndexEntry, IndexOp, Listing, OpError, OpResult, is_git_source};
 
 use crate::manifest::inside;
 use crate::source::{Index, Source, clone, git};
@@ -15,8 +15,8 @@ const SAVED: &str = "indexes.json";
 const LIMIT: usize = 1024 * 1024;
 const DESCRIPTION: usize = 300;
 
-/// Index and plugin names show on the approval card, so only plain lowercase ASCII is allowed:
-/// no line breaks that could fake card lines, and no lookalike letters.
+// Index and plugin names show on the approval card, so only plain lowercase ASCII is allowed:
+// no line breaks that could fake card lines, and no lookalike letters.
 fn plain(name: &str) -> bool {
     (1..=64).contains(&name.len())
         && name.bytes().all(|byte| {
@@ -112,14 +112,14 @@ pub(crate) fn public(url: &str) -> String {
 #[must_use]
 pub fn shown(location: &str) -> String {
     match Source::parse(location) {
-        Ok(Source::Git { url, reference }) => format!("git:{}@{reference}", public(&url)),
+        Ok(Source::Git { url, reference }) => format!("{GIT_SOURCE}{}@{reference}", public(&url)),
         _ => location.to_owned(),
     }
 }
 
 /// A source that is neither `git:` nor an absolute path names a plugin in the indexes.
 pub(crate) fn names_an_index(source: &str) -> bool {
-    !source.starts_with("git:") && Path::new(source).is_relative()
+    !is_git_source(source) && Path::new(source).is_relative()
 }
 
 /// Why the saved index list cannot be read.
@@ -194,7 +194,10 @@ pub(crate) fn read(
                 .parse()
                 .map_err(|_| OpError::Invalid(format!("{FILE} is not a file")))?;
             if size > LIMIT {
-                return Err(OpError::Invalid("the index is larger than 1 MiB".into()));
+                return Err(OpError::Invalid(format!(
+                    "the index is larger than {} MiB",
+                    LIMIT >> 20
+                )));
             }
             parse(&run(&["show", &blob])?, None)?
         }
@@ -234,7 +237,10 @@ pub(crate) fn read(
 /// back absolute; an index read from git lists only git sources.
 pub(crate) fn parse(text: &str, folder: Option<&Path>) -> Result<(String, Vec<IndexEntry>)> {
     if text.len() > LIMIT {
-        return Err(OpError::Invalid("the index is larger than 1 MiB".into()));
+        return Err(OpError::Invalid(format!(
+            "the index is larger than {} MiB",
+            LIMIT >> 20
+        )));
     }
     let index: Index<IndexEntry> =
         serde_json::from_str(text).map_err(|error| OpError::Invalid(format!("{FILE}: {error}")))?;

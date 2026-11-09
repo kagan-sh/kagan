@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use kg_domain::{
     BrowserOp, BrowserSnapshot, ConfigOp, Op, OpError, OpResult, PluginOp, PreviewKind, TEXT_MAX,
-    ThreadOp, UiSnapshot,
+    ThreadOp, UiSnapshot, is_git_source,
 };
 
 use crate::socket::Client;
@@ -264,8 +264,8 @@ pub(crate) fn take_file_text(mut op: Op, stdin: impl std::io::Read) -> Result<Op
     Ok(op)
 }
 
-/// A setting value left off the command line comes from a prompt that does not show it, or
-/// from stdin, so a secret stays out of shell history.
+// A setting value left off the command line comes from a prompt that does not show it, or
+// from stdin, so a secret stays out of shell history.
 fn take_value(op: Op) -> Result<Op, OpError> {
     use std::io::IsTerminal as _;
     let stdin = std::io::stdin();
@@ -317,8 +317,9 @@ fn read_file(path: &Path, noun: &str) -> Result<Vec<u8>, OpError> {
     // A fifo reports length 0, and a file can grow after this check.
     if meta.is_file() && meta.len() > TEXT_MAX as u64 {
         return Err(OpError::Invalid(format!(
-            "{noun} is {} bytes; the cap is 1 MiB",
-            meta.len()
+            "{noun} is {} bytes; the cap is {} MiB",
+            meta.len(),
+            TEXT_MAX >> 20
         )));
     }
     let file = std::fs::File::open(path)
@@ -346,7 +347,8 @@ fn read_capped(mut reader: impl std::io::Read, noun: &str) -> Result<Vec<u8>, Op
         let next = bytes.len().saturating_add(read);
         if next > TEXT_MAX {
             return Err(OpError::Invalid(format!(
-                "{noun} is {next} bytes; the cap is 1 MiB"
+                "{noun} is {next} bytes; the cap is {} MiB",
+                TEXT_MAX >> 20
             )));
         }
         bytes.extend_from_slice(&chunk[..read]);
@@ -488,7 +490,7 @@ pub(crate) fn paths(mut op: Op) -> Result<Op, OpError> {
                     kg_domain::IndexOp::Add { location: source }
                     | kg_domain::IndexOp::Remove { location: source },
             },
-        ) if !source.starts_with("git:") && Path::new(source.as_str()).exists() => {
+        ) if !is_git_source(source) && Path::new(source.as_str()).exists() => {
             let mut path = PathBuf::from(&*source);
             absolute(&mut path);
             *source = path

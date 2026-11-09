@@ -532,7 +532,6 @@ impl Manifest {
         Ok(())
     }
 
-    /// The manifest text the approval screen shows.
     fn shown(&self) -> impl Iterator<Item = &str> {
         let powers = &self.powers;
         [self.name.as_str(), self.version.as_str()]

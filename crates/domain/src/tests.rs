@@ -1098,7 +1098,7 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
     });
     assert_eq!(
         crate::check(&stop),
-        Err("thread id must be a plain identifier")
+        Err("thread id must be a plain identifier".into())
     );
     let run = Op::Thread(ThreadOp::Run(crate::Run {
         project_id: crate::ProjectId("project".into()),
@@ -1126,16 +1126,16 @@ fn surface_ids_and_window_indexes_match_the_documented_checks() {
             id: id.into(),
         }))
     };
-    assert_eq!(open(""), Err("surface id must be a plain name"));
-    assert_eq!(open("a\nb"), Err("surface id must be a plain name"));
+    assert_eq!(open(""), Err("surface id must be a plain name".into()));
+    assert_eq!(open("a\nb"), Err("surface id must be a plain name".into()));
     assert_eq!(open("notes"), Ok(()));
     assert_eq!(
         crate::check(&Op::Window(WindowOp::Thread { index: 0 })),
-        Err("thread index must be between 1 and 9")
+        Err("thread index must be between 1 and 9".into())
     );
     assert_eq!(
         crate::check(&Op::Window(WindowOp::Thread { index: 10 })),
-        Err("thread index must be between 1 and 9")
+        Err("thread index must be between 1 and 9".into())
     );
     assert_eq!(
         crate::check(&Op::Window(WindowOp::Thread { index: 9 })),
@@ -1152,14 +1152,17 @@ fn a_browser_op_needs_a_plain_thread_and_a_web_address() {
             thread_id: ThreadId("thr_1".into()),
         }))
     };
-    assert_eq!(open("  "), Err("type a web address, such as example.com"));
+    assert_eq!(
+        open("  "),
+        Err("type a web address, such as example.com".into())
+    );
     assert_eq!(open("example.com"), Ok(()));
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Goto {
             url: "example.com".into(),
             thread_id: ThreadId("not plain".into()),
         })),
-        Err("thread id must be a plain identifier")
+        Err("thread id must be a plain identifier".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Snapshot {
@@ -1178,14 +1181,14 @@ fn browser_acting_ops_are_checked_and_named_on_the_wire() {
             text: String::new(),
             thread_id: thread_id(),
         })),
-        Err("text must not be empty")
+        Err("text must not be empty".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Type {
             text: "x".repeat(1024 * 1024 + 1),
             thread_id: thread_id(),
         })),
-        Err("text is over 1 MiB")
+        Err("text is over 1 MiB".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Fill {
@@ -1194,7 +1197,7 @@ fn browser_acting_ops_are_checked_and_named_on_the_wire() {
             file: Some("a".into()),
             thread_id: thread_id(),
         })),
-        Err("pass the text or --file, not both")
+        Err("pass the text or --file, not both".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Fill {
@@ -1203,7 +1206,7 @@ fn browser_acting_ops_are_checked_and_named_on_the_wire() {
             file: None,
             thread_id: thread_id(),
         })),
-        Err("pass the text or --file")
+        Err("pass the text or --file".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Fill {
@@ -1212,7 +1215,7 @@ fn browser_acting_ops_are_checked_and_named_on_the_wire() {
             file: None,
             thread_id: thread_id(),
         })),
-        Err("text is over 1 MiB")
+        Err("text is over 1 MiB".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Fill {
@@ -1228,21 +1231,21 @@ fn browser_acting_ops_are_checked_and_named_on_the_wire() {
             key: " ".into(),
             thread_id: thread_id(),
         })),
-        Err("key must not be empty")
+        Err("key must not be empty".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Scroll {
             dy: f32::NAN,
             thread_id: thread_id(),
         })),
-        Err("scroll must be a number")
+        Err("scroll must be a number".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Scroll {
             dy: f32::INFINITY,
             thread_id: thread_id(),
         })),
-        Err("scroll must be a number")
+        Err("scroll must be a number".into())
     );
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Click {
@@ -1391,7 +1394,8 @@ fn a_resize_outside_the_terminal_limits_is_refused() {
             terminal: None,
         })
     };
-    let refused = Err("terminal size must be 2 to 1000 columns and 1 to 500 rows");
+    let refused: Result<(), String> =
+        Err("terminal size must be 2 to 1000 columns and 1 to 500 rows".into());
     for (cols, rows) in [
         (0, 24),
         (1, 24),

@@ -83,7 +83,7 @@ fn run(
     if let Some(index) = index {
         command.env("GIT_INDEX_FILE", index);
     }
-    kg_process::capture_with_limit(command, limit).map_err(|error| match error.kind() {
+    kg_process::capture(command, limit, || false).map_err(|error| match error.kind() {
         std::io::ErrorKind::NotFound => ToolError::Missing,
         std::io::ErrorKind::TimedOut => ToolError::TimedOut,
         _ => ToolError::Failed(error.to_string()),

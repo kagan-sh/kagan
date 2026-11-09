@@ -58,7 +58,7 @@ fn http_grants(
 
 const INSTRUCT_CAP: usize = 4096;
 const INSTRUCT_TOTAL: usize = 16 * 1024;
-/// What every reader but the plugin sees for a secret setting that holds a value.
+// What every reader but the plugin sees for a secret setting that holds a value.
 const SET: &str = "set";
 
 /// Enabled contributions, discovered without executing plugin code.

@@ -220,6 +220,7 @@ impl PluginHost {
         self.started
     }
 
+    #[cfg(test)]
     #[must_use]
     pub fn is_loaded(&self, id: &PluginId) -> bool {
         self.active

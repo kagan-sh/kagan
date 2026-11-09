@@ -213,7 +213,7 @@ pub(crate) async fn remove_web_stores(ids: Vec<[u8; 16]>, cx: &mut AsyncApp) -> 
 const IN_USE_WARNING: &str =
     "the plugin is removed, but WebKit still held a page store (DataStoreInUse)";
 
-/// The answer for an empty list or an old macOS, where custom stores do not exist.
+// The answer for an empty list or an old macOS, where custom stores do not exist.
 fn no_stores(ids: &[[u8; 16]]) -> Option<StoreRemoval> {
     if ids.is_empty() {
         return Some(StoreRemoval {

@@ -11,7 +11,6 @@ kg-core.workspace = true
 kg-domain.workspace = true
 async-channel.workspace = true
 cap-std = "=4.0.3"
-async-io = "=2.6.0"
 dunce.workspace = true
 futures.workspace = true
 gpui-kit.workspace = true

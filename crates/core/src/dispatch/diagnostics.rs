@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use gpui_kit::{AppContext as _, AsyncApp, WeakEntity};
 use kg_domain::{
     DiagnosticsOp, EventKind, LogCounts, OpError, OpResult, Plugin, PluginLog, Thread, ThreadId,
-    ThreadStatus,
+    ThreadStatus, is_git_source,
 };
 use kg_store::{ScreenRow, Store};
 use kg_terminal::SNAPSHOT_MAX;
@@ -152,11 +152,7 @@ fn cause_of(endings: &[(ThreadId, Vec<kg_domain::EventKind>)], id: &ThreadId) ->
 }
 
 fn source_kind(source: &str) -> &'static str {
-    if source.starts_with("git:") {
-        "git"
-    } else {
-        "path"
-    }
+    if is_git_source(source) { "git" } else { "path" }
 }
 
 fn commit_version(commit: Option<&str>) -> &str {

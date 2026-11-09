@@ -21,7 +21,7 @@ pub fn kill_leader(raw: u32) {
 
 // A shell's background jobs sit in their own process groups and keep the pty open after
 // the shell dies, so everything that started under the program ends, found with `getsid`.
-// A pid is checked again right before the kill: a wrong one ends the user's other programs.
+// A pid is checked right before the kill: a wrong one ends the user's other programs.
 pub fn kill_tree(leader: u32) {
     let Some(leader) = pid_of(leader) else {
         return;
@@ -33,7 +33,6 @@ pub fn kill_tree(leader: u32) {
         .lines()
         .filter_map(|line| line.trim().parse::<u32>().ok())
         .filter_map(pid_of)
-        .filter(|pid| sid_of(*pid) == Some(leader))
         .for_each(|pid| {
             if sid_of(pid) == Some(leader) {
                 // The process may already be gone.

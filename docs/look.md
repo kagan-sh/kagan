@@ -124,7 +124,7 @@ All 16 names have different colors on fjord. A test checks it.
 
 These ratios describe the fjord palette. The window does not report them, and it does not repair colors.
 
-Use `<dataDir>/themes/<id>.json`. `KG_DATA_DIR` overrides the data directory; otherwise it is `~/.kagan` (`USERPROFILE` on Windows). IDs are nonempty lowercase ASCII letters, digits and dashes. `fjord`, `ember` and `grey` are reserved. Paths, dots and traversal are rejected by the operation boundary. A plugin theme is a file inside the plugin, declared in its manifest, with the id `<plugin id>/<theme id>` ([plugin-api.md](plugin-api.md)).
+Use `<dataDir>/themes/<id>.json`. `KG_DATA_DIR` overrides the data directory, and an empty one counts as unset; otherwise it is `$HOME/.kagan`, or `%USERPROFILE%\.kagan` when `HOME` is unset or empty. IDs are nonempty lowercase ASCII letters, digits and dashes. `fjord`, `ember` and `grey` are reserved. Paths, dots and traversal are rejected by the operation boundary. A plugin theme is a file inside the plugin, declared in its manifest, with the id `<plugin id>/<theme id>` ([plugin-api.md](plugin-api.md)).
 
 Copy [ocean.json](themes/ocean.json) as a starting point, or run `kg theme new <id> [--from <theme>]`, or press New theme… in Settings → Appearance. The file contains a `name`, a complete `light` palette and a complete `dark` palette, and may set `look`.
 

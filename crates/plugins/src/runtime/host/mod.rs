@@ -352,7 +352,7 @@ impl PluginHost {
             .map(|global| global.0.clone())
     }
 }
-/// No activation is numbered 0, so no write matches a paused gate.
+// No activation is numbered 0, so no write matches a paused gate.
 const PAUSED: u64 = 0;
 
 pub(crate) struct Paused {

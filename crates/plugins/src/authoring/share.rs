@@ -1,9 +1,9 @@
 use std::ffi::OsStr;
 use std::path::Path;
 
-use kg_domain::{IndexEntry, OpError, OpResult};
+use kg_domain::{GIT_SOURCE, IndexEntry, OpError, OpResult};
 
-use crate::source::git;
+use crate::source::{git, git_command};
 use crate::{Result, discover};
 
 /// Checks a plugin that is committed and pushed, and returns its index entry and the line a
@@ -16,13 +16,19 @@ pub(crate) fn share(
     crate::development::check(path, data_dir, components)?;
     let manifest = discover(path, data_dir)?.manifest;
     let (_keep, never) = async_channel::bounded::<()>(1);
+    let inside = git_command(
+        Some(path),
+        ["rev-parse", "--is-inside-work-tree"].map(OsStr::new),
+        &never,
+    )?;
+    if inside.code != 0 || inside.stdout.trim_ascii() != b"true" {
+        return Err(OpError::Invalid(format!(
+            "{} is not in a git repository",
+            path.display()
+        )));
+    }
     let run = |args: &[&str]| git(Some(path), args.iter().map(OsStr::new), &never);
-    let top = run(&["rev-parse", "--show-toplevel"]).map_err(|error| match error {
-        OpError::Failed(message) if message.contains("not a git repository") => {
-            OpError::Invalid(format!("{} is not in a git repository", path.display()))
-        }
-        other => other,
-    })?;
+    let top = run(&["rev-parse", "--show-toplevel"])?;
     if !run(&["status", "--porcelain", "--", "."])?.is_empty() {
         return Err(OpError::Invalid(format!(
             "commit the changes in {} first; a teammate gets the commit, not your files",
@@ -53,7 +59,7 @@ pub(crate) fn share(
         .ok()
         .filter(|relative| !relative.as_os_str().is_empty())
         .map(|relative| relative.to_string_lossy().replace('\\', "/"));
-    let source = format!("git:{url}@{commit}");
+    let source = format!("{GIT_SOURCE}{url}@{commit}");
     let name = manifest
         .id
         .0

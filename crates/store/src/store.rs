@@ -214,8 +214,8 @@ impl Store {
     }
 }
 
-/// An insert of `columns` into `table` with `:column` placeholders that replaces the row with the
-/// same `id`.
+// An insert of `columns` into `table` with `:column` placeholders that replaces the row with the
+// same `id`.
 fn upsert(table: &str, columns: &str) -> String {
     let names: Vec<&str> = columns.split(", ").collect();
     let values = names
@@ -234,7 +234,7 @@ fn upsert(table: &str, columns: &str) -> String {
     )
 }
 
-/// The `seq` of the latest `started` event of the thread named by the SQL expression `thread`.
+// The `seq` of the latest `started` event of the thread named by the SQL expression `thread`.
 fn latest_start(thread: &str) -> String {
     format!(
         "(SELECT MAX(seq) FROM events AS start WHERE start.thread_id = {thread} \
