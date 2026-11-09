@@ -883,6 +883,17 @@ fn a_version_shows_its_number_without_its_build_suffix_or_full_stop(cx: &mut Tes
     assert_eq!(label(cx, window, "program-version-codex"), "0.16.0");
 }
 
+#[cfg(unix)]
+#[gpui_kit::test]
+fn the_custom_command_label_starts_on_the_program_names(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    fixture_programs(cx, data.path(), &["codex"]);
+    start_in_plain_folder(cx, window, data.path());
+    let (name_x, _, _, _) = bounds(cx, window, "program-name-codex").unwrap();
+    let (label_x, _, _, _) = bounds(cx, window, "custom-command-label").unwrap();
+    assert_close(label_x, name_x, "the custom command label");
+}
+
 /// Whether the row sits fully inside the program list's visible rows.
 #[cfg(unix)]
 fn in_program_list(cx: &mut TestAppContext, window: AnyWindowHandle, row: &str) -> bool {

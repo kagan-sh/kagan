@@ -11,8 +11,8 @@ use kg_domain::{EnvironmentProvider, ProjectId, ThreadId, ThreadStatus};
 use crate::kagan::{NewThread, StopThread};
 
 use super::{
-    add_project, click, committed_repo, environment_of, label, open, run_shell, selected_of,
-    set_program, setup, shell, shown, shows, thread_status, wait_until,
+    add_project, click, commit_setup, committed_repo, environment_of, label, open, run_shell,
+    selected_of, set_program, setup, shell, shown, shows, thread_status, wait_until,
 };
 
 #[gpui_kit::test]
@@ -261,6 +261,41 @@ fn escape_leaves_the_new_thread_screen_from_a_choice(cx: &mut TestAppContext) {
         cx.update(|cx| screen_read::start_project(kagan.read(cx)))
             .is_none()
     });
+}
+
+/// The bounds of an element, as x, y, width and height in points.
+fn bounds(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    id: &str,
+) -> Option<(f32, f32, f32, f32)> {
+    cx.update_window(window, |_, window, _| {
+        crate::ui_registry::find(window, &ElementId::Name(id.into())).map(|element| {
+            let bounds = element.bounds;
+            (
+                f32::from(bounds.origin.x),
+                f32::from(bounds.origin.y),
+                f32::from(bounds.size.width),
+                f32::from(bounds.size.height),
+            )
+        })
+    })
+    .unwrap()
+}
+
+#[gpui_kit::test]
+fn show_script_starts_on_the_spine_of_the_note_above_it(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let (repo, project) = committed_repo(cx, data.path());
+    commit_setup(&repo, "echo from-commit\n");
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "setup-disclose"));
+    let (note_x, _, _, _) = bounds(cx, window, "setup-script").unwrap();
+    let (disclose_x, _, _, _) = bounds(cx, window, "setup-disclose").unwrap();
+    assert!(
+        (disclose_x - note_x).abs() < 0.5,
+        "{disclose_x} vs {note_x}"
+    );
 }
 
 /// Whether the element named `name` is checked, and whether it has focus.

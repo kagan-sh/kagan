@@ -143,6 +143,50 @@ fn record_row_height(
     }
 }
 
+// A row the width of the list. Its label keeps the program names' inset, and the chevron turns
+// while the fields are open.
+fn custom_toggle(toggle: &'static str, custom: bool, cx: &App) -> AnyElement {
+    let muted = cx.theme().muted_foreground;
+    control(
+        "custom-command-toggle",
+        Facts::button(toggle),
+        Button::new("custom-command-toggle-button")
+            .small()
+            .ghost()
+            .w_full()
+            .h_7()
+            .accessibility_label(toggle)
+            // The button centres its content, so the row fills the width.
+            .child(
+                h_flex()
+                    .w_full()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .id("custom-command-label")
+                            .ui_container()
+                            .px_2()
+                            .aria_label(toggle)
+                            .child(toggle),
+                    )
+                    .child(
+                        div().pr_2().child(
+                            Icon::new(if custom {
+                                IconName::ChevronUp
+                            } else {
+                                IconName::ChevronDown
+                            })
+                            .small()
+                            .text_color(muted),
+                        ),
+                    ),
+            )
+            .on_click(dispatch(ToggleCustomCommand)),
+    )
+    .into_any_element()
+}
+
 fn programs_failed(message: &str, muted: Hsla, cx: &App) -> AnyElement {
     // The message sits above the button: a long path in it must not push the Retry out of view.
     v_flex()
@@ -259,28 +303,7 @@ impl Render for Picker {
             .when_some(reason, |this, reason| {
                 this.child(note("program-reason", reason, muted, cx))
             })
-            .child(control(
-                "custom-command-toggle",
-                Facts::button(toggle),
-                Button::new("custom-command-toggle-button")
-                    .small()
-                    .ghost()
-                    .w_full()
-                    .accessibility_label(toggle)
-                    // The button centres its content, so the label fills the width to sit left.
-                    .child(
-                        h_flex()
-                            .w_full()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .w_4()
-                                    .child(Icon::new(IconName::Plus).small().text_color(muted)),
-                            )
-                            .child(toggle),
-                    )
-                    .on_click(dispatch(ToggleCustomCommand)),
-            ))
+            .child(custom_toggle(toggle, custom, cx))
             .when(custom, |this| this.child(self.render_custom(cx)))
     }
 }

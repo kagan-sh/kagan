@@ -35,6 +35,7 @@ impl Kagan {
                 Button::new("setup-disclose-button")
                     .small()
                     .ghost()
+                    .px_0()
                     .label(name)
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.start.setup_open = !this.start.setup_open;
