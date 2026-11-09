@@ -252,7 +252,6 @@ fn hash_bytes(bytes: &[u8]) -> Result<String> {
     std::fs::write(&path, bytes)?;
     let dir = std::env::temp_dir();
     let hashed = crate::host::git::git(&dir, &["hash-object", "--", &path.display().to_string()]);
-    // The hash below is the result; the temp file is only tidied.
     let _ = std::fs::remove_file(&path);
     Ok(hashed?.trim().to_owned())
 }
