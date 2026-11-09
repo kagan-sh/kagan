@@ -224,6 +224,7 @@ pub(in crate::runtime::ops) async fn keep(
     let paused = host.update(cx, |host, _| host.pause_activation(&id));
     hold(host, Hold::Keep, cx).await;
     let approved = serde_json::to_value(&grant)?;
+    let skills = discovered.manifest.skills.clone();
     let workspace = cx.update(|cx| Workspace::global(cx));
     let kept = workspace
         .read_with(cx, |workspace, _| {
@@ -233,6 +234,7 @@ pub(in crate::runtime::ops) async fn keep(
                 source.clone(),
                 commit.clone(),
                 approved.clone(),
+                skills.clone(),
             )
         })
         .await?;
@@ -246,6 +248,7 @@ pub(in crate::runtime::ops) async fn keep(
             commit,
             enabled: true,
             approved,
+            skills,
             error: None,
         };
         workspace

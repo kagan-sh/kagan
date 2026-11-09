@@ -79,6 +79,7 @@ export default class Plugin extends View {
                 "downloads": {},
                 "folders": {}
             }),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();

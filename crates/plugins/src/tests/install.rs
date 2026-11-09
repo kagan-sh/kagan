@@ -1138,6 +1138,7 @@ fn a_plugin_that_did_not_start_says_why_when_listed(cx: &mut TestAppContext) {
         root,
         commit: None,
         enabled: true,
+        skills: Vec::new(),
         error: None,
     };
     open(cx, &[record]);

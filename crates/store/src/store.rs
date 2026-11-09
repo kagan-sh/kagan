@@ -147,6 +147,7 @@ UPDATE projects SET sort = (
 ",
     "ALTER TABLE pending_interactions ADD COLUMN fields TEXT;",
     REPAIR_THREAD_COLUMNS,
+    "ALTER TABLE plugins ADD COLUMN skills TEXT NOT NULL DEFAULT '[]';",
 ];
 
 pub(crate) const REPAIR_THREAD_COLUMNS: &str = "-- repair conflicting thread migrations";

@@ -211,6 +211,7 @@ fn install_with(data: &Path, folder: &str, id: &str, entry: &str) {
             commit: None,
             enabled: true,
             approved: json!({"powers": {"areas": ["threads"]}, "downloads": {}, "folders": {}}),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();
@@ -614,6 +615,7 @@ fn install_example(data: &Path, name: &str) {
             commit: None,
             enabled: true,
             approved: json!({"powers": {"areas": ["threads"]}, "downloads": {}, "folders": {}}),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();

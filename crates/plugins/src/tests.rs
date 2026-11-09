@@ -13,6 +13,7 @@ mod schedule;
 mod script;
 mod secret;
 mod settings;
+mod skills;
 mod status;
 
 use std::path::Path;
@@ -144,6 +145,7 @@ fn installed(root: &Path) -> Plugin {
         root,
         commit: None,
         enabled: true,
+        skills: Vec::new(),
         error: None,
     }
 }
@@ -1100,6 +1102,7 @@ fn installed_example(root: &Path) -> Plugin {
         root,
         commit: None,
         enabled: true,
+        skills: Vec::new(),
         error: None,
     }
 }
@@ -1138,6 +1141,7 @@ fn installed_at(root: &Path) -> Plugin {
         root,
         commit: None,
         enabled: true,
+        skills: Vec::new(),
         error: None,
     }
 }

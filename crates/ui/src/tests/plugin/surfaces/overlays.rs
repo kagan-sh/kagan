@@ -186,6 +186,7 @@ pub(in crate::tests) fn install_example_overlay(data: &Path) {
             commit: None,
             enabled: true,
             approved: json!({"powers": {}, "downloads": {}, "folders": {}}),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();

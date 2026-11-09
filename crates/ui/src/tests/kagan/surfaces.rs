@@ -83,6 +83,7 @@ pub(in crate::tests) fn install_overlay(data: &Path, id: &str, source: &str) {
             commit: None,
             enabled: true,
             approved: serde_json::json!({"powers": {}, "downloads": {}, "folders": {}}),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();
@@ -239,6 +240,7 @@ export class PanelB extends View {
             commit: None,
             enabled: true,
             approved: serde_json::json!({ "powers": {}, "downloads": {}, "folders": {} }),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();

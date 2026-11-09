@@ -66,6 +66,7 @@ fn install_panel(data: &Path, folder: &str, id: &str, entry: &str) {
             commit: None,
             enabled: true,
             approved: json!({"powers": {}, "downloads": {}, "folders": {}}),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();

@@ -104,13 +104,28 @@ async fn boot(
     let records = records.await?;
     let known: BTreeSet<_> = records.iter().map(|record| record.id.clone()).collect();
     web_store::retry_orphan_stores(&data_dir, &known, cx).await;
-    for record in records {
+    for mut record in records {
         let root = record.root.clone();
         let data = data_dir.clone();
         if let Ok(manifest) = cx
             .background_spawn(async move { manifest::read(&root, &data) })
             .await
         {
+            if record.skills != manifest.skills {
+                let (id, skills) = (record.id.clone(), manifest.skills.clone());
+                let workspace = cx.update(|cx| Workspace::global(cx));
+                match workspace
+                    .read_with(cx, |workspace, _| {
+                        workspace.set_plugin_skills(id, skills.clone())
+                    })
+                    .await
+                {
+                    Ok(()) => record.skills = skills,
+                    Err(error) => host.update(cx, |host, _| {
+                        host.warnings.insert(record.id.clone(), error.to_string());
+                    }),
+                }
+            }
             host.update(cx, |host, _| {
                 host.identities
                     .insert(manifest.id.clone(), (manifest.name, manifest.version));

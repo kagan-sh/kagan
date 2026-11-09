@@ -254,6 +254,7 @@ pub(in crate::tests) fn write_plugin(
             commit: None,
             enabled: true,
             approved: json!({"powers": {}, "downloads": {}, "folders": {}}),
+            skills: Vec::new(),
             error: None,
         })
         .unwrap();

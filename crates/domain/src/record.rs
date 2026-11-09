@@ -409,6 +409,9 @@ pub struct Plugin {
     pub commit: Option<String>,
     pub enabled: bool,
     pub approved: Value,
+    /// The skill folders the manifest names, relative to `root`. Stored with the record.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skills: Vec<PathBuf>,
     /// Why the plugin did not start. Filled when plugins are listed; never stored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,

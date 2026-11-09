@@ -71,20 +71,15 @@ pub(super) fn shared(plugins: Vec<kg_domain::Plugin>) -> Result<Catalog> {
     for plugin in plugins.into_iter().filter(|plugin| plugin.enabled) {
         let result = (|| -> Result<()> {
             let root = dunce::canonicalize(&plugin.root)?;
-            let manifest: serde_json::Value =
-                serde_json::from_str(&std::fs::read_to_string(root.join("kagan.json"))?)?;
-            if let Some(skills) = manifest.get("skills") {
-                let skills: Vec<PathBuf> = serde_json::from_value(skills.clone())?;
-                for path in skills {
-                    let path = dunce::canonicalize(root.join(path))?;
-                    if !path.starts_with(&root) {
-                        return Err(OpError::Invalid(format!(
-                            "plugin {} skill escapes its folder",
-                            plugin.id
-                        )));
-                    }
-                    paths.push(path);
+            for skill in &plugin.skills {
+                let path = dunce::canonicalize(root.join(skill))?;
+                if !path.starts_with(&root) {
+                    return Err(OpError::Invalid(format!(
+                        "plugin {} skill escapes its folder",
+                        plugin.id
+                    )));
                 }
+                paths.push(path);
             }
             Ok(())
         })();

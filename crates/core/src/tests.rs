@@ -1404,7 +1404,6 @@ fn install_plugin(dir: &Path, enabled: bool) {
     let root = dir.join("demo-plugin");
     let skill = root.join("skills/demo");
     std::fs::create_dir_all(&skill).unwrap();
-    std::fs::write(root.join("kagan.json"), r#"{"skills": ["skills/demo"]}"#).unwrap();
     std::fs::write(
         skill.join("SKILL.md"),
         "---\nname: demo\ndescription: A demo skill.\n---\n\nDo the demo.\n",
@@ -1425,6 +1424,7 @@ fn install_plugin(dir: &Path, enabled: bool) {
             commit: None,
             enabled,
             approved: json!({}),
+            skills: vec!["skills/demo".into()],
             error: None,
         })
         .unwrap();
@@ -1597,6 +1597,7 @@ fn plugin(id: &str, root: &Path, source: &str, commit: Option<&str>, approved: &
         } else {
             json!({ "marker": approved })
         },
+        skills: Vec::new(),
         error: None,
     }
 }
@@ -1815,6 +1816,7 @@ async fn folder_plugin_fixture(cx: &mut TestAppContext) -> Fixture {
                 commit: None,
                 enabled: true,
                 approved: json!({ "folders": { "notes": "Notes" } }),
+                skills: Vec::new(),
                 error: None,
             })
             .unwrap();
