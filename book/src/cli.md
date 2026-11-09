@@ -409,7 +409,7 @@ Options:
           
 
       --quiet
-          With a parent, do not type a note into the parent's terminal when this thread's turn ends, waits, exits or fails
+          With a parent, do not type a note into the parent's terminal when this thread's turn ends, asks the person, exits or fails
 
       --lifecycle-owner-thread-id <LIFECYCLE_OWNER_THREAD_ID>
           

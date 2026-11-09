@@ -320,7 +320,7 @@ pub struct Run {
     #[arg(long)]
     #[serde(default)]
     pub parent_thread_id: Option<ThreadId>,
-    /// With a parent, do not type a note into the parent's terminal when this thread's turn ends, waits, exits or fails
+    /// With a parent, do not type a note into the parent's terminal when this thread's turn ends, asks the person, exits or fails
     #[arg(long)]
     #[serde(default)]
     pub quiet: bool,
