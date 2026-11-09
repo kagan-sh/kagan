@@ -465,8 +465,7 @@ fn start_headless(location: &std::ffi::OsStr) -> io::Result<()> {
     std::os::unix::process::CommandExt::process_group(&mut command, 0);
     #[cfg(windows)]
     {
-        const DETACHED_PROCESS: u32 = 0x0000_0008;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        use windows_sys::Win32::System::Threading::{CREATE_NO_WINDOW, DETACHED_PROCESS};
         std::os::windows::process::CommandExt::creation_flags(
             &mut command,
             DETACHED_PROCESS | CREATE_NO_WINDOW,
