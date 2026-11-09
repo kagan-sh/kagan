@@ -328,7 +328,7 @@ Not in `kg plugin` [book:cli]. It runs a command the plugin declares under `cli`
 
 ## Skill
 
-A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matches the folder, a `description`, then the instructions [docs:self-extend] [book:skills]. Sources, lowest first: bundled, plugin, user (`<dataDir>/skills`), project (`<project>/.kagan/skills`) [docs:self-extend]. A higher source overrides a lower one with the same name [decision 24]. Two skills with the same name in one source are both dropped, and `List` shows the error [decision 24]. A user or project skill whose name starts with `kg-` is dropped with an error; that prefix is reserved for bundled and plugin skills [decision 158]. A plugin's skills are the folders its record holds: set on install, update, reload, and at each app start, not read from `kagan.json` on each list. Every start with agent integration writes the resolved kagan skills (bundled, plugin, user, project) and the person's BB user skills (`<BB_DATA_DIR or ~/.bb>/skills`) and the thread folder's `.bb/skills` to an immutable per-content catalog, and exposes it natively to the known programs; a kagan skill wins a name collision with a BB skill [decision 158]. `List` shows only the four kagan sources, not the BB skills.
+A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matches the folder, a `description`, then the instructions [docs:self-extend] [book:skills]. Sources, lowest first: bundled, plugin, user (`<dataDir>/skills`), project (`<project>/.kagan/skills`) [docs:self-extend]. A higher source overrides a lower one with the same name [decision 24]. Two skills with the same name in one source are both dropped, and `List` shows the error [decision 24]. A user or project skill whose name starts with `kg-` is dropped with an error; that prefix is reserved for bundled and plugin skills [decision 158]. A plugin's skills are the folders its record holds: set on install, update, reload, and at each app start, not read from `kagan.json` on each list. Every start with agent integration writes the resolved kagan skills (bundled, plugin, user, project) and the person's BB user skills (`<BB_DATA_DIR or ~/.bb>/skills`) and the thread folder's `.bb/skills` to an immutable per-content catalog, and exposes it natively to the known programs; a kagan skill wins a name collision with a BB skill [decision 158]. `List`, `Show` and `Files` read the four kagan sources and the same BB skills, so the window and the agent see one list [decision 202].
 
 ### `List`
 
@@ -356,11 +356,17 @@ A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matche
 - **Changes**: copies an existing skill folder into user skills, or into the project when `--project` is set [book:skills].
 - **Refused when**: a path that is not a skill folder, or a skill name that starts with `kg-` — `invalid` [op/].
 
+### `Update`
+
+- **Allowed when**: the skill is a user or project skill [decision 202].
+- **Changes**: replaces the whole `SKILL.md` with the text given, frontmatter included. The file is written as-is; there is no check that it still matches what was read [decision 202].
+- **Refused when**: a bundled, plugin, or BB skill — `invalid`; or text whose frontmatter does not parse, or names another skill — `invalid` [decision 202].
+
 ### `Remove`
 
 - **Allowed when**: the skill is a user or project skill [book:skills] [docs:self-extend].
 - **Changes**: deletes that skill folder [book:skills].
-- **Refused when**: a bundled or plugin skill — `invalid` [book:skills] [op/] [person 2026-10-08].
+- **Refused when**: a bundled, plugin, or BB skill — `invalid` [book:skills] [op/] [person 2026-10-08] [decision 202].
 
 ## Section
 

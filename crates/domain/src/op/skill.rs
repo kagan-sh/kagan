@@ -54,6 +54,16 @@ pub enum SkillOp {
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
     },
+    /// Replace a user or project skill's SKILL.md text
+    Update {
+        /// Skill name
+        name: String,
+        /// The whole SKILL.md, frontmatter included
+        text: String,
+        /// Project whose skills to include
+        #[arg(long, env = "KG_PROJECT_ID")]
+        project_id: Option<ProjectId>,
+    },
     /// Remove a skill
     Remove {
         /// Skill name

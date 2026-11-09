@@ -25,6 +25,7 @@ mod resume;
 mod screen;
 mod search;
 mod settings;
+mod skill;
 mod terminal;
 mod thread;
 mod turn;
