@@ -31,6 +31,45 @@ async fn preview(
 }
 
 #[gpui_kit::test]
+async fn a_socket_preview_asks_the_window_for_its_tab_and_a_plugin_preview_does_not(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    std::fs::write(fixture.dir.path().join("notes.txt"), "one\n").unwrap();
+    let thread = started(&fixture, cx).await;
+    let jobs = std::rc::Rc::new(std::cell::RefCell::new(Vec::<crate::UiJob>::new()));
+    let sink = jobs.clone();
+    cx.update(|cx| {
+        fixture.workspace.update(cx, |workspace, _| {
+            workspace.set_ui_driver(std::rc::Rc::new(
+                move |job: crate::UiJob, _: &mut gpui_kit::App| {
+                    sink.borrow_mut().push(job);
+                    gpui_kit::Task::ready(Ok::<_, OpError>(OpResult::Done))
+                },
+            ));
+        });
+    });
+    let (_gone, gone) = async_channel::bounded::<()>(1);
+    let socket = Op::Preview(PreviewOp::Show {
+        thread_id: Some(thread.clone()),
+        path: "notes.txt".into(),
+    });
+    cx.update(|cx| crate::Workspace::dispatch_for(socket, Some(crate::Requester::new(gone)), cx))
+        .await
+        .unwrap();
+    let shown = jobs.borrow().clone();
+    assert!(
+        matches!(
+            shown.as_slice(),
+            [crate::UiJob::Preview { thread: Some(id), path }] if *id == thread && path == "notes.txt"
+        ),
+        "{shown:?}"
+    );
+    preview(Some(&thread), "notes.txt", cx).await.unwrap();
+    assert_eq!(jobs.borrow().len(), 1, "a plugin read shows no tab");
+}
+
+#[gpui_kit::test]
 async fn a_relative_path_inside_the_environment_reads_as_text(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     std::fs::write(fixture.dir.path().join("notes.txt"), "one\ntwo\n").unwrap();

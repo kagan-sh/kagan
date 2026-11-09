@@ -414,10 +414,12 @@ fn a_sidebar_plugin_draws_only_the_list_and_the_host_keeps_questions(cx: &mut Te
                     InteractionOption {
                         id: "yes".into(),
                         label: "Yes".into(),
+                        role: None,
                     },
                     InteractionOption {
                         id: "no".into(),
                         label: "No".into(),
+                        role: None,
                     },
                 ],
                 fields: None,
@@ -671,10 +673,12 @@ fn ask(cx: &mut TestAppContext, thread: &ThreadId) -> kg_domain::PendingInteract
                     InteractionOption {
                         id: "yes".into(),
                         label: "Yes".into(),
+                        role: None,
                     },
                     InteractionOption {
                         id: "no".into(),
                         label: "No".into(),
+                        role: None,
                     },
                 ],
                 fields: None,

@@ -12,6 +12,10 @@ pub(crate) fn install(cx: &mut App) {
     Workspace::global(cx).update(cx, |workspace, _| {
         workspace.set_ui_driver(Rc::new(|job, cx| match job {
             UiJob::NewTheme { id, from } => crate::theme::new_theme(&id, from.as_deref(), cx),
+            UiJob::Preview { thread, path } => {
+                crate::show_preview(thread, path, cx);
+                Task::ready(Ok(OpResult::Done))
+            }
             UiJob::Browser(op) => browser(op, cx),
             UiJob::Op(UiOp::Screenshot { window, path }) => {
                 cx.spawn(async move |cx| capture_after_present(window, path, cx).await)

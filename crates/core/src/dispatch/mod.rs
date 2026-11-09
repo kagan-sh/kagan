@@ -69,6 +69,9 @@ pub(crate) async fn execute(
         Op::Environment(EnvironmentOp::Branches { project_id }) => {
             crate::host::git::branches(&database, project_id, cx).await
         }
+        Op::Environment(EnvironmentOp::Setup { project_id, rev }) => {
+            crate::host::git::setup(&database, project_id, rev, cx).await
+        }
         Op::Program(ProgramOp::List) => crate::host::program::list(this, &database, true, cx).await,
         Op::Program(ProgramOp::Discover) => {
             crate::host::program::list(this, &database, false, cx).await
@@ -173,7 +176,11 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Sidebar
         | Op::Project(ProjectOp::List | ProjectOp::Get { .. } | ProjectOp::Remove { .. })
         | Op::Program(ProgramOp::List | ProgramOp::Discover)
-        | Op::Environment(EnvironmentOp::Get { .. } | EnvironmentOp::Branches { .. })
+        | Op::Environment(
+            EnvironmentOp::Get { .. }
+            | EnvironmentOp::Branches { .. }
+            | EnvironmentOp::Setup { .. },
+        )
         | Op::Theme(ThemeOp::Get | ThemeOp::New { .. } | ThemeOp::Folder)
         | Op::Keymap(KeymapOp::Get)
         | Op::Preference(PreferenceOp::Get { .. })

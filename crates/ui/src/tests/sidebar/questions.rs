@@ -1,6 +1,6 @@
 use gpui_kit::{AppContext as _, Task, TestAppContext, px, size};
 use kg_core::Workspace;
-use kg_domain::{AskField, InteractionOption, Op, OpError, OpResult, ThreadOp};
+use kg_domain::{AskField, InteractionOption, Op, OpError, OpResult, OptionRole, ThreadOp};
 
 use crate::tests::app::picker::start_in_plain_folder;
 use crate::tests::kagan::{
@@ -13,10 +13,12 @@ fn install_options() -> Vec<InteractionOption> {
         InteractionOption {
             id: "approve".into(),
             label: "Install".into(),
+            role: None,
         },
         InteractionOption {
             id: "decline".into(),
             label: "Cancel".into(),
+            role: Some(OptionRole::Safe),
         },
     ]
 }
@@ -222,10 +224,12 @@ fn an_ask_with_fields_opens_a_popup_that_escape_dismisses(cx: &mut TestAppContex
                     InteractionOption {
                         id: "yes".into(),
                         label: "Yes".into(),
+                        role: None,
                     },
                     InteractionOption {
                         id: "no".into(),
                         label: "No".into(),
+                        role: None,
                     },
                 ],
                 fields: Some(vec![AskField::Boolean {
@@ -273,10 +277,12 @@ fn answering_an_ask_form_restores_terminal_focus(cx: &mut TestAppContext) {
                     InteractionOption {
                         id: "yes".into(),
                         label: "Yes".into(),
+                        role: None,
                     },
                     InteractionOption {
                         id: "no".into(),
                         label: "No".into(),
+                        role: None,
                     },
                 ],
                 fields: Some(vec![AskField::Number {
@@ -312,10 +318,12 @@ fn a_bad_number_in_the_ask_form_shows_on_the_card(cx: &mut TestAppContext) {
                     InteractionOption {
                         id: "yes".into(),
                         label: "Yes".into(),
+                        role: None,
                     },
                     InteractionOption {
                         id: "no".into(),
                         label: "No".into(),
+                        role: None,
                     },
                 ],
                 fields: Some(vec![AskField::Number {
@@ -365,10 +373,12 @@ fn a_select_in_the_ask_form_picks_none_from_its_menu(cx: &mut TestAppContext) {
                     InteractionOption {
                         id: "yes".into(),
                         label: "Yes".into(),
+                        role: None,
                     },
                     InteractionOption {
                         id: "no".into(),
                         label: "No".into(),
+                        role: None,
                     },
                 ],
                 fields: Some(vec![AskField::Select {
@@ -377,6 +387,7 @@ fn a_select_in_the_ask_form_picks_none_from_its_menu(cx: &mut TestAppContext) {
                     choices: vec![InteractionOption {
                         id: "fast".into(),
                         label: "Fast".into(),
+                        role: None,
                     }],
                     default: Some("fast".into()),
                     required: false,
@@ -500,10 +511,12 @@ fn yes_no() -> Vec<InteractionOption> {
         InteractionOption {
             id: "yes".into(),
             label: "Yes".into(),
+            role: None,
         },
         InteractionOption {
             id: "no".into(),
             label: "No".into(),
+            role: None,
         },
     ]
 }

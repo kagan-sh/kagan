@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui_kit::{App, AsyncApp, Task, WeakEntity};
-use kg_domain::{BrowserOp, OpError, OpResult, SurfaceOp, UI_UNAVAILABLE, UiOp};
+use kg_domain::{BrowserOp, OpError, OpResult, SurfaceOp, ThreadId, UI_UNAVAILABLE, UiOp};
 
 use crate::Workspace;
 use crate::host::database::Result;
@@ -12,7 +12,14 @@ pub enum UiJob {
     Op(UiOp),
     Surface(SurfaceOp),
     Browser(BrowserOp),
-    NewTheme { id: String, from: Option<String> },
+    NewTheme {
+        id: String,
+        from: Option<String>,
+    },
+    Preview {
+        thread: Option<ThreadId>,
+        path: String,
+    },
 }
 
 pub type UiDispatch = Rc<dyn Fn(UiJob, &mut App) -> Task<std::result::Result<OpResult, OpError>>>;

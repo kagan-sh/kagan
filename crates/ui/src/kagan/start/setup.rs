@@ -8,7 +8,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, div,
 };
 
-use super::{SetupSeen, StartFolder, script_changed};
+use super::{StartFolder, script_changed, setup_announcement, setup_script};
 use crate::kagan::Kagan;
 use crate::kagan::controls::{control, note};
 use crate::ui_observe::UiObserveExt as _;
@@ -96,10 +96,10 @@ impl Kagan {
         let muted = cx.theme().muted_foreground;
         let failed = cx.theme().danger;
         let mut rows = Vec::new();
-        if let Some(message) = self.start.setup.as_ref().and_then(SetupSeen::announcement) {
+        if let Some(message) = self.start.setup.as_ref().and_then(setup_announcement) {
             rows.push(note("setup-script", message, muted, cx));
         }
-        if let Some(seen) = self.start.setup.as_ref().and_then(SetupSeen::script) {
+        if let Some(seen) = self.start.setup.as_ref().and_then(setup_script) {
             rows.push(self.setup_disclosure(seen, cx));
         }
         if let Some(failure) = &self.start.setup_failure {

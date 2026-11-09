@@ -14,10 +14,12 @@ fn pending_interactions() {
             InteractionOption {
                 id: "allow".into(),
                 label: "Allow".into(),
+                role: None,
             },
             InteractionOption {
                 id: "reject".into(),
                 label: "Reject".into(),
+                role: None,
             },
         ],
         fields: None,

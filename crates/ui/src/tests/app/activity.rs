@@ -46,6 +46,7 @@ fn raise(cx: &mut TestAppContext, id: &ThreadId, title: &str) -> gpui_kit::Task<
     let options = vec![InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     }];
     let asked = cx.update(|cx| Workspace::ask(id, title.into(), options, cx));
     cx.run_until_parked();

@@ -1,14 +1,6 @@
 use super::*;
 
 #[test]
-fn pids_that_are_not_ours_are_refused() {
-    assert!(pid_of(0).is_none());
-    assert!(pid_of(1).is_none());
-    assert!(pid_of(u32::MAX).is_none());
-    assert!(pid_of(2).is_some());
-}
-
-#[test]
 fn an_ended_program_is_seen_without_reaping_it() {
     let mut ended_soon = std::process::Command::new("true").spawn().unwrap();
     let pid = ended_soon.id();
@@ -36,19 +28,4 @@ fn a_running_program_has_not_ended() {
 fn pids_that_are_not_ours_have_not_ended() {
     assert!(exit(0).is_none());
     assert!(exit(1).is_none());
-}
-
-#[test]
-fn killing_a_tree_walks_every_process_and_spares_the_rest() {
-    let mut running = std::process::Command::new("sleep")
-        .arg("30")
-        .spawn()
-        .unwrap();
-    kill_tree(running.id());
-    assert!(
-        running.try_wait().unwrap().is_none(),
-        "the sleep leads no sid of its own"
-    );
-    running.kill().unwrap();
-    running.wait().unwrap();
 }

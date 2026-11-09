@@ -130,7 +130,12 @@ fn drawn(
 ) -> (tempfile::TempDir, gpui_kit::VisualTestContext) {
     let data = tempfile::tempdir().unwrap();
     let opened = cx.update(|cx| {
-        kg_core::Workspace::open(data.path().into(), std::env::current_exe().unwrap(), cx)
+        kg_core::Workspace::open(
+            data.path().into(),
+            std::env::current_exe().unwrap(),
+            None,
+            cx,
+        )
     });
     cx.foreground_executor().block_test(opened).unwrap();
     cx.update(|cx| {

@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use crate::host::database::Result;
 use crate::workspace::closed;
-use crate::{PluginRequest, SocketLocation, Workspace, skill};
+use crate::{PluginRequest, Workspace, skill};
 
 use super::conversation;
 use super::run::ResolvedProgram;
@@ -229,12 +229,8 @@ pub(super) fn variables(
     cx: &mut AsyncApp,
 ) -> Result<Vec<(OsString, OsString)>> {
     let (cli, socket) = this
-        .update(cx, |workspace, cx| {
-            (
-                workspace.cli.clone(),
-                cx.try_global::<SocketLocation>()
-                    .map(|socket| socket.0.clone()),
-            )
+        .update(cx, |workspace, _| {
+            (workspace.cli.clone(), workspace.socket.clone())
         })
         .map_err(closed)?;
     Ok(environment(
@@ -257,13 +253,12 @@ pub(crate) async fn integrate(
 ) -> Result<Integration> {
     let env = variables(this, record, cx)?;
     let (cli, data_dir, database, socket) = this
-        .update(cx, |workspace, cx| {
+        .update(cx, |workspace, _| {
             (
                 workspace.cli.clone(),
                 workspace.data_dir.clone(),
                 workspace.database.clone(),
-                cx.try_global::<SocketLocation>()
-                    .map(|socket| socket.0.clone()),
+                workspace.socket.clone(),
             )
         })
         .map_err(closed)?;

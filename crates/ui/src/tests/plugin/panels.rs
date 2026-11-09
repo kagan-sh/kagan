@@ -320,6 +320,7 @@ fn space_answers_an_approval_as_a_person_and_synthetic_space_is_refused(cx: &mut
     let options = vec![InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     }];
     let asked = cx.update(|cx| {
         Workspace::ask_for_person(None, None, "Delete the plugin?".into(), options, cx)

@@ -622,7 +622,14 @@ async fn a_saved_thread_opens_after_a_restart(cx: &mut TestAppContext) {
     let db = dir.path().join("kagan.sqlite3");
     plant_old_turn(&db, &child.id);
     let _workspace = cx
-        .update(|cx| Workspace::open(dir.path().into(), std::env::current_exe().unwrap(), cx))
+        .update(|cx| {
+            Workspace::open(
+                dir.path().into(),
+                std::env::current_exe().unwrap(),
+                None,
+                cx,
+            )
+        })
         .await
         .unwrap();
     assert!(events(&child.id, cx).await.iter().any(|event| {
@@ -1000,7 +1007,14 @@ async fn an_interrupted_recovery_rolls_back_and_the_next_start_retries(cx: &mut 
         )
         .unwrap();
     let interrupted = cx
-        .update(|cx| Workspace::open(dir.path().into(), std::env::current_exe().unwrap(), cx))
+        .update(|cx| {
+            Workspace::open(
+                dir.path().into(),
+                std::env::current_exe().unwrap(),
+                None,
+                cx,
+            )
+        })
         .await;
     assert!(interrupted.is_err());
     let check = rusqlite::Connection::open(&db).unwrap();
@@ -1024,7 +1038,14 @@ async fn an_interrupted_recovery_rolls_back_and_the_next_start_retries(cx: &mut 
     check.execute_batch("DROP TRIGGER abort_failed").unwrap();
     drop(check);
     let _workspace = cx
-        .update(|cx| Workspace::open(dir.path().into(), std::env::current_exe().unwrap(), cx))
+        .update(|cx| {
+            Workspace::open(
+                dir.path().into(),
+                std::env::current_exe().unwrap(),
+                None,
+                cx,
+            )
+        })
         .await
         .unwrap();
     cx.run_until_parked();

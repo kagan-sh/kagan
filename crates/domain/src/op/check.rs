@@ -173,8 +173,12 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
 fn environment_thread(op: &EnvironmentOp) -> Result<(), &'static str> {
     match op {
         EnvironmentOp::Restore { thread_id } => plain(thread_id),
+        EnvironmentOp::Setup { rev, .. } if rev.starts_with('-') => {
+            Err("a revision cannot start with -")
+        }
         EnvironmentOp::Get { .. }
         | EnvironmentOp::Branches { .. }
+        | EnvironmentOp::Setup { .. }
         | EnvironmentOp::SetBase { .. }
         | EnvironmentOp::Remove { .. } => Ok(()),
     }

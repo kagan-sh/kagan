@@ -53,6 +53,7 @@ fn a_question_waits_while_the_person_types(cx: &mut TestAppContext) {
     let option = InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     };
     let _asked = cx.update(|cx| Workspace::ask(&id, "Ship the change?".into(), vec![option], cx));
     wait_until(cx, |cx| {
@@ -77,6 +78,7 @@ fn dock_count_tracks_distinct_threads_after_the_window_closes(cx: &mut TestAppCo
     let option = InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     };
     let _one = cx.update(|cx| Workspace::ask(&first, "First?".into(), vec![option.clone()], cx));
     let _two = cx.update(|cx| Workspace::ask(&first, "Second?".into(), vec![option.clone()], cx));
@@ -108,6 +110,7 @@ fn questions_from_every_thread_wait_in_needs_you(cx: &mut TestAppContext) {
     let option = InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     };
     let _one = cx.update(|cx| Workspace::ask(&first, "Ship one?".into(), vec![option.clone()], cx));
     let _two = cx.update(|cx| Workspace::ask(&second, "Ship two?".into(), vec![option], cx));
@@ -248,6 +251,7 @@ fn a_question_on_a_hidden_thread_waits_in_needs_you(cx: &mut TestAppContext) {
     let option = InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     };
     let _asked = cx.update(|cx| Workspace::ask(&id, "Hidden ask?".into(), vec![option], cx));
     wait_until(cx, |cx| {
@@ -267,6 +271,7 @@ fn a_question_already_on_screen_stays_up_while_the_person_types(cx: &mut TestApp
     let option = || InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     };
     let _first = cx.update(|cx| Workspace::ask(&id, "Ship one?".into(), vec![option()], cx));
     wait_until(cx, |cx| {
@@ -368,6 +373,7 @@ fn a_question_answered_elsewhere_leaves_needs_you(cx: &mut TestAppContext) {
     let option = |id: &str| InteractionOption {
         id: id.into(),
         label: id.into(),
+        role: None,
     };
     let _asked = cx.update(|cx| {
         Workspace::ask(

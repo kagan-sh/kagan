@@ -5345,14 +5345,12 @@ name = "kg"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "apple-native-keyring-store",
  "async-channel",
  "clap",
  "embed-resource",
  "gpui-kit",
  "gpui-shell",
  "interprocess",
- "keyring-core",
  "kg-core",
  "kg-domain",
  "kg-plugins",
@@ -5368,9 +5366,7 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "widestring",
- "windows-native-keyring-store",
  "windows-sys 0.61.2",
- "zbus-secret-service-keyring-store",
 ]
 
 [[package]]
@@ -5423,6 +5419,7 @@ dependencies = [
 name = "kg-plugins"
 version = "0.1.0"
 dependencies = [
+ "apple-native-keyring-store",
  "async-channel",
  "async-io",
  "cap-std",
@@ -5449,7 +5446,9 @@ dependencies = [
  "tree-sitter-javascript 0.25.0",
  "url",
  "uuid",
+ "windows-native-keyring-store",
  "windows-sys 0.61.2",
+ "zbus-secret-service-keyring-store",
 ]
 
 [[package]]
@@ -5457,6 +5456,7 @@ name = "kg-process"
 version = "0.1.0"
 dependencies = [
  "async-process",
+ "libc",
  "rustix",
  "tempfile",
  "windows-sys 0.61.2",

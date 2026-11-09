@@ -422,6 +422,7 @@ fn parse_option(raw: &str) -> Result<InteractionOption, &'static str> {
     Ok(InteractionOption {
         id: id.to_owned(),
         label: label.to_owned(),
+        role: None,
     })
 }
 
@@ -436,6 +437,7 @@ mod tests {
             Ok(InteractionOption {
                 id: "allow".into(),
                 label: "Allow once".into(),
+                role: None,
             })
         );
         for raw in ["allow", "=label", "id=", "="] {

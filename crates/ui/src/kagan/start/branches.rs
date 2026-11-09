@@ -6,8 +6,8 @@ use kg_domain::{
 };
 
 use super::{
-    BranchPick, Branches, ProjectIntent, StartFolder, base_of, project_kind, project_path,
-    read_setup,
+    BranchPick, Branches, ProjectIntent, StartFolder, base_of, pinned_setup, project_kind,
+    project_path,
 };
 use crate::kagan::{
     Kagan, RetryBranches, RetryPrograms, Shown, ToggleCustomCommand, UseProjectFolder,
@@ -16,7 +16,6 @@ use crate::kagan::{
 impl Kagan {
     pub(in crate::kagan) fn load_branches(&mut self, project: ProjectId, cx: &mut Context<Self>) {
         let epoch = self.start.setup_epoch;
-        let path = project_path(&project, cx);
         let task = Workspace::dispatch(
             Op::Environment(EnvironmentOp::Branches {
                 project_id: project.clone(),
@@ -33,12 +32,9 @@ impl Kagan {
                 Branches::Loaded(list) => base_of(list),
                 Branches::Loading | Branches::Failed(_) => None,
             };
-            let setup = match (path, rev) {
-                (Some(path), Some(rev)) => {
-                    cx.background_spawn(async move { read_setup(&path, &rev) })
-                        .await
-                }
-                _ => None,
+            let setup = match rev {
+                Some(rev) => pinned_setup(project.clone(), rev, cx).await,
+                None => None,
             };
             _ = this.update(cx, |this, cx| {
                 if matches!(this.screen.shown(), Shown::Start(shown) if *shown == project) {
@@ -204,15 +200,11 @@ impl Kagan {
         };
         let project = project.clone();
         let rev = self.base_rev();
-        let path = project_path(&project, cx);
         self.start.setup = None;
         self.start.setup_task = Some(cx.spawn(async move |this, cx| {
-            let setup = match (path, rev) {
-                (Some(path), Some(rev)) => {
-                    cx.background_spawn(async move { read_setup(&path, &rev) })
-                        .await
-                }
-                _ => None,
+            let setup = match rev {
+                Some(rev) => pinned_setup(project.clone(), rev, cx).await,
+                None => None,
             };
             _ = this.update(cx, |this, cx| {
                 if this.start.setup_epoch == epoch

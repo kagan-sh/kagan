@@ -124,6 +124,26 @@ async fn a_local_base_worktree_does_not_track_and_needs_no_setup(cx: &mut TestAp
 
 #[cfg(unix)]
 #[gpui_kit::test]
+async fn the_start_screen_reads_the_setup_script_at_a_revision(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = repo_dir(&fixture);
+    empty_repo(&repo);
+    commit_file(&repo, ".kagan/setup", "touch setup-ran\n");
+    let read = EnvironmentOp::Setup {
+        project_id: fixture.project.clone(),
+        rev: "HEAD".into(),
+    };
+    let OpResult::Setup(Some(setup)) = op(Op::Environment(read), cx).await.unwrap() else {
+        panic!("setup")
+    };
+    assert_eq!(setup.mode.as_deref(), Some("100644"));
+    assert_eq!(setup.text, "touch setup-ran");
+    assert!(!setup.truncated);
+    assert_eq!(setup.commit.len(), 40);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
 async fn a_setup_script_that_exits_zero_starts_the_program(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let repo = repo_dir(&fixture);

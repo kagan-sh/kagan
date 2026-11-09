@@ -166,7 +166,6 @@ async fn started_on(
 #[cfg(unix)]
 #[gpui_kit::test]
 async fn a_claude_thread_gets_kagan_flags_env_and_skills(cx: &mut TestAppContext) {
-    cx.update(|cx| cx.set_global(crate::SocketLocation("/tmp/kagan-test.sock".into())));
     let fixture = Fixture::new(cx).await;
     install_plugin(fixture.dir.path(), true);
     let run = fixture.dir.path().join("first");

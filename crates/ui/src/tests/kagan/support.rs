@@ -38,8 +38,14 @@ pub(in crate::tests) fn app_then(
     let data = tempfile::tempdir().unwrap();
     seed(data.path());
     install(data.path());
-    let opened =
-        cx.update(|cx| Workspace::open(data.path().into(), std::env::current_exe().unwrap(), cx));
+    let opened = cx.update(|cx| {
+        Workspace::open(
+            data.path().into(),
+            std::env::current_exe().unwrap(),
+            None,
+            cx,
+        )
+    });
     cx.foreground_executor().block_test(opened).unwrap();
     cx.update(|cx| {
         gpui_kit::init(cx);
@@ -93,8 +99,14 @@ pub(crate) fn open(cx: &mut TestAppContext) -> (Entity<Kagan>, AnyWindowHandle, 
 pub(in crate::tests) fn setup(cx: &mut TestAppContext) -> tempfile::TempDir {
     let data = tempfile::tempdir().unwrap();
     seed(data.path());
-    let opened =
-        cx.update(|cx| Workspace::open(data.path().into(), std::env::current_exe().unwrap(), cx));
+    let opened = cx.update(|cx| {
+        Workspace::open(
+            data.path().into(),
+            std::env::current_exe().unwrap(),
+            None,
+            cx,
+        )
+    });
     cx.foreground_executor().block_test(opened).unwrap();
     cx.update(|cx| {
         gpui_kit::init(cx);

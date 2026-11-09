@@ -5,7 +5,9 @@ use std::collections::BTreeSet;
 use gpui_kit::component::input::InputState;
 use gpui_kit::{AppContext as _, Context, ScrollHandle, Task, Window};
 use kg_core::Workspace;
-use kg_domain::{DiffOp, Op, OpError, OpResult, ReviewRow, review_rows};
+use kg_domain::{DiffOp, Op, OpError, OpResult};
+
+use super::rows::{ReviewRow, review_rows};
 
 use super::{Pane, ReadExpect, Review};
 use crate::kagan::Kagan;

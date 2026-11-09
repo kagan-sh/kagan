@@ -67,7 +67,7 @@ impl ThreadId {
 
 /// A path segment: letters, digits, `_` and `-` only.
 #[must_use]
-pub fn plain_identifier(value: &str) -> bool {
+fn plain_identifier(value: &str) -> bool {
     let mut chars = value.chars();
     let Some(first) = chars.next() else {
         return false;

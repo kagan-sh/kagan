@@ -8,7 +8,7 @@ use gpui_kit::{
     AnyElement, App, Context, IntoElement, ParentElement as _, Styled as _, Window, div,
 };
 use kg_core::{Approval, Workspace};
-use kg_domain::{InteractionOption, PendingInteractionId};
+use kg_domain::{InteractionOption, OptionRole, PendingInteractionId};
 
 use super::changes::line;
 use super::screen::{Activation, Side};
@@ -18,12 +18,11 @@ use super::{Kagan, question};
 /// from the research.
 pub(crate) const QUIET: Duration = Duration::from_millis(1500);
 
-/// Cancel is the safe choice, so it takes focus when the card offers it; otherwise the first
-/// option does.
+/// The safe option takes focus when the card offers one; otherwise the first option does.
 fn opening_option(options: &[InteractionOption]) -> Option<&InteractionOption> {
     options
         .iter()
-        .find(|option| option.label == "Cancel")
+        .find(|option| option.role == Some(OptionRole::Safe))
         .or_else(|| options.first())
 }
 

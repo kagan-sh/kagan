@@ -1225,6 +1225,7 @@ Commands:
   get       Show an environment
   restore   Recreate a thread's environment
   branches  Local branches of a project
+  setup     The setup script a worktree from this revision of a project would run
   set-base  Which branch change counts compare against
   remove    Remove a worktree again after git refused because of files it would keep
   help      Print this message or the help of the given subcommand(s)
@@ -1279,6 +1280,25 @@ Usage: kg environment branches <PROJECT_ID>
 Arguments:
   <PROJECT_ID>
           [env: KG_PROJECT_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg environment setup`
+
+```text
+The setup script a worktree from this revision of a project would run
+
+Usage: kg environment setup <PROJECT_ID> <REV>
+
+Arguments:
+  <PROJECT_ID>
+          [env: KG_PROJECT_ID=]
+
+  <REV>
+          
 
 Options:
   -h, --help

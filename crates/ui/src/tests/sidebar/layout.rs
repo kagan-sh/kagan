@@ -617,6 +617,7 @@ fn a_hidden_sidebar_counts_what_is_waiting_and_refuses_a_synthetic_answer(cx: &m
     let options = vec![InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     }];
     let first = cx.update(|cx| {
         Workspace::ask_for_person(

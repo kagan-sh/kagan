@@ -252,6 +252,7 @@ fn a_question_on_the_open_thread_appears_in_the_window(cx: &mut TestAppContext) 
     let option = InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     };
     let _asked = cx.update(|cx| Workspace::ask(&id, "Ship the change?".into(), vec![option], cx));
     wait_until(cx, |cx| {

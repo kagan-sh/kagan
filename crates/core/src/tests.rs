@@ -78,7 +78,14 @@ impl Fixture {
             .unwrap();
         drop(store);
         let workspace = cx
-            .update(|cx| Workspace::open(dir.path().into(), std::env::current_exe().unwrap(), cx))
+            .update(|cx| {
+                Workspace::open(
+                    dir.path().into(),
+                    std::env::current_exe().unwrap(),
+                    Some("/tmp/kagan-test.sock".into()),
+                    cx,
+                )
+            })
             .await
             .unwrap();
         cx.update(|cx| {
@@ -111,7 +118,14 @@ impl Fixture {
         plant(&mut store);
         drop(store);
         let workspace = cx
-            .update(|cx| Workspace::open(dir.path().into(), std::env::current_exe().unwrap(), cx))
+            .update(|cx| {
+                Workspace::open(
+                    dir.path().into(),
+                    std::env::current_exe().unwrap(),
+                    Some("/tmp/kagan-test.sock".into()),
+                    cx,
+                )
+            })
             .await
             .unwrap();
         cx.update(|cx| {
@@ -309,6 +323,7 @@ fn plant_old_turn(db: &Path, id: &ThreadId) {
             options: vec![InteractionOption {
                 id: "allow".into(),
                 label: "Allow".into(),
+                role: None,
             }],
             fields: None,
             created_at: Timestamp(1),
@@ -737,10 +752,12 @@ fn ask_options() -> Vec<InteractionOption> {
         InteractionOption {
             id: "yes".into(),
             label: "Yes".into(),
+            role: None,
         },
         InteractionOption {
             id: "no".into(),
             label: "No".into(),
+            role: None,
         },
     ]
 }
@@ -868,10 +885,12 @@ async fn ask_rejects_duplicate_select_choice_ids(cx: &mut TestAppContext) {
                     InteractionOption {
                         id: "a".into(),
                         label: "A".into(),
+                        role: None,
                     },
                     InteractionOption {
                         id: "a".into(),
                         label: "Also A".into(),
+                        role: None,
                     },
                 ],
                 default: None,
@@ -968,6 +987,7 @@ async fn ask_refuses_repeated_field_ids_text_over_its_caps_and_a_default_outside
                 vec![InteractionOption {
                     id: "fast".into(),
                     label: "Fast".into(),
+                    role: None,
                 }],
                 Some("slow"),
             )],
@@ -996,6 +1016,7 @@ async fn ask_refuses_more_fields_or_choices_than_the_caps_and_takes_a_full_form(
         .map(|n| InteractionOption {
             id: format!("c{n:02}"),
             label: "Choice".into(),
+            role: None,
         })
         .collect();
     let error = ask_refused(&id, vec![select_field(choices, None)], cx).await;
@@ -1008,6 +1029,7 @@ async fn ask_refuses_more_fields_or_choices_than_the_caps_and_takes_a_full_form(
         .map(|n| InteractionOption {
             id: format!("c{n:02}"),
             label: "Choice".into(),
+            role: None,
         })
         .collect();
     op(
@@ -1204,6 +1226,7 @@ async fn ask_answer_accepts_none_for_a_select(cx: &mut TestAppContext) {
                 choices: vec![InteractionOption {
                     id: "fast".into(),
                     label: "Fast".into(),
+                    role: None,
                 }],
                 default: None,
                 required: false,
