@@ -354,3 +354,20 @@ async fn a_child_title_stays_out_of_the_parent_line(cx: &mut TestAppContext) {
     assert!(!sent[0].contains("echo hi"), "{}", sent[0]);
     assert!(sent[0].contains(&child_id.to_string()), "{}", sent[0]);
 }
+
+#[gpui_kit::test]
+async fn a_child_end_under_a_parent_with_no_run_adds_no_run(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (parent, _parent_run) = started(&fixture, SLEEP, cx).await;
+    let program = finishing(fixture.dir.path(), "finish");
+    let (child_id, _child_run) = child(&fixture, &program, &parent, false, cx).await;
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.runs.remove(&parent);
+    });
+    wait_for_waiting(&child_id, 1, cx).await;
+    assert!(
+        !fixture
+            .workspace
+            .read_with(cx, |workspace, _| workspace.runs.contains_key(&parent))
+    );
+}
