@@ -248,21 +248,27 @@ pub(super) fn sidebar(
             cx,
         ));
     }
-    let (line, radius) = (cx.theme().border, cx.theme().radius);
+    let line = cx.theme().border;
+    // The scrolling part is inside the list, so the list keeps its id and its role.
     let list = v_flex()
         .id("settings-sections")
         .track_focus(&focus)
         .ui_observe_as(Facts {
+            role: Role::List,
             focus: Some(focus.clone()),
             ..Facts::button("Settings sections")
         })
         .flex_1()
         .min_h_0()
         .w_full()
-        .gap_0p5()
-        .rounded(radius)
-        .overflow_y_scrollbar()
-        .children(rows);
+        .child(
+            v_flex()
+                .id("settings-section-rows")
+                .size_full()
+                .gap_0p5()
+                .overflow_y_scrollbar()
+                .children(rows),
+        );
     div()
         .w(rems(14.))
         .flex_shrink_0()
@@ -300,10 +306,7 @@ pub(super) fn sidebar(
                 .child(
                     div()
                         .id("settings-search")
-                        .ui_observe_as(Facts {
-                            focus: Some(kagan.settings.query.read(cx).focus_handle(cx)),
-                            ..Facts::button("Search settings")
-                        })
+                        .ui_observe_as(Facts::input("Search settings", &kagan.settings.query, cx))
                         .child(Input::new(&kagan.settings.query)),
                 )
                 .child(list),

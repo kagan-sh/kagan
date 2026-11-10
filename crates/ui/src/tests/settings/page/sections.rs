@@ -313,3 +313,16 @@ fn a_one_group_section_has_no_repeated_heading(cx: &mut TestAppContext) {
     click(cx, window, "settings-section-updates");
     assert!(!present(cx, window, "settings-heading-updates"));
 }
+
+#[gpui_kit::test]
+fn the_settings_list_and_search_report_their_roles(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    let role = cx
+        .update_window(window, |_, window, _| {
+            crate::ui_registry::find(window, &ElementId::Name("settings-sections".into()))
+                .and_then(|element| element.role)
+        })
+        .unwrap();
+    assert_eq!(role, Some(gpui_kit::Role::List));
+}
