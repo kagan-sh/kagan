@@ -1,6 +1,6 @@
 ---
 name: kg-plugin-authoring
-description: Build, check, install, and test a kagan plugin with a panel, a command, an agent tool, or a skill. The person approves its powers.
+description: Build, make, fix, check, install, and test a kagan plugin with a panel, a command, an agent tool, or a skill. Use when the person asks to build, make, or fix a plugin, or to add a panel, command, tool or skill to kagan. The person approves its powers.
 ---
 
 The running app is the contract. `kg plugin types <path>` rewrites `kagan.d.ts` and `gpui-kit.d.ts` from it. Run that again after upgrading kagan, and before you call a host function or a component you have not used. `kagan.d.ts` lists every `kagan/*` export. `kg plugin check <path>` refuses a script the host throws on when the plugin loads or a panel opens: an import that list does not have, a `gpui-component` state constructor whose arguments miss the component schema, and `KgInput` or `KgTextarea` given the `gpui-base` state of the same name. Check does not run the plugin.

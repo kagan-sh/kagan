@@ -7,7 +7,6 @@ Read `kg guide skills` for the live contract.
 
 ## Where a skill goes
 
-- Built into kagan: `crates/core/skills` in the kagan source; it ships in the binary.
 - A plugin: a folder the plugin lists in `kagan.json` under `skills`.
 - User: `<dataDir>/skills`.
 - Project: `<project>/.kagan/skills`.
@@ -44,6 +43,14 @@ kg skill files <name>
 
 `kg skill list` shows duplicate errors. `kg skill show` prints the body the agent gets. `kg skill files` prints the files beside `SKILL.md`.
 
-Then ask the agent to load the skill with `skill_load { "name": "<name>" }` and do the task once. `skill_load` is connected to Claude and Codex. For another program, start a thread and check that the composed native folder contains the skill. Fix the description if the agent did not load it for the request, and fix the steps if it loaded it but did the task wrong.
+`skill_load` is connected to Claude and Codex. For another program, start a thread and check that the composed native folder contains the skill.
+
+## Test it
+
+Use a fresh thread for each test, so earlier context does not help the agent.
+
+1. Ask for a task in the words that should load the skill. Check that the agent calls `skill_load { "name": "<name>" }`. If it did not, fix the `description`. If it loaded the skill but did the task wrong, fix the steps.
+2. Ask a near miss: a request close to the skill's topic that should not load it. Check that the agent does not load it. If it did, narrow the `description`.
+3. Do the same task with the skill, then without it or with the old version. Keep the version that does better, and say why in one line.
 
 A bundled, plugin, user, or project skill also reaches Claude, Cursor, Codex, Kimi, OpenCode, and Pi natively: Claude and Cursor as a plugin catalog, Codex from `.agents/skills`, OpenCode from `.opencode/skills`, and Kimi and Pi with a skills-dir or skill flag.
