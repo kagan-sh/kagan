@@ -7,7 +7,7 @@ use kg_domain::{OpError, OpResult, ProjectId, Skill, SkillOp, SkillSource};
 
 use crate::Workspace;
 use crate::host::database::Result;
-use crate::workspace::{closed, missing};
+use crate::workspace::{WorkspaceEvent, closed, missing};
 
 const BUNDLED: &[(&str, &str)] = &[
     ("kg-cli", include_str!("../../skills/kg-cli.md")),
@@ -150,6 +150,11 @@ pub(crate) async fn run(
     op: SkillOp,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
+    if let SkillOp::Open = op {
+        this.update(cx, |_, cx| cx.emit(WorkspaceEvent::Skills))
+            .map_err(closed)?;
+        return Ok(OpResult::Done);
+    }
     let project_id = match &op {
         SkillOp::Open => None,
         SkillOp::List { project_id }

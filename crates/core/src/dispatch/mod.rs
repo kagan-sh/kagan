@@ -7,7 +7,7 @@ pub(crate) mod ui;
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{
     EnvironmentOp, KeymapOp, Op, OpError, OpResult, PreferenceOp, ProgramOp, ProjectOp, SettingsOp,
-    Sidebar, SkillOp, TerminalOp, ThemeOp, ThreadOp, order_sidebar_projects,
+    Sidebar, TerminalOp, ThemeOp, ThreadOp, order_sidebar_projects,
 };
 
 use crate::host::database::{Database, Result};
@@ -39,7 +39,6 @@ pub(crate) async fn execute(
     let database = crate::workspace::database(this, cx)?;
     match op {
         Op::Guide { chapter } => Ok(crate::dispatch::guide::read(chapter)),
-        Op::Skill(SkillOp::Open) => announce(this, crate::WorkspaceEvent::Skills, cx),
         Op::Skill(op) => crate::skill::run(this, op, cx).await,
         Op::Status {
             thread_id,
