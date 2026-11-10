@@ -21,6 +21,25 @@ use super::{
 use super::{alive, start_tree};
 
 #[gpui_kit::test]
+fn a_paused_activation_is_restored_unless_it_is_committed(cx: &mut TestAppContext) {
+    open(cx, &[]);
+    let id = PluginId(ID.into());
+    let host = cx.update(|cx| cx.global::<PluginHostGlobal>().0.clone());
+    let before = host.update(cx, |host, _| {
+        host.begin_activation(&id);
+        host.activation(&id)
+    });
+    assert!(before.is_some());
+    let dropped = host.update(cx, |host, _| host.pause_activation(&id));
+    assert_eq!(host.read_with(cx, |host, _| host.activation(&id)), None);
+    drop(dropped);
+    assert_eq!(host.read_with(cx, |host, _| host.activation(&id)), before);
+    let kept = host.update(cx, |host, _| host.pause_activation(&id));
+    kept.commit();
+    assert_eq!(host.read_with(cx, |host, _| host.activation(&id)), None);
+}
+
+#[gpui_kit::test]
 fn settings_are_typed_by_the_manifest(cx: &mut TestAppContext) {
     let plugin = plugin_dir();
     open(cx, &[installed(plugin.path())]);

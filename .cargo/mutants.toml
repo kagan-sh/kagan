@@ -17,4 +17,11 @@ exclude_re = [
     'syntax\.rs:\d+:\d+: replace \|\| with && in highlight\b',
     # The limit compares two clock readings; > and >= differ only within the same nanosecond.
     'process\.rs:\d+:\d+: replace > with >= in Process::wait_within',
+    # The Windows and macOS clipboard write. CI's mutants run on Linux, which compiles the other write_png.
+    'clipboard\.rs:25:5: replace write_png -> Result<HostValue, HostError> with Ok\(Default::default\(\)\)',
+    # The production stub is compiled only outside tests; the test build has its own hold.
+    'host/mod\.rs:\d+:\d+: replace hold -> bool with true',
+    # The keychain module is compiled out of every test build, and it talks to the OS keychain.
+    'keychain\.rs:\d+:\d+: replace use_keychain with \(\)',
+    'keychain\.rs:\d+:\d+: replace <impl keyring_core::api::CredentialStoreApi for Keychain>::vendor',
 ]

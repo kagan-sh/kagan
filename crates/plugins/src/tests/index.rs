@@ -254,6 +254,32 @@ fn a_shown_source_has_no_credentials() {
 }
 
 #[test]
+fn an_index_of_exactly_the_cap_is_read() {
+    let base = index(&json!([]));
+    let text = format!("{base}{}", " ".repeat(1024 * 1024 - base.len()));
+    assert_eq!(text.len(), 1024 * 1024);
+    assert!(parse(&text, None).is_ok());
+}
+
+#[test]
+fn a_git_index_of_exactly_the_cap_is_read() {
+    let repo = tempfile::tempdir().unwrap();
+    git(
+        repo.path(),
+        &["-c", "init.defaultBranch=main", "init", "-q"],
+    );
+    let base = index(&json!([]));
+    let text = format!("{base}{}", " ".repeat(1024 * 1024 - base.len()));
+    std::fs::create_dir(repo.path().join(".kagan")).unwrap();
+    std::fs::write(repo.path().join(".kagan/index.json"), text).unwrap();
+    git(repo.path(), &["add", "."]);
+    git(repo.path(), &["commit", "-q", "-m", "index"]);
+    let (_keep, stop) = async_channel::bounded::<()>(1);
+    let location = format!("git:{}@main", repo.path().display());
+    assert!(crate::install::index::read(&location, &stop).is_ok());
+}
+
+#[test]
 fn repo_index_selects_named_plugin_and_refuses_ambiguous_or_escaping_sources() {
     let (_keep, stop) = async_channel::bounded::<()>(1);
     let repo = tempfile::tempdir().unwrap();
@@ -520,6 +546,25 @@ fn share_refuses_a_plugin_that_is_not_in_a_git_repository(cx: &mut TestAppContex
     assert_eq!(
         error,
         OpError::Invalid(format!("{} is not in a git repository", folder.display()))
+    );
+    let repo = dir.path().join("repo");
+    std::fs::create_dir(&repo).unwrap();
+    git(&repo, &["init", "-q"]);
+    let inside_git = repo.join(".git").join("echo");
+    write_plugin(&inside_git, &sample_manifest());
+    let error = run(
+        cx,
+        Op::Plugin(PluginOp::Share {
+            path: inside_git.as_path().into(),
+        }),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error,
+        OpError::Invalid(format!(
+            "{} is not in a git repository",
+            inside_git.display()
+        ))
     );
 }
 
