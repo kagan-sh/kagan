@@ -5,6 +5,7 @@ use kg_domain::{OpError, PluginId, ThemeFile};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod cli;
 mod fetch;
 mod grant;
 mod roots;
@@ -110,6 +111,8 @@ pub(crate) enum Error {
     CommandKey(String),
     #[error("{0}")]
     SettingField(String),
+    #[error("{0}")]
+    Cli(String),
 }
 
 #[derive(Debug, Deserialize)]
@@ -257,6 +260,7 @@ impl Manifest {
         self.check_entry(root)?;
         self.check_skills(root)?;
         self.check_commands()?;
+        cli::check(&self.cli)?;
         self.check_status_command()?;
         self.check_hotkeys()?;
         self.check_events()?;
