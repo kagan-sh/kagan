@@ -604,13 +604,14 @@ The agent rules are text a thread's program is told when it starts: the global f
 
 ### `Get`
 
-- **Shows**: the file's text as it is on disk. A missing file shows nothing [decision 211].
-- **Refused when**: an unknown project — `not-found` [op/].
+- **Shows**: the file's text as it is on disk, at most 1 MiB. A missing file shows nothing [decision 211].
+- **Refused when**: an unknown project — `not-found` [op/]. A file that cannot be read, or is not UTF-8 — `invalid` [decision 211]. Only a missing file is empty, so a failed read never looks like an empty rules file.
 
 ### `Set`
 
 - **Changes**: writes the file and creates its folder. The text comes from the argument, or from `--file` (`-` for stdin) [book:cli].
-- **Refused when**: more than 16 KiB — `invalid`, and nothing is written [decision 211]. No text — `invalid`. An unknown project — `not-found` [op/].
+- **Refused when**: more than 16 KiB — `invalid`, and nothing is written [decision 211]. No text — `invalid`. An unknown project — `not-found` [op/]. A project whose folder is gone — `invalid`, and no folder is made [decision 211].
+- **Writes**: through a temp file renamed into place, so a start never reads half a file [decision 211].
 - **Applies**: a start reads the files then. A running thread keeps the text it started with. Codex's `kg mcp` server reads them when it lists tools [decision 211].
 
 ### `Clear`
