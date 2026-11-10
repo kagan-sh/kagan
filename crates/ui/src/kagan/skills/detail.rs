@@ -6,7 +6,7 @@ use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, Role,
-    Styled as _, div,
+    StatefulInteractiveElement as _, Styled as _, div,
 };
 use kg_domain::SkillSource;
 
@@ -52,23 +52,24 @@ fn breadcrumb(name: &str, cx: &Context<Page>) -> impl IntoElement {
         .gap(gpui_kit::px(space(SpaceStep::Xs, cx)))
         .type_small(cx)
         .text_color(cx.theme().muted_foreground)
-        .child("Skills /")
-        .child(control(
-            "skills-back",
-            Facts::button("My skills"),
-            Button::new("skills-back-button")
-                .small()
-                .ghost()
-                .label("My skills")
-                .on_click(cx.listener(|this, _, _, cx| this.back(cx))),
-        ))
+        .child(
+            div()
+                .id("skills-back")
+                .cursor_pointer()
+                .hover(|link| link.text_color(cx.theme().foreground))
+                .on_click(cx.listener(|this, _, _, cx| this.back(cx)))
+                .ui_observe_as(Facts::button("Skills"))
+                .child("Skills"),
+        )
+        .child("/")
         .child(
             div()
                 .min_w_0()
                 .overflow_hidden()
                 .text_ellipsis()
                 .whitespace_nowrap()
-                .child(format!("> {name}")),
+                .text_color(cx.theme().foreground)
+                .child(name.to_owned()),
         )
 }
 
@@ -294,15 +295,18 @@ fn frontmatter(shown: &Shown, cx: &Context<Page>) -> impl IntoElement {
 const BODY_MAX_HEIGHT: f32 = 420.;
 fn body(shown: &Shown, cx: &Context<Page>) -> impl IntoElement {
     div()
-        .overflow_y_scrollbar()
-        .id("skills-body")
         .w_full()
-        .max_h(gpui_kit::px(BODY_MAX_HEIGHT))
         .p(gpui_kit::px(space(SpaceStep::Md, cx)))
         .border_1()
         .border_color(cx.theme().border)
         .rounded(cx.theme().radius)
-        .child(TextView::markdown("skills-body-text", shown.body.clone()))
+        .child(
+            div()
+                .overflow_y_scrollbar()
+                .id("skills-body")
+                .max_h(gpui_kit::px(BODY_MAX_HEIGHT))
+                .child(TextView::markdown("skills-body-text", shown.body.clone())),
+        )
 }
 
 fn files(shown: &Shown, cx: &Context<Page>) -> impl IntoElement {
@@ -325,6 +329,9 @@ fn files(shown: &Shown, cx: &Context<Page>) -> impl IntoElement {
         .children(names.into_iter().enumerate().map(|(index, name)| {
             div()
                 .id(("skills-file", index))
+                .flex()
+                .items_center()
+                .gap(gpui_kit::px(space(SpaceStep::Xs, cx)))
                 .type_small(cx)
                 .text_color(cx.theme().muted_foreground)
                 .child(Icon::new(IconName::FileText).small())
