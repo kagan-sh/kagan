@@ -32,7 +32,7 @@ use crate::theme::ThemeState;
 use crate::ui_observe::UiObserveExt as _;
 
 pub(super) use keyboard::{Recorder, plugin_commands};
-use nav::Section;
+use nav::Category;
 pub(super) use plugins::Drafts;
 
 actions!(
@@ -88,7 +88,7 @@ pub(super) struct SettingsState {
     pub(super) approvals: usize,
     pub(super) drafts: Drafts,
     pub(super) keyboard: Recorder,
-    section: Section,
+    section: Category,
     pub(super) cursor: usize,
     pub(super) query: Entity<InputState>,
     pub(super) list: FocusHandle,
@@ -101,7 +101,7 @@ impl SettingsState {
             approvals: 0,
             drafts: Drafts::default(),
             keyboard: Recorder::default(),
-            section: Section::default(),
+            section: Category::default(),
             cursor: 0,
             query: cx.new(|cx| InputState::new(window, cx).placeholder("Search settings")),
             list: cx.focus_handle().tab_stop(true),
@@ -158,7 +158,7 @@ impl Kagan {
 
     pub(super) fn manage_plugins(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open_settings(window, cx);
-        self.select_section(Section::Installed, window, cx);
+        self.select_section(Category::Installed, window, cx);
     }
 
     pub(super) fn close_settings(
@@ -185,9 +185,9 @@ impl Kagan {
     pub(super) fn reconcile_plugin_views(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         plugins::sync(&mut self.settings.drafts, window, cx);
         let entries = pages::plugin_entries(cx);
-        if matches!(&self.settings.section, Section::Plugin(id) if !entries.iter().any(|(entry, _)| entry == id))
+        if matches!(&self.settings.section, Category::Plugin(id) if !entries.iter().any(|(entry, _)| entry == id))
         {
-            self.settings.section = Section::default();
+            self.settings.section = Category::default();
         }
         let host = PluginHost::try_global(cx);
         self.slots.settings_views.retain(|id, (generation, _)| {
@@ -317,15 +317,13 @@ pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) 
             .into_any_element(),
     ];
     let section = kagan.settings.section.clone();
-    if kagan.settings.query.read(cx).value().trim().is_empty() {
-        items.extend(
-            groups
-                .into_iter()
-                .filter(|group| group.section == section)
-                .map(|group| group_block(group, cx)),
-        );
-        items.extend(plugin_view(kagan, &section));
-    }
+    items.extend(
+        groups
+            .into_iter()
+            .filter(|group| group.section == section)
+            .map(|group| group_block(group, cx)),
+    );
+    items.extend(plugin_view(kagan, &section));
     let page = v_flex()
         .id("settings-page")
         .size_full()
@@ -366,8 +364,8 @@ pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) 
         .into_any_element()
 }
 
-fn plugin_view(kagan: &Kagan, section: &Section) -> Option<AnyElement> {
-    let Section::Plugin(id) = section else {
+fn plugin_view(kagan: &Kagan, section: &Category) -> Option<AnyElement> {
+    let Category::Plugin(id) = section else {
         return None;
     };
     let (_, view) = kagan.slots.settings_views.get(id)?;

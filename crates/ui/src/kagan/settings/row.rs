@@ -3,7 +3,7 @@ use gpui_kit::component::switch::Switch;
 use gpui_kit::{AnyElement, App, ElementId, IntoElement, Role, SharedString, Window};
 use kg_domain::Op;
 
-use super::nav::Section;
+use super::nav::Category;
 
 use crate::kagan::controls::control;
 use crate::ui_registry::Facts;
@@ -25,7 +25,7 @@ pub(super) struct Group {
     pub(super) rows: Vec<Row>,
     pub(super) headed: bool,
     pub(super) style: GroupStyle,
-    pub(super) section: Section,
+    pub(super) section: Category,
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
@@ -60,7 +60,7 @@ pub(super) fn group(
         rows,
         headed: false,
         style: GroupStyle::Plain,
-        section: Section::default(),
+        section: Category::default(),
     }
 }
 

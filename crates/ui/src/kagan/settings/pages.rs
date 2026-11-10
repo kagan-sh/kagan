@@ -16,7 +16,7 @@ use serde_json::json;
 
 use super::indexes;
 use super::installed;
-use super::nav::Section;
+use super::nav::Category;
 use super::plugins;
 use super::row::{Group, Row, group, row, save, switch};
 use super::{ActivateItem, ITEM, Kagan};
@@ -35,35 +35,35 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     appearance.rows.extend(mode_group(cx).rows);
     appearance.rows.push(terminal_size(kagan));
     let mut out = vec![
-        within(general(agent, notify, confirm_archive), Section::General),
-        within(appearance, Section::Appearance),
+        within(general(agent, notify, confirm_archive), Category::General),
+        within(appearance, Category::Appearance),
     ];
     out.extend(
         super::keyboard::groups(kagan, window, cx)
             .into_iter()
-            .map(|group| within(group, Section::Keyboard)),
+            .map(|group| within(group, Category::Keyboard)),
     );
     let mut installed = installed::group(kagan, window, cx);
     installed.title = "Installed".into();
     let slots = Slot::ALL.map(|slot| super::slots::row(kagan, slot, cx));
-    out.push(within(installed, Section::Installed));
-    out.push(within(indexes::group(kagan, cx), Section::Installed));
+    out.push(within(installed, Category::Installed));
+    out.push(within(indexes::group(kagan, cx), Category::Installed));
     out.push(within(
         group(
             "activity",
             "Activity",
             vec![plugin_status_row(plugin_status)],
         ),
-        Section::Installed,
+        Category::Installed,
     ));
     out.push(within(
         group("slots", "Replace parts", slots.into()),
-        Section::Installed,
+        Category::Installed,
     ));
-    out.push(within(super::updates::group(kagan, cx), Section::Updates));
+    out.push(within(super::updates::group(kagan, cx), Category::Updates));
     for (id, _) in plugin_entries(cx) {
         for group in plugins::groups(kagan, &id, cx) {
-            out.push(within(group, Section::Plugin(id.clone())));
+            out.push(within(group, Category::Plugin(id.clone())));
         }
     }
     out
@@ -79,7 +79,7 @@ fn set_flag(key: &str, on: bool, cx: &mut App) {
     );
 }
 
-fn within(mut group: Group, section: Section) -> Group {
+fn within(mut group: Group, section: Category) -> Group {
     group.section = section;
     group.headed = true;
     group

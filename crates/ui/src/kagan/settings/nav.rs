@@ -18,7 +18,7 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 #[derive(Clone, PartialEq, Eq, Default)]
-pub(super) enum Section {
+pub(super) enum Category {
     #[default]
     General,
     Appearance,
@@ -28,7 +28,7 @@ pub(super) enum Section {
     Plugin(PluginId),
 }
 
-impl Section {
+impl Category {
     fn key(&self) -> String {
         match self {
             Self::General => "general".into(),
@@ -43,16 +43,16 @@ impl Section {
 
 #[derive(Clone)]
 pub(super) struct Listed {
-    section: Section,
+    section: Category,
     label: SharedString,
     icon: IconName,
 }
 
 #[derive(Clone)]
 pub(super) enum Entry {
-    Section(Listed),
+    Category(Listed),
     Result {
-        section: Section,
+        section: Category,
         group: SharedString,
         at: usize,
         title: SharedString,
@@ -60,12 +60,12 @@ pub(super) enum Entry {
     },
 }
 
-const FIXED: [(Section, &str, IconName); 5] = [
-    (Section::General, "General", IconName::Settings),
-    (Section::Appearance, "Appearance", IconName::Palette),
-    (Section::Keyboard, "Keyboard", IconName::Keyboard),
-    (Section::Installed, "Installed", IconName::ListTree),
-    (Section::Updates, "Updates", IconName::RotateCw),
+const FIXED: [(Category, &str, IconName); 5] = [
+    (Category::General, "General", IconName::Settings),
+    (Category::Appearance, "Appearance", IconName::Palette),
+    (Category::Keyboard, "Keyboard", IconName::Keyboard),
+    (Category::Installed, "Installed", IconName::ListTree),
+    (Category::Updates, "Updates", IconName::RotateCw),
 ];
 
 fn listed(cx: &App) -> Vec<Listed> {
@@ -80,7 +80,7 @@ fn listed(cx: &App) -> Vec<Listed> {
             pages::plugin_entries(cx)
                 .into_iter()
                 .map(|(id, name)| Listed {
-                    section: Section::Plugin(id),
+                    section: Category::Plugin(id),
                     label: name.into(),
                     icon: IconName::Puzzle,
                 }),
@@ -92,7 +92,7 @@ pub(super) fn entries(kagan: &Kagan, groups: &[Group], cx: &App) -> Vec<Entry> {
     let query = kagan.settings.query.read(cx).value().trim().to_lowercase();
     let listed = listed(cx);
     if query.is_empty() {
-        return listed.into_iter().map(Entry::Section).collect();
+        return listed.into_iter().map(Entry::Category).collect();
     }
     let mut out = Vec::new();
     for group in groups {
@@ -133,7 +133,7 @@ pub(super) fn entries(kagan: &Kagan, groups: &[Group], cx: &App) -> Vec<Entry> {
 impl Kagan {
     pub(super) fn select_section(
         &mut self,
-        section: Section,
+        section: Category,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -158,7 +158,7 @@ impl Kagan {
     ) {
         self.settings.cursor = index;
         match entry {
-            Entry::Section(listed) => self.select_section(listed.section, window, cx),
+            Entry::Category(listed) => self.select_section(listed.section, window, cx),
             Entry::Result { section, at, .. } => {
                 self.select_section(section, window, cx);
                 let kagan = cx.entity();
@@ -184,7 +184,7 @@ pub(super) fn sidebar(
     let len = entries.len();
     let cursor = kagan.settings.cursor.min(len.saturating_sub(1));
     let first_plugin = entries.iter().position(
-        |entry| matches!(entry, Entry::Section(item) if matches!(item.section, Section::Plugin(_))),
+        |entry| matches!(entry, Entry::Category(item) if matches!(item.section, Category::Plugin(_))),
     );
     let searching = !kagan.settings.query.read(cx).value().trim().is_empty();
     let open = entries.get(cursor).cloned();
@@ -211,13 +211,12 @@ pub(super) fn sidebar(
             );
         }
         let selected =
-            matches!(entry, Entry::Section(item) if item.section == kagan.settings.section);
+            matches!(entry, Entry::Category(item) if item.section == kagan.settings.section);
         rows.push(row(index, entry, selected, focused && index == cursor, cx));
     }
-    let (line, radius, ring) = (cx.theme().border, cx.theme().radius, cx.theme().ring);
+    let (line, radius) = (cx.theme().border, cx.theme().radius);
     let list = v_flex()
         .id("settings-sections")
-        .key_context(CONTEXT_SECTIONS)
         .track_focus(&focus)
         .ui_observe_as(Facts {
             focus: Some(focus.clone()),
@@ -237,11 +236,6 @@ pub(super) fn sidebar(
             this.settings.cursor = cursor.saturating_sub(1);
             cx.notify();
         }))
-        .on_action(cx.listener(move |this, _: &OpenSection, window, cx| {
-            if let Some(entry) = open.clone() {
-                this.settings_activate(cursor, entry, window, cx);
-            }
-        }))
         .children(rows);
     div()
         .w(rems(14.))
@@ -254,6 +248,12 @@ pub(super) fn sidebar(
             v_flex()
                 .size_full()
                 .gap(px(space(SpaceStep::Sm, cx)))
+                .key_context(CONTEXT_SECTIONS)
+                .on_action(cx.listener(move |this, _: &OpenSection, window, cx| {
+                    if let Some(entry) = open.clone() {
+                        this.settings_activate(cursor, entry, window, cx);
+                    }
+                }))
                 .child(
                     div()
                         .id("settings-search")
@@ -278,7 +278,7 @@ fn row(
     let (ring, radius) = (cx.theme().ring, cx.theme().radius);
     let (hover, muted) = (cx.theme().muted, cx.theme().muted_foreground);
     let (id, label, content) = match entry {
-        Entry::Section(item) => (
+        Entry::Category(item) => (
             format!("settings-section-{}", item.section.key()),
             item.label.clone(),
             h_flex()
