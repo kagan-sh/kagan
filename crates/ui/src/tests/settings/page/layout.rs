@@ -28,35 +28,47 @@ fn settings_saves_terminal_size_and_notifications(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn clicking_a_setting_out_of_view_scrolls_to_it(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
+    cx.simulate_window_resize(window, size(px(1100.), px(560.)));
+    cx.run_until_parked();
     click(cx, window, "settings-gear");
     click(cx, window, "settings-section-installed");
+    assert!(
+        !shows(cx, window, "slot-review-kagan"),
+        "the target starts below the window"
+    );
     run_op(
         cx,
         Op::Ui(UiOp::Click {
-            element_id: "plugin-install-open".into(),
+            element_id: "slot-review-kagan".into(),
             within: None,
             window: 0,
         }),
     );
     cx.run_until_parked();
-    assert!(shows(cx, window, "plugin-source"));
+    assert!(shows(cx, window, "slot-review-kagan"));
 }
 
 #[gpui_kit::test]
 fn scrolling_an_element_out_of_view_first_brings_it_into_view(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
+    cx.simulate_window_resize(window, size(px(1100.), px(560.)));
+    cx.run_until_parked();
     click(cx, window, "settings-gear");
     click(cx, window, "settings-section-installed");
+    assert!(
+        !shows(cx, window, "slot-review-kagan"),
+        "the target starts below the window"
+    );
     run_op(
         cx,
         Op::Ui(UiOp::Scroll {
-            element_id: "plugin-install-open".into(),
+            element_id: "slot-review-kagan".into(),
             within: None,
             dy: 0.,
             window: 0,
         }),
     );
-    assert!(shows(cx, window, "plugin-install-open"));
+    assert!(shows(cx, window, "slot-review-kagan"));
 }
 
 #[gpui_kit::test]
