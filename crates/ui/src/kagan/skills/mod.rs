@@ -413,6 +413,10 @@ impl Kagan {
     }
 
     pub(crate) fn show_skills(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.shows_skills() {
+            cx.notify();
+            return;
+        }
         self.screen.remember_center(window, cx);
         self.cancel_plugin_start();
         self.dismiss_thread_menus(cx);

@@ -202,3 +202,13 @@ fn a_fork_types_nothing_when_its_thread_does_not_start(cx: &mut TestAppContext) 
     assert!(!grid_text(cx, &kagan).contains("Make a new skill"));
     assert!(!shows(cx, window, "plugin-prompt-notice"));
 }
+
+#[gpui_kit::test]
+fn asking_for_the_open_page_again_keeps_its_place(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    show_skills(cx, &kagan, window);
+    click(cx, window, "skill-row-kg-cli");
+    cx.run_until_parked();
+    show_skills(cx, &kagan, window);
+    assert!(shows(cx, window, "skills-read-only"));
+}
