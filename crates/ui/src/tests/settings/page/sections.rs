@@ -28,6 +28,46 @@ fn search_finds_a_row_in_another_section_and_jumps_there(cx: &mut TestAppContext
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
     tab_to(cx, window, "settings-search");
+    cx.simulate_input(window, "text size");
+    cx.run_until_parked();
+    assert!(present(cx, window, "settings-result-appearance-0"));
+    assert!(!present(cx, window, "settings-section-general"));
+    assert!(
+        present(cx, window, "setting-row-notify"),
+        "the chosen section stays on screen while searching"
+    );
+
+    click(cx, window, "settings-result-appearance-0");
+    cx.run_until_parked();
+    assert_eq!(
+        selected_of(cx, window, "settings-section-appearance"),
+        Some(true)
+    );
+    assert!(present(cx, window, "setting-row-terminal-font-size"));
+    assert!(present(cx, window, "settings-section-general"));
+}
+
+#[gpui_kit::test]
+fn enter_in_the_search_box_opens_the_first_result(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    tab_to(cx, window, "settings-search");
+    cx.simulate_input(window, "text size");
+    cx.run_until_parked();
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(
+        selected_of(cx, window, "settings-section-appearance"),
+        Some(true)
+    );
+    assert!(present(cx, window, "setting-row-terminal-font-size"));
+}
+
+#[gpui_kit::test]
+fn arrows_move_the_section_list_and_enter_opens_a_section(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    tab_to(cx, window, "settings-search");
     cx.simulate_keystrokes(window, "tab");
     cx.run_until_parked();
     cx.simulate_keystrokes(window, "down");
