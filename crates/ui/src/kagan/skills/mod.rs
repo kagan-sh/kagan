@@ -7,7 +7,7 @@ use gpui_kit::{
     Subscription, Task, Window, actions, div,
 };
 use kg_core::Workspace;
-use kg_domain::{Op, OpResult, ProjectId, Skill, SkillOp, SkillSource};
+use kg_domain::{Op, OpResult, ProjectId, Skill, SkillOp, SkillSource, SkillTemplate};
 
 use super::Kagan;
 use super::screen::Center;
@@ -35,6 +35,9 @@ pub(in crate::kagan) struct Page {
     query: Entity<InputState>,
     filter: Option<SkillSource>,
     sort: Sort,
+    descending: bool,
+    template: SkillTemplate,
+    save: Save,
     selected: Option<Shown>,
     editor: Option<Entity<TextareaState>>,
     // The SKILL.md text the editor was opened on; Save refuses if the file changed since.
@@ -54,6 +57,12 @@ pub(in crate::kagan) struct Page {
 pub(in crate::kagan) enum Sort {
     Name,
     Source,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(in crate::kagan) enum Save {
+    Yours,
+    Project,
 }
 
 pub(in crate::kagan) struct Open {
@@ -94,6 +103,9 @@ impl Page {
             query,
             filter: None,
             sort: Sort::Name,
+            descending: false,
+            template: SkillTemplate::Blank,
+            save: Save::Yours,
             selected: None,
             editor: None,
             creating: None,
@@ -187,9 +199,28 @@ impl Page {
         cx.notify();
     }
 
-    fn set_sort(&mut self, sort: Sort, cx: &mut Context<Self>) {
+    fn set_sort(&mut self, sort: Sort, descending: bool, cx: &mut Context<Self>) {
         self.sort = sort;
+        self.descending = descending;
         cx.notify();
+    }
+
+    fn set_template(&mut self, template: SkillTemplate, cx: &mut Context<Self>) {
+        self.template = template;
+        cx.notify();
+    }
+
+    fn set_save(&mut self, save: Save, cx: &mut Context<Self>) {
+        self.save = save;
+        cx.notify();
+    }
+
+    fn count(&self, filter: Option<SkillSource>) -> usize {
+        self.listing
+            .iter()
+            .flatten()
+            .filter(|skill| filter.is_none_or(|source| skill.source == source))
+            .count()
     }
 
     // A skill's folder is removed by Remove; the list reloads and the page returns to it.
@@ -305,7 +336,8 @@ impl Page {
         let made = Workspace::dispatch(
             Op::Skill(SkillOp::New {
                 name: name.clone(),
-                project: false,
+                project: self.save == Save::Project,
+                template: self.template,
                 project_id: self.project.clone(),
             }),
             cx,
@@ -348,6 +380,9 @@ impl Page {
                     .cmp(&source_rank(b.source))
                     .then_with(|| a.name.cmp(&b.name))
             }),
+        }
+        if self.descending {
+            skills.reverse();
         }
         skills
     }

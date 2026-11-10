@@ -1,14 +1,15 @@
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Input;
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, Role,
-    StatefulInteractiveElement as _, Styled as _, Window, div,
+    AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
+    Role, StatefulInteractiveElement as _, Styled as _, Window, div,
 };
-use kg_domain::{Skill, SkillSource};
+use kg_domain::{Skill, SkillSource, SkillTemplate};
 
-use super::{Page, Sort};
+use super::{Page, Save, Sort};
 use crate::kagan::controls::{control, note};
 use crate::theme::{SpaceStep, TypeScale as _, space};
 use crate::ui_observe::UiObserveExt as _;
@@ -63,7 +64,7 @@ pub(super) fn render(page: &Page, window: &mut Window, cx: &mut Context<Page>) -
         .child(header(cx))
         .child(toolbar(page, cx))
         .when_some(page.creating.clone(), |this, input| {
-            this.child(create_row(&input, cx))
+            this.child(create_row(page, &input, cx))
         })
         .when_some(page.notice.clone(), |this, notice| {
             this.child(note("skills-notice", notice, cx.theme().danger, cx))
@@ -99,38 +100,34 @@ fn header(cx: &Context<Page>) -> impl IntoElement {
         )
 }
 
+const FILTERS: [Option<SkillSource>; 5] = [
+    None,
+    Some(SkillSource::Bundled),
+    Some(SkillSource::Plugin),
+    Some(SkillSource::User),
+    Some(SkillSource::Project),
+];
+
+const SORTS: [(Sort, bool); 4] = [
+    (Sort::Name, false),
+    (Sort::Name, true),
+    (Sort::Source, false),
+    (Sort::Source, true),
+];
+
+const TEMPLATES: [SkillTemplate; 4] = [
+    SkillTemplate::Blank,
+    SkillTemplate::ReviewPr,
+    SkillTemplate::ReleaseNotes,
+    SkillTemplate::DebugTest,
+];
+
 fn toolbar(page: &Page, cx: &mut Context<Page>) -> impl IntoElement {
-    let filter = filter_label(page.filter);
-    let sort = match page.sort {
-        Sort::Name => "Name",
-        Sort::Source => "Source",
-    };
-    let next_filter = next_filter(page.filter);
-    let next_sort = match page.sort {
-        Sort::Name => Sort::Source,
-        Sort::Source => Sort::Name,
-    };
     h_flex()
         .gap(gpui_kit::px(space(SpaceStep::Sm, cx)))
         .child(div().flex_1().min_w_0().child(Input::new(&page.query)))
-        .child(control(
-            "skills-filter",
-            Facts::button(format!("Filter: {filter}")),
-            Button::new("skills-filter-button")
-                .small()
-                .outline()
-                .label(format!("Filter: {filter}"))
-                .on_click(cx.listener(move |this, _, _, cx| this.set_filter(next_filter, cx))),
-        ))
-        .child(control(
-            "skills-sort",
-            Facts::button(format!("Sort: {sort}")),
-            Button::new("skills-sort-button")
-                .small()
-                .outline()
-                .label(format!("Sort: {sort}"))
-                .on_click(cx.listener(move |this, _, _, cx| this.set_sort(next_sort, cx))),
-        ))
+        .child(filter_menu(page, cx))
+        .child(sort_menu(page, cx))
         .child(control(
             "skills-new",
             Facts::button("New skill"),
@@ -142,13 +139,103 @@ fn toolbar(page: &Page, cx: &mut Context<Page>) -> impl IntoElement {
         ))
 }
 
-fn next_filter(filter: Option<SkillSource>) -> Option<SkillSource> {
-    match filter {
-        None => Some(SkillSource::Bundled),
-        Some(SkillSource::Bundled) => Some(SkillSource::Plugin),
-        Some(SkillSource::Plugin) => Some(SkillSource::User),
-        Some(SkillSource::User) => Some(SkillSource::Project),
-        Some(SkillSource::Project) => None,
+fn filter_menu(page: &Page, cx: &mut Context<Page>) -> impl IntoElement {
+    let label = format!("Filter: {}", filter_label(page.filter));
+    let current = page.filter;
+    let counts = FILTERS.map(|filter| page.count(filter));
+    let weak = cx.entity().downgrade();
+    control(
+        "skills-filter",
+        Facts::button(label.clone()),
+        Button::new("skills-filter-button")
+            .small()
+            .outline()
+            .label(label)
+            .dropdown_menu(move |menu, _, _| {
+                FILTERS.iter().zip(counts).enumerate().fold(
+                    menu,
+                    |menu, (index, (&filter, count))| {
+                        let weak = weak.clone();
+                        menu.item(menu_item(
+                            format!("skills-filter-{index}"),
+                            format!("{} ({count})", filter_label(filter)),
+                            current == filter,
+                            false,
+                            move |cx| _ = weak.update(cx, |page, cx| page.set_filter(filter, cx)),
+                        ))
+                    },
+                )
+            }),
+    )
+}
+
+fn sort_menu(page: &Page, cx: &mut Context<Page>) -> impl IntoElement {
+    let label = format!("Sort: {}", sort_label(page.sort, page.descending));
+    let (current, descending) = (page.sort, page.descending);
+    let weak = cx.entity().downgrade();
+    control(
+        "skills-sort",
+        Facts::button(label.clone()),
+        Button::new("skills-sort-button")
+            .small()
+            .outline()
+            .label(label)
+            .dropdown_menu(move |menu, _, _| {
+                SORTS
+                    .iter()
+                    .enumerate()
+                    .fold(menu, |menu, (index, &(sort, desc))| {
+                        let weak = weak.clone();
+                        menu.item(menu_item(
+                            format!("skills-sort-{index}"),
+                            sort_label(sort, desc).to_owned(),
+                            current == sort && descending == desc,
+                            false,
+                            move |cx| _ = weak.update(cx, |page, cx| page.set_sort(sort, desc, cx)),
+                        ))
+                    })
+            }),
+    )
+}
+
+fn menu_item(
+    id: String,
+    text: String,
+    selected: bool,
+    disabled: bool,
+    pick: impl Fn(&mut App) + 'static,
+) -> PopupMenuItem {
+    PopupMenuItem::element(move |_, _| {
+        div()
+            .id(ElementId::Name(id.clone().into()))
+            .ui_observe_as(Facts {
+                role: Role::MenuItem,
+                selected: Some(selected),
+                disabled,
+                ..Facts::button(text.clone())
+            })
+            .child(text.clone())
+    })
+    .checked(selected)
+    .disabled(disabled)
+    .on_click(move |_, _, cx| pick(cx))
+}
+
+fn sort_label(sort: Sort, descending: bool) -> &'static str {
+    match (sort, descending) {
+        (Sort::Name, false) => "Name A–Z",
+        (Sort::Name, true) => "Name Z–A",
+        (Sort::Source, false) => "Source, built in first",
+        (Sort::Source, true) => "Source, project first",
+    }
+}
+
+fn template_label(template: SkillTemplate) -> &'static str {
+    match template {
+        SkillTemplate::Blank => "Blank",
+        SkillTemplate::ReviewPr => "Review a pull request",
+        SkillTemplate::ReleaseNotes => "Write release notes",
+        SkillTemplate::DebugTest => "Debug a failing test",
     }
 }
 
@@ -178,12 +265,15 @@ fn source_icon(source: SkillSource) -> IconName {
 }
 
 fn create_row(
+    page: &Page,
     input: &gpui_kit::Entity<gpui_kit::component::input::InputState>,
     cx: &mut Context<Page>,
 ) -> impl IntoElement {
     h_flex()
         .gap(gpui_kit::px(space(SpaceStep::Sm, cx)))
         .child(div().flex_1().min_w_0().child(Input::new(input)))
+        .child(template_menu(page, cx))
+        .child(scope_menu(page, cx))
         .child(control(
             "skills-create",
             Facts::button("Create skill"),
@@ -193,6 +283,67 @@ fn create_row(
                 .label("Create skill")
                 .on_click(cx.listener(|this, _, _, cx| this.create(cx))),
         ))
+}
+
+fn template_menu(page: &Page, cx: &mut Context<Page>) -> impl IntoElement {
+    let label = format!("Template: {}", template_label(page.template));
+    let current = page.template;
+    let weak = cx.entity().downgrade();
+    control(
+        "skills-template",
+        Facts::button(label.clone()),
+        Button::new("skills-template-button")
+            .small()
+            .outline()
+            .label(label)
+            .dropdown_menu(move |menu, _, _| {
+                TEMPLATES.iter().fold(menu, |menu, &template| {
+                    let weak = weak.clone();
+                    menu.item(menu_item(
+                        format!("skills-template-{template:?}"),
+                        template_label(template).to_owned(),
+                        current == template,
+                        false,
+                        move |cx| _ = weak.update(cx, |page, cx| page.set_template(template, cx)),
+                    ))
+                })
+            }),
+    )
+}
+
+fn scope_menu(page: &Page, cx: &mut Context<Page>) -> impl IntoElement {
+    let current = page.save;
+    let label = format!(
+        "Save in: {}",
+        match current {
+            Save::Yours => "Yours",
+            Save::Project => "Project",
+        }
+    );
+    let has_project = page.project.is_some();
+    let weak = cx.entity().downgrade();
+    control(
+        "skills-scope",
+        Facts::button(label.clone()),
+        Button::new("skills-scope-button")
+            .small()
+            .outline()
+            .label(label)
+            .dropdown_menu(move |menu, _, _| {
+                [(Save::Yours, "Yours"), (Save::Project, "Project")]
+                    .into_iter()
+                    .fold(menu, |menu, (save, name)| {
+                        let weak = weak.clone();
+                        menu.item(menu_item(
+                            format!("skills-scope-{name}"),
+                            name.to_owned(),
+                            current == save,
+                            save == Save::Project && !has_project,
+                            move |cx| _ = weak.update(cx, |page, cx| page.set_save(save, cx)),
+                        ))
+                    })
+            }),
+    )
 }
 
 fn row(skill: &Skill, window: &mut Window, cx: &mut Context<Page>) -> impl IntoElement {

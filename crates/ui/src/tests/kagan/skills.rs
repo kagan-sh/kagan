@@ -212,3 +212,67 @@ fn asking_for_the_open_page_again_keeps_its_place(cx: &mut TestAppContext) {
     show_skills(cx, &kagan, window);
     assert!(shows(cx, window, "skills-read-only"));
 }
+
+#[gpui_kit::test]
+fn the_filter_menu_narrows_the_list_to_one_source(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    write_user_skill(data.path(), "mine");
+    show_skills(cx, &kagan, window);
+    click(cx, window, "skills-filter");
+    cx.run_until_parked();
+    click(cx, window, "skills-filter-3");
+    cx.run_until_parked();
+    assert!(shows(cx, window, "skill-row-mine"));
+    assert!(!shows(cx, window, "skill-row-kg-cli"));
+}
+
+fn first_row_by_tab(cx: &mut TestAppContext, window: AnyWindowHandle) -> Option<&'static str> {
+    for _ in 0..80 {
+        if focused_of(cx, window, "skill-row-mine") == Some(true) {
+            return Some("mine");
+        }
+        if focused_of(cx, window, "skill-row-kg-cli") == Some(true) {
+            return Some("kg-cli");
+        }
+        cx.simulate_keystrokes(window, "tab");
+        cx.run_until_parked();
+    }
+    None
+}
+
+#[gpui_kit::test]
+fn the_default_sort_lists_by_name(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    write_user_skill(data.path(), "mine");
+    show_skills(cx, &kagan, window);
+    assert_eq!(first_row_by_tab(cx, window), Some("kg-cli"));
+}
+
+#[gpui_kit::test]
+fn the_sort_menu_reverses_the_order(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    write_user_skill(data.path(), "mine");
+    show_skills(cx, &kagan, window);
+    click(cx, window, "skills-sort");
+    cx.run_until_parked();
+    click(cx, window, "skills-sort-1");
+    cx.run_until_parked();
+    assert_eq!(first_row_by_tab(cx, window), Some("mine"));
+}
+
+#[gpui_kit::test]
+fn a_new_skill_starts_from_the_template_picked_in_the_menu(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    show_skills(cx, &kagan, window);
+    click(cx, window, "skills-new");
+    cx.run_until_parked();
+    cx.simulate_input(window, "review-me");
+    cx.run_until_parked();
+    click(cx, window, "skills-template");
+    cx.run_until_parked();
+    click(cx, window, "skills-template-ReviewPr");
+    cx.run_until_parked();
+    click(cx, window, "skills-create");
+    wait_until(cx, |cx| shows(cx, window, "skills-back"));
+    assert!(label(cx, window, "skills-field-description").starts_with("Review a pull request"));
+}

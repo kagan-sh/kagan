@@ -9,6 +9,8 @@ use crate::Workspace;
 use crate::host::database::Result;
 use crate::workspace::{WorkspaceEvent, closed, missing};
 
+mod template;
+
 const BUNDLED: &[(&str, &[(&str, &str)])] = &[
     (
         "kg-cli",
@@ -278,7 +280,12 @@ pub(crate) async fn run(
             })
         }
         SkillOp::Files { name, .. } => Ok(OpResult::Files(catalog.get(&name)?.paths())),
-        SkillOp::New { name, project, .. } => {
+        SkillOp::New {
+            name,
+            project,
+            template,
+            ..
+        } => {
             if !valid_name(&name) || reserved(&name) {
                 return Err(OpError::Invalid(
                     "skill name must be lowercase and hyphenated, and must not start with kg-"
@@ -287,11 +294,15 @@ pub(crate) async fn run(
             }
             let root = destination(this, project, project_id.as_ref(), cx)?.join(&name);
             cx.background_spawn(async move {
-                std::fs::create_dir_all(root.parent().ok_or_else(|| OpError::Invalid("skill parent is missing".into()))?)?;
+                std::fs::create_dir_all(
+                    root.parent()
+                        .ok_or_else(|| OpError::Invalid("skill parent is missing".into()))?,
+                )?;
                 std::fs::create_dir(&root)?;
-                std::fs::write(root.join("SKILL.md"), format!("---\nname: {name}\ndescription: Describe when to use this skill.\n---\n\nWrite the instructions here.\n"))?;
+                std::fs::write(root.join("SKILL.md"), template::text(&name, template))?;
                 Ok(OpResult::Files(vec![root.join("SKILL.md")]))
-            }).await
+            })
+            .await
         }
         SkillOp::Add { path, project, .. } => {
             let target = destination(this, project, project_id.as_ref(), cx)?;

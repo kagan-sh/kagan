@@ -348,7 +348,7 @@ A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matche
 
 ### `New`
 
-- **Changes**: writes a skill folder into user skills, or into the project when `--project` is set [book:skills] [docs:self-extend].
+- **Changes**: writes a skill folder into user skills, or into the project when `--project` is set [book:skills] [docs:self-extend]. Its SKILL.md starts from `--template` (`blank`, `review-pr`, `release-notes`, or `debug-test`; `blank` by default) [decision 211].
 - **Refused when**: a name that is not lowercase and hyphenated, starts with `kg-`, or already exists in that source — `invalid` [docs:self-extend] [op/] [person 2026-10-08].
 
 ### `Add`

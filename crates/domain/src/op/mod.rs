@@ -56,7 +56,7 @@ pub use program::ProgramOp;
 pub use project::ProjectOp;
 pub use section::SectionOp;
 pub use settings::SettingsOp;
-pub use skill::{Skill, SkillOp, SkillSource};
+pub use skill::{Skill, SkillOp, SkillSource, SkillTemplate};
 pub use surface::{Slot, SlotChoice, SlotChoiceError, SurfaceItem, SurfaceOp, SurfacePlacement};
 pub use terminal::{
     ExtraTerminal, SCREEN_MAX_BYTES, SelectMode, TERMINAL_COLS, TERMINAL_ROWS, TerminalOp,

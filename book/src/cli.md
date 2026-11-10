@@ -234,13 +234,24 @@ Options:
       --project
           Create it in the project folder instead of the user folder
 
+      --template <TEMPLATE>
+          What the new SKILL.md starts with
+
+          Possible values:
+          - blank:         A placeholder to fill in
+          - review-pr:     Review a pull request
+          - release-notes: Write release notes
+          - debug-test:    Debug a failing test
+          
+          [default: blank]
+
       --project-id <PROJECT_ID>
           Project whose skills to include
           
           [env: KG_PROJECT_ID=]
 
   -h, --help
-          Print help
+          Print help (see a summary with '-h')
 ```
 
 ## `kg skill add`
