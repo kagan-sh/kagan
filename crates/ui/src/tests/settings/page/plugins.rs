@@ -101,6 +101,7 @@ fn the_installed_switch_disables_and_enables_a_plugin(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     assert!(plugin_enabled(cx));
 
     click(cx, window, &format!("plugin-{PREFS}"));
@@ -115,6 +116,7 @@ fn a_plugin_that_did_not_start_offers_update_and_remove(cx: &mut TestAppContext)
     let (_kagan, window, data) = open_with_plugins_then(cx, install_old_plugin);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     click(cx, window, &format!("plugin-details-{OLD}"));
     assert!(
         !present(cx, window, &format!("plugin-update-{OLD}")),
@@ -201,6 +203,7 @@ fn two_plugins_with_the_same_key_stay_apart(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.other");
     click(cx, window, "setting-row-dev.test.other/sounds");
 
     click(cx, window, "plugin-dev.test.other/sounds");
@@ -274,6 +277,7 @@ fn an_entry_and_its_control_expose_a_label(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-appearance");
     assert_eq!(
         aria_label(cx, window, "theme-ember").as_deref(),
         Some("Ember theme")
@@ -285,6 +289,7 @@ fn a_plugin_text_field_states_its_value_and_saves_on_enter(cx: &mut TestAppConte
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     let field = format!("plugin-text-{PREFS}/label");
     assert_eq!(value_of(cx, window, &field), Some("hi".into()));
 
@@ -313,6 +318,7 @@ fn a_plugin_number_field_saves_a_finite_number_on_enter(cx: &mut TestAppContext)
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     let field = format!("plugin-text-{PREFS}/retries");
     assert_eq!(value_of(cx, window, &field), Some("3".into()));
     assert_eq!(plugin_config(cx, "retries"), json!(3));
@@ -375,6 +381,7 @@ fn a_plugin_turns_off_and_on_from_the_installed_page(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     let switch = format!("plugin-{PREFS}");
     wait_until(cx, |cx| present(cx, window, &switch));
     assert!(plugin_enabled(cx));

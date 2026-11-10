@@ -16,8 +16,10 @@ use crate::tests::sidebar::layout::span;
 fn settings_saves_terminal_size_and_notifications(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-appearance");
     click(cx, window, "terminal-size-bigger");
     wait_until(cx, |cx| saved(cx, "terminal-font-size") == json!(13));
+    click(cx, window, "settings-section-general");
     click(cx, window, "notify");
     wait_until(cx, |cx| saved(cx, "notify") == json!(false));
     assert_eq!(value_of(cx, window, "notify").as_deref(), Some("off"));
@@ -27,7 +29,7 @@ fn settings_saves_terminal_size_and_notifications(cx: &mut TestAppContext) {
 fn clicking_a_setting_out_of_view_scrolls_to_it(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
-    assert!(!shows(cx, window, "plugin-install-open"));
+    click(cx, window, "settings-section-installed");
     run_op(
         cx,
         Op::Ui(UiOp::Click {
@@ -44,7 +46,7 @@ fn clicking_a_setting_out_of_view_scrolls_to_it(cx: &mut TestAppContext) {
 fn scrolling_an_element_out_of_view_first_brings_it_into_view(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
-    assert!(!shows(cx, window, "plugin-install-open"));
+    click(cx, window, "settings-section-installed");
     run_op(
         cx,
         Op::Ui(UiOp::Scroll {
@@ -61,30 +63,32 @@ fn scrolling_an_element_out_of_view_first_brings_it_into_view(cx: &mut TestAppCo
 fn the_settings_scrollbar_hugs_the_window_edge(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-keyboard");
     for width in [1100., 1500.] {
         cx.simulate_window_resize(window, size(px(width), px(720.)));
         cx.run_until_parked();
         let (center_x, center_width) = span(cx, window, "center").unwrap();
         let edge = center_x + center_width;
-        let (close_x, close_width) = span(cx, window, "settings-close").unwrap();
-        let (_, column) = span(cx, window, "settings-group-appearance").unwrap();
-        let gap = (center_width - column) / 2.;
+        let (page_x, page_width) = span(cx, window, "settings-page").unwrap();
+        let (column_x, column) = span(cx, window, "settings-group-shortcuts").unwrap();
+        let left = column_x - page_x;
+        let right = page_x + page_width - column_x - column;
         assert!(
-            (edge - close_x - close_width - gap).abs() < 1.,
+            (left - right).abs() < 1.,
             "the column is not centered at {width}"
         );
         // gpui-kit draws the bar along the right side of the element that scrolls.
         let bar = point(px(edge) - Scrollbar::width() / 2., px(300.));
         wheel(cx, window, bar, 10_000.);
-        let top = top_of(cx, window, "setting-row-theme");
+        let top = top_of(cx, window, "setting-row-NewThread");
         wheel(cx, window, bar, -50.);
         assert!(
-            (top_of(cx, window, "setting-row-theme") - (top - 50.)).abs() < 0.5,
+            (top_of(cx, window, "setting-row-NewThread") - (top - 50.)).abs() < 0.5,
             "the page does not scroll under its bar at {width}"
         );
     }
+    click(cx, window, "settings-section-installed");
     wheel(cx, window, point(px(700.), px(300.)), 10_000.);
-    assert!(!shows(cx, window, "plugin-install-open"));
     run_op(
         cx,
         Op::Ui(UiOp::Click {
@@ -100,6 +104,7 @@ fn the_settings_scrollbar_hugs_the_window_edge(cx: &mut TestAppContext) {
 fn the_settings_thumb_follows_the_page_down(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-keyboard");
     cx.simulate_window_resize(window, size(px(1100.), px(720.)));
     cx.run_until_parked();
     let (center_x, center_width) = span(cx, window, "center").unwrap();
@@ -112,7 +117,7 @@ fn the_settings_thumb_follows_the_page_down(cx: &mut TestAppContext) {
         .unwrap()
         .unwrap();
     wheel(cx, window, point(x, px(300.)), -10_000.);
-    let top = top_of(cx, window, "setting-row-theme");
+    let top = top_of(cx, window, "setting-row-NewThread");
     let grab = point(x, bottom - px(10.));
     let drop = grab - point(px(0.), px(100.));
     press_at(cx, window, grab, 1, Modifiers::default());
@@ -120,7 +125,7 @@ fn the_settings_thumb_follows_the_page_down(cx: &mut TestAppContext) {
     release(cx, window, drop, 1, Modifiers::default());
     cx.run_until_parked();
     assert!(
-        top_of(cx, window, "setting-row-theme") > top + 100.,
+        top_of(cx, window, "setting-row-NewThread") > top + 100.,
         "the thumb is not at the bottom of the bar once the page is scrolled down"
     );
 }

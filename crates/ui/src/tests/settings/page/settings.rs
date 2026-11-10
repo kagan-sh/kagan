@@ -29,6 +29,7 @@ fn agent_integration_saved_as_off_shows_off_at_start(cx: &mut TestAppContext) {
 fn a_theme_card_reports_whether_it_is_the_chosen_theme(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-appearance");
     let before = get_theme(cx).theme;
     assert_eq!(
         selected_of(cx, window, &format!("theme-{before}")),
@@ -50,6 +51,7 @@ fn a_theme_card_reports_whether_it_is_the_chosen_theme(cx: &mut TestAppContext) 
 fn the_theme_picker_saves_the_theme(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-appearance");
     click(cx, window, "theme-ember");
     assert_eq!(get_theme(cx).theme, "ember");
 }
@@ -58,6 +60,7 @@ fn the_theme_picker_saves_the_theme(cx: &mut TestAppContext) {
 fn the_mode_choice_saves_the_mode(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-appearance");
     click(cx, window, "mode-dark");
     assert_eq!(get_theme(cx).mode, Appearance::Dark);
     click(cx, window, "mode-system");
@@ -69,6 +72,7 @@ fn a_plugin_setting_saves_from_its_page(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     assert!(present(cx, window, "setting-row-dev.test.prefs/sounds"));
 
     click(cx, window, "plugin-dev.test.prefs/sounds");
@@ -83,6 +87,7 @@ fn a_project_setting_picks_from_a_dropdown(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     assert_eq!(
         label(cx, window, "setting-project-dev.test.prefs/board"),
         "None"
@@ -128,6 +133,7 @@ fn a_missing_project_setting_keeps_its_id(cx: &mut TestAppContext) {
         }),
     );
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     assert_eq!(plugin_config(cx, "board"), json!("prj_gone"));
     assert_eq!(
         label(cx, window, "setting-project-dev.test.prefs/board"),
@@ -154,6 +160,7 @@ fn a_project_menu_scrolls_to_its_last_of_25_projects(cx: &mut TestAppContext) {
     cx.simulate_window_resize(window, size(px(1100.), px(420.)));
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     click(cx, window, "setting-project-dev.test.prefs/board");
     let pick = format!("project-pick-dev.test.prefs/board/{}", last.0);
     wait_until(cx, |cx| {
@@ -199,6 +206,7 @@ fn removing_the_project_while_settings_is_open_shows_missing(cx: &mut TestAppCon
     let project = add_project(cx, &folder);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     click(cx, window, "setting-project-dev.test.prefs/board");
     let pick = format!("project-pick-dev.test.prefs/board/{}", project.id.0);
     wait_until(cx, |cx| shows(cx, window, &pick));
@@ -246,6 +254,7 @@ fn review_number_type_after_reload(cx: &mut TestAppContext) {
         "ctrl-a"
     };
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     let field = format!("plugin-text-{PREFS}/retries");
     click(cx, window, &field);
     cx.simulate_keystrokes(window, select_all);
@@ -303,6 +312,7 @@ fn a_multiline_setting_saves_its_lines_from_the_editor(cx: &mut TestAppContext) 
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     let field = format!("plugin-text-{PREFS}/log");
     assert!(present(cx, window, &field));
 
@@ -354,6 +364,7 @@ fn a_reload_that_toggles_multiline_swaps_the_row_widget_and_saves_both_ways(
     let (_kagan, window, data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     let field = format!("plugin-text-{PREFS}/label");
     let select_all = if cfg!(target_os = "macos") {
         "cmd-a"
@@ -431,6 +442,7 @@ fn a_long_choice_keeps_its_title_wider_than_it_is_tall(cx: &mut TestAppContext) 
         );
     });
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.programs");
     let title = "setting-row-dev.test.programs/program-title";
     assert!(present(cx, window, title));
     let (width, height) = cx

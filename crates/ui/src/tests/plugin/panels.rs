@@ -395,6 +395,7 @@ fn the_install_form_is_disabled_while_an_install_runs_and_follows_the_host(
     .unwrap();
     std::fs::write(folder.join("main.js"), "export default class Plugin {}\n").unwrap();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     click(cx, window, "plugin-install-open");
     cx.run_until_parked();
 
@@ -442,6 +443,7 @@ fn a_focused_plugin_row_answers_its_keys_through_its_actions(cx: &mut TestAppCon
         plugin_log(cx, "dev.test.broken").contains("boom in render")
     });
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
 
     let row = "plugin-row-dev.test.broken";
     let mut focused = false;
@@ -674,6 +676,7 @@ fn x_on_a_plugin_row_asks_before_removing_it(cx: &mut TestAppContext) {
     cx.run_until_parked();
     open_tool(cx, "dev.test.broken");
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
 
     let row = "plugin-row-dev.test.broken";
     let mut focused = false;

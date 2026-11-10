@@ -141,6 +141,7 @@ pub(in crate::tests) fn starter_key_runs_hello(cx: &mut TestAppContext, window: 
     };
     let row = "shortcut-plugin-dev.kagan.counter-lab-hello";
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-keyboard");
     click(cx, window, "setting-row-plugin-dev.kagan.counter-lab-hello");
     assert_eq!(observed_label(cx, window, row).as_deref(), Some("Not set"));
     click(cx, window, &format!("{row}-key"));
@@ -284,6 +285,7 @@ fn installing_from_the_plugins_box_asks_for_approval_in_needs_you(cx: &mut TestA
 
     // Type the folder into the install form on the Installed page and press its Install button.
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     click(cx, window, "plugin-install-open");
     click(cx, window, "plugin-source");
     cx.simulate_input(window, &root.display().to_string());
@@ -340,6 +342,7 @@ fn installing_from_the_plugins_box_asks_for_approval_in_needs_you(cx: &mut TestA
 fn choosing_a_plugin_folder_fills_the_install_form(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open_with_plugins(cx, false);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     click(cx, window, "plugin-install-open");
     click(cx, window, "plugin-choose-folder");
     assert!(cx.did_prompt_for_paths());

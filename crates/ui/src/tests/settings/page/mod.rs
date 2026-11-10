@@ -7,6 +7,7 @@ mod layout;
 mod mode;
 mod plugins;
 mod saves;
+mod sections;
 mod settings;
 mod sidebars;
 mod theme;

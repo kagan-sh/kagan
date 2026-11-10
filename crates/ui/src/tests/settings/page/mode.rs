@@ -71,14 +71,17 @@ fn the_gear_leaves_settings_when_clicked_again(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn settings_is_one_page_and_manage_plugins_scrolls_to_installed(cx: &mut TestAppContext) {
+fn settings_shows_one_section_and_manage_plugins_opens_installed(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-appearance");
     assert!(shows(cx, window, "setting-row-theme"));
-    assert!(!shows(cx, window, "settings-search"));
+    assert!(!shows(cx, window, "setting-row-install"));
+    assert!(shows(cx, window, "settings-search"));
     assert!(!shows(cx, window, "settings-menu"));
     cx.simulate_keystrokes(window, "escape");
     cx.run_until_parked();
     click(cx, window, "plugins-manage");
     assert!(shows(cx, window, "setting-row-install"));
+    assert!(!shows(cx, window, "setting-row-theme"));
 }

@@ -55,31 +55,9 @@ pub(in crate::tests) fn install_theme_plugin(data: &Path) {
 fn general_describes_what_integration_still_sets(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
-    click(cx, window, "setting-row-agent-integration-note");
+    click(cx, window, "settings-section-general");
     let note = aria_label(cx, window, "setting-row-agent-integration-note").unwrap_or_default();
-    assert!(
-        note.contains("claude") && note.contains("codex") && note.contains("cursor-agent"),
-        "{note}"
-    );
-    assert!(note.contains("--new-session-id or --resume"), "{note}");
-    assert!(
-        note.contains("--mcp-config")
-            && note.contains("--session-id or --resume")
-            && note.contains("-c mcp_servers.kagan.*"),
-        "{note}"
-    );
-    assert!(note.contains("Off drops kagan’s tools"), "{note}");
-    assert!(
-        note.contains("--disallowed-tools")
-            && note.contains("--disable multi_agent")
-            && note.contains("--append-system-prompt"),
-        "{note}"
-    );
-    assert!(
-        note.contains("KG_ variables") && note.contains("PATH"),
-        "{note}"
-    );
-    assert!(!note.contains("unchanged"), "{note}");
+    assert_eq!(note, "Off keeps kagan’s tools out of the agents it starts.");
 }
 
 #[gpui_kit::test]
@@ -103,6 +81,7 @@ fn a_text_draft_waits_for_enter_and_revert_puts_the_saved_value_back(cx: &mut Te
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     let field = format!("plugin-text-{PREFS}/label");
     click(cx, window, &field);
     cx.simulate_input(window, "!");
@@ -136,6 +115,7 @@ fn a_newer_draft_survives_the_reply(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     let field = format!("plugin-text-{PREFS}/label");
     click(cx, window, &field);
     cx.simulate_input(window, "!");
@@ -154,6 +134,7 @@ fn a_failed_text_save_keeps_the_draft_until_revert(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     let field = format!("plugin-text-{PREFS}/label");
     click(cx, window, &field);
     cx.simulate_input(window, "!");
@@ -172,6 +153,7 @@ fn a_failed_text_save_keeps_the_draft_until_revert(cx: &mut TestAppContext) {
             thread_id: None,
         }),
     );
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     assert_eq!(value_of(cx, window, &field), Some("hi!".into()));
     assert_eq!(plugin_config(cx, "label"), json!("hi"));
     assert_eq!(
@@ -187,6 +169,7 @@ fn a_failed_switch_keeps_the_saved_value_and_shows_the_error(cx: &mut TestAppCon
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     cx.update_window(window, |_, window, cx| {
         crate::ui_dispatch::click(
             window,
@@ -207,6 +190,7 @@ fn a_failed_switch_keeps_the_saved_value_and_shows_the_error(cx: &mut TestAppCon
             thread_id: None,
         }),
     );
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     assert_eq!(
         value_of(cx, window, &format!("plugin-{PREFS}/sounds")).as_deref(),
         Some("on")

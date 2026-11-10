@@ -224,6 +224,7 @@ fn a_plugin_key_is_removed_and_its_rows_go_with_the_plugin(cx: &mut TestAppConte
 fn change_on_a_review_shortcut_saves_it_under_its_keymap_name(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-keyboard");
     click(cx, window, "setting-row-NextChange");
     click(cx, window, "shortcut-NextChange-key");
     cx.simulate_keystrokes(window, "f9");
@@ -320,6 +321,7 @@ fn a_saved_key_wins_over_a_plugin_installed_later(cx: &mut TestAppContext) {
         }),
     );
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-keyboard");
     let zz = format!("shortcut-plugin-{ZZ}-run");
     let aa = format!("shortcut-plugin-{AA}-run");
     click(cx, window, &format!("setting-row-plugin-{ZZ}-run"));
