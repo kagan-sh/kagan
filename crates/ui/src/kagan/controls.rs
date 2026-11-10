@@ -2,6 +2,7 @@ use gpui_kit::component::button::{Button, Toggle};
 use gpui_kit::component::h_flex;
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::menu::PopupMenu;
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -15,6 +16,29 @@ use super::Kagan;
 use crate::theme::{SpaceStep, TypeScale as _, space};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
+
+// A small muted icon for a state. Its label is the accessible name and the tooltip.
+pub(super) fn state_mark(
+    id: String,
+    icon: gpui_kit::assets::IconName,
+    label: &'static str,
+    cx: &App,
+) -> AnyElement {
+    div()
+        .id(ElementId::Name(id.into()))
+        .w_4()
+        .h(px(16.))
+        .flex()
+        .flex_shrink_0()
+        .justify_center()
+        .items_center()
+        .ui_container()
+        .aria_label(label)
+        .tooltip(move |window, cx| Tooltip::new(label).build(window, cx))
+        .text_color(cx.theme().muted_foreground)
+        .child(gpui_kit::component::Icon::new(icon).small())
+        .into_any_element()
+}
 
 pub(super) fn menu_item(id: &'static str, label: &'static str) -> impl IntoElement {
     control(

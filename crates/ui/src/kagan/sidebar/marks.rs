@@ -16,7 +16,7 @@ use kg_domain::{Project, ProjectId, ProjectKind, ThreadId};
 use super::rows::icon_command;
 use crate::kagan::{ArchiveThread, ThreadActions};
 
-use crate::kagan::controls::{menu_popup, tip};
+use crate::kagan::controls::{menu_popup, state_mark, tip};
 use crate::theme::Tone;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -248,44 +248,27 @@ pub(super) fn row_marks(
             (*pinned || *muted).then(|| {
                 h_flex()
                     .flex_shrink_0()
-                    .children(pinned.then(|| pin_mark(format!("thread-pinned-{id}"), cx)))
-                    .children(muted.then(|| mute_mark(format!("thread-muted-{id}"), cx)))
+                    .children(pinned.then(|| {
+                        state_mark(
+                            format!("thread-pinned-{id}"),
+                            gpui_kit::assets::IconName::Pin,
+                            "Pinned",
+                            cx,
+                        )
+                    }))
+                    .children(muted.then(|| {
+                        state_mark(
+                            format!("thread-muted-{id}"),
+                            gpui_kit::assets::IconName::BellMinus,
+                            "Notifications muted",
+                            cx,
+                        )
+                    }))
                     .into_any_element()
             }),
         ),
         Kind::Project { .. } => (None, None, None),
     }
-}
-
-pub(super) fn pin_mark(id: String, cx: &App) -> impl IntoElement {
-    div()
-        .id(ElementId::Name(id.into()))
-        .w_4()
-        .h(px(16.))
-        .flex()
-        .flex_shrink_0()
-        .justify_center()
-        .items_center()
-        .ui_container()
-        .aria_label("Pinned")
-        .text_color(cx.theme().muted_foreground)
-        .child(Icon::new(gpui_kit::assets::IconName::Pin).small())
-}
-
-pub(super) fn mute_mark(id: String, cx: &App) -> impl IntoElement {
-    div()
-        .id(ElementId::Name(id.into()))
-        .w_4()
-        .h(px(16.))
-        .flex()
-        .flex_shrink_0()
-        .justify_center()
-        .items_center()
-        .ui_container()
-        .aria_label("Notifications muted")
-        .tooltip(|window, cx| Tooltip::new("Notifications muted").build(window, cx))
-        .text_color(cx.theme().muted_foreground)
-        .child(Icon::new(gpui_kit::assets::IconName::BellMinus).small())
 }
 
 pub(super) fn row_glyph(icon: impl Into<Icon>, cx: &App) -> AnyElement {
