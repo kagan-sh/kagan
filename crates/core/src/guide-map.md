@@ -48,6 +48,6 @@ diagnostics: `kg diagnostics export`.
 
 update: `kg update check` reads the GitHub release list now; `kg update status` prints the version, the install kind and what the last check found. Only a person installs, from the window.
 
-Preferences: `confirm-archive`, `agent-integration`, `notify`, `plugin-status`, `update-check` (off by default; on checks at launch and daily), `terminal-font-size`, `review-viewed`, `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width`, `<window>.review-wrap`, `slot.threads`, and `slot.review` (a plugin id, or `kagan` for the built-in; set from the window, or with `kg plugin use`). For example, `kg preference set notify false`.
+Preferences and keys: `kg guide customize`.
 
 Examples: `kg project list`, `kg thread get`, `kg thread run --program codex`, and `kg plugin list`.

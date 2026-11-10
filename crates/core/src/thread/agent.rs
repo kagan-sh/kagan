@@ -528,7 +528,7 @@ async fn collect_instruct(
 }
 
 mod files;
-mod note;
+pub(crate) mod note;
 
 pub(crate) use note::{cursor_rule, note_with, read_instructions};
 
