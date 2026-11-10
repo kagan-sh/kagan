@@ -178,7 +178,11 @@ fn a_restored_screen_keeps_its_lines_and_its_tail() {
     let kept = view.kept();
     assert!(kept.lines.iter().any(|line| line.text == "two"), "{kept:?}");
     let transcript = view.transcript();
-    assert_eq!(view.tail(5), &transcript[transcript.len() - 5..]);
+    assert_eq!(
+        transcript,
+        "one\ntwo\nthree\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+    );
+    assert_eq!(view.tail(5), "\n\n\n\n\n");
 }
 
 #[cfg(unix)]
