@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use gpui_kit::TestAppContext;
-use kg_domain::{Op, OpResult, PluginId, PluginOp, Skill, SkillOp, SkillSource};
+use kg_domain::{Op, OpError, OpResult, PluginId, PluginOp, Skill, SkillOp, SkillSource};
 use serde_json::json;
 
 use super::{
@@ -163,4 +163,28 @@ fn a_cli_group_name_is_lowercase_words() {
             .is_some_and(|text| text.contains("Probe Tool")),
         "{error:?}"
     );
+}
+
+#[gpui_kit::test]
+fn a_disabled_plugins_commands_leave_the_generated_skill(cx: &mut TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let mut manifest = sample_manifest();
+    manifest["cli"] =
+        json!([{ "name": "probe", "commands": [{ "name": "hang", "usage": "hang <seconds>" }] }]);
+    write_plugin(dir.path(), &manifest);
+    open(cx, &[installed(dir.path())]);
+    cx.run_until_parked();
+    let show = Op::Skill(SkillOp::Show {
+        name: "kg-plugin-commands".into(),
+        project_id: None,
+    });
+    assert!(run(cx, show.clone()).is_ok());
+    run(
+        cx,
+        Op::Plugin(PluginOp::Disable {
+            id: PluginId(ID.into()),
+        }),
+    )
+    .unwrap();
+    assert!(matches!(run(cx, show), Err(OpError::NotFound(_))));
 }
