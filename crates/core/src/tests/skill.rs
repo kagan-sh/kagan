@@ -163,6 +163,48 @@ async fn update_refuses_a_file_changed_since_it_was_read(cx: &mut TestAppContext
     assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
 }
 
+#[cfg(unix)]
+fn link_skill(fixture: &Fixture) -> std::path::PathBuf {
+    write_skill(&fixture.dir.path().join("elsewhere"), "mine");
+    std::fs::create_dir_all(fixture.dir.path().join("skills")).unwrap();
+    let link = fixture.dir.path().join("skills/mine");
+    std::os::unix::fs::symlink(fixture.dir.path().join("elsewhere/mine"), &link).unwrap();
+    link
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_linked_skill_folder_is_not_listed_or_touched(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let link = link_skill(&fixture);
+    assert!(
+        listed(&fixture, cx)
+            .await
+            .iter()
+            .all(|skill| skill.name != "mine")
+    );
+    let text = "---\nname: mine\ndescription: Edited.\n---\n\nNew body.\n";
+    assert!(matches!(
+        update(&fixture, "mine", text, cx).await,
+        Err(OpError::NotFound(_))
+    ));
+    let removed = op(
+        Op::Skill(SkillOp::Remove {
+            name: "mine".into(),
+            project_id: Some(fixture.project.clone()),
+        }),
+        cx,
+    )
+    .await;
+    assert!(matches!(removed, Err(OpError::NotFound(_))));
+    assert!(std::fs::symlink_metadata(&link).is_ok());
+    assert!(
+        std::fs::read_to_string(fixture.dir.path().join("elsewhere/mine/SKILL.md"))
+            .unwrap()
+            .contains("A test skill.")
+    );
+}
+
 #[gpui_kit::test]
 async fn update_refuses_text_with_another_name(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
