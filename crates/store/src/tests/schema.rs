@@ -268,9 +268,13 @@ fn a_failed_migration_leaves_the_previous_schema() {
 
 #[test]
 fn an_old_notify_switch_becomes_a_level_and_threads_default() {
-    fn migrated(stored: &str) -> (String, String) {
+    fn migrated(stored: Option<&str>) -> (Option<String>, String) {
+        use rusqlite::OptionalExtension as _;
         let mut conn = rusqlite::Connection::open_in_memory().unwrap();
-        let before = crate::store::MIGRATIONS.len() - 2;
+        let before = crate::store::MIGRATIONS
+            .iter()
+            .position(|sql| sql.contains("ADD COLUMN notify"))
+            .unwrap();
         crate::migrate(
             &mut conn,
             crate::store::MIGRATIONS[..before].iter().copied(),
@@ -286,11 +290,13 @@ fn an_old_notify_switch_becomes_a_level_and_threads_default() {
             [],
         )
         .unwrap();
-        conn.execute(
-            "INSERT INTO settings (key, value) VALUES ('notify', ?1)",
-            [stored],
-        )
-        .unwrap();
+        if let Some(stored) = stored {
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES ('notify', ?1)",
+                [stored],
+            )
+            .unwrap();
+        }
         crate::migrate(&mut conn, crate::store::MIGRATIONS.iter().copied()).unwrap();
         let value = conn
             .query_row(
@@ -298,6 +304,7 @@ fn an_old_notify_switch_becomes_a_level_and_threads_default() {
                 [],
                 |row| row.get(0),
             )
+            .optional()
             .unwrap();
         let level = conn
             .query_row("SELECT notify FROM threads WHERE id = 'thr_1'", [], |row| {
@@ -307,11 +314,12 @@ fn an_old_notify_switch_becomes_a_level_and_threads_default() {
         (value, level)
     }
     assert_eq!(
-        migrated("false"),
-        ("\"off\"".to_owned(), "default".to_owned())
+        migrated(Some("false")),
+        (Some("\"off\"".to_owned()), "default".to_owned())
     );
     assert_eq!(
-        migrated("true"),
-        ("\"all\"".to_owned(), "default".to_owned())
+        migrated(Some("true")),
+        (Some("\"all\"".to_owned()), "default".to_owned())
     );
+    assert_eq!(migrated(None), (None, "default".to_owned()));
 }
