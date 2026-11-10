@@ -5,7 +5,8 @@ use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, div,
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, Role,
+    Styled as _, div,
 };
 use kg_domain::SkillSource;
 
@@ -13,6 +14,7 @@ use super::list::source_label;
 use super::{Page, Shown};
 use crate::kagan::controls::{control, note};
 use crate::theme::TypeScale as _;
+use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 use gpui_kit::component::scroll::ScrollableElement as _;
 
@@ -247,7 +249,20 @@ fn frontmatter(shown: &Shown, cx: &Context<Page>) -> impl IntoElement {
                                 .text_color(cx.theme().muted_foreground)
                                 .child(key),
                         )
-                        .child(div().flex_1().min_w_0().type_small(cx).child(value))
+                        .child(
+                            div()
+                                .id(gpui_kit::ElementId::Name(
+                                    format!("skills-field-{key}").into(),
+                                ))
+                                .flex_1()
+                                .min_w_0()
+                                .type_small(cx)
+                                .ui_observe_as(Facts {
+                                    role: Role::Status,
+                                    ..Facts::button(value.clone())
+                                })
+                                .child(value),
+                        )
                 })),
         )
 }

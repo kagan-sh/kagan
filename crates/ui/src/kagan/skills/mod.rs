@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use gpui_kit::component::input::{InputEvent, InputState, TextareaState};
 use gpui_kit::{
-    AppContext as _, Context, Entity, EventEmitter, IntoElement, Render, Subscription, Task, Window,
+    AppContext as _, Context, Entity, EventEmitter, Focusable as _, IntoElement, Render,
+    Subscription, Task, Window,
 };
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, ProjectId, Skill, SkillOp, SkillSource};
@@ -24,9 +25,12 @@ pub(in crate::kagan) struct Page {
     sort: Sort,
     selected: Option<Shown>,
     editor: Option<Entity<TextareaState>>,
+    // The SKILL.md text the editor was opened on; Save refuses if the file changed since.
+    expected: String,
     creating: Option<Entity<InputState>>,
     confirming: bool,
-    task: Option<Task<()>>,
+    list_task: Option<Task<()>>,
+    detail_task: Option<Task<()>>,
     _watch: Subscription,
 }
 
@@ -80,7 +84,9 @@ impl Page {
             editor: None,
             creating: None,
             confirming: false,
-            task: None,
+            list_task: None,
+            detail_task: None,
+            expected: String::new(),
             _watch: watch,
         };
         page.reload(cx);
@@ -94,7 +100,7 @@ impl Page {
             }),
             cx,
         );
-        self.task = Some(cx.spawn(async move |this, cx| {
+        self.list_task = Some(cx.spawn(async move |this, cx| {
             let result = listed.await;
             _ = this.update(cx, |page, cx| {
                 match result {
@@ -102,8 +108,14 @@ impl Page {
                         page.listing = Some(skills);
                         page.errors = errors;
                     }
-                    Ok(_) => {}
-                    Err(error) => page.notice = Some(error.to_string()),
+                    Ok(_) => {
+                        page.listing = Some(Vec::new());
+                        page.notice = Some("The skills did not load.".into());
+                    }
+                    Err(error) => {
+                        page.listing = Some(Vec::new());
+                        page.notice = Some(error.to_string());
+                    }
                 }
                 cx.notify();
             });
@@ -118,7 +130,7 @@ impl Page {
             }),
             cx,
         );
-        self.task = Some(cx.spawn(async move |this, cx| {
+        self.detail_task = Some(cx.spawn(async move |this, cx| {
             let result = shown.await;
             _ = this.update(cx, |page, cx| {
                 match result {
@@ -126,7 +138,7 @@ impl Page {
                         page.selected = Some(Shown { skill, body, files });
                         page.notice = None;
                     }
-                    Ok(_) => {}
+                    Ok(_) => page.notice = Some("The skill did not load.".into()),
                     Err(error) => page.notice = Some(error.to_string()),
                 }
                 cx.notify();
@@ -174,7 +186,7 @@ impl Page {
             }),
             cx,
         );
-        self.task = Some(cx.spawn(async move |this, cx| {
+        self.detail_task = Some(cx.spawn(async move |this, cx| {
             let result = removed.await;
             _ = this.update(cx, |page, cx| {
                 match result {
@@ -202,7 +214,7 @@ impl Page {
         else {
             return;
         };
-        self.task = Some(cx.spawn_in(window, async move |this, cx| {
+        self.detail_task = Some(cx.spawn_in(window, async move |this, cx| {
             let text = cx
                 .background_executor()
                 .spawn(async move { std::fs::read_to_string(path) })
@@ -213,8 +225,11 @@ impl Page {
                         let editor = cx.new(|cx| {
                             TextareaState::new(window, cx)
                                 .auto_grow(8, 24)
-                                .default_value(text)
+                                .default_value(text.clone())
                         });
+                        let focus = editor.read(cx).focus_handle(cx);
+                        window.focus(&focus, cx);
+                        page.expected = text;
                         page.editor = Some(editor);
                     }
                     Err(error) => page.notice = Some(error.to_string()),
@@ -233,13 +248,13 @@ impl Page {
             Op::Skill(SkillOp::Update {
                 name: shown.skill.name.clone(),
                 text,
-                expected: None,
+                expected: Some(self.expected.clone()),
                 project_id: self.project.clone(),
             }),
             cx,
         );
         let name = shown.skill.name.clone();
-        self.task = Some(cx.spawn(async move |this, cx| {
+        self.detail_task = Some(cx.spawn(async move |this, cx| {
             let result = updated.await;
             _ = this.update(cx, |page, cx| {
                 match result {
@@ -257,7 +272,10 @@ impl Page {
     }
 
     fn start_new(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.creating = Some(cx.new(|cx| InputState::new(window, cx).placeholder("skill-name")));
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder("skill-name"));
+        let focus = input.read(cx).focus_handle(cx);
+        window.focus(&focus, cx);
+        self.creating = Some(input);
         cx.notify();
     }
 
@@ -274,7 +292,7 @@ impl Page {
             }),
             cx,
         );
-        self.task = Some(cx.spawn(async move |this, cx| {
+        self.detail_task = Some(cx.spawn(async move |this, cx| {
             let result = made.await;
             _ = this.update(cx, |page, cx| {
                 match result {

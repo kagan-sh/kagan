@@ -1,7 +1,7 @@
 use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, TestAppContext};
 
 use crate::kagan::Kagan;
-use crate::tests::kagan::{chord, click, open, shows};
+use crate::tests::kagan::{chord, click, label, open, shows, wait_until};
 
 fn show_skills(cx: &mut TestAppContext, kagan: &Entity<Kagan>, window: AnyWindowHandle) {
     cx.update_window(window, |_, window, cx| {
@@ -87,4 +87,46 @@ fn fork_opens_the_new_thread_screen_with_the_prompt_line(cx: &mut TestAppContext
     click(cx, window, "skills-fork");
     cx.run_until_parked();
     assert!(shows(cx, window, "start-fork-note"));
+}
+
+#[gpui_kit::test]
+fn saving_an_edit_shows_the_new_description(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    write_user_skill(data.path(), "mine");
+    show_skills(cx, &kagan, window);
+    click(cx, window, "skill-row-mine");
+    cx.run_until_parked();
+    click(cx, window, "skills-edit");
+    cx.run_until_parked();
+    let select_all = if cfg!(target_os = "macos") {
+        "cmd-a"
+    } else {
+        "ctrl-a"
+    };
+    cx.simulate_keystrokes(window, select_all);
+    cx.simulate_input(
+        window,
+        "---\nname: mine\ndescription: Edited now.\n---\n\nNew body.\n",
+    );
+    cx.run_until_parked();
+    click(cx, window, "skills-save");
+    wait_until(cx, |cx| {
+        label(cx, window, "skills-field-description") == "Edited now."
+    });
+    assert!(!shows(cx, window, "skills-save"));
+}
+
+#[gpui_kit::test]
+fn a_new_skill_is_in_the_list_after_going_back(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    show_skills(cx, &kagan, window);
+    click(cx, window, "skills-new");
+    cx.run_until_parked();
+    cx.simulate_input(window, "fresh-one");
+    cx.run_until_parked();
+    click(cx, window, "skills-create");
+    wait_until(cx, |cx| shows(cx, window, "skills-back"));
+    click(cx, window, "skills-back");
+    cx.run_until_parked();
+    assert!(shows(cx, window, "skill-row-fresh-one"));
 }
