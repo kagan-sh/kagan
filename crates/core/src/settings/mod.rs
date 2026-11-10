@@ -73,6 +73,7 @@ const PREFERENCES: &[(&str, Kind)] = &[
     (prefs::NOTIFY, Kind::Notify),
     (prefs::PLUGIN_STATUS, Kind::Flag),
     (prefs::UPDATE_CHECK, Kind::Flag),
+    (prefs::SETUP_GUIDE, Kind::Flag),
     (prefs::TERMINAL_FONT_SIZE, Kind::FontSize),
     (Slot::Threads.preference(), Kind::Slot),
     (Slot::Review.preference(), Kind::Slot),

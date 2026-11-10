@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::Subcommand;
+use clap::{Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 
 use crate::ProjectId;
@@ -41,6 +41,10 @@ pub enum SkillOp {
         /// Create it in the project folder instead of the user folder
         #[arg(long)]
         project: bool,
+        /// What the new SKILL.md starts with
+        #[arg(long, value_enum, default_value_t = SkillTemplate::Blank)]
+        #[serde(default)]
+        template: SkillTemplate,
         /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
@@ -78,6 +82,21 @@ pub enum SkillOp {
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
     },
+}
+
+/// The starting text of a new skill.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+pub enum SkillTemplate {
+    /// A placeholder to fill in
+    #[default]
+    Blank,
+    /// Review a pull request
+    ReviewPr,
+    /// Write release notes
+    ReleaseNotes,
+    /// Debug a failing test
+    DebugTest,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

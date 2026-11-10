@@ -29,7 +29,7 @@ Commands:
   window        The application menu and the window
   surface       Plugin surfaces in the window
   keymap        Keyboard shortcuts: built-in ones and plugin commands
-  preference    Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+  preference    Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, setup-guide, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
   instructions  Agent rules: the global rules, or one project's, that a thread's program is told
   ui            Native window for QA and agents
   notify        System notifications
@@ -236,13 +236,24 @@ Options:
       --project
           Create it in the project folder instead of the user folder
 
+      --template <TEMPLATE>
+          What the new SKILL.md starts with
+
+          Possible values:
+          - blank:         A placeholder to fill in
+          - review-pr:     Review a pull request
+          - release-notes: Write release notes
+          - debug-test:    Debug a failing test
+          
+          [default: blank]
+
       --project-id <PROJECT_ID>
           Project whose skills to include
           
           [env: KG_PROJECT_ID=]
 
   -h, --help
-          Print help
+          Print help (see a summary with '-h')
 ```
 
 ## `kg skill add`
@@ -2571,7 +2582,7 @@ Options:
 ## `kg preference`
 
 ```text
-Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, setup-guide, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
 
 Usage: kg preference [OPTIONS] <COMMAND>
 

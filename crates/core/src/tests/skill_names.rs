@@ -10,6 +10,7 @@ async fn a_new_skill_needs_a_plain_name_outside_the_kg_prefix(cx: &mut TestAppCo
         Op::Skill(SkillOp::New {
             name: name.into(),
             project: true,
+            template: kg_domain::SkillTemplate::Blank,
             project_id: Some(fixture.project.clone()),
         })
     };

@@ -22,6 +22,7 @@ mod review;
 mod review_comments;
 mod review_wrap;
 mod setup;
+mod setup_guide;
 mod sidebar;
 mod skills;
 mod start;
@@ -48,12 +49,13 @@ pub(in crate::tests) use remove::{only_worktree, worktree_dirs};
 pub(in crate::tests) use review::two_changes;
 pub(in crate::tests) use setup::{commit_setup, disabled};
 pub(in crate::tests) use start::press_key;
+pub(in crate::tests) use support::setup_with;
 pub(in crate::tests) use support::{
     app_then, click, click_within, count_repaints, git, grid_text, host_grid, host_then, input,
     pending, run_child, run_program, scroll_form_to_end, set_preference, setup, thread_record,
     thread_status, wait_for_shell, wait_until,
 };
-pub(crate) use support::{open, run_shell};
+pub(crate) use support::{open, open_empty, run_shell};
 pub(in crate::tests) use surfaces::{
     click_through_driver, install_overlay, install_twin, observed_label, open_surface,
     overlay_source, run_op,

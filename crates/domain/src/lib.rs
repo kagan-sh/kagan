@@ -34,7 +34,7 @@ pub use op::{
     OpResult, Order, PinnedSetup, PluginOp, PreferenceOp, ProgramOp, ProjectBranch, ProjectOp, Run,
     SCREEN_MAX_BYTES, SEARCH_DEFAULT, SEARCH_LIMIT, SEARCH_TEXT_MAX, SHORTCUTS, SectionOp,
     SelectMode, SettingsOp, SetupFile, Shortcut, ShortcutGroup, ShortcutScope, ShortcutWhen, Skill,
-    SkillOp, SkillSource, Slot, SlotChoice, SlotChoiceError, SurfaceItem, SurfaceOp,
+    SkillOp, SkillSource, SkillTemplate, Slot, SlotChoice, SlotChoiceError, SurfaceItem, SurfaceOp,
     SurfacePlacement, TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThemeOp, ThemeSettings,
     ThreadOp, UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,
     UiSnapshot, WaitOutcome, WindowOp, branch_slug, check, default_chord, expand_secondary,

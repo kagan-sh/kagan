@@ -22,11 +22,12 @@ kg skill list
 kg skill show kg-plugin-authoring
 kg skill new my-skill
 kg skill new my-skill --project
+kg skill new review-pr --template review-pr
 kg skill add <path>
 kg skill remove my-skill
 ```
 
-- `new` makes a folder in your skills. `--project` makes it in the project.
+- `new` makes a folder in your skills. `--project` makes it in the project. `--template` starts it from `blank` (the default), `review-pr`, `release-notes`, or `debug-test`.
 - `add` copies a skill folder you already have.
 - `remove` deletes one of your skills or a project skill. It cannot remove a built-in skill or a plugin skill.
 - A name that starts with `kg-` is reserved. `new` and `add` refuse it.

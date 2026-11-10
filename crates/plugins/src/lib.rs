@@ -87,3 +87,27 @@ pub struct PluginTheme<'a> {
     pub plugin: &'a str,
     pub file: &'a ThemeFile,
 }
+
+/// The kagan version this build is. A plugin's `kagan` requirement is checked against it.
+pub const KAGAN_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Whether `running` is at least `minimum`. `None` when either is not a semantic version.
+#[must_use]
+pub fn kagan_at_least(minimum: &str, running: &str) -> Option<bool> {
+    let minimum = semver::Version::parse(minimum).ok()?;
+    let running = semver::Version::parse(running).ok()?;
+    Some(running >= minimum)
+}
+
+#[cfg(test)]
+mod kagan_version_tests {
+    use super::kagan_at_least;
+
+    #[test]
+    fn a_build_meets_a_minimum_it_reaches_and_not_one_above_it() {
+        assert_eq!(kagan_at_least("0.1.3", "0.1.3"), Some(true));
+        assert_eq!(kagan_at_least("0.1.3", "0.9.0"), Some(true));
+        assert_eq!(kagan_at_least("0.1.3", "0.1.0"), Some(false));
+        assert_eq!(kagan_at_least("0.1.3", "not a version"), None);
+    }
+}

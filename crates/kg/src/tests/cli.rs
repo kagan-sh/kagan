@@ -362,6 +362,7 @@ fn self_extension_commands_derive_from_ops() {
         Op::Skill(kg_domain::SkillOp::New {
             name: "my-task".into(),
             project: true,
+            template: kg_domain::SkillTemplate::Blank,
             project_id: Some(ProjectId("prj_1".into()))
         })
     );
@@ -696,6 +697,7 @@ fn cli_skills_parse_their_verbs() {
         Op::Skill(SkillOp::New {
             name: "my-task".into(),
             project: true,
+            template: kg_domain::SkillTemplate::Blank,
             project_id: None,
         })
     );
