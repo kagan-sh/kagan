@@ -12,7 +12,7 @@ An agent in a thread can learn kagan, find and load skills, and build, install, 
 
 ## Thread context
 
-Every thread's program gets `KG_THREAD_ID`, `KG_PROJECT_ID`, `KG_ENVIRONMENT_ID`, `KG_CLI` (the absolute path of the running `kg`), `KG_SOCKET` (the app's socket), and a `PATH` with `kg`'s folder first, so `kg` works by name. `kg status` prints the ids, plus warnings such as a plugin that failed to load. Commands that take a thread, project or environment default to these.
+Every thread's program gets `KG_THREAD_ID`, `KG_PROJECT_ID`, `KG_ENVIRONMENT_ID`, `KG_CLI` (the absolute path of the running `kg`), `KG_SOCKET` (the app's socket), and a `PATH` with `kg`'s folder first, so `kg` works by name. It also gets the environment variables you set with `kg env set`, or in Settings (decision 211). `kg status` prints the ids, plus warnings such as a plugin that failed to load. Commands that take a thread, project or environment default to these.
 
 ## Guide
 
