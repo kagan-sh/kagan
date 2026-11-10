@@ -234,11 +234,11 @@ An environment variable is a name and a value that every program kagan starts ge
 
 - **Allowed when**: the name is a shell name that does not start with `KG_` and is not `PATH`, in any case. The value is one line, not empty, and at most 1024 bytes. `--project` names a live project [op/] [decision 220].
 - **Changes**: stores the value under that name, replacing one that was there [decision 220]. The value comes from stdin, or from a prompt that does not show it, never from the command line [book:cli].
-- **Refused when**: a name or value that breaks the rules above — `invalid`, and the message never repeats the value [decision 220]. A missing project — `not-found` [op/].
+- **Refused when**: a name or value that breaks the rules above — `invalid`, and the message never repeats the value [decision 220]. A request that names a thread (kagan's own terminals do) — `invalid`, which points to Settings [decision 220]. A missing project — `not-found` [op/].
 
 ### `Remove`
 
-- **Changes**: forgets that name in that scope [decision 220].
+- **Changes**: forgets that name in that scope [decision 220]. A request that names a thread is refused, as for `Set` [decision 220]. A values file that cannot be read is moved aside, and the result is a warning [decision 220].
 - **Refused when**: the name is not set in that scope — `not-found` [op/].
 
 ## Environment
@@ -703,7 +703,7 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 ### `SettingsOp::Project`
 
 - **Allowed when**: the id is a live project [op/] [decision 221].
-- **Changes**: shows that project's page, with its environment variables, its default program, and its agent rules, opening the window if it is closed [decision 221]. The sidebar's "Project settings…" menu item sends this op.
+- **Changes**: shows that project's page, with its environment variables, its default program, and its agent rules, opening the window if it is closed [decision 221]. Escape or Close leaves the page [decision 221]. The sidebar's "Project settings…" menu item sends this op.
 - **Refused when**: a missing id — `not-found` [op/].
 
 ### `Hide`, `HideOthers`, `ShowAll`

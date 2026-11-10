@@ -824,6 +824,54 @@ Why: the person sets their rules once in the window, and a project's rules belon
 
 **219. Settings → General shows the kg command with a Copy button, and kagan does not ask for a password.** The Command line row is built from the probe in `crates/ui/src/kagan/settings/command.rs`. The probe runs off the main thread when the window opens and returns one of three answers for the PATH: on it, missing, or could not check. The check asks the login shell, `command -v kg`, and gives up after three seconds, killing the child, so a slow profile cannot hold the row. On Windows it looks for `kg.exe` in the user's Path without starting a process. The row also finds kg beside kagan's own program. The AppImage carries no kg, so it gets its own text and does not show a folder inside the mount. Each state has its own row, and a test covers every state on every platform: checking, on the PATH, could not check, missing with a command, missing in an AppImage, and missing with no kg beside kagan. The command is `sudo mkdir -p /usr/local/bin && sudo ln -sf <kg> /usr/local/bin/kg` on macOS, `export PATH='<folder>':"$PATH"` on Linux, and the folder on Windows, where the person adds it to Path. Copy puts the line on the clipboard. Decision 114 is about updates, and its rule against asking for an administrator password is about writing folders kagan cannot write. This decision applies the same reasoning to the command line: kagan does not ask for a password, and the osascript prompt that would link `/usr/local/bin/kg` was weighed and declined. Why: nothing kagan does needs root, and a prompt from kagan to write into `/usr/local/bin` would be a new kind of power for a one-time link. A person who runs the lines once never sees the row again. The check is a display-only read for one row, kept in kg-ui and not an Op. An Op would be a CLI command that answers "is kg reachable", and only a reachable kg can answer it. Cost: one more step for a person on macOS, one short shell run when the window opens, and the product-line ceiling from 72243 to 73498 for this branch (approved per PR), with settings.rs (618 lines) listed at its size. Rules out: an administrator prompt from kagan, a link written without the person running the command, a copy of kg into a folder kagan can write, and a check with no time limit.
 
-**220. Environment variables are a file only the person reads, and every program kagan starts gets them.** The person sets a name and a value under Settings → General, in a project's page, or with `kg env set`. A name is a shell name (letters, digits and `_`, not starting with a digit). A name that starts with `KG_` or is `PATH`, in any case, is refused, because kagan sets those. A value is one line, not empty, at most 1024 bytes. Settings and `kg env list` show each name with "Set" and never the value. The values sit in `<data>/environment.json`, created with mode 0600 through a temporary file that is renamed over the old one, and never in the database, a reply, or the log. A project's value wins over the global one with the same name. Removing a project removes its values. A thread's program, its extra terminals, and its setup and teardown scripts get them. kagan's own names are set after them, so kagan's names are never overridden. Plugin processes and git do not get them. Why: a program needs API keys, and the person should not have to put them in a shell profile. Core cannot reach the keychain. Its store is set up by `kg_plugins::init` (190), and the platform crates live in `kg-plugins`, which `kg-core` may not depend on (`scripts/crate-boundaries.sh`). So these values use a file only the person can read, the way plugin secrets fall back to a file when there is no keychain (104). Cost: the values are plain text in a file in the data folder, not encrypted, and any program that can read the person's files can read them. Moving them to the keychain later would take: the keychain store and its three platform crates move out of `kg-plugins` into a crate `kg-core` may depend on, and `scripts/crate-boundaries.sh` changes if that is a new crate; each value is stored as one keychain item keyed by its scope and name, with the names kept in the file; an existing file is read once, each value is written to the keychain, and the value is then removed from the file; and with no keychain, the file stays as the fallback with a warning, as plugin secrets do. Decision 190 is then amended. The feature adds the `EnvOp` and its checks, a `projects` column, the variables module, the Settings group, the project page, and the script environment. Product Rust is 73,498 lines on main, and 74,487 with this feature, so the ceiling is 74,487 (up 989 lines, the gap this feature needs). The Settings file `crates/ui/src/kagan/settings.rs` rises from 618 to 626 lines, so its own ceiling is 626. Rules out: a value in the database, a value on the command line, a value in a reply or the log, and a second keychain path in core.
+**220. Environment variables are a file only the person reads, and every program kagan starts gets them.**
 
-**221. A project has its own page for its variables, default program, and agent rules.** The page opens from the sidebar's "Project settings…" menu item, which sends `SettingsOp::Project`, and from `kg settings project <id>`. It is a window page like Skills (205), not a Settings category, so no project adds a row to the Settings list. It shows the project's environment variables, its default program (the installed programs; "First installed" clears the choice), and its agent rules. The rules are the same `RulesEditor` that the project menu's "Agent rules…" opens (211), embedded in the page and not copied. A new thread in the project starts with the default program when it is installed, and otherwise with the first installed program as before. The project's program is the first recent program, so the existing default rule picks it. Why: a project's program, variables, and rules belong with the project, and the project's menu is where a person looks for them. Cost: one window page, one `projects` column (`program`, added by an appended migration), and the program list takes an optional project. Rules out: a default that is not installed, a project page inside Settings, and a second rules editor.
+The person sets a name and a value under Settings → General, on a project's page, or with `kg env set`.
+
+- A name is a shell name: letters, digits and `_`, not starting with a digit. A name that starts with `KG_` or is `PATH`, in any letter case, is refused, because kagan sets those.
+- A value is one line, not empty, at most 1024 bytes.
+- Settings and `kg env list` show each name with "Set", never the value.
+
+Where values live:
+
+- They sit in `<data>/environment.json`. The file is created with mode 0600 through a temporary file that is renamed over the old one.
+- On Windows there are no mode bits. The file takes the data folder's ACL, and no test checks it.
+- Values never go to the database, a reply, or the log.
+- A project's value wins over the global one with the same name. Windows names fold case for that match; other systems do not.
+- Removing a project removes its values. That step is best effort: a file that cannot be read is a warning, and the project is still removed.
+
+Who gets them:
+
+- A thread's program, its extra terminals, and its setup and teardown scripts get them. kagan's own names are set after them, so kagan's names are never overridden.
+- Plugin processes and git do not get them.
+- Setup and teardown scripts come from the repo, so they see global values from other projects too. The same program in the same folder already gets those values, and the setup file is pinned and checked before it runs.
+
+Who may change them:
+
+- A thread cannot change a variable. `kg env set` and `kg env remove` are refused when the request names a thread, which kagan's own terminals do. This stops the default path, not a determined agent: a program can drop `KG_THREAD_ID` and send the same request. A stronger check would need the connecting process's identity, and kagan does not record it.
+- A name that is refused is refused before the value is read.
+
+Writes and damage:
+
+- Every read-modify-write of the file holds one process-wide lock, so two writes cannot erase each other.
+- A file that cannot be read stops a thread start, and the error names its path. Setting or removing a variable moves that file aside to `environment.json.unreadable`, keeping its mode, and returns a warning that names the moved file.
+
+Why not the keychain:
+
+- Core cannot reach it. The keychain store is set up by `kg_plugins::init` (190). The platform crates live in `kg-plugins`, which `kg-core` may not depend on (`scripts/crate-boundaries.sh`).
+- So these values use a file only the person can read. Plugin secrets fall back to a file the same way when there is no keychain (104).
+- Plain text on disk: the values are not encrypted, and any program that can read the person's files can read them.
+
+A later move to the keychain would take these steps:
+
+1. Move the keychain store and its three platform crates out of `kg-plugins` into a crate `kg-core` may depend on. If that is a new crate, `scripts/crate-boundaries.sh` changes.
+2. Store each value as one keychain item, keyed by its scope and name, and keep only the names in the file.
+3. Read the existing file once, write each value to the keychain, and remove the values from the file.
+4. With no keychain, keep the file as the fallback, with a warning, as plugin secrets do.
+5. Amend decision 190.
+
+Cost: product Rust is 73,498 lines on main. With this feature it is 74,652 lines, so the ceiling is 74,652 (up 1,154 lines, the gap this feature needs). `crates/ui/src/kagan/settings.rs` rises from 618 to 626 lines, so its own ceiling is 626.
+
+Rules out: a value in the database, a value on the command line, a value in a reply or the log, a thread changing a variable through the op, and a second keychain path in core.
+
+**221. A project has its own page for its variables, default program, and agent rules.** The page opens from the sidebar's "Project settings…" menu item, which sends `SettingsOp::Project`, and from `kg settings project <id>`. It is a window page like Skills (205), not a Settings category, so no project adds a row to the Settings list. It shows the project's environment variables, its default program (the installed programs; "First installed" clears the choice), and its agent rules. The rules are the same `RulesEditor` that the project menu's "Agent rules…" opens (211), embedded in the page and not copied. Escape or Close leaves the page; the page takes focus when it opens. Escape or Close leaves the page; the page takes focus when it opens. A new thread in the project starts with the default program when it is installed, and otherwise with the first installed program as before. The project's program is the first recent program, so the existing default rule picks it. Why: a project's program, variables, and rules belong with the project, and the project's menu is where a person looks for them. Cost: one window page, one `projects` column (`program`, added by an appended migration), and the program list takes an optional project. Rules out: a default that is not installed, a project page inside Settings, and a second rules editor.
