@@ -14,7 +14,7 @@ use kg_core::{Color, Workspace};
 use kg_domain::{Op, Thread, ThreadId, ThreadNotify, ThreadOp};
 use kg_plugins::RunCommand;
 
-use super::controls::{bound_keys, control, dispatch, menu_item, menu_popup, tip};
+use super::controls::{bound_keys, control, dispatch, menu_item, menu_popup, state_mark, tip};
 use super::{
     AddProject, Kagan, NewThread, RenameThread, SaveDiagnostics, StartAgain, StopThread,
     ThreadActions,
@@ -273,7 +273,7 @@ impl Kagan {
     // A click on the title does not start a rename.
     pub(super) fn title_line(&self, thread: &Thread, cx: &mut Context<Self>) -> AnyElement {
         let Some(input) = &self.title.rename else {
-            return div()
+            let title = div()
                 .id("thread-title")
                 .ui_container()
                 .flex_initial()
@@ -281,7 +281,21 @@ impl Kagan {
                 .text_ellipsis()
                 .type_body(cx)
                 .font_weight(gpui_kit::FontWeight::MEDIUM)
-                .child(thread.title.clone())
+                .child(thread.title.clone());
+            if thread.notify != ThreadNotify::Muted {
+                return title.into_any_element();
+            }
+            return h_flex()
+                .flex_initial()
+                .min_w_0()
+                .gap_1()
+                .child(title)
+                .child(state_mark(
+                    "title-muted".into(),
+                    gpui_kit::assets::IconName::BellMinus,
+                    "Notifications muted",
+                    cx,
+                ))
                 .into_any_element();
         };
         div()
