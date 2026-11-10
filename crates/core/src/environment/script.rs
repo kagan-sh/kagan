@@ -64,12 +64,12 @@ fn shown_text(raw: &str) -> (String, bool) {
         if short.chars().count() < line.chars().count() {
             truncated = true;
         }
-        let gap = usize::from(!out.is_empty());
+        let gap = usize::from(index > 0);
         if out.len() + gap + short.len() > SHOWN_CHARS {
             truncated = true;
             break;
         }
-        if !out.is_empty() {
+        if index > 0 {
             out.push('\n');
         }
         out.push_str(&short);
@@ -520,6 +520,11 @@ mod tests {
         let (shown, truncated) = shown_text(&fits.join("\n"));
         assert!(!truncated);
         assert_eq!(shown.lines().count(), 10);
+    }
+
+    #[test]
+    fn a_blank_first_line_keeps_its_newline() {
+        assert_eq!(shown_text("\na"), ("\na".to_owned(), false));
     }
 
     #[test]
