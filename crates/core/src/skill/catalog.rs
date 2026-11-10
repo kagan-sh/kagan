@@ -61,10 +61,19 @@ pub(super) fn materialize(data_dir: &Path, files: &[(&str, &str, &str)]) -> Resu
     }
     let folder = data_dir.join("agent/bundled");
     let stable = folder.join(hex::encode(hash.finalize()));
-    if stable.is_dir() {
+    if stable.is_dir() && intact(&stable, files) {
         return Ok(stable);
     }
     std::fs::create_dir_all(&folder)?;
+    if stable.exists() {
+        // A reader may still be inside a damaged folder, so it is moved aside, not deleted.
+        let aside = folder.join(format!(".broken-{}", uuid::Uuid::new_v4()));
+        match std::fs::rename(&stable, &aside) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
     let temp = folder.join(format!(
         ".tmp-{}-{}",
         std::process::id(),
@@ -84,6 +93,44 @@ pub(super) fn materialize(data_dir: &Path, files: &[(&str, &str, &str)]) -> Resu
     let _ = std::fs::remove_dir_all(&temp);
     result?;
     Ok(stable)
+}
+
+/// True when the folder holds exactly these files, with this text, and no link.
+fn intact(root: &Path, files: &[(&str, &str, &str)]) -> bool {
+    let mut found = Vec::new();
+    if files_under(root, root, &mut found).is_err() {
+        return false;
+    }
+    let expected: BTreeSet<PathBuf> = files
+        .iter()
+        .map(|&(skill, path, _)| Path::new(skill).join(path))
+        .collect();
+    found.into_iter().collect::<BTreeSet<_>>() == expected
+        && files.iter().all(|&(skill, path, text)| {
+            std::fs::read_to_string(root.join(skill).join(path)).is_ok_and(|got| got == text)
+        })
+}
+
+fn files_under(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        if kind.is_symlink() {
+            return Err(std::io::Error::other("a link in a bundled folder"));
+        }
+        if kind.is_dir() {
+            files_under(root, &entry.path(), out)?;
+        } else {
+            out.push(
+                entry
+                    .path()
+                    .strip_prefix(root)
+                    .map_err(std::io::Error::other)?
+                    .to_owned(),
+            );
+        }
+    }
+    Ok(())
 }
 
 /// Moves a built folder into its final name. Another reader may have placed the same content first.

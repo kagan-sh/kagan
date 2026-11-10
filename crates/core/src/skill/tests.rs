@@ -31,6 +31,36 @@ fn placing_over_a_folder_another_reader_built_keeps_theirs() {
 }
 
 #[test]
+fn a_bundled_folder_changed_on_disk_is_rebuilt_from_the_binary() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = materialize(dir.path(), DEMO).unwrap();
+    std::fs::write(root.join("kg-demo/SKILL.md"), "tampered").unwrap();
+    let again = materialize(dir.path(), DEMO).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(again.join("kg-demo/SKILL.md")).unwrap(),
+        DEMO[0].2
+    );
+}
+
+#[test]
+fn a_bundled_folder_missing_a_file_is_rebuilt() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = materialize(dir.path(), DEMO).unwrap();
+    std::fs::remove_file(root.join("kg-demo/references/long.md")).unwrap();
+    let again = materialize(dir.path(), DEMO).unwrap();
+    assert!(again.join("kg-demo/references/long.md").is_file());
+}
+
+#[test]
+fn a_bundled_folder_with_a_stray_file_is_rebuilt() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = materialize(dir.path(), DEMO).unwrap();
+    std::fs::write(root.join("kg-demo/stray.md"), "extra").unwrap();
+    let again = materialize(dir.path(), DEMO).unwrap();
+    assert!(!again.join("kg-demo/stray.md").exists());
+}
+
+#[test]
 fn a_bundled_skill_lists_its_supporting_files_on_disk() {
     let dir = tempfile::tempdir().unwrap();
     let root = materialize(dir.path(), DEMO).unwrap();
