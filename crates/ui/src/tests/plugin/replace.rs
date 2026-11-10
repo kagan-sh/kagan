@@ -10,8 +10,8 @@ use serde_json::json;
 
 use crate::kagan::{Kagan, replace_read, review_read};
 use crate::tests::kagan::{
-    chord, click, label, open_with_plugins_then, pending, plugin_log, repo_thread, run_shell,
-    shows, wait_until,
+    chord, click, label, open_with_plugins_then, pending, plugin_log, present, repo_thread,
+    run_shell, shows, wait_until,
 };
 
 const SWAP: &str = "dev.test.swap";
@@ -537,6 +537,7 @@ fn settings_picks_the_review_and_the_key_takes_it_back(cx: &mut TestAppContext) 
     let (kagan, window, data) = opened(cx, LIST);
     let _ = repo_thread(cx, window, data.path());
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     wait_until(cx, |cx| shows(cx, window, "settings-page"));
     let note = label(cx, window, &format!("setting-row-{SWAP}-note"));
     assert!(
@@ -980,7 +981,10 @@ fn a_review_cover_cannot_take_the_hosts_clicks(cx: &mut TestAppContext) {
 fn a_slot_button_clicked_by_kg_ui_needs_a_person(cx: &mut TestAppContext) {
     let (kagan, window, _data) = opened(cx, LIST);
     click(cx, window, "settings-gear");
-    wait_until(cx, |cx| shows(cx, window, &format!("slot-threads-{SWAP}")));
+    click(cx, window, "settings-section-installed");
+    wait_until(cx, |cx| {
+        present(cx, window, &format!("slot-threads-{SWAP}"))
+    });
     let clicked = run(
         cx,
         Op::Ui(kg_domain::UiOp::Click {

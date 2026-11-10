@@ -127,6 +127,7 @@ fn kg_ui_cannot_install_an_update(cx: &mut TestAppContext) {
 fn settings_shows_the_version_and_the_automatic_check_starts_off(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-updates");
     assert!(present(cx, window, "setting-row-update-version"));
     assert!(present(cx, window, "update-check-now"));
     assert_eq!(value_of(cx, window, "update-check").as_deref(), Some("off"));

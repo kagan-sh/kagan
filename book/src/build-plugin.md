@@ -69,7 +69,7 @@ To make the line a button, name one of the plugin's commands in `ui.status`:
 
 A click runs that command. It must have `when` set to `always`, which is the default, so the line can run with no thread on screen. When a thread is on screen, the command gets it, as it does for any `always` command.
 
-A plugin that declares `ui.status` starts with kagan, so the line shows without opening a panel. Without `command` it is text only: no click or view. Turn **Plugin status** off in Settings → Appearance, or turn the plugin off in Installed, to hide the line.
+A plugin that declares `ui.status` starts with kagan, so the line shows without opening a panel. Without `command` it is text only: no click or view. Turn **Plugin status** off in Settings → Installed, or turn the plugin off in Installed, to hide the line.
 
 ## Call another plugin
 

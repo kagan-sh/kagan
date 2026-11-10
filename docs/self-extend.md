@@ -16,7 +16,7 @@ Every thread's program gets `KG_THREAD_ID`, `KG_PROJECT_ID`, `KG_ENVIRONMENT_ID`
 
 ## Guide
 
-`kg guide` prints the concepts (the `CONTEXT.md` terms) and the chapter list. `kg guide <chapter>` prints one chapter: `threads`, `projects`, `environments`, `plugins`, `skills`, `ui`, `customize`, `json`. The text ships in the binary, so it always matches the running version. The generated `kg-plugin-commands` skill lists each plugin command with its manifest `usage` (decision 208). `kg <name> <command> --help` passes `--help` to the plugin, which may answer it.
+`kg guide` prints the concepts (the `CONTEXT.md` terms) and the chapter list. `kg guide <chapter>` prints one chapter: `threads`, `projects`, `environments`, `plugins`, `skills`, `ui`, `customize`, `json`. The text ships in the binary, so it always matches the running version. The generated `kg-plugin-commands` skill lists each plugin command with its manifest `usage` (decision 209). `kg <name> <command> --help` passes `--help` to the plugin, which may answer it.
 
 ## Instructions
 
@@ -37,7 +37,7 @@ Sources, lowest precedence first:
 
 A higher source overrides a lower one with the same name. A user or project name that starts with `kg-` is dropped, because that prefix belongs to kagan's bundled and plugin skills. Two skills with the same name in one source are both dropped and shown as an error in `kg skill list`.
 
-**Reaching the agent.** `kg mcp` offers the agent tool `skill_load { name }`. The tool list names each skill and its description. The tool returns the body and the skill's absolute file paths. `kg skill files <name>` lists the same paths; the agent reads them with its own file tools. Bundled skills list their supporting files too. They are written to `<dataDir>/agent/bundled/<hash>` (decision 207), so each path is a real file.
+**Reaching the agent.** `kg mcp` offers the agent tool `skill_load { name }`. The tool list names each skill and its description. The tool returns the body and the skill's absolute file paths. `kg skill files <name>` lists the same paths; the agent reads them with its own file tools. Bundled skills list their supporting files too. They are written to `<dataDir>/agent/bundled/<hash>` (decision 208), so each path is a real file.
 
 `skill_load` covers kagan's four skill sources. It is connected to `claude` and `codex` only, because those are the programs that get the `kg mcp` server.
 
@@ -56,7 +56,7 @@ Short, and each points at `kg guide` chapters and the generated `.d.ts` files in
 - `kg-skill-creator`: writing and testing a skill.
 - `kg-customize`: where a theme, key, preference, agent rule, or skill folder lives. The facts are in `kg guide customize`.
 - `kg-ui`: drive the open window with `kg ui`. It cannot approve powers.
-- `kg-plugin-commands`: generated, not a file in the binary. One line per `kg` command of each running plugin, from its manifest usage. Present only when a plugin adds a command (decision 208).
+- `kg-plugin-commands`: generated, not a file in the binary. One line per `kg` command of each running plugin, from its manifest usage. Present only when a plugin adds a command (decision 209).
 
 ## Plugin dev loop
 

@@ -33,6 +33,7 @@ fn leaving_settings_at_480_brings_back_the_window_layout(cx: &mut TestAppContext
 fn the_keyboard_page_shows_bound_keycaps_only(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-keyboard");
     click(cx, window, "shortcut-NewThread");
     assert!(shows(cx, window, "setting-row-NewThread"));
     assert!(!present(cx, window, "setting-row-NewThread-note"));
@@ -63,6 +64,7 @@ fn the_keyboard_page_shows_bound_keycaps_only(cx: &mut TestAppContext) {
 fn keyboard_groups_shortcuts_by_where_they_apply(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-keyboard");
     for (section, row) in [
         ("window", "NewThread"),
         ("thread", "StopThread"),
@@ -96,6 +98,7 @@ fn a_saved_shortcut_changes_the_keycap(cx: &mut TestAppContext) {
         }),
     );
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-keyboard");
     click(cx, window, "shortcut-NewThread");
     assert_eq!(
         aria_label(cx, window, "shortcut-NewThread").as_deref(),
