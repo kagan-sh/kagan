@@ -26,6 +26,7 @@ use kg_domain::PluginId;
 use kg_plugins::PluginHost;
 
 use super::question;
+use super::rules::RulesEditor;
 use super::surface::mount_error;
 use super::{Kagan, OpenSettings};
 use crate::theme::ThemeState;
@@ -89,6 +90,7 @@ pub(super) struct SettingsState {
     pub(super) query: Entity<InputState>,
     _query_watch: Subscription,
     pub(super) list: FocusHandle,
+    pub(super) rules: Entity<RulesEditor>,
 }
 
 impl SettingsState {
@@ -105,6 +107,7 @@ impl SettingsState {
                 cx.notify();
             }
         });
+        let rules = cx.new(|cx| RulesEditor::new(None, window, cx));
         Self {
             scroll: ScrollHandle::new(),
             approvals: 0,
@@ -115,6 +118,7 @@ impl SettingsState {
             query,
             _query_watch: watch,
             list: cx.focus_handle().tab_stop(true),
+            rules,
         }
     }
 }

@@ -60,6 +60,7 @@ pub(super) enum Event {
     Archive(ThreadId),
     ThreadActions(ThreadId),
     RemoveProject(ProjectId),
+    AgentRules(ProjectId),
     Reorder {
         id: ProjectId,
         before: Option<ProjectId>,

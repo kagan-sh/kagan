@@ -36,6 +36,7 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     appearance.rows.push(terminal_size(kagan));
     let mut out = vec![
         within(general(agent, notify, confirm_archive), Category::General),
+        within(rules_group(kagan), Category::General),
         within(appearance, Category::Appearance),
     ];
     out.extend(
@@ -162,6 +163,17 @@ fn general(agent: bool, notify: bool, confirm_archive: bool) -> Group {
             ),
         ],
     )
+}
+
+fn rules_group(kagan: &Kagan) -> Group {
+    let mut row = row(
+        "agent-rules",
+        "Agent rules",
+        "Text each agent is told when it starts. Projects add their own from the project menu.",
+        kagan.settings.rules.clone().into_any_element(),
+    );
+    row.wide = true;
+    group("agent-rules", "Agent rules", vec![row])
 }
 
 fn plugin_status_row(on: bool) -> Row {
