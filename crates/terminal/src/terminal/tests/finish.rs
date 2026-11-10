@@ -14,9 +14,9 @@ use super::super::exit::DRAIN;
 use super::super::exit::finished_exit;
 #[cfg(unix)]
 use super::{Reap, sh};
-use crate::Exit;
 #[cfg(unix)]
-use crate::{Finished, Terminal};
+use crate::Terminal;
+use crate::{Exit, Finished};
 
 #[test]
 fn a_finished_process_needs_a_signalled_handle() {
