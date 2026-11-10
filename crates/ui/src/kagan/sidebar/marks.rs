@@ -237,11 +237,21 @@ pub(super) fn row_marks(
 ) -> (Option<SharedString>, Option<AnyElement>, Option<AnyElement>) {
     match kind {
         Kind::Thread {
-            id, tone, pinned, ..
+            id,
+            tone,
+            pinned,
+            muted,
+            ..
         } => (
             Some(tone.word().into()),
             Some(thread_marks(id, *tone, cx)),
-            pinned.then(|| pin_mark(format!("thread-pinned-{id}"), cx).into_any_element()),
+            (*pinned || *muted).then(|| {
+                h_flex()
+                    .flex_shrink_0()
+                    .children(pinned.then(|| pin_mark(format!("thread-pinned-{id}"), cx)))
+                    .children(muted.then(|| mute_mark(format!("thread-muted-{id}"), cx)))
+                    .into_any_element()
+            }),
         ),
         Kind::Project { .. } => (None, None, None),
     }
@@ -260,6 +270,22 @@ pub(super) fn pin_mark(id: String, cx: &App) -> impl IntoElement {
         .aria_label("Pinned")
         .text_color(cx.theme().muted_foreground)
         .child(Icon::new(gpui_kit::assets::IconName::Pin).small())
+}
+
+pub(super) fn mute_mark(id: String, cx: &App) -> impl IntoElement {
+    div()
+        .id(ElementId::Name(id.into()))
+        .w_4()
+        .h(px(16.))
+        .flex()
+        .flex_shrink_0()
+        .justify_center()
+        .items_center()
+        .ui_container()
+        .aria_label("Notifications muted")
+        .tooltip(|window, cx| Tooltip::new("Notifications muted").build(window, cx))
+        .text_color(cx.theme().muted_foreground)
+        .child(Icon::new(gpui_kit::assets::IconName::BellMinus).small())
 }
 
 pub(super) fn row_glyph(icon: impl Into<Icon>, cx: &App) -> AnyElement {

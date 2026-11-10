@@ -388,6 +388,7 @@ enum Kind {
         id: ThreadId,
         tone: Tone,
         pinned: bool,
+        muted: bool,
         depth: u16,
         children: bool,
         expanded: bool,

@@ -215,6 +215,8 @@ fn listen(
                 | WorkspaceEvent::Skills
                 | WorkspaceEvent::NewPlugin
                 | WorkspaceEvent::Window(_)
+                | WorkspaceEvent::Notice(..)
+                | WorkspaceEvent::NotifyTest
                 | WorkspaceEvent::Screen(..) => {}
             },
         ),

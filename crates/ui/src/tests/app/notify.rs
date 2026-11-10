@@ -3,7 +3,9 @@ use std::time::{Duration, Instant};
 
 use gpui_kit::{AppContext as _, SystemNotification, SystemNotificationResponse, TestAppContext};
 use kg_core::Workspace;
-use kg_domain::{EnvironmentSpec, Op, OpResult, ProjectId, Run, ThreadId, ThreadOp};
+use kg_domain::{
+    EnvironmentSpec, NotifyOp, Op, OpResult, ProjectId, Run, ThreadId, ThreadNotify, ThreadOp,
+};
 
 use crate::tests::kagan::{
     app_then, host, open_with_plugins, set_preference, shown, thread_record,
@@ -116,7 +118,7 @@ fn a_second_spinner_frame_does_not_notify(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn notify_off_suppresses_the_next_one(cx: &mut TestAppContext) {
     let data = host(cx);
-    set_preference(cx, "notify", serde_json::json!(false));
+    set_preference(cx, "notify", serde_json::json!("off"));
     let program = script(
         data.path(),
         "spin",
@@ -160,6 +162,101 @@ fn stop_a_failed_start_and_a_plain_title_do_not_notify(cx: &mut TestAppContext) 
     });
     assert!(cx.foreground_executor().block_test(missing).is_err());
     assert!(cx.delivered_system_notifications().is_empty());
+}
+
+#[gpui_kit::test]
+fn asks_only_skips_a_turn_that_ends(cx: &mut TestAppContext) {
+    let data = host(cx);
+    set_preference(cx, "notify", serde_json::json!("asks"));
+    let program = script(
+        data.path(),
+        "spin",
+        &format!("{SPINNER}; sleep 1; {PLAIN}; sleep 30"),
+    );
+    let id = start(cx, &program);
+    park(cx, Duration::from_millis(2500));
+    stop(cx, &id);
+    assert!(cx.delivered_system_notifications().is_empty());
+}
+
+#[gpui_kit::test]
+fn a_muted_thread_posts_nothing(cx: &mut TestAppContext) {
+    let data = host(cx);
+    let program = script(
+        data.path(),
+        "spin",
+        &format!("{SPINNER}; sleep 1; {PLAIN}; sleep 30"),
+    );
+    let id = start(cx, &program);
+    set_thread_notify(cx, &id, ThreadNotify::Muted);
+    park(cx, Duration::from_millis(2500));
+    stop(cx, &id);
+    assert!(cx.delivered_system_notifications().is_empty());
+}
+
+#[gpui_kit::test]
+fn a_thread_level_all_posts_while_the_global_level_is_off(cx: &mut TestAppContext) {
+    let data = host(cx);
+    set_preference(cx, "notify", serde_json::json!("off"));
+    let program = script(
+        data.path(),
+        "spin",
+        &format!("{SPINNER}; sleep 1; {PLAIN}; sleep 30"),
+    );
+    let id = start(cx, &program);
+    set_thread_notify(cx, &id, ThreadNotify::All);
+    let notes = until_notice(cx);
+    stop(cx, &id);
+    assert_eq!(notes.len(), 1);
+}
+
+#[gpui_kit::test]
+fn opening_a_thread_clears_its_notice(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open_with_plugins(cx, false);
+    let program = script(
+        data.path(),
+        "spin",
+        &format!("{SPINNER}; sleep 1; {PLAIN}; sleep 30"),
+    );
+    let id = start(cx, &program);
+    let [note] = until_notice(cx).try_into().unwrap();
+    cx.update_window(window, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| kagan.select(id.clone(), window, cx));
+    })
+    .unwrap();
+    cx.run_until_parked();
+    stop(cx, &id);
+    assert!(
+        cx.dismissed_system_notifications()
+            .iter()
+            .any(|tag| tag.as_ref() == note.tag.as_ref())
+    );
+}
+
+#[gpui_kit::test]
+fn the_test_notification_posts_even_when_notify_is_off(cx: &mut TestAppContext) {
+    let _data = host(cx);
+    set_preference(cx, "notify", serde_json::json!("off"));
+    let task = cx.update(|cx| Workspace::dispatch(Op::Notify(NotifyOp::Test), cx));
+    cx.foreground_executor().block_test(task).unwrap();
+    cx.run_until_parked();
+    let notes = cx.delivered_system_notifications();
+    assert_eq!(notes.len(), 1);
+    assert_eq!(notes[0].tag.as_ref(), "kagan:test");
+}
+
+fn set_thread_notify(cx: &mut TestAppContext, id: &ThreadId, level: ThreadNotify) {
+    let task = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::Notify {
+                id: id.clone(),
+                level,
+            }),
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(task).unwrap();
+    cx.run_until_parked();
 }
 
 fn script(dir: &Path, name: &str, body: &str) -> String {

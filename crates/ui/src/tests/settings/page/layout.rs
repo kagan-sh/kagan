@@ -7,9 +7,7 @@ use kg_domain::{Op, UiOp};
 use serde_json::json;
 
 use super::{run_op, saved};
-use crate::tests::kagan::{
-    click, drag_to, open, press as press_at, release, shows, value_of, wait_until,
-};
+use crate::tests::kagan::{click, drag_to, open, press as press_at, release, shows, wait_until};
 use crate::tests::sidebar::layout::span;
 
 #[gpui_kit::test]
@@ -20,9 +18,10 @@ fn settings_saves_terminal_size_and_notifications(cx: &mut TestAppContext) {
     click(cx, window, "terminal-size-bigger");
     wait_until(cx, |cx| saved(cx, "terminal-font-size") == json!(13));
     click(cx, window, "settings-section-general");
-    click(cx, window, "notify");
-    wait_until(cx, |cx| saved(cx, "notify") == json!(false));
-    assert_eq!(value_of(cx, window, "notify").as_deref(), Some("off"));
+    click(cx, window, "notify-asks");
+    wait_until(cx, |cx| saved(cx, "notify") == json!("asks"));
+    click(cx, window, "notify-off");
+    wait_until(cx, |cx| saved(cx, "notify") == json!("off"));
 }
 
 #[gpui_kit::test]
