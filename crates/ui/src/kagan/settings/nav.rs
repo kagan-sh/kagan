@@ -190,31 +190,18 @@ impl Kagan {
     }
 }
 
-pub(super) fn sidebar(
+fn list_rows(
     kagan: &Kagan,
     entries: &[Entry],
-    window: &mut Window,
+    ring: bool,
+    cursor: usize,
     cx: &mut Context<Kagan>,
-) -> AnyElement {
-    let focus = kagan.settings.list.clone();
+) -> Vec<AnyElement> {
     let chosen = shown(&kagan.settings.section, cx);
-    let typing = kagan
-        .settings
-        .query
-        .read(cx)
-        .focus_handle(cx)
-        .is_focused(window)
-        && !kagan.settings.query.read(cx).value().trim().is_empty();
-    let focused = focus.is_focused(window) || typing;
-    // The ring is for keyboard focus only, so a mouse click leaves no ring behind.
-    let keyboard = window.last_input_was_keyboard();
-    let len = entries.len();
-    let cursor = kagan.settings.cursor.min(len.saturating_sub(1));
     let first_plugin = entries.iter().position(
         |entry| matches!(entry, Entry::Category(item) if matches!(item.section, Category::Plugin(_))),
     );
     let searching = !kagan.settings.query.read(cx).value().trim().is_empty();
-    let open = entries.get(cursor).cloned();
     let mut rows: Vec<AnyElement> = Vec::new();
     if searching && entries.is_empty() {
         rows.push(note(
@@ -238,14 +225,31 @@ pub(super) fn sidebar(
             );
         }
         let selected = matches!(entry, Entry::Category(item) if item.section == chosen);
-        rows.push(row(
-            index,
-            entry,
-            selected,
-            focused && keyboard && index == cursor,
-            cx,
-        ));
+        rows.push(row(index, entry, selected, ring && index == cursor, cx));
     }
+    rows
+}
+
+pub(super) fn sidebar(
+    kagan: &Kagan,
+    entries: &[Entry],
+    window: &mut Window,
+    cx: &mut Context<Kagan>,
+) -> AnyElement {
+    let focus = kagan.settings.list.clone();
+    let typing = kagan
+        .settings
+        .query
+        .read(cx)
+        .focus_handle(cx)
+        .is_focused(window)
+        && !kagan.settings.query.read(cx).value().trim().is_empty();
+    // The ring is for keyboard focus only, so a mouse click leaves no ring behind.
+    let ring = (focus.is_focused(window) || typing) && window.last_input_was_keyboard();
+    let len = entries.len();
+    let cursor = kagan.settings.cursor.min(len.saturating_sub(1));
+    let open = entries.get(cursor).cloned();
+    let rows = list_rows(kagan, entries, ring, cursor, cx);
     let line = cx.theme().border;
     // The scrolling part is inside the list, so the list keeps its id and its role.
     let list = v_flex()
@@ -283,16 +287,16 @@ pub(super) fn sidebar(
                 .key_context(CONTEXT_SECTIONS)
                 .capture_key_down(cx.listener(move |this, event: &KeyDownEvent, _, cx| {
                     // Captured before the search box, which would otherwise take Up and Down itself.
-                    let step = match event.keystroke.key.as_str() {
-                        "down" => 1,
-                        "up" => -1,
+                    let bottom = len.saturating_sub(1);
+                    let target = match event.keystroke.key.as_str() {
+                        "down" => (cursor + 1).min(bottom),
+                        "up" => cursor.saturating_sub(1),
                         _ => return,
                     };
                     if event.keystroke.modifiers.modified() {
                         return;
                     }
-                    this.settings.cursor =
-                        (cursor as isize + step).clamp(0, len.saturating_sub(1) as isize) as usize;
+                    this.settings.cursor = target;
                     cx.stop_propagation();
                     cx.notify();
                 }))
