@@ -11,10 +11,10 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, Subscription, Window, div,
 };
 use kg_core::{Color, Workspace};
-use kg_domain::{Op, Thread, ThreadId, ThreadOp};
+use kg_domain::{Op, Thread, ThreadId, ThreadNotify, ThreadOp};
 use kg_plugins::RunCommand;
 
-use super::controls::{bound_keys, control, dispatch, menu_item, menu_popup, tip};
+use super::controls::{bound_keys, control, dispatch, menu_item, menu_popup, state_mark, tip};
 use super::{
     AddProject, Kagan, NewThread, RenameThread, SaveDiagnostics, StartAgain, StopThread,
     ThreadActions,
@@ -49,10 +49,22 @@ pub(super) struct TitleState {
 #[derive(Clone, Copy)]
 pub(super) enum ThreadPick {
     Pin,
+    Notify(ThreadNotify),
     Archive,
     Rename,
     SaveDiagnostics,
 }
+
+const NOTIFY_CHOICES: [(ThreadNotify, &str, &str); 4] = [
+    (ThreadNotify::Default, "thread-notify-default", "Default"),
+    (ThreadNotify::All, "thread-notify-all", "All"),
+    (
+        ThreadNotify::Asks,
+        "thread-notify-asks",
+        "Only when it asks me",
+    ),
+    (ThreadNotify::Muted, "thread-notify-muted", "Muted"),
+];
 
 // The title bar and a sidebar row show the same menu. `tail` adds items after Rename.
 pub(super) fn thread_menu(
@@ -63,18 +75,35 @@ pub(super) fn thread_menu(
     cx: &mut App,
 ) -> Entity<PopupMenu> {
     let pin = if thread.pinned { "Unpin" } else { "Pin" };
+    let notify = thread.notify;
+    let on_notify = on_pick.clone();
     let item = move |pick: ThreadPick, id: &'static str, label: &'static str| {
         let on_pick = on_pick.clone();
         PopupMenuItem::element(move |_, _| menu_item(id, label))
             .on_click(move |_, window, cx| on_pick(pick, window, cx))
     };
-    PopupMenu::build(window, cx, move |menu, _, _| {
+    PopupMenu::build(window, cx, move |menu, window, cx| {
         let menu = menu
             .item(item(ThreadPick::Pin, "thread-pin", pin))
             .separator()
             .item(item(ThreadPick::Archive, "thread-archive", "Archive"))
             .separator()
-            .item(item(ThreadPick::Rename, "thread-rename", "Rename…"));
+            .item(item(ThreadPick::Rename, "thread-rename", "Rename…"))
+            .separator()
+            .submenu("Notifications", window, cx, move |menu, _, _| {
+                NOTIFY_CHOICES
+                    .into_iter()
+                    .fold(menu, |menu, (level, id, label)| {
+                        let on_pick = on_notify.clone();
+                        menu.item(
+                            PopupMenuItem::element(move |_, _| menu_item(id, label))
+                                .checked(level == notify)
+                                .on_click(move |_, window, cx| {
+                                    on_pick(ThreadPick::Notify(level), window, cx);
+                                }),
+                        )
+                    })
+            });
         tail(menu).separator().item(item(
             ThreadPick::SaveDiagnostics,
             "save-diagnostics",
@@ -244,7 +273,7 @@ impl Kagan {
     // A click on the title does not start a rename.
     pub(super) fn title_line(&self, thread: &Thread, cx: &mut Context<Self>) -> AnyElement {
         let Some(input) = &self.title.rename else {
-            return div()
+            let title = div()
                 .id("thread-title")
                 .ui_container()
                 .flex_initial()
@@ -252,7 +281,21 @@ impl Kagan {
                 .text_ellipsis()
                 .type_body(cx)
                 .font_weight(gpui_kit::FontWeight::MEDIUM)
-                .child(thread.title.clone())
+                .child(thread.title.clone());
+            if thread.notify != ThreadNotify::Muted {
+                return title.into_any_element();
+            }
+            return h_flex()
+                .flex_initial()
+                .min_w_0()
+                .gap_1()
+                .child(title)
+                .child(state_mark(
+                    "title-muted".into(),
+                    gpui_kit::assets::IconName::BellMinus,
+                    "Notifications muted",
+                    cx,
+                ))
                 .into_any_element();
         };
         div()

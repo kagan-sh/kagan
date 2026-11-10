@@ -3,6 +3,7 @@
 mod diff;
 mod event;
 mod id;
+mod notify;
 mod op;
 pub mod prefs;
 mod preview;
@@ -24,17 +25,18 @@ pub use id::{
     Conversation, EnvironmentId, PendingInteractionId, PluginId, ProjectId, SectionId, ThreadId,
     Timestamp,
 };
+pub use notify::{NotifyLevel, NotifyReason, ThreadNotify};
 pub use op::{
     Appearance, BranchList, BrowserControl, BrowserOp, BrowserSnapshot, BrowserView, CommandGroup,
     ConfigOp, DiagnosticsOp, DiffOp, DiffQuery, DiffScope, DropSide, EnvironmentOp,
-    EnvironmentSpec, ExtraTerminal, FOLDER_IN_USE, GuideChapter, IndexOp, KeyPlatform, Keymap,
-    KeymapAction, KeymapOp, Metadata, Op, OpError, OpResult, Order, PinnedSetup, PluginOp,
-    PreferenceOp, ProgramOp, ProjectBranch, ProjectOp, Run, SCREEN_MAX_BYTES, SEARCH_DEFAULT,
-    SEARCH_LIMIT, SEARCH_TEXT_MAX, SHORTCUTS, SectionOp, SelectMode, SettingsOp, SetupFile,
-    Shortcut, ShortcutGroup, ShortcutScope, ShortcutWhen, Skill, SkillOp, SkillSource,
-    SkillTemplate, Slot, SlotChoice, SlotChoiceError, SurfaceItem, SurfaceOp, SurfacePlacement,
-    TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThemeOp, ThemeSettings, ThreadOp,
-    UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,
+    EnvironmentSpec, ExtraTerminal, FOLDER_IN_USE, GuideChapter, INSTRUCTIONS_MAX, IndexOp,
+    InstructionsOp, KeyPlatform, Keymap, KeymapAction, KeymapOp, Metadata, NotifyOp, Op, OpError,
+    OpResult, Order, PinnedSetup, PluginOp, PreferenceOp, ProgramOp, ProjectBranch, ProjectOp, Run,
+    SCREEN_MAX_BYTES, SEARCH_DEFAULT, SEARCH_LIMIT, SEARCH_TEXT_MAX, SHORTCUTS, SectionOp,
+    SelectMode, SettingsOp, SetupFile, Shortcut, ShortcutGroup, ShortcutScope, ShortcutWhen, Skill,
+    SkillOp, SkillSource, SkillTemplate, Slot, SlotChoice, SlotChoiceError, SurfaceItem, SurfaceOp,
+    SurfacePlacement, TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThemeOp, ThemeSettings,
+    ThreadOp, UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,
     UiSnapshot, WaitOutcome, WindowOp, branch_slug, check, default_chord, expand_secondary,
     invalid_json, valid_theme_choice, valid_theme_id,
 };

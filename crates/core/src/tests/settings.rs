@@ -244,3 +244,34 @@ async fn every_default_shortcut_passes_the_key_check(cx: &mut TestAppContext) {
         assert!(result.is_ok(), "default {} is refused", shortcut.chord);
     }
 }
+
+#[gpui_kit::test]
+async fn notify_is_all_asks_or_off(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    for refused in [json!(true), json!(false), json!("yes")] {
+        let error = op(
+            Op::Preference(PreferenceOp::Set {
+                key: "notify".into(),
+                value: refused,
+            }),
+            cx,
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(error, OpError::Invalid(ref message) if message.contains("all, asks or off")),
+            "{error}"
+        );
+    }
+    for level in ["all", "asks", "off"] {
+        op(
+            Op::Preference(PreferenceOp::Set {
+                key: "notify".into(),
+                value: json!(level),
+            }),
+            cx,
+        )
+        .await
+        .unwrap();
+    }
+}

@@ -167,7 +167,7 @@ fn a_branch_slug_comes_from_the_title() {
 #[test]
 fn thread_unread_when_attention_is_newer_than_read() {
     let wire = json!({
-        "id": "thr_1", "projectId": "prj_1", "environmentId": null, "title": "t", "titleLocked": false, "quiet": false,
+        "id": "thr_1", "projectId": "prj_1", "environmentId": null, "title": "t", "titleLocked": false, "quiet": false, "notify": "default",
         "provider": "claude-code", "status": "idle", "visibility": "visible",
         "parentThreadId": null, "lifecycleOwnerThreadId": null, "sectionId": null,
         "pinned": false, "lastReadAt": 5, "latestAttentionAt": 5, "mark": "none", "archivedAt": null,
@@ -1079,6 +1079,7 @@ fn sample(
         visibility,
         parent_thread_id: None,
         quiet: false,
+        notify: crate::ThreadNotify::Default,
         lifecycle_owner_thread_id: owner,
         section_id: None,
         pinned: false,

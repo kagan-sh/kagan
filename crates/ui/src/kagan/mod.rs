@@ -31,6 +31,7 @@ pub(crate) mod quit;
 mod replace;
 mod review;
 mod right;
+mod rules;
 mod screen;
 mod settings;
 mod setup_guide;

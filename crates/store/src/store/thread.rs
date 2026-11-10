@@ -1,6 +1,6 @@
 use kg_domain::{
     Conversation, EnvironmentId, EnvironmentStatus, Event, EventKind, Metadata, PluginId,
-    ProjectId, Thread, ThreadId, ThreadMark, ThreadStatus, Timestamp,
+    ProjectId, Thread, ThreadId, ThreadMark, ThreadNotify, ThreadStatus, Timestamp,
 };
 use rusqlite::{Connection, OptionalExtension as _, Row, named_params, params};
 use serde_json::Value;
@@ -13,7 +13,7 @@ use crate::{Error, Result};
 
 const THREAD_COLUMNS: &str = "id, project_id, environment_id, title, provider, status, \
     visibility, parent_thread_id, lifecycle_owner_thread_id, section_id, pinned, last_read_at, \
-    latest_attention_at, archived_at, created_at, updated_at, title_locked, done, quiet";
+    latest_attention_at, archived_at, created_at, updated_at, title_locked, done, quiet, notify";
 
 const OWNED_THREADS: &str = "WITH RECURSIVE owned(id) AS ( \
     SELECT id FROM threads WHERE id = ?1 \
@@ -222,6 +222,14 @@ impl super::Store {
             ],
         )?;
         Ok(changed == 1)
+    }
+
+    pub fn set_notify(&self, id: &ThreadId, level: ThreadNotify) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE threads SET notify = ?2 WHERE id = ?1",
+            params![Text(id), Text(level)],
+        )?;
+        found(changed, "thread", id)
     }
 
     pub fn set_pinned(&self, id: &ThreadId, pinned: bool) -> Result<()> {
@@ -440,6 +448,7 @@ fn thread_row(row: &Row) -> rusqlite::Result<Thread> {
         updated_at: Timestamp(row.get("updated_at")?),
         title_locked: row.get("title_locked")?,
         quiet: row.get("quiet")?,
+        notify: row.get::<_, Text<_>>("notify")?.0,
     })
 }
 
@@ -466,6 +475,7 @@ fn put_thread(conn: &Connection, thread: &Thread) -> Result<()> {
             ":title_locked": thread.title_locked,
             ":done": thread.mark == ThreadMark::Done,
             ":quiet": thread.quiet,
+            ":notify": Text(thread.notify),
         },
     )?;
     Ok(())

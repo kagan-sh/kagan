@@ -60,6 +60,7 @@ pub(super) enum Event {
     Archive(ThreadId),
     ThreadActions(ThreadId),
     RemoveProject(ProjectId),
+    AgentRules(ProjectId),
     Reorder {
         id: ProjectId,
         before: Option<ProjectId>,
@@ -388,6 +389,7 @@ enum Kind {
         id: ThreadId,
         tone: Tone,
         pinned: bool,
+        muted: bool,
         depth: u16,
         children: bool,
         expanded: bool,

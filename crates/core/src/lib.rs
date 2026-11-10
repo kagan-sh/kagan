@@ -5,6 +5,7 @@ mod dispatch;
 mod end;
 mod environment;
 mod host;
+mod instructions;
 mod plugin_folder;
 mod preview;
 mod project;

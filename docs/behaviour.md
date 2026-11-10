@@ -100,6 +100,12 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - **Changes**: pins it to the top of the sidebar, or unpins it [CONTEXT] [book:cli].
 - **Refused when**: a missing thread — `not-found` [op/].
 
+### `Notify`
+
+- **Allowed when**: the thread exists [book:cli].
+- **Changes**: sets the thread's own notification level: `default` follows the global `notify`, `all` and `asks` replace it with that level, and `muted` posts nothing for this thread. A muted thread shows a muted mark beside its title and in its sidebar row. It writes no event [decision 213].
+- **Refused when**: a missing thread — `not-found` [op/].
+
 ### `Rename`
 
 - **Allowed when**: the thread exists, including one that is archived [book:cli].
@@ -586,7 +592,7 @@ Built-in shortcut overrides, and the keys of plugin commands, named `<plugin-id>
 
 ## Preference
 
-Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integration`, `notify` [settings.rs], `plugin-status` [decision 157], `update-check` [decision 113], `setup-guide` [decision 218], `terminal-font-size`, `review-viewed`, `slot.threads` and `slot.review` (a plugin id, or `kagan` for the built-in; set from the window or with `kg plugin use`) [docs:plugin-api], and the layout of each window, `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a lowercase id such as `main` [decision 48]. `row-actions` and `footer` were removed as unused: the window never read them. The bare `right-sidebar` name was removed as unused (decision 48). The dock layout is not a preference and not an `Op`; it is `{dataDir}/layout.json` [decision 15]. `predict` still loads and no longer hides hunks; it is not one of these keys [decision 43].
+Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integration`, `notify` [decision 212], `plugin-status` [decision 157], `update-check` [decision 113], `setup-guide` [decision 218], `terminal-font-size`, `review-viewed`, `slot.threads` and `slot.review` (a plugin id, or `kagan` for the built-in; set from the window or with `kg plugin use`) [docs:plugin-api], and the layout of each window, `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a lowercase id such as `main` [decision 48]. `row-actions` and `footer` were removed as unused: the window never read them. The bare `right-sidebar` name was removed as unused (decision 48). The dock layout is not a preference and not an `Op`; it is `{dataDir}/layout.json` [decision 15]. `predict` still loads and no longer hides hunks; it is not one of these keys [decision 43].
 
 ### `Get`
 
@@ -595,8 +601,29 @@ Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integrat
 
 ### `Set`
 
-- **Changes**: stores the value when the shape matches [person 2026-10-08]. `confirm-archive` is a boolean [person 2026-10-08], and so are `agent-integration`, `notify` [settings.rs] and `plugin-status` [decision 157]. `agent-integration` set to `false` drops kagan's tools from claude (--mcp-config, --plugin-dir, --append-system-prompt-file, --disallowed-tools, and --session-id or --resume, so Start again does not resume the conversation), codex (--disable multi_agent, --disable multi_agent_v2, -c mcp_servers.kagan.*, and resume <id>), cursor-agent and agent (--plugin-dir, the workspace rule, and --new-session-id or --resume), and pi (--skill and --append-system-prompt). Every program still gets the KG_ variables and PATH with kg's folder first. `notify` set to `false` stops the system notification for a thread that needs you while that thread is not on screen. An unset `notify` counts as on [notify.rs]. `plugin-status` set to `false` hides every plugin item in the activity strip; an unset one counts as on, and a plugin can still be turned off in Installed [decision 157]. `setup-guide` is a boolean; `false` hides the setup guide on the empty window, and an unset one counts as shown [decision 218]. `update-check` is a boolean; an unset one counts as off, and on runs the automatic update check at launch and then daily [decision 113]. `terminal-font-size` is an integer from 9 to 24. `<window>.right-sidebar` is a boolean that says whether the right sidebar is open; an open window reads it when it opens, so a change applies the next time the window opens [decision 48]. `<window>.review-wrap` is a boolean that wraps long lines in the review. `<window>.left-width` and `<window>.right-width` are numbers of pixels. `review-viewed` is a map from a reviewed file's path to the revision marked as viewed.
+- **Changes**: stores the value when the shape matches [person 2026-10-08]. `confirm-archive` is a boolean [person 2026-10-08], and so are `agent-integration` and `plugin-status` [decision 157]. `notify` is one of `all`, `asks` or `off`, and any other value is refused [decision 212]. `agent-integration` set to `false` drops kagan's tools from claude (--mcp-config, --plugin-dir, --append-system-prompt-file, --disallowed-tools, and --session-id or --resume, so Start again does not resume the conversation), codex (--disable multi_agent, --disable multi_agent_v2, -c mcp_servers.kagan.*, and resume <id>), cursor-agent and agent (--plugin-dir, the workspace rule, and --new-session-id or --resume), and pi (--skill and --append-system-prompt). Every program still gets the KG_ variables and PATH with kg's folder first. `notify` sets which events post a system notification for a thread that is not on screen: `all` (a turn ended, a question or approval waits, or a program failed or exited), `asks` (only a question or approval), or `off` [decision 212]. An unset `notify` counts as `all`. A thread's own level replaces it [decision 213]. `plugin-status` set to `false` hides every plugin item in the activity strip; an unset one counts as on, and a plugin can still be turned off in Installed [decision 157]. `setup-guide` is a boolean; `false` hides the setup guide on the empty window, and an unset one counts as shown [decision 218]. `update-check` is a boolean; an unset one counts as off, and on runs the automatic update check at launch and then daily [decision 113]. `terminal-font-size` is an integer from 9 to 24. `<window>.right-sidebar` is a boolean that says whether the right sidebar is open; an open window reads it when it opens, so a change applies the next time the window opens [decision 48]. `<window>.review-wrap` is a boolean that wraps long lines in the review. `<window>.left-width` and `<window>.right-width` are numbers of pixels. `review-viewed` is a map from a reviewed file's path to the revision marked as viewed.
 - **Refused when**: any other key — `invalid`, message `unknown preference <key>` [person 2026-10-08] [op/]. A wrong shape — `invalid` [person 2026-10-08] [op/].
+
+## Agent rules
+
+The agent rules are text a thread's program is told when it starts: the global file `<dataDir>/instructions.md`, and a project's `<project>/.kagan/instructions.md` [decision 211]. Each file holds at most 16 KiB (16,384 bytes) [decision 211]. They reach `claude`, `codex`, `cursor-agent` and `pi`, not `kimi` or `opencode` [decision 211] [docs:self-extend].
+
+### `Get`
+
+- **Shows**: the file's text as it is on disk, at most 1 MiB. A missing file shows nothing [decision 211].
+- **Refused when**: an unknown project — `not-found` [op/]. A file that cannot be read, or is not UTF-8 — `invalid` [decision 211]. Only a missing file is empty, so a failed read never looks like an empty rules file.
+
+### `Set`
+
+- **Changes**: writes the file and creates its folder. The text comes from the argument, or from `--file` (`-` for stdin) [book:cli].
+- **Refused when**: more than 16 KiB — `invalid`, and nothing is written [decision 211]. No text — `invalid`. An unknown project — `not-found` [op/]. A project whose folder is gone — `invalid`, and no folder is made [decision 211].
+- **Writes**: through a temp file renamed into place, so a start never reads half a file [decision 211].
+- **Applies**: a start reads the files then. A running thread keeps the text it started with. Codex's `kg mcp` server reads them when it lists tools [decision 211].
+
+### `Clear`
+
+- **Changes**: deletes the file. Clearing a missing file succeeds.
+- **Refused when**: an unknown project — `not-found` [op/].
 
 ## Config
 
@@ -627,6 +654,11 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 
 - **Allowed when**: always. The kagan mark's menu on the rail runs it, and the same menu runs `SettingsOp::Open` for Settings… [decision 108].
 - **Shows**: its own window with the app icon, kagan, the version with the short commit of the build, a tagline, the GitHub, Book, License and Acknowledgements links, and the copyright. A second About focuses the open window. Escape, Cmd+W, or a click in another window closes it [decision 99] [docs:look].
+
+### `NotifyOp::Test`
+
+- **Allowed when**: always [book:cli].
+- **Changes**: posts one test system notification, even when `notify` is `off` [decision 215].
 
 ### `SettingsOp::Open` and `SettingsOp::Plugins`
 
