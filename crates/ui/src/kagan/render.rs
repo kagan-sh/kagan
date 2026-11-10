@@ -233,7 +233,9 @@ impl Kagan {
                     .children(update::notice(cx))
                     .children(
                         self.plugin_prompt_visible(cx)
-                            .then(|| Self::plugin_prompt_notice(&self.plugin_prompt_text, cx)),
+                            .then(|| self.plugin_prompt.clone())
+                            .flatten()
+                            .map(|(_, text)| Self::plugin_prompt_notice(&text, cx)),
                     )
                     .child(main)
                     .children(overlays::render(self, cx))

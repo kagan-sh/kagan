@@ -1,7 +1,9 @@
 use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, TestAppContext};
 
 use crate::kagan::Kagan;
-use crate::tests::kagan::{chord, click, focused_of, label, open, shows, wait_until};
+use crate::tests::kagan::{
+    chord, click, focused_of, grid_text, label, open, shell, shows, wait_until,
+};
 
 fn show_skills(cx: &mut TestAppContext, kagan: &Entity<Kagan>, window: AnyWindowHandle) {
     cx.update_window(window, |_, window, cx| {
@@ -149,4 +151,54 @@ fn a_skill_row_opens_from_the_keyboard_and_escape_goes_back(cx: &mut TestAppCont
     cx.simulate_keystrokes(window, "escape");
     cx.run_until_parked();
     assert!(shows(cx, window, "skill-row-kg-cli"));
+}
+
+fn fork_to_start(
+    cx: &mut TestAppContext,
+    kagan: &Entity<Kagan>,
+    window: AnyWindowHandle,
+    data: &std::path::Path,
+) {
+    click(cx, window, "project-prj_kagan");
+    cx.run_until_parked();
+    write_user_skill(data, "mine");
+    show_skills(cx, kagan, window);
+    click(cx, window, "skill-row-mine");
+    cx.run_until_parked();
+    click(cx, window, "skills-fork");
+    cx.run_until_parked();
+}
+
+fn start_with_program(
+    cx: &mut TestAppContext,
+    kagan: &Entity<Kagan>,
+    window: AnyWindowHandle,
+    program: &str,
+) {
+    cx.update_window(window, |_, window, cx| {
+        let picker = kagan.read(cx).picker_entity();
+        picker.update(cx, |picker, cx| {
+            picker.use_custom(program.into(), "", window, cx)
+        });
+    })
+    .unwrap();
+    click(cx, window, "start");
+}
+
+#[gpui_kit::test]
+fn a_forked_thread_gets_the_prompt_typed_in(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    fork_to_start(cx, &kagan, window, data.path());
+    start_with_program(cx, &kagan, window, &shell());
+    wait_until(cx, |cx| grid_text(cx, &kagan).contains("Make a new skill"));
+}
+
+#[gpui_kit::test]
+fn a_fork_types_nothing_when_its_thread_does_not_start(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    fork_to_start(cx, &kagan, window, data.path());
+    start_with_program(cx, &kagan, window, "/nonexistent/kagan-no-such-program");
+    cx.run_until_parked();
+    assert!(!grid_text(cx, &kagan).contains("Make a new skill"));
+    assert!(!shows(cx, window, "plugin-prompt-notice"));
 }

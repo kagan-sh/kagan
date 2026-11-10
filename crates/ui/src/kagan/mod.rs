@@ -146,8 +146,8 @@ pub(crate) struct Kagan {
     questions: Entity<attention::Attention>,
     _questions_watch: Subscription,
     note: Option<SharedString>,
-    plugin_prompt_notice: Option<ThreadId>,
-    plugin_prompt_text: String,
+    // A prompt the program did not take, with the thread it belongs to, for the person to copy.
+    plugin_prompt: Option<(ThreadId, String)>,
     focus: FocusHandle,
     surface_close_focus: FocusHandle,
     slots: surface::SlotState,
