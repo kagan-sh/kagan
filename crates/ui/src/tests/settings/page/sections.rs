@@ -1,4 +1,4 @@
-use gpui_kit::TestAppContext;
+use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, TestAppContext};
 
 use serde_json::json;
 
@@ -201,4 +201,27 @@ fn the_chosen_section_is_kept_when_settings_reopens(cx: &mut TestAppContext) {
         selected_of(cx, window, "settings-section-appearance"),
         Some(true)
     );
+}
+
+fn height_of(cx: &mut TestAppContext, window: AnyWindowHandle, id: &str) -> f32 {
+    cx.update_window(window, |_, window, _| {
+        crate::ui_registry::find(window, &ElementId::Name(id.into()))
+            .map(|element| f32::from(element.bounds.size.height))
+    })
+    .unwrap()
+    .unwrap()
+}
+
+#[gpui_kit::test]
+fn the_cursor_ring_does_not_change_a_row_height(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    tab_to(cx, window, "settings-search");
+    cx.simulate_keystrokes(window, "tab");
+    cx.run_until_parked();
+    let at_rest = height_of(cx, window, "settings-section-appearance");
+    cx.simulate_keystrokes(window, "down");
+    cx.run_until_parked();
+    let with_ring = height_of(cx, window, "settings-section-appearance");
+    assert_eq!(at_rest, with_ring, "the ring moved the row");
 }

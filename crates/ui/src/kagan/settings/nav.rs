@@ -203,6 +203,8 @@ pub(super) fn sidebar(
         .is_focused(window)
         && !kagan.settings.query.read(cx).value().trim().is_empty();
     let focused = focus.is_focused(window) || typing;
+    // The ring is for keyboard focus only, so a mouse click leaves no ring behind.
+    let keyboard = window.last_input_was_keyboard();
     let len = entries.len();
     let cursor = kagan.settings.cursor.min(len.saturating_sub(1));
     let first_plugin = entries.iter().position(
@@ -233,7 +235,13 @@ pub(super) fn sidebar(
             );
         }
         let selected = matches!(entry, Entry::Category(item) if item.section == chosen);
-        rows.push(row(index, entry, selected, focused && index == cursor, cx));
+        rows.push(row(
+            index,
+            entry,
+            selected,
+            focused && keyboard && index == cursor,
+            cx,
+        ));
     }
     let (line, radius) = (cx.theme().border, cx.theme().radius);
     let list = v_flex()
@@ -366,7 +374,12 @@ fn row(
                 .text_color(cx.theme().accent_foreground)
         })
         .when(!selected, |row| row.hover(|row| row.bg(hover)))
-        .when(focused_here, |row| row.border_1().border_color(ring))
+        .border_1()
+        .border_color(if focused_here {
+            ring
+        } else {
+            cx.theme().transparent
+        })
         .on_click(cx.listener(move |this, _, window, cx| {
             this.settings_activate(index, activate.clone(), window, cx);
         }))
