@@ -3,7 +3,8 @@
 
 use crate::theme::{SpaceStep, TypeScale as _, radius_md, space};
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::button::Button;
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AppContext as _, Context, ElementId, Entity, FocusHandle, InteractiveElement as _, IntoElement,
@@ -138,46 +139,32 @@ impl Page {
         }
     }
 
-    fn program_row(&self, cx: &mut Context<Self>) -> Row {
-        let current = self.program.clone();
-        let mut buttons = h_flex().gap_2().flex_wrap().items_center();
-        for program in &self.programs {
-            let picked = program.command.clone();
-            let selected = current.as_deref() == Some(program.command.as_str());
-            let button = Button::new(ElementId::Name(
-                format!("button-project-program-{}", program.command).into(),
-            ))
-            .small()
-            .label(program.label.clone())
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.pick(Some(picked.clone()), cx);
-            }));
-            let button = if selected {
-                button.primary()
-            } else {
-                button.outline()
-            };
-            buttons = buttons.child(control(
-                format!("project-program-{}", program.command),
-                Facts::button(program.label.clone()),
-                button,
-            ));
+    fn program_label(&self) -> String {
+        match &self.program {
+            Some(stored) => self
+                .programs
+                .iter()
+                .find(|program| &program.command == stored)
+                .map_or_else(|| stored.clone(), |program| program.label.clone()),
+            None => "First installed".to_owned(),
         }
-        let first = Button::new("button-project-program-first")
-            .small()
-            .outline()
-            .label("First installed")
-            .on_click(cx.listener(|this, _, _, cx| this.pick(None, cx)));
-        buttons = buttons.child(control(
-            "project-program-first",
-            Facts::button("First installed"),
-            first,
-        ));
-        let mut column = v_flex()
-            .w_full()
-            .items_end()
-            .gap_2()
-            .child(buttons.w_full().justify_end());
+    }
+
+    fn program_row(&self, cx: &mut Context<Self>) -> Row {
+        let label = self.program_label();
+        let page = cx.entity().downgrade();
+        let current = self.program.clone();
+        let (picked, programs) = (current.clone(), self.programs.clone());
+        let choice = control(
+            "project-program-choice",
+            Facts::button(label.clone()),
+            Button::new("button-project-program-choice")
+                .small()
+                .outline()
+                .label(label)
+                .dropdown_menu(move |menu, _, _| program_menu(menu, &page, &picked, &programs)),
+        );
+        let mut column = v_flex().w_full().items_end().gap_2().child(choice);
         if let Some(stored) = current.filter(|stored| {
             self.programs_loaded && !self.programs.iter().any(|p| &p.command == stored)
         }) {
@@ -240,6 +227,57 @@ impl Page {
             },
         ]
     }
+}
+
+fn program_menu(
+    menu: PopupMenu,
+    page: &WeakEntity<Page>,
+    current: &Option<String>,
+    programs: &[Program],
+) -> PopupMenu {
+    let menu = programs
+        .iter()
+        .fold(menu.scrollable(true), |menu, program| {
+            let selected = current.as_deref() == Some(program.command.as_str());
+            let id = format!("project-program-{}", program.command);
+            let label = program.label.clone();
+            let pick = program.command.clone();
+            let page = page.clone();
+            menu.item(
+                PopupMenuItem::element(move |_, _| {
+                    div()
+                        .id(ElementId::Name(id.clone().into()))
+                        .ui_observe_as(Facts {
+                            role: Role::MenuItem,
+                            selected: Some(selected),
+                            ..Facts::button(label.clone())
+                        })
+                        .child(label.clone())
+                })
+                .checked(selected)
+                .on_click(move |_, _, cx| {
+                    _ = page.update(cx, |page, cx| page.pick(Some(pick.clone()), cx));
+                }),
+            )
+        });
+    let selected = current.is_none();
+    let page = page.clone();
+    menu.item(
+        PopupMenuItem::element(move |_, _| {
+            div()
+                .id("project-program-first")
+                .ui_observe_as(Facts {
+                    role: Role::MenuItem,
+                    selected: Some(selected),
+                    ..Facts::button("First installed")
+                })
+                .child("First installed")
+        })
+        .checked(selected)
+        .on_click(move |_, _, cx| {
+            _ = page.update(cx, |page, cx| page.pick(None, cx));
+        }),
+    )
 }
 
 impl Render for Page {
