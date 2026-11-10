@@ -36,6 +36,7 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     appearance.rows.push(terminal_size(kagan));
     let mut out = vec![
         within(general(agent, notify, confirm_archive), Category::General),
+        within(environment(kagan), Category::General),
         within(appearance, Category::Appearance),
     ];
     out.extend(
@@ -161,6 +162,19 @@ fn general(agent: bool, notify: bool, confirm_archive: bool) -> Group {
                 ),
             ),
         ],
+    )
+}
+
+fn environment(kagan: &Kagan) -> Group {
+    group(
+        "environment",
+        "Environment variables",
+        vec![row(
+            "environment-variables",
+            "Variables",
+            "Set once for every program kagan starts. A value is hidden after you set it.",
+            kagan.settings.variables.clone().into_any_element(),
+        )],
     )
 }
 

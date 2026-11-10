@@ -43,6 +43,7 @@ impl Kagan {
                 self.sidebar
                     .update(cx, |sidebar, cx| sidebar.open_row_menu(&thread, window, cx));
             }
+            Event::ProjectSettings(id) => self.open_project_page(id.clone(), window, cx),
             Event::RemoveProject(id) => self.remove_project(id.clone(), cx),
             Event::Reorder { id, before } => {
                 self.reorder_project(id.clone(), before.clone(), cx);

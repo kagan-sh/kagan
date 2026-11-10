@@ -81,6 +81,8 @@ pub(crate) struct Picker {
     arguments: Entity<InputState>,
     _subscriptions: Vec<Subscription>,
     load_task: Option<Task<()>>,
+    // The project the program list was read for: its default, and the default of a retry.
+    project: Option<kg_domain::ProjectId>,
 }
 
 impl EventEmitter<Start> for Picker {}

@@ -215,7 +215,22 @@ pub(super) fn project_menu(
     project: ProjectId,
     view: WeakEntity<Sidebar>,
 ) -> PopupMenu {
-    menu.item(
+    let settings = {
+        let (project, view) = (project.clone(), view.clone());
+        PopupMenuItem::element(|_, _| {
+            div()
+                .id("project-settings")
+                .ui_observe_as(Facts {
+                    role: Role::MenuItem,
+                    ..Facts::button("Project settings…")
+                })
+                .child("Project settings…")
+        })
+        .on_click(move |_, _, cx| {
+            _ = view.update(cx, |_, cx| cx.emit(Event::ProjectSettings(project.clone())));
+        })
+    };
+    menu.item(settings).item(
         PopupMenuItem::element(|_, _| {
             div()
                 .id("project-remove")

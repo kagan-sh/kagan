@@ -59,6 +59,7 @@ pub(super) enum Event {
     Start(ProjectId),
     Archive(ThreadId),
     ThreadActions(ThreadId),
+    ProjectSettings(ProjectId),
     RemoveProject(ProjectId),
     Reorder {
         id: ProjectId,

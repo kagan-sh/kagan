@@ -60,7 +60,8 @@ impl Kagan {
                 }
                 screen::Center::Work(_)
                 | screen::Center::Archived(_)
-                | screen::Center::Skills(..) => {}
+                | screen::Center::Skills(..)
+                | screen::Center::Project(..) => {}
             }
         }
         ids
@@ -260,6 +261,7 @@ impl Kagan {
             }
             screen::Center::Archived(_) => archived::list(self, window, cx).into_any_element(),
             screen::Center::Skills(open) => open.page.clone().into_any_element(),
+            screen::Center::Project(page) => page.clone().into_any_element(),
             screen::Center::Work(Shown::Thread(view)) => {
                 self.render_thread(view, cx).into_any_element()
             }

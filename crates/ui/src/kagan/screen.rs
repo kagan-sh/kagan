@@ -1,7 +1,8 @@
 #[cfg(test)]
 pub(crate) mod tests;
-use gpui_kit::{App, Context, WeakFocusHandle, Window};
+use gpui_kit::{App, Context, Entity, WeakFocusHandle, Window};
 
+use super::settings;
 use super::{Kagan, Shown, archived, changes::Changes, layout::Panes, review, skills, surface};
 use kg_domain::ThreadId;
 
@@ -30,6 +31,7 @@ pub(super) enum Center {
     Settings,
     Archived(archived::List),
     Skills(skills::Open),
+    Project(Entity<settings::project::Page>),
 }
 
 struct Pending {

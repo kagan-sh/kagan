@@ -62,17 +62,33 @@ impl Picker {
             arguments,
             _subscriptions: subscriptions,
             load_task: None,
+            project: None,
         }
+    }
+
+    pub(crate) fn project(&self) -> Option<kg_domain::ProjectId> {
+        self.project.clone()
     }
 
     // Each opening of the screen starts with the program list, so a custom command stays closed.
     // The search is kept, as the docs say.
-    pub(crate) fn load(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn load(
+        &mut self,
+        project: Option<kg_domain::ProjectId>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.project.clone_from(&project);
         self.set_mode(Mode::Catalog, cx);
         self.state = Programs::Loading;
         self.list
             .update(cx, |list, _| list.delegate_mut().loading = true);
-        let task = Workspace::dispatch(Op::Program(ProgramOp::Discover { project_id: None }), cx);
+        let task = Workspace::dispatch(
+            Op::Program(ProgramOp::Discover {
+                project_id: project.clone(),
+            }),
+            cx,
+        );
         let window = window.window_handle();
         self.load_task = Some(cx.spawn(async move |this, cx| {
             let result = task.await;
@@ -87,7 +103,12 @@ impl Picker {
                 });
             });
             let versions = cx.update(|cx| {
-                Workspace::dispatch(Op::Program(ProgramOp::List { project_id: None }), cx)
+                Workspace::dispatch(
+                    Op::Program(ProgramOp::List {
+                        project_id: project,
+                    }),
+                    cx,
+                )
             });
             if let Ok(OpResult::Programs(programs)) = versions.await {
                 _ = this.update(cx, |this, cx| {
