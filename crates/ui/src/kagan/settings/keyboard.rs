@@ -330,7 +330,7 @@ fn button(
             Button::new(ElementId::Name(
                 format!("button-shortcut-{id}-{name}").into(),
             ))
-            .xsmall()
+            .small()
             .ghost()
             .label(label.to_owned())
             .on_click(cx.listener(move |this, _, window, cx| act(this, window, cx))),
