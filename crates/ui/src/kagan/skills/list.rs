@@ -10,7 +10,7 @@ use kg_domain::{Skill, SkillSource};
 
 use super::{Page, Sort};
 use crate::kagan::controls::{control, note};
-use crate::theme::TypeScale as _;
+use crate::theme::{SpaceStep, TypeScale as _, space};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 use gpui_kit::component::ActiveTheme as _;
@@ -58,8 +58,8 @@ pub(super) fn render(page: &Page, window: &mut Window, cx: &mut Context<Page>) -
         .id("skills-page")
         .size_full()
         .min_h_0()
-        .p_4()
-        .gap_3()
+        .p(gpui_kit::px(space(SpaceStep::Lg, cx)))
+        .gap(gpui_kit::px(space(SpaceStep::Md, cx)))
         .child(header(cx))
         .child(toolbar(page, cx))
         .when_some(page.creating.clone(), |this, input| {
@@ -81,7 +81,7 @@ pub(super) fn render(page: &Page, window: &mut Window, cx: &mut Context<Page>) -
 
 fn header(cx: &Context<Page>) -> impl IntoElement {
     v_flex()
-        .gap_1()
+        .gap(gpui_kit::px(space(SpaceStep::Xs, cx)))
         .child(
             div()
                 .type_small(cx)
@@ -111,7 +111,7 @@ fn toolbar(page: &Page, cx: &mut Context<Page>) -> impl IntoElement {
         Sort::Source => Sort::Name,
     };
     h_flex()
-        .gap_2()
+        .gap(gpui_kit::px(space(SpaceStep::Sm, cx)))
         .child(div().flex_1().min_w_0().child(Input::new(&page.query)))
         .child(control(
             "skills-filter",
@@ -183,7 +183,7 @@ fn create_row(
     cx: &mut Context<Page>,
 ) -> impl IntoElement {
     h_flex()
-        .gap_2()
+        .gap(gpui_kit::px(space(SpaceStep::Sm, cx)))
         .child(div().flex_1().min_w_0().child(Input::new(input)))
         .child(control(
             "skills-create",
@@ -213,9 +213,9 @@ fn row(skill: &Skill, window: &mut Window, cx: &mut Context<Page>) -> impl IntoE
         .track_focus(&focus)
         .focus_visible(|line| line.border_1().border_color(cx.theme().ring))
         .w_full()
-        .px_3()
-        .py_2()
-        .gap_3()
+        .px(gpui_kit::px(space(SpaceStep::Md, cx)))
+        .py(gpui_kit::px(space(SpaceStep::Sm, cx)))
+        .gap(gpui_kit::px(space(SpaceStep::Md, cx)))
         .items_center()
         .cursor_pointer()
         .border_b_1()
@@ -235,10 +235,10 @@ fn row(skill: &Skill, window: &mut Window, cx: &mut Context<Page>) -> impl IntoE
             v_flex()
                 .flex_1()
                 .min_w_0()
-                .gap_0p5()
+                .gap(gpui_kit::px(space(SpaceStep::Xs, cx)))
                 .child(
                     h_flex()
-                        .gap_2()
+                        .gap(gpui_kit::px(space(SpaceStep::Sm, cx)))
                         .child(div().type_body(cx).child(skill.name.clone()))
                         .child(
                             div()
@@ -250,7 +250,7 @@ fn row(skill: &Skill, window: &mut Window, cx: &mut Context<Page>) -> impl IntoE
                             this.child(
                                 div()
                                     .type_caption(cx)
-                                    .px_1()
+                                    .px(gpui_kit::px(space(SpaceStep::Xs, cx)))
                                     .rounded(cx.theme().radius)
                                     .border_1()
                                     .border_color(cx.theme().border)

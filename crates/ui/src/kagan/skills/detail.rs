@@ -13,7 +13,7 @@ use kg_domain::SkillSource;
 use super::list::source_label;
 use super::{Page, Shown};
 use crate::kagan::controls::{control, note};
-use crate::theme::TypeScale as _;
+use crate::theme::{SpaceStep, TypeScale as _, space};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 use gpui_kit::component::scroll::ScrollableElement as _;
@@ -28,8 +28,8 @@ pub(super) fn render(page: &Page, cx: &mut Context<Page>) -> AnyElement {
         .id("skills-detail")
         .size_full()
         .min_h_0()
-        .p_4()
-        .gap_3()
+        .p(gpui_kit::px(space(SpaceStep::Lg, cx)))
+        .gap(gpui_kit::px(space(SpaceStep::Md, cx)))
         .child(breadcrumb(&shown.skill.name, cx))
         .child(title(page, shown, editable, cx))
         .when_some(page.notice.clone(), |this, notice| {
@@ -48,7 +48,7 @@ pub(super) fn render(page: &Page, cx: &mut Context<Page>) -> AnyElement {
 
 fn breadcrumb(name: &str, cx: &Context<Page>) -> impl IntoElement {
     h_flex()
-        .gap_1()
+        .gap(gpui_kit::px(space(SpaceStep::Xs, cx)))
         .type_small(cx)
         .text_color(cx.theme().muted_foreground)
         .child("Skills /")
@@ -72,11 +72,11 @@ fn title(page: &Page, shown: &Shown, editable: bool, cx: &mut Context<Page>) -> 
     h_flex()
         .justify_between()
         .items_start()
-        .gap_3()
+        .gap(gpui_kit::px(space(SpaceStep::Md, cx)))
         .child(
             v_flex()
                 .min_w_0()
-                .gap_1()
+                .gap(gpui_kit::px(space(SpaceStep::Xs, cx)))
                 .child(div().type_title(cx).child(shown.skill.name.clone()))
                 .child(
                     div()
@@ -93,7 +93,7 @@ fn title(page: &Page, shown: &Shown, editable: bool, cx: &mut Context<Page>) -> 
 fn actions(page: &Page, shown: &Shown, editable: bool, cx: &mut Context<Page>) -> AnyElement {
     if page.confirming {
         return h_flex()
-            .gap_2()
+            .gap(gpui_kit::px(space(SpaceStep::Sm, cx)))
             .items_center()
             .child(note(
                 "skills-confirm-text",
@@ -124,7 +124,9 @@ fn actions(page: &Page, shown: &Shown, editable: bool, cx: &mut Context<Page>) -
             ))
             .into_any_element();
     }
-    let mut row = h_flex().gap_2().items_center();
+    let mut row = h_flex()
+        .gap(gpui_kit::px(space(SpaceStep::Sm, cx)))
+        .items_center();
     if editable {
         row = row
             .child(control(
@@ -187,7 +189,7 @@ fn editor_view(
     cx: &mut Context<Page>,
 ) -> impl IntoElement {
     v_flex()
-        .gap_2()
+        .gap(gpui_kit::px(space(SpaceStep::Sm, cx)))
         .child(
             Textarea::new(editor)
                 .text_size(gpui_kit::px(crate::theme::type_body(cx)))
@@ -195,7 +197,7 @@ fn editor_view(
         )
         .child(
             h_flex()
-                .gap_2()
+                .gap(gpui_kit::px(space(SpaceStep::Sm, cx)))
                 .child(control(
                     "skills-save",
                     Facts::button("Save skill"),
@@ -230,7 +232,7 @@ fn frontmatter(shown: &Shown, cx: &Context<Page>) -> impl IntoElement {
         rows.push(("argument-hint", hint));
     }
     v_flex()
-        .gap_1()
+        .gap(gpui_kit::px(space(SpaceStep::Xs, cx)))
         .child(div().type_small(cx).child("SKILL.md"))
         .child(
             v_flex()
@@ -239,12 +241,12 @@ fn frontmatter(shown: &Shown, cx: &Context<Page>) -> impl IntoElement {
                 .rounded(cx.theme().radius)
                 .children(rows.into_iter().map(|(key, value)| {
                     h_flex()
-                        .gap_3()
-                        .px_3()
-                        .py_1()
+                        .gap(gpui_kit::px(space(SpaceStep::Md, cx)))
+                        .px(gpui_kit::px(space(SpaceStep::Md, cx)))
+                        .py(gpui_kit::px(space(SpaceStep::Xs, cx)))
                         .child(
                             div()
-                                .w(gpui_kit::px(140.))
+                                .w(gpui_kit::px(space(SpaceStep::Xl, cx) * 6.))
                                 .type_small(cx)
                                 .text_color(cx.theme().muted_foreground)
                                 .child(key),
@@ -268,13 +270,14 @@ fn frontmatter(shown: &Shown, cx: &Context<Page>) -> impl IntoElement {
 }
 
 // The instructions, rendered as Markdown in a bordered box that scrolls.
+const BODY_MAX_HEIGHT: f32 = 420.;
 fn body(shown: &Shown, cx: &Context<Page>) -> impl IntoElement {
     div()
         .overflow_y_scrollbar()
         .id("skills-body")
         .w_full()
-        .max_h(gpui_kit::px(420.))
-        .p_3()
+        .max_h(gpui_kit::px(BODY_MAX_HEIGHT))
+        .p(gpui_kit::px(space(SpaceStep::Md, cx)))
         .border_1()
         .border_color(cx.theme().border)
         .rounded(cx.theme().radius)
@@ -296,7 +299,7 @@ fn files(shown: &Shown, cx: &Context<Page>) -> impl IntoElement {
         })
         .collect();
     v_flex()
-        .gap_1()
+        .gap(gpui_kit::px(space(SpaceStep::Xs, cx)))
         .child(div().type_small(cx).child("Files"))
         .children(names.into_iter().enumerate().map(|(index, name)| {
             div()
