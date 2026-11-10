@@ -158,6 +158,33 @@ fn a_loaded_skill_resolves_its_files_beside_skill_md() {
 }
 
 #[test]
+fn a_split_bundled_skill_has_a_short_entry_and_names_only_files_it_ships() {
+    for &(name, files) in super::BUNDLED {
+        let skill = files
+            .iter()
+            .find(|(path, _)| *path == "SKILL.md")
+            .unwrap()
+            .1;
+        if matches!(name, "kg-plugin-authoring" | "kg-plugin-port") {
+            assert!(
+                skill.len() < 4096,
+                "{name} SKILL.md is {} bytes",
+                skill.len()
+            );
+        }
+        for word in skill.split(|c: char| c.is_whitespace() || "`(),;:\"".contains(c)) {
+            let word = word.trim_end_matches('.');
+            if word.starts_with("references/") {
+                assert!(
+                    files.iter().any(|(path, _)| *path == word),
+                    "{name} names {word}, which it does not ship"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn a_loaded_skill_without_a_path_has_no_files() {
     let loaded = loaded("kg-cli", None, vec![PathBuf::from("reference.md")]);
     assert!(loaded.paths().is_empty());

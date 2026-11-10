@@ -53,6 +53,29 @@ async fn a_bundled_skill_lists_files_that_exist_on_disk(cx: &mut TestAppContext)
 }
 
 #[gpui_kit::test]
+async fn a_split_skill_lists_the_reference_files_it_names(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Files(files) = op(
+        Op::Skill(SkillOp::Files {
+            name: "kg-plugin-port".into(),
+            project_id: Some(fixture.project.clone()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("files")
+    };
+    assert!(
+        files
+            .iter()
+            .any(|file| file.ends_with("references/mapping.md")),
+        "{files:?}"
+    );
+    assert!(files.iter().all(|file| file.exists()), "{files:?}");
+}
+
+#[gpui_kit::test]
 async fn bb_folders_are_not_read(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     write_skill(&fixture.dir.path().join(".bb/skills"), "bb-project");

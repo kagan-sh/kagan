@@ -17,17 +17,65 @@ const BUNDLED: &[(&str, &[(&str, &str)])] = &[
     ),
     (
         "kg-plugin-authoring",
-        &[(
-            "SKILL.md",
-            include_str!("../../skills/kg-plugin-authoring/SKILL.md"),
-        )],
+        &[
+            (
+                "SKILL.md",
+                include_str!("../../skills/kg-plugin-authoring/SKILL.md"),
+            ),
+            (
+                "references/check.md",
+                include_str!("../../skills/kg-plugin-authoring/references/check.md"),
+            ),
+            (
+                "references/host-and-jobs.md",
+                include_str!("../../skills/kg-plugin-authoring/references/host-and-jobs.md"),
+            ),
+            (
+                "references/manifest.md",
+                include_str!("../../skills/kg-plugin-authoring/references/manifest.md"),
+            ),
+            (
+                "references/share.md",
+                include_str!("../../skills/kg-plugin-authoring/references/share.md"),
+            ),
+            (
+                "references/ui-controls.md",
+                include_str!("../../skills/kg-plugin-authoring/references/ui-controls.md"),
+            ),
+        ],
     ),
     (
         "kg-plugin-port",
-        &[(
-            "SKILL.md",
-            include_str!("../../skills/kg-plugin-port/SKILL.md"),
-        )],
+        &[
+            (
+                "SKILL.md",
+                include_str!("../../skills/kg-plugin-port/SKILL.md"),
+            ),
+            (
+                "references/checklist.md",
+                include_str!("../../skills/kg-plugin-port/references/checklist.md"),
+            ),
+            (
+                "references/events.md",
+                include_str!("../../skills/kg-plugin-port/references/events.md"),
+            ),
+            (
+                "references/job-loop.md",
+                include_str!("../../skills/kg-plugin-port/references/job-loop.md"),
+            ),
+            (
+                "references/mapping.md",
+                include_str!("../../skills/kg-plugin-port/references/mapping.md"),
+            ),
+            (
+                "references/powers.md",
+                include_str!("../../skills/kg-plugin-port/references/powers.md"),
+            ),
+            (
+                "references/themes-and-right-panels.md",
+                include_str!("../../skills/kg-plugin-port/references/themes-and-right-panels.md"),
+            ),
+        ],
     ),
     (
         "kg-skill-creator",
