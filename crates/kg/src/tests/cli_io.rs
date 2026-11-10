@@ -1,4 +1,7 @@
-use kg_domain::{ConfigOp, IndexOp, Op, OpError, PluginId, PluginOp, TEXT_MAX, ThreadId, ThreadOp};
+use kg_domain::{
+    ConfigOp, EnvOp, IndexOp, Op, OpError, PluginId, PluginOp, ProjectId, TEXT_MAX, ThreadId,
+    ThreadOp,
+};
 use serde_json::json;
 
 use clap::Parser;
@@ -328,5 +331,46 @@ fn install_sends_a_bare_name_to_the_indexes_and_a_folder_as_its_path() {
         source(&["plugin", "search"]),
         String::new(),
         "search with no text lists every plugin"
+    );
+}
+
+#[test]
+fn an_env_value_is_read_from_stdin_and_never_taken_from_the_command_line() {
+    use crate::cli::take_value_with;
+    let typed = parse(&["env", "set", "API_KEY", "--project", "prj_1"]);
+    let project = Some(ProjectId("prj_1".into()));
+    assert_eq!(
+        typed,
+        Op::Env(EnvOp::Set {
+            name: "API_KEY".into(),
+            project_id: project.clone(),
+            value: None,
+        })
+    );
+    let read = take_value_with(typed, |name| {
+        assert_eq!(name, "API_KEY");
+        Ok("sk-1\n".into())
+    });
+    assert_eq!(
+        read.unwrap(),
+        Op::Env(EnvOp::Set {
+            name: "API_KEY".into(),
+            project_id: project,
+            value: Some("sk-1".into()),
+        })
+    );
+    let empty = take_value_with(parse(&["env", "set", "API_KEY"]), |_| Ok("\n".into()));
+    assert!(empty.is_err());
+    assert!(Cli::try_parse_from(["kg", "env", "set", "API_KEY", "sk-1"]).is_err());
+    assert_eq!(
+        parse(&["env", "list"]),
+        Op::Env(EnvOp::List { project_id: None })
+    );
+    assert_eq!(
+        parse(&["env", "remove", "API_KEY"]),
+        Op::Env(EnvOp::Remove {
+            name: "API_KEY".into(),
+            project_id: None,
+        })
     );
 }
