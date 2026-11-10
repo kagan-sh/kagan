@@ -40,7 +40,6 @@ exclude_re = [
     'ui/src/components/webview/mod\.rs:228:12: delete ! in place',
     'ui/src/components/webview/mod\.rs:231:43: replace < with (<=|==|>) in place',
     # These need a live WebView, which needs a display, so CI's runner cannot run them.
-    'ui/src/components/webview/pages\.rs:76:5: replace sync_pages',
     'ui/src/web_page\.rs:\d+:\d+: replace open_windows',
     'ui/src/web_page\.rs:\d+:\d+: replace restrain',
     'ui/src/web_page\.rs:\d+:\d+: replace WebPage::eval',
