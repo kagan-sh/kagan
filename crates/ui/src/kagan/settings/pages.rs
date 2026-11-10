@@ -36,6 +36,7 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     appearance.rows.push(terminal_size(kagan));
     let mut out = vec![
         within(general(agent, notify, confirm_archive), Category::General),
+        within(setup_guide_group(cx), Category::General),
         within(appearance, Category::Appearance),
     ];
     out.extend(
@@ -70,6 +71,28 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
         }
     }
     headed(out)
+}
+
+fn setup_guide_group(cx: &mut Context<Kagan>) -> Group {
+    group(
+        "setup-guide",
+        "Setup guide",
+        vec![row(
+            "setup-guide",
+            "Setup guide",
+            "Show the first steps again on the empty window.",
+            control(
+                "setup-guide-show",
+                Facts::button("Show setup guide"),
+                Button::new("setup-guide-show-button")
+                    .small()
+                    .outline()
+                    .label("Show setup guide")
+                    .on_click(cx.listener(|this, _, _, cx| this.set_setup_guide(true, cx))),
+            )
+            .into_any_element(),
+        )],
+    )
 }
 
 fn set_flag(key: &str, on: bool, cx: &mut App) {

@@ -408,7 +408,7 @@ impl Kagan {
             .into_any_element()
     }
 
-    pub(super) fn render_welcome(cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_welcome(&self, cx: &mut Context<Self>) -> AnyElement {
         v_flex()
             .flex_1()
             .items_center()
@@ -457,6 +457,7 @@ impl Kagan {
                             .on_click(dispatch(AddProject)),
                     )),
             )
+            .children(super::setup_guide::panel(self, cx))
             .into_any_element()
     }
 

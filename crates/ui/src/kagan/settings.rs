@@ -23,7 +23,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, Subscription, Window, actions, div, px, rems,
 };
 use kg_core::{Approval, Workspace};
-use kg_domain::PluginId;
+use kg_domain::{Op, OpResult, PluginId, ProgramOp};
 use kg_plugins::PluginHost;
 
 use super::question;
@@ -77,6 +77,8 @@ pub(super) struct Prefs {
     pub(super) notify: bool,
     pub(super) plugin_status: bool,
     pub(super) update_check: bool,
+    pub(super) setup_guide: bool,
+    pub(super) agent_ready: Option<bool>,
     pub(super) loaded: bool,
 }
 
@@ -127,6 +129,8 @@ pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
         notify: true,
         plugin_status: true,
         update_check: false,
+        setup_guide: true,
+        agent_ready: None,
         loaded: false,
     })
 }
@@ -258,8 +262,26 @@ impl Kagan {
     pub(super) fn load_settings(&mut self, cx: &mut Context<Self>) {
         Self::load_layout(cx);
         self.load_prefs(cx);
+        self.load_agent_ready(cx);
         self.load_slots(cx);
         self.load_terminal_size(cx);
+    }
+
+    // Reads the agents on the PATH, without starting any of them.
+    pub(super) fn load_agent_ready(&self, cx: &mut Context<Self>) {
+        let prefs = self.prefs.clone();
+        cx.spawn(async move |_, cx| {
+            let listed = cx.update(|cx| Workspace::dispatch(Op::Program(ProgramOp::Discover), cx));
+            let agent_ready = match listed.await {
+                Ok(OpResult::Programs(list)) => Some(list.agent().is_some()),
+                _ => None,
+            };
+            prefs.update(cx, |prefs, cx| {
+                prefs.agent_ready = agent_ready;
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     pub(super) fn load_prefs(&self, cx: &mut Context<Self>) {
@@ -268,6 +290,7 @@ impl Kagan {
         let plugin_status = super::layout::read::<bool>(kg_domain::prefs::PLUGIN_STATUS, cx);
         let update = super::layout::read::<bool>(kg_domain::prefs::UPDATE_CHECK, cx);
         let confirm = super::layout::read::<bool>(kg_domain::prefs::CONFIRM_ARCHIVE, cx);
+        let setup = super::layout::read::<bool>(kg_domain::prefs::SETUP_GUIDE, cx);
         let prefs = self.prefs.clone();
         cx.spawn(async move |_, cx| {
             let on = agent.await.ok().flatten().unwrap_or(true);
@@ -275,12 +298,14 @@ impl Kagan {
             let status = plugin_status.await.ok().flatten().unwrap_or(true);
             let update_check = update.await.ok().flatten().unwrap_or(false);
             let confirm_archive = confirm.await.ok().flatten().unwrap_or(false);
+            let setup_guide = setup.await.ok().flatten().unwrap_or(true);
             prefs.update(cx, |prefs, cx| {
                 prefs.confirm_archive = confirm_archive;
                 prefs.agent_integration = on;
                 prefs.notify = notifications;
                 prefs.plugin_status = status;
                 prefs.update_check = update_check;
+                prefs.setup_guide = setup_guide;
                 prefs.loaded = true;
                 cx.notify();
             });

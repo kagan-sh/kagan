@@ -33,6 +33,7 @@ mod review;
 mod right;
 mod screen;
 mod settings;
+mod setup_guide;
 mod shown;
 mod sidebar;
 mod skills;
