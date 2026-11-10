@@ -6,7 +6,7 @@ use kg_domain::{Op, PluginId, PluginOp};
 use kg_plugins::PluginHost;
 
 use super::{install_plugins, run_op, saved, tab_to};
-use crate::tests::kagan::{click, open, open_with_plugins_then, present, selected_of};
+use crate::tests::kagan::{click, open, open_with_plugins_then, present, selected_of, shows};
 
 #[gpui_kit::test]
 fn picking_a_section_shows_only_its_rows(cx: &mut TestAppContext) {
@@ -172,4 +172,33 @@ fn a_plugin_section_comes_back_after_its_plugin_reloads(cx: &mut TestAppContext)
     );
     cx.run_until_parked();
     assert!(present(cx, window, "setting-row-dev.test.prefs/sounds"));
+}
+
+#[gpui_kit::test]
+fn a_result_in_a_lower_group_scrolls_into_view(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-keyboard");
+    assert!(!shows(cx, window, "setting-row-FindInDiff"));
+    click(cx, window, "settings-search");
+    cx.simulate_input(window, "find in diff");
+    cx.run_until_parked();
+    click(cx, window, "settings-result-shortcuts-review-0");
+    cx.run_until_parked();
+    assert!(shows(cx, window, "setting-row-FindInDiff"));
+}
+
+#[gpui_kit::test]
+fn the_chosen_section_is_kept_when_settings_reopens(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-appearance");
+    cx.simulate_keystrokes(window, "escape");
+    cx.run_until_parked();
+    click(cx, window, "settings-gear");
+    cx.run_until_parked();
+    assert_eq!(
+        selected_of(cx, window, "settings-section-appearance"),
+        Some(true)
+    );
 }
