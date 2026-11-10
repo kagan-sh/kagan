@@ -1339,21 +1339,21 @@ async fn a_rename_for_a_requester_locks_the_title_after_one(cx: &mut TestAppCont
         panic!("run")
     };
     let rename = |title: &str| {
-        let (_keep, gone) = async_channel::bounded::<()>(1);
+        let (keep, gone) = async_channel::bounded::<()>(1);
         let requester = crate::Requester::new(gone);
         let op = Op::Thread(ThreadOp::Rename {
             id: started.id.clone(),
             title: title.into(),
         });
-        (op, requester)
+        (op, requester, keep)
     };
-    let (op, requester) = rename("Named");
+    let (op, requester, _keep) = rename("Named");
     let named = cx
         .update(|cx| Workspace::dispatch_for(op, Some(requester), cx))
         .await
         .unwrap();
     assert!(matches!(named, OpResult::Thread(ref thread) if thread.title == "Named"));
-    let (op, requester) = rename("Other");
+    let (op, requester, _keep) = rename("Other");
     let kept = cx
         .update(|cx| Workspace::dispatch_for(op, Some(requester), cx))
         .await
