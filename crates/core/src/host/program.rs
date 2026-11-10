@@ -7,7 +7,7 @@ use gpui_kit::{AsyncApp, WeakEntity};
 use crate::Workspace;
 use kg_domain::{
     KNOWN_PROGRAMS, LISTED_WHEN_MISSING, OpError, OpResult, Program, ProgramList, ProgramSource,
-    Visibility, split_program,
+    ProjectId, Visibility, split_program,
 };
 use kg_process::{find_program, pathext, user_path};
 
@@ -22,6 +22,7 @@ pub(crate) async fn list(
     this: &WeakEntity<Workspace>,
     database: &Database,
     include_versions: bool,
+    project_id: Option<ProjectId>,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     let environment = program_environment_of(this, cx);
@@ -33,6 +34,13 @@ pub(crate) async fn list(
             Path::new(&environment.shell).display()
         )));
     }
+    let project_program = match project_id {
+        Some(id) => database
+            .call(move |store| store.project(&id))
+            .await?
+            .and_then(|project| project.program),
+        None => None,
+    };
     let recent = database
         .call(|store| store.all_threads())
         .await?
@@ -54,6 +62,7 @@ pub(crate) async fn list(
                 pathext.as_deref(),
                 shell.as_deref(),
                 &recent,
+                project_program.as_deref(),
             );
             if include_versions {
                 versions(&mut list);
@@ -65,12 +74,14 @@ pub(crate) async fn list(
 }
 
 /// The programs found with `path` and `pathext`, the `shell`, and the `recent` commands, newest
-/// first. Versions are filled in separately, so this reads nothing but the filesystem.
+/// first. The default is `project_program` when it is installed, else the first installed recent
+/// command. Versions are filled in separately, so this reads nothing but the filesystem.
 pub(crate) fn discover(
     path: Option<&OsStr>,
     pathext: Option<&OsStr>,
     shell: Option<&OsStr>,
     recent: &[String],
+    project_program: Option<&str>,
 ) -> ProgramList {
     let mut programs = Vec::new();
     for (command, label) in KNOWN_PROGRAMS {
@@ -117,12 +128,13 @@ pub(crate) fn discover(
             version: None,
         });
     }
-    let default = recent
-        .iter()
+    let default = project_program
+        .into_iter()
+        .chain(recent.iter().map(String::as_str))
         .find_map(|command| {
             programs
                 .iter()
-                .find(|program| &program.command == command && program.installed())
+                .find(|program| program.command == command && program.installed())
         })
         .or_else(|| {
             programs

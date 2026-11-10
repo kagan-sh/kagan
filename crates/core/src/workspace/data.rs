@@ -24,6 +24,7 @@ fn ensure_personal(data_dir: &Path, store: &Store) -> Result<()> {
                     .map_err(|error| OpError::Failed(format!("{}: {error}", personal.display())))?,
                 git_remote_url: None,
                 sort: 0,
+                program: None,
             })
             .map_err(closed)?;
     }
