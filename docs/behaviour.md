@@ -364,13 +364,13 @@ A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matche
 ### `Update`
 
 - **Allowed when**: the skill is a user or project skill [decision 203].
-- **Changes**: replaces the whole `SKILL.md` with the text given, frontmatter included. The file is written as-is; there is no check that it still matches what was read [decision 203].
-- **Refused when**: an unknown name — `not-found` [op/]. A bundled or plugin skill — `invalid`; or text whose frontmatter does not parse, or names another skill — `invalid` [decision 203].
+- **Changes**: replaces the whole `SKILL.md` with the text given, frontmatter included. The file is written as-is, unless it has changed since the window read it: then nothing is written and the call is refused [decision 206]. `kg skill update` does not send that check [decision 206].
+- **Refused when**: an unknown name — `not-found` [op/]. A bundled or plugin skill — `invalid`; or text whose frontmatter does not parse, or names another skill — `invalid` [decision 203]; or the file changed since the window read it — `invalid` [decision 206].
 
 ### `Remove`
 
 - **Allowed when**: the skill is a user or project skill [book:skills] [docs:self-extend].
-- **Changes**: deletes that skill folder [book:skills].
+- **Changes**: deletes that skill folder [book:skills]. A folder that is a link is not listed, so Remove does not find it [decision 206].
 - **Refused when**: an unknown name — `not-found` [op/]. A bundled or plugin skill — `invalid` [book:skills] [op/] [person 2026-10-08] [decision 203].
 
 ## Section
