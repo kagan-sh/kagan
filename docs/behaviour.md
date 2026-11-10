@@ -328,7 +328,7 @@ Not in `kg plugin` [book:cli]. It runs a command the plugin declares under `cli`
 
 ## Skill
 
-A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matches the folder, a `description`, then the instructions [docs:self-extend] [book:skills]. Sources, lowest first: bundled, plugin, user (`<dataDir>/skills`), project (`<project>/.kagan/skills`) [docs:self-extend]. A higher source overrides a lower one with the same name [decision 24]. Two skills with the same name in one source are both dropped, and `List` shows the error [decision 24]. A user or project skill whose name starts with `kg-` is dropped with an error; that prefix is reserved for bundled and plugin skills [decision 158]. A plugin's skills are the folders its record holds: set on install, update, reload, and at each app start, not read from `kagan.json` on each list. Every start with agent integration writes the resolved kagan skills (bundled, plugin, user, project) to an immutable per-content catalog, and exposes it natively to the known programs. `List`, `Show` and `Files` read the four kagan sources [decision 203].
+A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matches the folder, a `description`, then the instructions [docs:self-extend] [book:skills]. Sources, lowest first: bundled, plugin, user (`<dataDir>/skills`), project (`<project>/.kagan/skills`) [docs:self-extend]. A higher source overrides a lower one with the same name [decision 24]. Two skills with the same name in one source are both dropped, and `List` shows the error [decision 24]. A user or project skill whose name starts with `kg-` is dropped with an error; that prefix is reserved for bundled and plugin skills [decision 158]. A plugin's skills are the folders its record holds: set on install, update, reload, and at each app start, not read from `kagan.json` on each list. Every start with agent integration writes the resolved kagan skills (bundled, plugin, user, project) to an immutable per-content catalog, and exposes it natively to the known programs. `List`, `Show` and `Files` read the four kagan sources [decision 203]. When a running plugin declares a `kg` command, `kg-plugin-commands` is generated from the running plugins on each read and listed as bundled; it is absent otherwise [decision 209].
 
 ### `List`
 
@@ -343,7 +343,7 @@ A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matche
 
 ### `Files`
 
-- **Shows**: the skill's file paths; bundled skills have none [docs:self-extend] [book:skills].
+- **Shows**: the skill's file paths. A bundled skill's files are real files under `<dataDir>/agent/bundled/<hash>` [decision 208] [docs:self-extend] [book:skills].
 - **Refused when**: an unknown name — `not-found` [op/].
 
 ### `New`
@@ -688,7 +688,7 @@ Finds a newer kagan on the GitHub releases page (decision 113). Installing is no
 
 ### `Guide`
 
-- **Shows**: the concepts, and one chapter when named [book:cli] [op/]. The text ships in the binary [docs:self-extend]. Chapters are threads, projects, environments, plugins, skills, ui, and json [op/] [book:cli].
+- **Shows**: the concepts, and one chapter when named [book:cli] [op/]. The text ships in the binary [docs:self-extend]. Chapters are threads, projects, environments, plugins, skills, ui, customize, and json [op/] [book:cli]. `customize` names where each look, key, preference, agent rule and skill folder lives; the bundled `kg-customize` skill points to it [decision 210].
 - **Refused when**: an unknown chapter — `invalid` [op/].
 
 ### `Open`

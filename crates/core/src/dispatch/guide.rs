@@ -4,7 +4,7 @@ pub(crate) fn read(chapter: Option<GuideChapter>) -> OpResult {
     let text = match chapter {
         None => {
             return OpResult::Text(format!(
-                "{}\n\nChapters: threads, projects, environments, plugins, skills, ui, json\nRead one with kg guide <chapter>.\n\n{}",
+                "{}\n\nChapters: threads, projects, environments, plugins, skills, ui, customize, json\nRead one with kg guide <chapter>.\n\n{}",
                 include_str!("../../../../docs/CONTEXT.md"),
                 include_str!("../guide-map.md")
             ));
@@ -30,6 +30,9 @@ pub(crate) fn read(chapter: Option<GuideChapter>) -> OpResult {
         }
         Some(GuideChapter::Ui) => {
             return OpResult::Text(include_str!("../../../../docs/ui-driver.md").into());
+        }
+        Some(GuideChapter::Customize) => {
+            return OpResult::Text(include_str!("../../../../docs/customize.md").into());
         }
         Some(GuideChapter::Json) => {
             "Every command accepts --json. Results are the serialized OpResult for the running version, and every Op request uses kebab-case names and camelCase fields. Failures return {\"error\":{\"kind\":\"not-found|invalid|failed|setup-changed\",\"message\":\"...\"}} and a nonzero exit code. `hint` may be present. `kg thread paste --file` reads the file in the client and sends the text; a payload that still carries a path is invalid. kg status --json returns {\"status\":{\"threadId\",\"projectId\",\"environmentId\",\"cli\",\"dataDir\",\"warnings\"}}. cli is the absolute path of the kg that is serving this command. Leave KG_DATA_DIR unset to reach the open app. A KG_DATA_DIR without KG_SOCKET uses the socket for that folder, not the open app. In a thread KG_SOCKET is the open app's socket already; outside one, leave it unset so you reach the open app. If the socket does not answer, the command starts a second headless app, and you should stop. On macOS the open app's socket is ~/Library/Application Support/kagan/kg.sock when KG_DATA_DIR is unset, and the binary in /Applications is /Applications/kagan.app/Contents/MacOS/kg. That macOS build is unsigned and not notarized unless the Apple signing secrets are set. It does not add itself to PATH. A kg mcp process is not the app. --help is generated from the same typed operations that the app dispatches."

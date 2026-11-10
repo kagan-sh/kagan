@@ -252,6 +252,7 @@ pub(crate) async fn forward(
     match (host, request) {
         (Some(host), request) => cx.update(|cx| host(request, cx)).await,
         (None, PluginRequest::Warnings) => Ok(OpResult::Warnings(Vec::new())),
+        (None, PluginRequest::Commands) => Ok(OpResult::PluginCommands(Vec::new())),
         (None, PluginRequest::Tools { .. }) => Ok(OpResult::Tools {
             instructions: None,
             tools: Vec::new(),

@@ -9,27 +9,101 @@ use crate::Workspace;
 use crate::host::database::Result;
 use crate::workspace::{WorkspaceEvent, closed, missing};
 
-const BUNDLED: &[(&str, &str)] = &[
-    ("kg-cli", include_str!("../../skills/kg-cli.md")),
+const BUNDLED: &[(&str, &[(&str, &str)])] = &[
+    (
+        "kg-cli",
+        &[("SKILL.md", include_str!("../../skills/kg-cli/SKILL.md"))],
+    ),
+    (
+        "kg-customize",
+        &[(
+            "SKILL.md",
+            include_str!("../../skills/kg-customize/SKILL.md"),
+        )],
+    ),
     (
         "kg-plugin-authoring",
-        include_str!("../../skills/kg-plugin-authoring.md"),
+        &[
+            (
+                "SKILL.md",
+                include_str!("../../skills/kg-plugin-authoring/SKILL.md"),
+            ),
+            (
+                "references/check.md",
+                include_str!("../../skills/kg-plugin-authoring/references/check.md"),
+            ),
+            (
+                "references/host-and-jobs.md",
+                include_str!("../../skills/kg-plugin-authoring/references/host-and-jobs.md"),
+            ),
+            (
+                "references/manifest.md",
+                include_str!("../../skills/kg-plugin-authoring/references/manifest.md"),
+            ),
+            (
+                "references/share.md",
+                include_str!("../../skills/kg-plugin-authoring/references/share.md"),
+            ),
+            (
+                "references/ui-controls.md",
+                include_str!("../../skills/kg-plugin-authoring/references/ui-controls.md"),
+            ),
+        ],
     ),
     (
         "kg-plugin-port",
-        include_str!("../../skills/kg-plugin-port.md"),
+        &[
+            (
+                "SKILL.md",
+                include_str!("../../skills/kg-plugin-port/SKILL.md"),
+            ),
+            (
+                "references/checklist.md",
+                include_str!("../../skills/kg-plugin-port/references/checklist.md"),
+            ),
+            (
+                "references/events.md",
+                include_str!("../../skills/kg-plugin-port/references/events.md"),
+            ),
+            (
+                "references/job-loop.md",
+                include_str!("../../skills/kg-plugin-port/references/job-loop.md"),
+            ),
+            (
+                "references/mapping.md",
+                include_str!("../../skills/kg-plugin-port/references/mapping.md"),
+            ),
+            (
+                "references/powers.md",
+                include_str!("../../skills/kg-plugin-port/references/powers.md"),
+            ),
+            (
+                "references/themes-and-right-panels.md",
+                include_str!("../../skills/kg-plugin-port/references/themes-and-right-panels.md"),
+            ),
+        ],
     ),
     (
         "kg-skill-creator",
-        include_str!("../../skills/kg-skill-creator.md"),
+        &[(
+            "SKILL.md",
+            include_str!("../../skills/kg-skill-creator/SKILL.md"),
+        )],
     ),
-    ("kg-threads", include_str!("../../skills/kg-threads.md")),
-    ("kg-ui", include_str!("../../skills/kg-ui.md")),
+    (
+        "kg-threads",
+        &[("SKILL.md", include_str!("../../skills/kg-threads/SKILL.md"))],
+    ),
+    (
+        "kg-ui",
+        &[("SKILL.md", include_str!("../../skills/kg-ui/SKILL.md"))],
+    ),
 ];
 
 mod catalog;
+mod plugin_commands;
 
-use catalog::{Catalog, Loaded, read, shared, valid_name, write};
+use catalog::{Catalog, Loaded, materialize, read, shared, valid_name, write};
 
 pub(crate) async fn catalog(
     this: &WeakEntity<Workspace>,
@@ -56,8 +130,26 @@ pub(crate) async fn catalog(
         })
         .map_err(closed)??;
     let plugins = database.call(|store| store.plugins()).await?;
+    let OpResult::PluginCommands(commands) =
+        crate::dispatch::forward(this, crate::PluginRequest::Commands, cx).await?
+    else {
+        return Err(OpError::Failed("plugin host returned no commands".into()));
+    };
+    let generated = plugin_commands::skill(&commands);
     cx.background_spawn(async move {
-        let mut catalog = shared(plugins)?;
+        let mut files: Vec<(&str, &str, &str)> = BUNDLED
+            .iter()
+            .flat_map(|&(name, entries)| {
+                entries.iter().map(move |&(path, text)| (name, path, text))
+            })
+            .collect();
+        let mut names: Vec<&str> = BUNDLED.iter().map(|&(name, _)| name).collect();
+        if let Some(text) = &generated {
+            files.push((plugin_commands::NAME, "SKILL.md", text));
+            names.push(plugin_commands::NAME);
+        }
+        let root = materialize(&data_dir, &files)?;
+        let mut catalog = shared(plugins, &root, &names)?;
         catalog.folder(&data_dir.join("skills"), SkillSource::User);
         if let Some(project) = project {
             catalog.folder(&project.join(".kagan/skills"), SkillSource::Project);

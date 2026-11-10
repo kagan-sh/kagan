@@ -100,6 +100,8 @@ type Envelope = (Request, Sender<Result<OpResult>>);
 /// The operations core hands to the plugin host.
 pub enum PluginRequest {
     Warnings,
+    /// The `kg` commands of every running plugin, for the generated plugin-commands skill.
+    Commands,
     Tools {
         thread_id: ThreadId,
     },

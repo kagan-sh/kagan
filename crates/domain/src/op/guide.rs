@@ -10,5 +10,6 @@ pub enum GuideChapter {
     Plugins,
     Skills,
     Ui,
+    Customize,
     Json,
 }

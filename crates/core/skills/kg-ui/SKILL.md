@@ -1,6 +1,6 @@
 ---
 name: kg-ui
-description: Drive the kagan window with kg ui for QA and automation without OS input.
+description: Drive the kagan window with kg ui to test it, click through it, or take screenshots, without OS input. Use when the person asks to screenshot, click, type into, or test the kagan window, or to QA the app. It cannot approve plugin powers.
 ---
 
 Read `kg guide ui`. Use `kg ui snapshot` to find element ids, then `click`, `type`, `key`, `scroll`, and `drag` (`--hold`, then `drop` or `key escape`). Use `kg ui screenshot` for PNG files. Do not use cliclick, osascript, or synthetic clicks on Approve for plugin powers. Combine with other Ops (`thread`, `theme`, `diff`, …).
