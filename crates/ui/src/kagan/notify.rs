@@ -53,7 +53,7 @@ pub(super) fn watch(cx: &mut App) {
     .detach();
 }
 
-// Clicking a thread opens it, so the notice for it is cleared too.
+// Opening a thread clears its notice.
 pub(super) fn clear(id: &ThreadId, cx: &App) {
     cx.dismiss_system_notification(&tag(id));
 }
