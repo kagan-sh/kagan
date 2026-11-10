@@ -21,5 +21,7 @@ fn a_program_environment_names_its_path_and_shell() {
 
 #[test]
 fn the_home_folder_is_the_home_variable() {
-    assert_eq!(user_home(), std::env::var_os("HOME").map(PathBuf::from));
+    // SAFETY: nextest runs each test in its own process, so no other thread reads HOME here.
+    unsafe { std::env::set_var("HOME", "/kg/test/home") };
+    assert_eq!(user_home(), Some(PathBuf::from("/kg/test/home")));
 }
