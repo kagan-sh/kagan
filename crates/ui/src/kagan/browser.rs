@@ -314,6 +314,24 @@ impl Kagan {
             .into_any_element()
     }
 
+    // A terminal link opened in the Browser tab. A link that is not a web address, or a page that
+    // cannot open, goes to the system browser.
+    pub(crate) fn open_link(&mut self, link: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let LinkTarget::Tab(url) = link_target(link, true) else {
+            cx.open_url(link);
+            return;
+        };
+        #[cfg(test)]
+        TAB_OPENS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let Ok(page) = self.browser.page_for(&url, window, cx) else {
+            cx.open_url(link);
+            return;
+        };
+        self.browser.page = Some(page.clone());
+        self.open_browser(window, cx);
+        self.follow_address(page, cx);
+        cx.notify();
+    }
     fn open_address(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let typed = self.browser.address.read(cx).value().to_string();
         match page_url(&typed) {
@@ -339,3 +357,62 @@ impl Kagan {
 
 #[cfg(test)]
 mod tests;
+
+/// How many links were sent to the Browser tab; the tests read it to tell the switch apart.
+#[cfg(test)]
+pub(crate) static TAB_OPENS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum LinkTarget {
+    System,
+    Tab(url::Url),
+}
+
+pub(crate) fn link_target(link: &str, in_tab: bool) -> LinkTarget {
+    if !in_tab {
+        return LinkTarget::System;
+    }
+    url::Url::parse(link)
+        .ok()
+        .filter(|url| matches!(url.scheme(), "http" | "https"))
+        .map_or(LinkTarget::System, LinkTarget::Tab)
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::{LinkTarget, link_target};
+
+    #[test]
+    fn a_web_link_goes_to_the_tab_when_the_switch_is_on() {
+        assert!(matches!(
+            link_target("https://example.com/x", true),
+            LinkTarget::Tab(_)
+        ));
+        assert!(matches!(
+            link_target("http://localhost:4321/x", true),
+            LinkTarget::Tab(_)
+        ));
+    }
+
+    #[test]
+    fn other_schemes_never_reach_the_tab() {
+        for link in [
+            "file:///etc/passwd",
+            "mailto:someone@example.com",
+            "javascript:alert(1)",
+            "ssh://host/repo",
+            "not a link",
+        ] {
+            assert_eq!(link_target(link, true), LinkTarget::System, "{link}");
+        }
+    }
+
+    #[test]
+    fn the_switch_off_keeps_every_link_in_the_system_browser() {
+        assert_eq!(
+            link_target("https://example.com/x", false),
+            LinkTarget::System
+        );
+    }
+}

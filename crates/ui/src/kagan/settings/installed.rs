@@ -1,6 +1,7 @@
 use crate::kagan::dispatch;
 use crate::theme::TypeScale as _;
 
+use gpui_kit::component::Disableable as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Input;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
@@ -15,8 +16,8 @@ use super::Kagan;
 use super::row::{Group, Row, row, switch};
 use crate::kagan::controls::{act, answer, control, dispatch};
 use crate::kagan::plugin_actions::{
-    InstallPlugin, ReloadPlugin, RemovePlugin, ShowPluginLogs, ToggleInstallForm,
-    TogglePluginDetails, TogglePluginEnabled, UpdatePlugin,
+    CheckPluginUpdates, InstallPlugin, ReloadPlugin, RemovePlugin, ShowPluginLogs,
+    ToggleInstallForm, TogglePluginDetails, TogglePluginEnabled, UpdateAllPlugins, UpdatePlugin,
 };
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -33,6 +34,12 @@ pub(super) fn group(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>)
     } else {
         vec![install_row(kagan)]
     };
+    if statuses
+        .iter()
+        .any(|status| kg_domain::is_git_source(&status.source))
+    {
+        rows.push(updates_row(kagan));
+    }
     if kagan.plugins.form && !installing {
         rows.push(form_row(kagan, cx));
     }
@@ -79,6 +86,65 @@ fn install_row(kagan: &Kagan) -> Row {
         )
         .into_any_element(),
     )
+}
+
+fn updates_row(kagan: &Kagan) -> Row {
+    let busy = kagan.plugins.busy;
+    let check = control(
+        "plugin-updates-check",
+        Facts {
+            disabled: busy,
+            ..Facts::button("Check for updates")
+        },
+        Button::new("button-plugin-updates-check")
+            .small()
+            .outline()
+            .label("Check for updates")
+            .disabled(busy)
+            .on_click(dispatch(CheckPluginUpdates)),
+    )
+    .into_any_element();
+    let found = kagan.plugins.updates.as_ref();
+    let behind: Vec<&str> = found
+        .map(|found| {
+            found
+                .plugins
+                .iter()
+                .map(|plugin| plugin.name.as_str())
+                .collect()
+        })
+        .unwrap_or_default();
+    if let Some(note) = &kagan.plugins.note {
+        return row("plugin-updates", "Plugin updates", note, check);
+    }
+    if !behind.is_empty() {
+        let all = control(
+            "plugin-updates-all",
+            Facts {
+                disabled: busy,
+                ..Facts::button("Update all")
+            },
+            Button::new("button-plugin-updates-all")
+                .small()
+                .outline()
+                .label("Update all")
+                .disabled(busy)
+                .on_click(dispatch(UpdateAllPlugins)),
+        )
+        .into_any_element();
+        return row(
+            "plugin-updates",
+            "Plugin updates",
+            &format!("Behind their ref: {}.", behind.join(", ")),
+            all,
+        );
+    }
+    let note = match found {
+        Some(found) if !found.failed.is_empty() => found.failed.join(" "),
+        Some(_) => "Every git plugin is up to date.".to_owned(),
+        None => "Looks for a newer commit on each git plugin's ref. A plugin pinned to a commit is skipped.".to_owned(),
+    };
+    row("plugin-updates", "Plugin updates", &note, check)
 }
 
 fn form_row(kagan: &Kagan, cx: &mut Context<Kagan>) -> Row {
@@ -294,7 +360,7 @@ fn row_keys<E: InteractiveElement>(row: E, id: &PluginId, git: bool, cx: &mut Co
     let row = if git {
         answer::<UpdatePlugin, _>(row, id, cx, |this, id, cx| {
             let op = PluginOp::Update {
-                id: id.clone(),
+                target: kg_domain::UpdateTarget::One(id.clone()),
                 thread_id: None,
             };
             this.plugin_op(op, "update the plugin", |_, _, _| {}, cx);
@@ -437,4 +503,48 @@ fn install_waiting_row(stoppable: bool) -> Row {
         )
         .into_any_element(),
     )
+}
+
+// What an update-all run did, in words the person can act on.
+pub(in crate::kagan) fn update_outcome(
+    updated: &[PluginId],
+    failed: &[String],
+    needs_approval: &[PluginId],
+) -> String {
+    let mut parts = Vec::new();
+    if !updated.is_empty() {
+        let names: Vec<&str> = updated.iter().map(|id| id.0.as_str()).collect();
+        parts.push(format!("Updated {}.", names.join(", ")));
+    }
+    parts.extend(failed.iter().map(|line| format!("Not updated: {line}.")));
+    for id in needs_approval {
+        parts.push(format!(
+            "{} needs approval for new powers: update it alone to approve them.",
+            id.0
+        ));
+    }
+    if parts.is_empty() {
+        "Nothing to update.".to_owned()
+    } else {
+        parts.join(" ")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use kg_domain::PluginId;
+
+    use super::update_outcome;
+
+    #[test]
+    fn an_update_outcome_names_each_failure_and_each_plugin_that_needs_approval() {
+        let note = update_outcome(
+            &[PluginId("dev.test.a".into())],
+            &["dev.test.b: remote is gone".into()],
+            &[PluginId("dev.test.c".into())],
+        );
+        assert!(note.contains("dev.test.b: remote is gone"), "{note}");
+        assert!(note.contains("dev.test.c"), "{note}");
+        assert!(note.contains("approve"), "{note}");
+    }
 }

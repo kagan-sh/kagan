@@ -285,7 +285,7 @@ fn cli_plugin_commands() {
             "thr_2"
         ]),
         Op::Plugin(PluginOp::Update {
-            id: PluginId("dev.kagan.canvas".into()),
+            target: kg_domain::UpdateTarget::One(PluginId("dev.kagan.canvas".into())),
             thread_id: Some(ThreadId("thr_2".into())),
         })
     );

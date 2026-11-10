@@ -65,6 +65,9 @@ enum Kind {
     Slot,
     Pixels,
     Map,
+    BranchPrefix,
+    Density,
+    FontName,
 }
 
 const PREFERENCES: &[(&str, Kind)] = &[
@@ -75,6 +78,12 @@ const PREFERENCES: &[(&str, Kind)] = &[
     (prefs::UPDATE_CHECK, Kind::Flag),
     (prefs::SETUP_GUIDE, Kind::Flag),
     (prefs::TERMINAL_FONT_SIZE, Kind::FontSize),
+    (prefs::BRANCH_PREFIX, Kind::BranchPrefix),
+    (prefs::TERMINAL_COPY_ON_SELECT, Kind::Flag),
+    (prefs::TERMINAL_LINKS_BROWSER, Kind::Flag),
+    (prefs::DENSITY, Kind::Density),
+    (prefs::FONT_UI, Kind::FontName),
+    (prefs::FONT_TERMINAL, Kind::FontName),
     (Slot::Threads.preference(), Kind::Slot),
     (Slot::Review.preference(), Kind::Slot),
     (prefs::REVIEW_VIEWED, Kind::Map),
@@ -124,6 +133,33 @@ fn accepts(kind: Kind, key: &str, value: &serde_json::Value) -> Result<()> {
         Kind::Pixels => serde_json::from_value::<f32>(value.clone())
             .map(|_| ())
             .map_err(|_| OpError::Invalid(format!("{key} must be a number of pixels"))),
+        Kind::FontName => value
+            .as_str()
+            .filter(|text| prefs::valid_font_name(text))
+            .map(|_| ())
+            .ok_or_else(|| {
+                OpError::Invalid(format!(
+                    "{key} must be a font family name of up to {} bytes, or empty",
+                    prefs::FONT_NAME_MAX
+                ))
+            }),
+        Kind::Density => value
+            .as_str()
+            .filter(|text| prefs::DENSITIES.contains(text))
+            .map(|_| ())
+            .ok_or_else(|| {
+                OpError::Invalid(format!("{key} must be compact, default or roomy"))
+            }),
+        Kind::BranchPrefix => value
+            .as_str()
+            .filter(|text| prefs::valid_branch_prefix(text))
+            .map(|_| ())
+            .ok_or_else(|| {
+                OpError::Invalid(format!(
+                    "{key} must be empty, or up to {} bytes and a valid git branch start such as bb/",
+                    prefs::BRANCH_PREFIX_MAX
+                ))
+            }),
         Kind::Map => {
             serde_json::from_value::<std::collections::BTreeMap<String, String>>(value.clone())
                 .map(|_| ())
@@ -219,9 +255,11 @@ pub(crate) async fn keymap(
                 )
                 .await
             }
-            KeymapAction::BuiltIn(_) => Err(OpError::Invalid(format!(
-                "{action} is built in and keeps a key: set another one, or reset it"
-            ))),
+            KeymapAction::BuiltIn(shortcut) => {
+                let mut overrides = load_keymap(&database).await?;
+                overrides.unbind(shortcut.name.to_owned());
+                store_keymap(this, &database, &overrides, cx).await
+            }
         },
     }
 }
@@ -246,7 +284,16 @@ async fn set_built_in(
         }
         overrides.set(action.to_owned(), key);
     }
-    let value = serde_json::to_value(&overrides)?;
+    store_keymap(this, database, &overrides, cx).await
+}
+
+async fn store_keymap(
+    this: &WeakEntity<Workspace>,
+    database: &Database,
+    overrides: &kg_domain::Keymap,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let value = serde_json::to_value(overrides)?;
     database
         .call(move |store| store.set_setting(KEYMAP, &value))
         .await?;

@@ -146,6 +146,11 @@ impl Keymap {
         self.shared.insert(action, key);
     }
 
+    /// Leaves a shortcut with no key. An empty chord is the saved mark for that.
+    pub fn unbind(&mut self, action: String) {
+        self.shared.insert(action, String::new());
+    }
+
     pub fn reset(&mut self, action: &str) {
         self.shared.remove(action);
     }
@@ -167,7 +172,7 @@ pub enum KeymapOp {
         #[serde(default)]
         reset: bool,
     },
-    /// Leave a plugin's command with no key
+    /// Leave a shortcut with no key, until it is set or reset
     Remove {
         /// `<plugin-id>:<command>`
         action: String,

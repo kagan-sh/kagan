@@ -43,10 +43,11 @@ fn terminal_bindings() -> Vec<KeyBinding> {
 }
 
 pub(crate) fn chord_for(action: &str, keymap: &Keymap, platform: KeyPlatform) -> String {
-    // A saved chord that does not parse would panic when bound, so it counts as no override.
+    // An empty saved chord is a shortcut the person took the key off. A saved chord that does not
+    // parse would panic when bound, so it counts as no override.
     if let Some(saved) = keymap
         .binding(action)
-        .filter(|saved| kg_core::parse_key(saved).is_ok())
+        .filter(|saved| saved.is_empty() || kg_core::parse_key(saved).is_ok())
     {
         return saved.to_owned();
     }
@@ -57,13 +58,16 @@ fn chord_bindings(keymap: &Keymap, cx: &App) -> Vec<KeyBinding> {
     SHORTCUTS
         .iter()
         .flat_map(|shortcut| {
+            let chord = chord_for(shortcut.name, keymap, KeyPlatform::host());
             let contexts: &[&str] = match shortcut.scope {
                 ShortcutScope::Window => &[CONTEXT],
                 ShortcutScope::Review => &[super::review::CONTEXT],
                 ShortcutScope::ReviewSend => &[NAV_CONTEXT, "Review > Input"],
             };
             contexts.iter().filter_map(move |context| {
-                let chord = chord_for(shortcut.name, keymap, KeyPlatform::host());
+                if chord.is_empty() {
+                    return None;
+                }
                 let result = cx
                     .build_action(shortcut.action, None)
                     .map_err(|error| error.to_string())

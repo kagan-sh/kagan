@@ -30,7 +30,7 @@ Commands:
   window        The application menu and the window
   surface       Plugin surfaces in the window
   keymap        Keyboard shortcuts: built-in ones and plugin commands
-  preference    Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, setup-guide, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+  preference    Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
   instructions  Agent rules: the global rules, or one project's, that a thread's program is told
   ui            Native window for QA and agents
   notify        System notifications
@@ -1533,7 +1533,8 @@ Commands:
   list            Installed plugins
   remove          Remove an installed plugin
   install         Install from `git:<url>@<ref>`, a local folder, or a plugin name an index lists
-  update          Update to the latest commit
+  update          Update to the latest commit: one plugin, or every git plugin with --all
+  outdated        Git plugins whose pinned ref now names a newer commit
   index           The plugin indexes searched by name, in order
   search          Plugins the indexes list whose name or description holds the text
   enable          Enable a plugin
@@ -1783,20 +1784,35 @@ Options:
 ## `kg plugin update`
 
 ```text
-Update to the latest commit
+Update to the latest commit: one plugin, or every git plugin with --all
 
-Usage: kg plugin update [OPTIONS] <ID>
+Usage: kg plugin update [OPTIONS] [ID]
 
 Arguments:
-  <ID>
-          
+  [ID]
+          The plugin to update
 
 Options:
+      --all
+          Update every git plugin that has a newer commit
+
       --thread-id <THREAD_ID>
           The thread where a person approves new powers
           
           [env: KG_THREAD_ID=]
 
+  -h, --help
+          Print help
+```
+
+## `kg plugin outdated`
+
+```text
+Git plugins whose pinned ref now names a newer commit
+
+Usage: kg plugin outdated
+
+Options:
   -h, --help
           Print help
 ```
@@ -2633,7 +2649,7 @@ Usage: kg keymap [OPTIONS] <COMMAND>
 Commands:
   get     Saved shortcut overrides, and the key of each enabled plugin's commands
   set     Rebind a shortcut, or reset it
-  remove  Leave a plugin's command with no key
+  remove  Leave a shortcut with no key, until it is set or reset
   help    Print this message or the help of the given subcommand(s)
 
 Options:
@@ -2681,7 +2697,7 @@ Options:
 ## `kg keymap remove`
 
 ```text
-Leave a plugin's command with no key
+Leave a shortcut with no key, until it is set or reset
 
 Usage: kg keymap remove <ACTION>
 
@@ -2697,7 +2713,7 @@ Options:
 ## `kg preference`
 
 ```text
-Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, setup-guide, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
 
 Usage: kg preference [OPTIONS] <COMMAND>
 

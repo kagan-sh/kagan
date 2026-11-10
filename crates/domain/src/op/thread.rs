@@ -394,6 +394,33 @@ pub fn branch_slug(title: &str) -> String {
     slug
 }
 
+/// Whether git accepts `name` as a branch name.
+#[must_use]
+pub fn valid_branch(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    let lock = |part: &str| {
+        let tail = part.as_bytes();
+        tail.len() >= 5 && tail[tail.len() - 5..].eq_ignore_ascii_case(b".lock")
+    };
+    !name.is_empty()
+        && !name.eq_ignore_ascii_case("HEAD")
+        && name != "@"
+        && !name.starts_with('-')
+        && !name.starts_with('/')
+        && !name.ends_with('/')
+        && !name.ends_with('.')
+        && name
+            .split('/')
+            .all(|part| !part.starts_with('.') && !lock(part))
+        && !name.contains("//")
+        && !name.contains("..")
+        && !name.contains("@{")
+        && !bytes.iter().any(|byte| {
+            byte.is_ascii_control()
+                || matches!(byte, b' ' | b'~' | b'^' | b':' | b'\\' | b'?' | b'*' | b'[')
+        })
+}
+
 /// Why a wait returned. `kg thread wait` prints these words, and so does the plugin API.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]

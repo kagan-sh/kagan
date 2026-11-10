@@ -1,7 +1,7 @@
 use gpui_kit::component::highlighter::HighlightTheme;
 use kg_core::Ansi;
 
-use super::colors::highlight;
+use super::colors::{Families, highlight};
 use super::*;
 
 const NAMES: [Ansi; 16] = [
@@ -104,7 +104,7 @@ fn a_written_theme_reads_back_the_same() {
 
 #[test]
 fn a_default_look_projects_the_numbers_the_window_had_before() {
-    let config = config(&fjord(), ThemeMode::Light);
+    let config = config(&fjord(), ThemeMode::Light, &Families::default());
     assert_eq!(config.font_size, Some(16.));
     assert_eq!(config.mono_font_size, Some(12.));
     assert_eq!(config.radius, Some(8));
@@ -134,7 +134,7 @@ fn a_custom_look_projects_its_numbers() {
         control: 20,
         ..kg_domain::Look::default()
     };
-    let config = config(&file, ThemeMode::Dark);
+    let config = config(&file, ThemeMode::Dark, &Families::default());
     assert_eq!(config.mono_font_size, Some(11.));
     assert_eq!(file.look.radius.xs, 0);
     assert_eq!(config.radius, Some(2));

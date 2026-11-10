@@ -52,6 +52,10 @@ async fn the_preference_keys_named_in_help_are_accepted(cx: &mut TestAppContext)
         "notify",
         "plugin-status",
         "terminal-font-size",
+        "branch-prefix",
+        "terminal-copy-on-select",
+        "terminal-links-browser",
+        "density",
         "main.left-sidebar",
         "main.right-sidebar",
         "main.left-width",
@@ -273,5 +277,139 @@ async fn notify_is_all_asks_or_off(cx: &mut TestAppContext) {
         )
         .await
         .unwrap();
+    }
+}
+
+#[gpui_kit::test]
+async fn branch_prefix_must_start_a_git_branch(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    for good in ["", "bb/", "feat-", "a-b/c-"] {
+        op(
+            Op::Preference(PreferenceOp::Set {
+                key: "branch-prefix".into(),
+                value: json!(good),
+            }),
+            cx,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("{good:?} is refused: {error}"));
+    }
+    for bad in [
+        "bb",
+        "feat_",
+        "refs/x/",
+        "bad space/",
+        "-flag",
+        "a..b",
+        "x~",
+        "a/b.lock/",
+        &"x".repeat(41),
+    ] {
+        let refused = op(
+            Op::Preference(PreferenceOp::Set {
+                key: "branch-prefix".into(),
+                value: json!(bad),
+            }),
+            cx,
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(refused, OpError::Invalid(_)),
+            "{bad:?} gave {refused}"
+        );
+    }
+    let OpResult::Setting(value) = op(
+        Op::Preference(PreferenceOp::Get {
+            key: "branch-prefix".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("preference")
+    };
+    assert_eq!(value, json!("a-b/c-"));
+}
+
+#[gpui_kit::test]
+async fn a_built_in_shortcut_can_lose_its_key_and_reset_brings_it_back(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    op(
+        Op::Keymap(KeymapOp::Remove {
+            action: "NewThread".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    cx.run_until_parked();
+    let unbound = cx.update(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .keymap()
+            .binding("NewThread")
+            .map(str::to_owned)
+    });
+    assert_eq!(unbound.as_deref(), Some(""));
+    op(
+        Op::Keymap(KeymapOp::Set {
+            action: "NewThread".into(),
+            key: "secondary-j".into(),
+            reset: false,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    op(
+        Op::Keymap(KeymapOp::Set {
+            action: "NewThread".into(),
+            key: String::new(),
+            reset: true,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    cx.run_until_parked();
+    let reset = cx.update(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .keymap()
+            .binding("NewThread")
+            .map(str::to_owned)
+    });
+    assert_eq!(reset, None);
+}
+
+#[gpui_kit::test]
+async fn font_names_are_family_names_or_empty(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    for good in ["", "Helvetica Neue", "JetBrains Mono"] {
+        op(
+            Op::Preference(PreferenceOp::Set {
+                key: "font-ui".into(),
+                value: json!(good),
+            }),
+            cx,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("{good:?} is refused: {error}"));
+    }
+    for bad in ["bad\tname", &"x".repeat(81)] {
+        let refused = op(
+            Op::Preference(PreferenceOp::Set {
+                key: "font-terminal".into(),
+                value: json!(bad),
+            }),
+            cx,
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(refused, OpError::Invalid(_)),
+            "{bad:?} gave {refused}"
+        );
     }
 }

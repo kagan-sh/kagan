@@ -131,32 +131,6 @@ pub(crate) fn current_branch(cwd: &Path) -> Option<String> {
     (!name.is_empty()).then(|| name.to_owned())
 }
 
-fn is_lock_suffix(name: &str) -> bool {
-    let bytes = name.as_bytes();
-    bytes.len() >= 5 && bytes[bytes.len() - 5..].eq_ignore_ascii_case(b".lock")
-}
-
-pub(crate) fn valid_branch(name: &str) -> bool {
-    let bytes = name.as_bytes();
-    !name.is_empty()
-        && !name.eq_ignore_ascii_case("HEAD")
-        && name != "@"
-        && !name.starts_with('-')
-        && !name.starts_with('/')
-        && !name.ends_with('/')
-        && !name.ends_with('.')
-        && name
-            .split('/')
-            .all(|part| !part.starts_with('.') && !is_lock_suffix(part))
-        && !name.contains("//")
-        && !name.contains("..")
-        && !name.contains("@{")
-        && !bytes.iter().any(|byte| {
-            byte.is_ascii_control()
-                || matches!(byte, b' ' | b'~' | b'^' | b':' | b'\\' | b'?' | b'*' | b'[')
-        })
-}
-
 pub(crate) async fn branches(
     database: &Database,
     id: ProjectId,
@@ -321,7 +295,7 @@ pub(crate) fn place_project_branch(
 ) -> Result<()> {
     match branch {
         kg_domain::ProjectBranch::Checkout { name } => {
-            if !valid_branch(name) {
+            if !kg_domain::valid_branch(name) {
                 return Err(refused_name(name));
             }
             if !branch_moves(path, branch) {
@@ -342,10 +316,10 @@ pub(crate) fn place_project_branch(
             let Some(name) = new_name else {
                 return Err(OpError::Invalid("branch name is empty".into()));
             };
-            if !valid_branch(name) {
+            if !kg_domain::valid_branch(name) {
                 return Err(refused_name(name));
             }
-            if !valid_branch(base) {
+            if !kg_domain::valid_branch(base) {
                 return Err(refused_name(base));
             }
             if let Some(message) = checkout_block(path) {
@@ -386,7 +360,7 @@ pub(crate) async fn set_base(
     base: String,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    if !valid_branch(&base) {
+    if !kg_domain::valid_branch(&base) {
         return Err(OpError::Invalid(format!(
             "base branch {base} is not allowed"
         )));
@@ -423,7 +397,7 @@ async fn load(database: &Database, id: &EnvironmentId) -> Result<Environment> {
 
 #[cfg(test)]
 mod tests {
-    use super::valid_branch;
+    use kg_domain::valid_branch;
 
     #[cfg(unix)]
     #[test]

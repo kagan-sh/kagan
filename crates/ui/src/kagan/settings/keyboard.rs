@@ -3,7 +3,7 @@ use crate::theme::TypeScale as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use gpui_kit::{
     AnyElement, App, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, Keystroke,
@@ -12,10 +12,11 @@ use gpui_kit::{
 };
 use kg_core::Workspace;
 use kg_domain::{KeymapAction, KeymapOp, Op, OpResult, PluginId, SHORTCUTS, ShortcutGroup};
-use kg_plugins::{CommandContribution, PluginHost, RunCommand};
+use kg_plugins::{CommandContribution, PluginHost};
 
 use super::Kagan;
-use super::row::{Group, GroupStyle, Row, group, row};
+use super::row::{Group, GroupStyle, Row, group, row, save};
+use crate::kagan::keys::chord_for;
 use crate::plugins::{Refused, Why, refused};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -31,6 +32,8 @@ struct Shortcut {
     id: String,
     title: String,
     keys: Vec<Keystroke>,
+    /// The person saved a key or removed one; Reset puts the default back.
+    overridden: bool,
 }
 
 type Labels = BTreeMap<String, String>;
@@ -38,36 +41,31 @@ type Labels = BTreeMap<String, String>;
 pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) -> Vec<Group> {
     let refused = refused(cx);
     let labels = labels(cx);
+    let keymap = Workspace::global(cx).read(cx).keymap().clone();
     let mut built_in: [Vec<Shortcut>; 4] = std::array::from_fn(|_| Vec::new());
-    let mut seen = BTreeSet::new();
-    for binding in cx.key_bindings().borrow().bindings() {
-        let action = binding.action();
-        if action.as_any().is::<RunCommand>() || binding.keystrokes().is_empty() {
-            continue;
-        }
-        let name = action.name();
-        let Some(shortcut) = SHORTCUTS.iter().find(|shortcut| shortcut.action == name) else {
-            continue;
-        };
-        let short = name.rsplit("::").next().unwrap_or(name).to_owned();
-        if !seen.insert(short.clone()) {
-            continue;
-        }
+    // Every built-in is listed, even one with no key, so a removed key can be bound again.
+    for shortcut in SHORTCUTS {
         let section = match shortcut.settings_group {
             ShortcutGroup::Window => 0,
             ShortcutGroup::Thread => 1,
             ShortcutGroup::NewThread => 2,
             ShortcutGroup::Review => 3,
         };
+        let short = shortcut
+            .action
+            .rsplit("::")
+            .next()
+            .unwrap_or(shortcut.action);
         built_in[section].push(Shortcut {
             target: KeymapAction::BuiltIn(shortcut),
-            id: short,
+            id: short.to_owned(),
             title: shortcut.label.to_owned(),
-            keys: binding
-                .keystrokes()
-                .iter()
-                .map(|key| key.inner().clone())
-                .collect(),
+            keys: parse(&chord_for(
+                shortcut.name,
+                &keymap,
+                kg_domain::KeyPlatform::host(),
+            )),
+            overridden: keymap.binding(shortcut.name).is_some(),
         });
     }
     let mut out: Vec<Group> = ["Window", "Thread", "New thread", "Review"]
@@ -107,6 +105,7 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
                     id: format!("plugin-{}-{}", plugin.0, command.id),
                     title: command.title.clone(),
                     keys,
+                    overridden: false,
                 };
                 shortcut_row(kagan, &shortcut, &refused, &labels, window, cx)
             })
@@ -253,8 +252,7 @@ fn controls(
             }
         },
     ));
-    let removable = matches!(shortcut.target, KeymapAction::Plugin { .. });
-    let line = if removable && !recording && !shortcut.keys.is_empty() {
+    let line = if !recording && !shortcut.keys.is_empty() {
         let action = action.to_owned();
         line.child(button(
             id,
@@ -264,6 +262,21 @@ fn controls(
             cx,
             move |this, _, cx| {
                 this.save_shortcut(action.clone(), None, cx);
+            },
+        ))
+    } else {
+        line
+    };
+    let line = if shortcut.overridden && !recording {
+        let action = action.to_owned();
+        line.child(button(
+            id,
+            "reset",
+            "Reset",
+            window,
+            cx,
+            move |this, _, cx| {
+                this.reset_shortcut(action.clone(), cx);
             },
         ))
     } else {
@@ -417,6 +430,18 @@ impl Kagan {
             }
         }
         true
+    }
+
+    fn reset_shortcut(&mut self, action: String, cx: &mut Context<Self>) {
+        self.settings.keyboard.fault = None;
+        save(
+            Op::Keymap(KeymapOp::Set {
+                action,
+                key: String::new(),
+                reset: true,
+            }),
+            cx,
+        );
     }
 
     fn save_shortcut(&mut self, action: String, key: Option<String>, cx: &mut Context<Self>) {

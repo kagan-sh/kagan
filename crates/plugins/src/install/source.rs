@@ -118,27 +118,7 @@ pub(crate) fn clone(
     checkout: &Path,
     stop: &async_channel::Receiver<()>,
 ) -> Result<String> {
-    let ssh = url.starts_with("ssh://")
-        || (!url.contains("://")
-            && url
-                .split_once(':')
-                .is_some_and(|(host, _)| host.len() > 1 && !host.contains('/')));
-    let proxy = [
-        "HTTPS_PROXY",
-        "https_proxy",
-        "HTTP_PROXY",
-        "http_proxy",
-        "ALL_PROXY",
-        "all_proxy",
-    ]
-    .iter()
-    .any(|key| std::env::var_os(key).is_some_and(|value| !value.is_empty()))
-        || git_config("http.proxy");
-    if !ssh {
-        check_host(url, Duration::from_secs(15), proxy)?;
-    }
-    let ssh_timeout =
-        ssh && std::env::var_os("GIT_SSH_COMMAND").is_none() && !git_config("core.sshCommand");
+    let ssh_timeout = remote_rules(url)?;
     git_with_ssh(
         None,
         [
@@ -169,6 +149,84 @@ pub(crate) fn clone(
         "{} has no ref {reference}",
         public(url)
     )))
+}
+
+/// What a remote says a plugin's ref names now, or that the ref is a commit kagan pinned.
+pub(crate) enum Named {
+    Commit(String),
+    Pinned,
+}
+
+/// Asks the remote for the commit a ref names, with the same ssh and proxy rules as a clone.
+/// No ref matches and the installed commit starts with the ref: the plugin is pinned to a commit.
+pub(crate) fn remote_commit(
+    url: &str,
+    reference: &str,
+    installed: Option<&str>,
+    stop: &async_channel::Receiver<()>,
+) -> Result<Named> {
+    let ssh_timeout = remote_rules(url)?;
+    let listing = git_with_ssh(
+        None,
+        [OsStr::new("ls-remote"), OsStr::new("--"), OsStr::new(url)],
+        stop,
+        ssh_timeout,
+    )?;
+    let mut plain = None;
+    let mut peeled = None;
+    for line in listing.lines() {
+        let Some((sha, name)) = line.split_once('\t') else {
+            continue;
+        };
+        if name == format!("refs/heads/{reference}") || name == format!("refs/tags/{reference}") {
+            plain.get_or_insert(sha.to_owned());
+        }
+        if name == format!("refs/tags/{reference}^{{}}") {
+            peeled = Some(sha.to_owned());
+        }
+    }
+    // An annotated tag lists the tag object first; the `^{}` line names the commit it points to.
+    if let Some(sha) = peeled.or(plain) {
+        return Ok(Named::Commit(sha));
+    }
+    let pinned = installed.is_some_and(|commit| {
+        reference.len() >= 7
+            && reference.bytes().all(|byte| byte.is_ascii_hexdigit())
+            && commit.starts_with(reference)
+    });
+    if pinned {
+        return Ok(Named::Pinned);
+    }
+    Err(OpError::Invalid(format!(
+        "{} has no ref {reference}",
+        public(url)
+    )))
+}
+
+// Checks the host when it is not ssh, and says whether ssh needs a connect timeout.
+fn remote_rules(url: &str) -> Result<bool> {
+    let ssh = url.starts_with("ssh://")
+        || (!url.contains("://")
+            && url
+                .split_once(':')
+                .is_some_and(|(host, _)| host.len() > 1 && !host.contains('/')));
+    let proxy = [
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+        "ALL_PROXY",
+        "all_proxy",
+    ]
+    .iter()
+    .any(|key| std::env::var_os(key).is_some_and(|value| !value.is_empty()))
+        || git_config("http.proxy");
+    if !ssh {
+        check_host(url, Duration::from_secs(15), proxy)?;
+    }
+    let ssh_timeout =
+        ssh && std::env::var_os("GIT_SSH_COMMAND").is_none() && !git_config("core.sshCommand");
+    Ok(ssh_timeout)
 }
 
 fn check_host(source: &str, timeout: Duration, proxy: bool) -> Result<()> {
@@ -266,7 +324,10 @@ fn git_with_ssh<'a>(
 ) -> Result<String> {
     let output = git_command_inner(cwd, args, stop, ssh_timeout)?;
     if output.code != 0 {
-        return Err(OpError::Failed(format!("git failed: {}", output.stderr)));
+        return Err(OpError::Failed(format!(
+            "git failed: {}",
+            redact(&output.stderr)
+        )));
     }
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
@@ -421,4 +482,43 @@ fn select(root: &Path, selected: Option<&Path>) -> Result<PathBuf> {
         .strip_prefix(root)
         .map(Path::to_path_buf)
         .map_err(|error| OpError::Invalid(error.to_string()))
+}
+
+/// Hides the user and password in every URL in `text`, so a git error cannot show a credential.
+pub(crate) fn redact(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("://") {
+        let (head, tail) = rest.split_at(at + 3);
+        out.push_str(head);
+        let end = tail
+            .find(|c: char| c == '/' || c == '\'' || c == '"' || c.is_whitespace())
+            .unwrap_or(tail.len());
+        let (authority, after) = tail.split_at(end);
+        match authority.rfind('@') {
+            Some(index) => {
+                out.push_str("***");
+                out.push_str(&authority[index..]);
+            }
+            None => out.push_str(authority),
+        }
+        rest = after;
+    }
+    out.push_str(rest);
+    out
+}
+
+#[cfg(test)]
+mod redact_tests {
+    use super::redact;
+
+    #[test]
+    fn a_credential_in_a_git_error_is_hidden_and_the_host_stays() {
+        let text = "fatal: unable to access 'https://user:secret@git.example.test/x.git/': 401";
+        let shown = redact(text);
+        assert!(!shown.contains("secret"), "{shown}");
+        assert!(!shown.contains("user:"), "{shown}");
+        assert!(shown.contains("***@git.example.test/x.git/"), "{shown}");
+        assert_eq!(redact("no link here"), "no link here");
+    }
 }

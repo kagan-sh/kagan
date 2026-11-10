@@ -1,8 +1,13 @@
-use crate::theme::{SpaceStep, TypeScale as _, control_height, radius_md, space};
+use crate::theme::{SpaceStep, TypeScale as _, radius_md, space};
 
+mod appearance;
 mod command;
+mod fonts;
+mod general;
 mod indexes;
 mod installed;
+mod render;
+pub(in crate::kagan) use installed::update_outcome;
 mod keyboard;
 mod nav;
 mod pages;
@@ -16,13 +21,14 @@ mod updates;
 use crate::ui_registry::Facts;
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
+use gpui_kit::component::searchable_list::SearchableVec;
+use gpui_kit::component::select::{SelectEvent, SelectState};
 use gpui_kit::component::{ActiveTheme as _, StyledExt as _};
 use gpui_kit::component::{h_flex, v_flex};
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, ElementId, Entity, FocusHandle, Hsla,
-    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, ScrollHandle,
-    StatefulInteractiveElement as _, Styled as _, Subscription, Window, actions, div, px, rems,
+    AnyElement, App, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _,
+    IntoElement, KeyBinding, ParentElement as _, ScrollHandle, StatefulInteractiveElement as _,
+    Styled as _, Subscription, Window, actions, div, px, rems,
 };
 use kg_core::{Approval, Workspace};
 use kg_domain::{NotifyLevel, PluginId};
@@ -36,9 +42,11 @@ use super::{Kagan, OpenSettings};
 use crate::theme::ThemeState;
 use crate::ui_observe::UiObserveExt as _;
 
+use fonts::{FontItem, FontSelect, font_items};
 pub(super) use keyboard::{Recorder, plugin_commands};
 use nav::Category;
 pub(super) use plugins::Drafts;
+use render::group_block;
 
 actions!(
     settings,
@@ -81,6 +89,8 @@ pub(super) struct Prefs {
     pub(super) notify: NotifyLevel,
     pub(super) plugin_status: bool,
     pub(super) update_check: bool,
+    pub(super) copy_on_select: bool,
+    pub(super) links_in_tab: bool,
     pub(super) setup_guide: Option<bool>,
     pub(super) agent_ready: Option<bool>,
     pub(super) kg_check: Option<command::Check>,
@@ -97,6 +107,11 @@ pub(super) struct SettingsState {
     pub(super) query: Entity<InputState>,
     _query_watch: Subscription,
     pub(super) list: FocusHandle,
+    pub(super) branch_prefix: Entity<InputState>,
+    _branch_watch: Subscription,
+    pub(super) ui_font: Entity<FontSelect>,
+    pub(super) terminal_font: Entity<FontSelect>,
+    _font_watch: [Subscription; 2],
     pub(super) variables: Entity<Variables>,
     pub(super) rules: Entity<RulesEditor>,
 }
@@ -115,8 +130,47 @@ impl SettingsState {
                 cx.notify();
             }
         });
+        let branch_prefix = cx.new(|cx| InputState::new(window, cx).placeholder("bb/"));
+        // The prefix is saved on Enter or when the field loses focus; a bad one stays unsaved.
+        let branch_watch = cx.subscribe_in(
+            &branch_prefix,
+            window,
+            |_, input, event: &InputEvent, _, cx| {
+                if matches!(event, InputEvent::PressEnter { .. } | InputEvent::Blur) {
+                    let text = input.read(cx).value().trim().to_owned();
+                    if kg_domain::prefs::valid_branch_prefix(&text) {
+                        super::layout::save(kg_domain::prefs::BRANCH_PREFIX, text, cx);
+                    }
+                }
+            },
+        );
         let variables = cx.new(|cx| Variables::new(None, window, cx));
         let rules = cx.new(|cx| RulesEditor::new(None, window, cx));
+        let fonts = font_items(cx);
+        let ui_font = cx.new(|cx| {
+            SelectState::new(SearchableVec::new(fonts.clone()), None, window, cx).searchable(true)
+        });
+        let terminal_font = cx.new(|cx| {
+            SelectState::new(SearchableVec::new(fonts), None, window, cx).searchable(true)
+        });
+        let ui_watch = cx.subscribe_in(
+            &ui_font,
+            window,
+            |_, _, event: &SelectEvent<SearchableVec<FontItem>>, _, cx| {
+                if let SelectEvent::Confirm(Some(name)) = event {
+                    super::layout::save(kg_domain::prefs::FONT_UI, name.clone(), cx);
+                }
+            },
+        );
+        let terminal_watch = cx.subscribe_in(
+            &terminal_font,
+            window,
+            |_, _, event: &SelectEvent<SearchableVec<FontItem>>, _, cx| {
+                if let SelectEvent::Confirm(Some(name)) = event {
+                    super::layout::save(kg_domain::prefs::FONT_TERMINAL, name.clone(), cx);
+                }
+            },
+        );
         Self {
             variables,
             scroll: ScrollHandle::new(),
@@ -128,6 +182,11 @@ impl SettingsState {
             query,
             _query_watch: watch,
             list: cx.focus_handle().tab_stop(true),
+            branch_prefix,
+            _branch_watch: branch_watch,
+            ui_font,
+            terminal_font,
+            _font_watch: [ui_watch, terminal_watch],
             rules,
         }
     }
@@ -140,6 +199,8 @@ pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
         notify: NotifyLevel::default(),
         plugin_status: true,
         update_check: false,
+        copy_on_select: false,
+        links_in_tab: false,
         setup_guide: None,
         agent_ready: None,
         kg_check: None,
@@ -203,6 +264,7 @@ impl Kagan {
         if !self.in_settings() {
             return;
         }
+        ThemeState::global(cx).update(cx, ThemeState::end_preview);
         self.stop_recording();
         let work = self.screen.shown().clone();
         self.open_center(super::screen::Center::Work(work), window, cx);
@@ -307,15 +369,41 @@ impl Kagan {
         let plugin_status = super::layout::read::<bool>(kg_domain::prefs::PLUGIN_STATUS, cx);
         let update = super::layout::read::<bool>(kg_domain::prefs::UPDATE_CHECK, cx);
         let confirm = super::layout::read::<bool>(kg_domain::prefs::CONFIRM_ARCHIVE, cx);
+        let branch = super::layout::read::<String>(kg_domain::prefs::BRANCH_PREFIX, cx);
+        let ui_name = super::layout::read::<String>(kg_domain::prefs::FONT_UI, cx);
+        let terminal_name = super::layout::read::<String>(kg_domain::prefs::FONT_TERMINAL, cx);
+        let ui_font = self.settings.ui_font.clone();
+        let terminal_font = self.settings.terminal_font.clone();
+        let copy = super::layout::read::<bool>(kg_domain::prefs::TERMINAL_COPY_ON_SELECT, cx);
+        let links = super::layout::read::<bool>(kg_domain::prefs::TERMINAL_LINKS_BROWSER, cx);
+        let branch_input = self.settings.branch_prefix.clone();
+        let fonts = font_items(cx);
+        let window = self.window;
         let setup = super::layout::read::<bool>(kg_domain::prefs::SETUP_GUIDE, cx);
         let kagan = cx.weak_entity();
         let prefs = self.prefs.clone();
         cx.spawn(async move |_, cx| {
+            let branch_prefix = branch.await.ok().flatten().unwrap_or_default();
+            let ui_name = ui_name.await.ok().flatten().unwrap_or_default();
+            let terminal_name = terminal_name.await.ok().flatten().unwrap_or_default();
+            _ = cx.update_window(window, |_, window, cx| {
+                branch_input.update(cx, |state, cx| state.set_value(branch_prefix, window, cx));
+                ui_font.update(cx, |state, cx| {
+                    state.set_items(SearchableVec::new(fonts.clone()), window, cx);
+                    state.set_selected_value(&ui_name, window, cx);
+                });
+                terminal_font.update(cx, |state, cx| {
+                    state.set_items(SearchableVec::new(fonts), window, cx);
+                    state.set_selected_value(&terminal_name, window, cx);
+                });
+            });
             let on = agent.await.ok().flatten().unwrap_or(true);
             let notifications = notify.await.ok().flatten().unwrap_or_default();
             let status = plugin_status.await.ok().flatten().unwrap_or(true);
             let update_check = update.await.ok().flatten().unwrap_or(false);
             let confirm_archive = confirm.await.ok().flatten().unwrap_or(false);
+            let copy_on_select = copy.await.ok().flatten().unwrap_or(false);
+            let links_in_tab = links.await.ok().flatten().unwrap_or(false);
             let setup_guide = setup.await.ok().flatten();
             prefs.update(cx, |prefs, cx| {
                 prefs.confirm_archive = confirm_archive;
@@ -323,6 +411,8 @@ impl Kagan {
                 prefs.notify = notifications;
                 prefs.plugin_status = status;
                 prefs.update_check = update_check;
+                prefs.copy_on_select = copy_on_select;
+                prefs.links_in_tab = links_in_tab;
                 prefs.setup_guide = setup_guide;
                 prefs.loaded = true;
                 cx.notify();
@@ -466,158 +556,6 @@ fn settings_header(window: &mut Window, cx: &mut Context<Kagan>) -> AnyElement {
                 }),
         )
         .into_any_element()
-}
-
-fn group_block(group: row::Group, cx: &App) -> AnyElement {
-    let radius = cx.theme().radius;
-    let line = cx.theme().border;
-    let card = cx.theme().group_box;
-    let muted = cx.theme().muted_foreground;
-    let rows = group.rows.len();
-    let shortcut = group.style != row::GroupStyle::Plain;
-    let first_shortcut = group.style == row::GroupStyle::FirstShortcuts;
-    let title = group.title.clone();
-    let block =
-        v_flex()
-            .flex_shrink_0()
-            .id(ElementId::Name(
-                format!("settings-group-{}", group.key).into(),
-            ))
-            .ui_container()
-            .gap(px(space(SpaceStep::Sm, cx)))
-            .when(group.headed, |card| {
-                card.child(
-                    div()
-                        .id(ElementId::Name(
-                            format!("settings-heading-{}", group.key).into(),
-                        ))
-                        .ui_container()
-                        .aria_label(title.clone())
-                        .type_caption(cx)
-                        .font_semibold()
-                        .text_color(cx.theme().foreground)
-                        .child(title),
-                )
-            })
-            .child(
-                v_flex()
-                    .rounded(radius)
-                    .border_1()
-                    .border_color(line)
-                    .bg(card)
-                    .overflow_hidden()
-                    .children(group.rows.into_iter().enumerate().map(|(ix, row)| {
-                        row_element(row, ix + 1 == rows, line, muted, shortcut, cx)
-                    })),
-            )
-            .into_any_element();
-    if first_shortcut {
-        div()
-            .flex_shrink_0()
-            .id("settings-group-shortcuts")
-            .ui_container()
-            .child(block)
-            .into_any_element()
-    } else {
-        block
-    }
-}
-
-fn row_element(
-    row: row::Row,
-    last: bool,
-    line: Hsla,
-    muted: Hsla,
-    shortcut: bool,
-    cx: &App,
-) -> AnyElement {
-    let show_text = !row.bare;
-    let noted = !row.note.is_empty();
-    let alias = row.alias;
-    let note = row
-        .note_content
-        .unwrap_or_else(|| row.note.clone().into_any_element());
-    // A floor, not `min_w_0`. `min_w_0` let a long choice shrink the title to one
-    // letter a line. The choice wraps in the width that is left.
-    let text = v_flex()
-        .flex_1()
-        .min_w(px(160.))
-        .gap_0p5()
-        .when(show_text && !row.title.is_empty(), |text| {
-            let title = div()
-                .id(ElementId::Name(format!("{}-title", row.id).into()))
-                .ui_container()
-                .type_body(cx)
-                .child(row.title.clone());
-            match alias {
-                Some(alias) => text.child(
-                    div()
-                        .id(ElementId::Name(format!("settings-heading-{alias}").into()))
-                        .ui_container()
-                        .aria_label(row.title.clone())
-                        .child(title)
-                        .into_any_element(),
-                ),
-                None => text.child(title.into_any_element()),
-            }
-        })
-        .when(!row.note.is_empty(), |text| {
-            text.child(
-                div()
-                    .id(ElementId::Name(format!("{}-note", row.id).into()))
-                    .ui_container()
-                    .aria_label(row.note.clone())
-                    .type_small(cx)
-                    .text_color(muted)
-                    .child(note),
-            )
-        });
-    let frame = if row.wide {
-        v_flex().gap(px(space(SpaceStep::Md, cx)))
-    } else {
-        h_flex()
-            .gap(px(space(SpaceStep::Lg, cx)))
-            .justify_between()
-            .items_center()
-    };
-    let body = frame
-        .when(
-            show_text && (!row.title.is_empty() || !row.note.is_empty()),
-            |frame| frame.child(text),
-        )
-        .child(if row.wide {
-            row.control
-        } else {
-            h_flex()
-                .min_w_0()
-                .justify_end()
-                .child(row.control)
-                .into_any_element()
-        });
-    let item = div()
-        .id(row.id)
-        .ui_container()
-        .aria_label(row.title)
-        .when(shortcut, |item| item.px(px(space(SpaceStep::Lg, cx))))
-        .when(shortcut && !noted, |item| item.h(px(control_height(cx))))
-        .when(shortcut && noted, |item| {
-            item.py(px(space(SpaceStep::Xs, cx)))
-        })
-        .when(!shortcut, |item| {
-            item.px(px(space(SpaceStep::Lg, cx)))
-                .py(px(space(SpaceStep::Md, cx)))
-        })
-        .when(!last, |item| item.border_b_1().border_color(line))
-        .child(body)
-        .into_any_element();
-    match alias {
-        Some(alias) => div()
-            .id(ElementId::Name(format!("settings-group-{alias}").into()))
-            .ui_container()
-            .child(item)
-            .into_any_element(),
-        None => item,
-    }
 }
 
 #[cfg(test)]

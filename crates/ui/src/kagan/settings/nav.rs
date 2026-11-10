@@ -15,7 +15,7 @@ use kg_domain::PluginId;
 use super::row::Group;
 use super::{CONTEXT_SECTIONS, Kagan, OpenSection, pages};
 use crate::kagan::controls::note;
-use crate::theme::{SpaceStep, TypeScale as _, space};
+use crate::theme::{SpaceStep, ThemeState, TypeScale as _, space};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -157,6 +157,7 @@ impl Kagan {
     ) {
         self.settings.cursor = section_position(&section, cx);
         self.settings.section = section;
+        ThemeState::global(cx).update(cx, ThemeState::end_preview);
         self.settings
             .query
             .update(cx, |query, cx| query.set_value("", window, cx));

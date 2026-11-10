@@ -2,7 +2,7 @@ use gpui_kit::{AppContext as _, ElementId, TestAppContext, px, size};
 use kg_domain::{KeymapOp, Op};
 
 use super::{aria_label, bound_keycap, run_op};
-use crate::tests::kagan::{chord, click, open, present, shows};
+use crate::tests::kagan::{chord, click, label, open, present, shows};
 use crate::tests::sidebar::layout::span;
 
 #[gpui_kit::test]
@@ -108,4 +108,46 @@ fn a_saved_shortcut_changes_the_keycap(cx: &mut TestAppContext) {
         aria_label(cx, window, "shortcut-NewThread").as_deref(),
         Some("f10")
     );
+}
+
+#[gpui_kit::test]
+fn a_built_in_shortcut_can_be_removed_and_keeps_no_key(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-keyboard");
+    click(cx, window, "shortcut-NewThread-remove");
+    cx.run_until_parked();
+    let binding = cx.update(|cx| {
+        kg_core::Workspace::global(cx)
+            .read(cx)
+            .keymap()
+            .binding("NewThread")
+            .map(str::to_owned)
+    });
+    assert_eq!(binding.as_deref(), Some(""));
+}
+
+#[gpui_kit::test]
+fn a_removed_built_in_shortcut_stays_listed_with_bind_and_reset(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-keyboard");
+    click(cx, window, "shortcut-NewThread-remove");
+    cx.run_until_parked();
+    assert!(
+        present(cx, window, "shortcut-NewThread-key"),
+        "the removed shortcut vanished from Settings"
+    );
+    assert_eq!(label(cx, window, "shortcut-NewThread-key"), "Bind");
+    click(cx, window, "shortcut-NewThread-reset");
+    cx.run_until_parked();
+    assert_eq!(label(cx, window, "shortcut-NewThread-key"), "Change");
+    let binding = cx.update(|cx| {
+        kg_core::Workspace::global(cx)
+            .read(cx)
+            .keymap()
+            .binding("NewThread")
+            .map(str::to_owned)
+    });
+    assert_eq!(binding, None, "reset did not bring the default back");
 }

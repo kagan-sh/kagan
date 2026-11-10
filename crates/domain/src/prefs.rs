@@ -5,6 +5,15 @@ pub const AGENT_INTEGRATION: &str = "agent-integration";
 pub const NOTIFY: &str = "notify";
 pub const PLUGIN_STATUS: &str = "plugin-status";
 pub const UPDATE_CHECK: &str = "update-check";
+pub const BRANCH_PREFIX: &str = "branch-prefix";
+pub const TERMINAL_COPY_ON_SELECT: &str = "terminal-copy-on-select";
+pub const TERMINAL_LINKS_BROWSER: &str = "terminal-links-browser";
+pub const FONT_UI: &str = "font-ui";
+pub const FONT_TERMINAL: &str = "font-terminal";
+pub const FONT_NAME_MAX: usize = 80;
+pub const DENSITY: &str = "density";
+pub const DENSITIES: [&str; 3] = ["compact", "default", "roomy"];
+pub const BRANCH_PREFIX_MAX: usize = 40;
 pub const TERMINAL_FONT_SIZE: &str = "terminal-font-size";
 pub const REVIEW_VIEWED: &str = "review-viewed";
 pub const SETUP_GUIDE: &str = "setup-guide";
@@ -18,3 +27,19 @@ pub const LEFT_WIDTH: &str = "left-width";
 pub const RIGHT_SIDEBAR: &str = "right-sidebar";
 pub const RIGHT_WIDTH: &str = "right-width";
 pub const REVIEW_WRAP: &str = "review-wrap";
+
+/// Whether `text` can start the branch names kagan makes: empty, or a git branch fragment such as `bb/`.
+#[must_use]
+pub fn valid_branch_prefix(text: &str) -> bool {
+    text.is_empty()
+        || (text.len() <= BRANCH_PREFIX_MAX
+            && (text.ends_with('/') || text.ends_with('-'))
+            && !text.starts_with("refs/")
+            && crate::valid_branch(&format!("{text}x")))
+}
+
+/// Whether `text` can name a font family: empty for the theme's own font, or a family name of up to 80 bytes.
+#[must_use]
+pub fn valid_font_name(text: &str) -> bool {
+    text.is_empty() || (text.len() <= FONT_NAME_MAX && !text.chars().any(char::is_control))
+}

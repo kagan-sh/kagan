@@ -245,6 +245,7 @@ fn plugin_thread(op: &PluginOp) -> Option<&ThreadId> {
         | PluginOp::CancelInstall
         | PluginOp::New { .. }
         | PluginOp::Check { .. }
+        | PluginOp::Outdated
         | PluginOp::Share { .. }
         | PluginOp::Logs { .. }
         | PluginOp::Types { .. }

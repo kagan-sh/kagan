@@ -32,9 +32,13 @@ A plugin from git stays at the commit you installed. A folder install is a link,
 
 ```bash
 kg plugin update <id>
+kg plugin update --all
+kg plugin outdated
 ```
 
-If the new version asks for more powers, kagan asks you again.
+`kg plugin outdated` lists the git plugins whose ref now names a newer commit. `kg plugin update --all` moves each of them. Settings → Installed has the same check as **Check for updates**, with **Update all** when some are behind. A plugin pinned to a commit is not checked.
+
+If the new version asks for more powers, kagan asks you again, plugin by plugin. `kg plugin update --all` does not approve new powers: it moves each plugin whose update keeps its powers, and lists each one that adds powers under needs approval; update that plugin alone to approve it.
 
 ## Install from an index
 

@@ -63,4 +63,6 @@ kg keymap set <id>:<command> <key>
 kg keymap remove <id>:<command>
 ```
 
+To take the key off a built-in shortcut, remove it in Settings → Keyboard, or run `kg keymap remove <shortcut>`. `kg keymap set <shortcut> "" --reset` puts its default key back.
+
 Settings → Keyboard lists plugin commands under the plugin name.

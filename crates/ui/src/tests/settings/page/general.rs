@@ -205,3 +205,35 @@ fn a_failed_switch_keeps_the_saved_value_and_shows_the_error(cx: &mut TestAppCon
         "setting-row-dev.test.prefs/sounds-note"
     ));
 }
+
+fn saved_preference(cx: &mut TestAppContext, key: &str) -> serde_json::Value {
+    match try_op(
+        cx,
+        Op::Preference(kg_domain::PreferenceOp::Get { key: key.into() }),
+    ) {
+        Ok(OpResult::Setting(value)) => value,
+        other => panic!("preference {key} read as {other:?}"),
+    }
+}
+
+#[gpui_kit::test]
+fn the_branch_prefix_saves_on_enter_and_a_bad_one_is_not_saved(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-general");
+    click(cx, window, "branch-prefix");
+    cx.simulate_input(window, "bb/");
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(saved_preference(cx, "branch-prefix"), json!("bb/"));
+
+    click(cx, window, "branch-prefix");
+    cx.simulate_input(window, " x");
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(saved_preference(cx, "branch-prefix"), json!("bb/"));
+    assert_eq!(
+        aria_label(cx, window, "setting-row-branch-prefix-note").as_deref(),
+        Some("Not a valid branch start. It must end in / or -, such as bb/ or feat-.")
+    );
+}

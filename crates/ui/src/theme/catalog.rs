@@ -1,18 +1,20 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use gpui_kit::SharedString;
 use gpui_kit::component::ThemeMode;
 use gpui_kit::{
     App, AppContext as _, Context, Entity, EventEmitter, Global, Hsla, Subscription, Task, Window,
 };
 use kg_domain::{
-    Appearance, Look, Op, OpError, OpResult, Palette, ThemeFile, ThemeOp, ThemeSettings,
+    Appearance, Look, Op, OpError, OpResult, Palette, PreferenceOp, Space, ThemeFile, ThemeOp,
+    ThemeSettings, prefs,
 };
 use kg_plugins::PluginHost;
 
 use kg_core::{Workspace, WorkspaceEvent};
 
-use super::colors::apply;
+use super::colors::{Families, apply};
 use super::palette::{builtins, fjord, palette, reserved};
 use crate::theme::token_color;
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -34,6 +36,12 @@ pub(crate) struct Notice(pub(crate) String);
 pub(crate) struct ThemeState {
     pub(crate) catalog: Vec<CatalogEntry>,
     pub(crate) settings: ThemeSettings,
+    pub(crate) density: Density,
+    pub(crate) installed_fonts: Vec<String>,
+    font_prefs: FontPrefs,
+    // The card's id and theme while a card previews; the saved theme is `applied`.
+    preview: Option<(String, ThemeFile)>,
+    focus_preview: bool,
     pub(crate) palette: Palette,
     pub(crate) error: Option<String>,
     dir: PathBuf,
@@ -49,12 +57,60 @@ pub(crate) struct ThemeState {
     _changed: Subscription,
     plugins_changed: Option<Subscription>,
     load: Task<()>,
+    fonts_load: Task<()>,
 }
 
 impl EventEmitter<Notice> for ThemeState {}
 
 struct ThemeOwner(Entity<ThemeState>);
 impl Global for ThemeOwner {}
+
+/// How close the rows and the spacing sit. The theme file sets the default; this scales it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Density {
+    Compact,
+    #[default]
+    Default,
+    Roomy,
+}
+
+impl Density {
+    pub(crate) fn parse(text: &str) -> Self {
+        match text {
+            "compact" => Self::Compact,
+            "roomy" => Self::Roomy,
+            _ => Self::Default,
+        }
+    }
+
+    pub(crate) fn id(self) -> &'static str {
+        match self {
+            Self::Compact => "compact",
+            Self::Default => "default",
+            Self::Roomy => "roomy",
+        }
+    }
+
+    fn scale(self, mut look: Look) -> Look {
+        let percent = match self {
+            Self::Compact => 75,
+            Self::Default => return look,
+            Self::Roomy => 125,
+        };
+        let by = |value: u16| u16::try_from(u32::from(value) * percent / 100).unwrap_or(u16::MAX);
+        look.space = Space {
+            xs: by(look.space.xs),
+            sm: by(look.space.sm),
+            md: by(look.space.md),
+            lg: by(look.space.lg),
+            xl: by(look.space.xl),
+            xxl: by(look.space.xxl),
+        };
+        look.row = by(look.row);
+        look.control = by(look.control);
+        look
+    }
+}
 
 pub(crate) fn look(cx: &App) -> Look {
     cx.try_global::<ThemeOwner>()
@@ -80,7 +136,7 @@ impl ThemeState {
         let system = ThemeMode::Dark;
         let mode = resolve(settings.mode, system);
         let palette = palette(&file, mode).clone();
-        apply(&file, mode, cx);
+        apply(&file, mode, &Families::default(), cx);
         let folder = dir.clone();
         let watch = cx.spawn(async move |this, cx| {
             if this.update(cx, Self::load_settings).is_err() {
@@ -108,9 +164,14 @@ impl ThemeState {
                 this.load_settings(cx);
             }
         });
-        Self {
+        let mut state = Self {
             catalog: builtins(),
             builtins: builtins(),
+            density: Density::default(),
+            installed_fonts: Vec::new(),
+            font_prefs: FontPrefs::default(),
+            preview: None,
+            focus_preview: false,
             settings,
             palette,
             error: None,
@@ -126,14 +187,70 @@ impl ThemeState {
             _changed: changed,
             plugins_changed: None,
             load: Task::ready(()),
+            fonts_load: Task::ready(()),
+        };
+        let text = cx.text_system().clone();
+        state.fonts_load = cx.spawn(async move |this, cx| {
+            let all = cx
+                .background_spawn(async move { text.all_font_names() })
+                .await;
+            _ = this.update(cx, |this, cx| {
+                // A list a test put in place is kept; the platform's list fills an empty one.
+                if this.installed_fonts.is_empty() {
+                    this.installed_fonts = sorted_families(all);
+                    this.paint(cx);
+                }
+            });
+        });
+        state
+    }
+
+    // A font the person picked wins over the theme's, when the system has it; otherwise the default.
+    fn families(&self) -> Families {
+        let pick = |chosen: &str, fallback: &str| {
+            if self.installed_fonts.iter().any(|font| font == chosen) {
+                SharedString::from(chosen.to_owned())
+            } else {
+                SharedString::from(fallback.to_owned())
+            }
+        };
+        let default = Families::default();
+        Families {
+            ui: pick(&self.font_prefs.ui, &default.ui),
+            mono: pick(&self.font_prefs.terminal, &default.mono),
         }
     }
 
     fn load_settings(&mut self, cx: &mut Context<Self>) {
         let task = Workspace::dispatch(Op::Theme(ThemeOp::Get), cx);
+        let [ui, terminal] = [prefs::FONT_UI, prefs::FONT_TERMINAL].map(|key| {
+            Workspace::dispatch(Op::Preference(PreferenceOp::Get { key: key.into() }), cx)
+        });
+        let density = Workspace::dispatch(
+            Op::Preference(PreferenceOp::Get {
+                key: prefs::DENSITY.into(),
+            }),
+            cx,
+        );
         self.load = cx.spawn(async move |this, cx| {
+            let density = match density.await {
+                Ok(OpResult::Setting(value)) => Density::parse(value.as_str().unwrap_or_default()),
+                _ => Density::default(),
+            };
+            let fonts = FontPrefs {
+                ui: text_of(ui.await),
+                terminal: text_of(terminal.await),
+            };
             if let Ok(OpResult::Theme(settings)) = task.await {
-                _ = this.update(cx, |this, cx| this.refresh(settings, cx));
+                _ = this.update(cx, |this, cx| {
+                    let fonts_changed = this.font_prefs != fonts;
+                    if this.density != density || fonts_changed {
+                        this.density = density;
+                        this.font_prefs = fonts;
+                        this.paint(cx);
+                    }
+                    this.refresh(settings, cx);
+                });
             }
         });
     }
@@ -229,13 +346,66 @@ impl ThemeState {
 
     fn paint(&mut self, cx: &mut Context<Self>) {
         self.mode = resolve(self.settings.mode, self.system);
-        self.palette = palette(&self.applied, self.mode).clone();
-        apply(&self.applied, self.mode, cx);
+        // A preview is what the window shows; the store refresh only changes `applied`.
+        let shown = self
+            .preview
+            .as_ref()
+            .map_or_else(|| self.applied.clone(), |(_, file)| file.clone());
+        self.palette = palette(&shown, self.mode).clone();
+        apply(&shown, self.mode, &self.families(), cx);
         cx.notify();
     }
 
+    #[cfg(test)]
+    pub(crate) fn set_installed_fonts_for_test(&mut self, fonts: Vec<String>) {
+        self.installed_fonts = fonts;
+    }
+
+    // Shows a card's theme without saving it.
+    pub(crate) fn preview(&mut self, id: &str, cx: &mut Context<Self>) {
+        if self.preview.as_ref().is_some_and(|(shown, _)| shown == id) {
+            return;
+        }
+        let Some(Ok(file)) = self
+            .catalog
+            .iter()
+            .find(|entry| entry.id == id)
+            .map(|entry| entry.file.clone())
+        else {
+            return;
+        };
+        self.preview = Some((id.to_owned(), file));
+        self.paint(cx);
+    }
+
+    // Puts the saved theme back on screen.
+    pub(crate) fn end_preview(&mut self, cx: &mut Context<Self>) {
+        if self.preview.take().is_some() {
+            self.paint(cx);
+        }
+    }
+
+    // A click keeps the previewed theme on screen; the save that follows makes it the saved one.
+    pub(crate) fn commit_preview(&mut self, cx: &mut Context<Self>) {
+        if let Some((id, file)) = self.preview.take() {
+            self.applied = file;
+            self.applied_id = Some(id);
+            self.paint(cx);
+        }
+    }
+
+    // A card with keyboard focus previews its theme; losing focus puts the saved one back.
+    pub(crate) fn follow_focus(&mut self, focused: Option<&str>, cx: &mut Context<Self>) {
+        match focused {
+            Some(id) => self.preview(id, cx),
+            None if self.focus_preview => self.end_preview(cx),
+            None => {}
+        }
+        self.focus_preview = focused.is_some();
+    }
+
     pub(crate) fn look(&self) -> Look {
-        self.applied.look
+        self.density.scale(self.applied.look)
     }
 
     fn copy(&self, id: &str, from: Option<&str>) -> Result<ThemeFile, OpError> {
@@ -258,6 +428,32 @@ impl ThemeState {
         Ok(file)
     }
 }
+/// The font names the person saved. An empty name is the theme's own font.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct FontPrefs {
+    pub(crate) ui: String,
+    pub(crate) terminal: String,
+}
+
+fn text_of(result: Result<OpResult, OpError>) -> String {
+    match result {
+        Ok(OpResult::Setting(value)) => value.as_str().unwrap_or_default().to_owned(),
+        _ => String::new(),
+    }
+}
+
+// The families the system has, without the hidden system faces (their names start with a dot).
+// Read off the main thread: the platform walks every font, which takes tens of milliseconds.
+fn sorted_families(all: Vec<String>) -> Vec<String> {
+    let mut names: Vec<String> = all
+        .into_iter()
+        .filter(|name| !name.starts_with('.'))
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 fn resolve(mode: Appearance, system: ThemeMode) -> ThemeMode {
     match mode {
         Appearance::Light => ThemeMode::Light,
