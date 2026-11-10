@@ -166,12 +166,10 @@ impl Kagan {
 
     pub(super) fn settings_activate(
         &mut self,
-        index: usize,
         entry: Entry,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.settings.cursor = index;
         match entry {
             Entry::Category(listed) => self.select_section(listed.section, window, cx),
             Entry::Result { section, at, .. } => {
@@ -300,7 +298,7 @@ pub(super) fn sidebar(
                 }))
                 .on_action(cx.listener(move |this, _: &OpenSection, window, cx| {
                     if let Some(entry) = open.clone() {
-                        this.settings_activate(cursor, entry, window, cx);
+                        this.settings_activate(entry, window, cx);
                     }
                 }))
                 .child(
@@ -391,7 +389,7 @@ fn row(
             cx.theme().transparent
         })
         .on_click(cx.listener(move |this, _, window, cx| {
-            this.settings_activate(index, activate.clone(), window, cx);
+            this.settings_activate(activate.clone(), window, cx);
         }))
         .child(content)
         .into_any_element()
