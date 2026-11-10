@@ -6,8 +6,8 @@ pub(crate) mod ui;
 
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{
-    EnvironmentOp, KeymapOp, Op, OpError, OpResult, PreferenceOp, ProgramOp, ProjectOp, SettingsOp,
-    Sidebar, TerminalOp, ThemeOp, ThreadOp, order_sidebar_projects,
+    EnvironmentOp, KeymapOp, NotifyOp, Op, OpError, OpResult, PreferenceOp, ProgramOp, ProjectOp,
+    SettingsOp, Sidebar, TerminalOp, ThemeOp, ThreadOp, order_sidebar_projects,
 };
 
 use crate::host::database::{Database, Result};
@@ -47,6 +47,7 @@ pub(crate) async fn execute(
         } => crate::dispatch::guide::status(this, thread_id, project_id, environment_id, cx).await,
         Op::Open => announce(this, crate::WorkspaceEvent::Open, cx),
         Op::Settings(SettingsOp::Open) => announce(this, crate::WorkspaceEvent::Settings, cx),
+        Op::Notify(NotifyOp::Test) => announce(this, crate::WorkspaceEvent::NotifyTest, cx),
         Op::Settings(SettingsOp::Plugins) => {
             announce(this, crate::WorkspaceEvent::SettingsPlugins, cx)
         }
@@ -172,6 +173,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Skill(_)
         | Op::Open
         | Op::Settings(_)
+        | Op::Notify(_)
         | Op::Window(_)
         | Op::Sidebar
         | Op::Project(ProjectOp::List | ProjectOp::Get { .. } | ProjectOp::Remove { .. })
@@ -207,6 +209,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
             | ThreadOp::Archive { .. }
             | ThreadOp::Unarchive { .. }
             | ThreadOp::SetPinned { .. }
+            | ThreadOp::Notify { .. }
             | ThreadOp::Rename { .. }
             | ThreadOp::Ask { .. }
             | ThreadOp::MarkRead { .. }

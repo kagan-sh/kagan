@@ -78,8 +78,14 @@ pub(super) async fn waiting(
         );
     }
     Workspace::events(this, id.clone(), kinds, cx).await?;
-    this.update(cx, |_, cx| cx.emit(WorkspaceEvent::Waiting(id)))
-        .map_err(closed)
+    this.update(cx, |_, cx| {
+        cx.emit(WorkspaceEvent::Notice(
+            id.clone(),
+            kg_domain::NotifyReason::TurnEnded,
+        ));
+        cx.emit(WorkspaceEvent::Waiting(id));
+    })
+    .map_err(closed)
 }
 
 pub(super) async fn done(

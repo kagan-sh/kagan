@@ -54,6 +54,12 @@ pub(crate) async fn raise(
     };
     this.update(cx, |workspace, cx| {
         super::notify::asked(workspace, &thread_id, cx);
+        if waiting.for_a_person {
+            cx.emit(crate::WorkspaceEvent::Notice(
+                thread_id.clone(),
+                kg_domain::NotifyReason::Asked,
+            ));
+        }
         waiting.thread = Some(thread_id);
         workspace.pending.insert(interaction_id, waiting);
         thread.update(cx, |thread, cx| {
