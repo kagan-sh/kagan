@@ -497,7 +497,6 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_long_line_is_cut_and_marked() {
         let (shown, truncated) = shown_text(&"x".repeat(201));
@@ -528,6 +527,7 @@ mod tests {
         assert_eq!(shown_text("a\n\n"), ("a\n".to_owned(), false));
     }
 
+    #[cfg(unix)]
     #[test]
     fn file_mode_keeps_the_executable_bit() {
         use std::os::unix::fs::PermissionsExt as _;
