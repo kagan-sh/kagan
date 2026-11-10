@@ -345,6 +345,7 @@ fn an_env_value_is_read_from_stdin_and_never_taken_from_the_command_line() {
             name: "API_KEY".into(),
             project_id: project.clone(),
             value: None,
+            thread_id: None,
         })
     );
     let read = take_value_with(typed, |name| {
@@ -357,6 +358,7 @@ fn an_env_value_is_read_from_stdin_and_never_taken_from_the_command_line() {
             name: "API_KEY".into(),
             project_id: project,
             value: Some("sk-1".into()),
+            thread_id: None,
         })
     );
     let empty = take_value_with(parse(&["env", "set", "API_KEY"]), |_| Ok("\n".into()));
@@ -371,6 +373,7 @@ fn an_env_value_is_read_from_stdin_and_never_taken_from_the_command_line() {
         Op::Env(EnvOp::Remove {
             name: "API_KEY".into(),
             project_id: None,
+            thread_id: None,
         })
     );
 }
@@ -422,4 +425,13 @@ fn instructions_set_reads_a_file_or_stdin_and_sends_the_text() {
         parse(&["instructions", "get"]),
         Op::Instructions(InstructionsOp::Get { project: None })
     );
+}
+
+#[test]
+fn env_set_checks_the_name_before_reading_stdin() {
+    use crate::cli::take_value_with;
+    let refused = take_value_with(parse(&["env", "set", "PATH"]), |_| {
+        panic!("stdin must not be read for a name kagan refuses")
+    });
+    assert!(matches!(refused, Err(OpError::Invalid(_))), "{refused:?}");
 }

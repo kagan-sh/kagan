@@ -286,6 +286,10 @@ pub(crate) fn take_value_with(
     op: Op,
     read: impl FnOnce(&str) -> Result<String, OpError>,
 ) -> Result<Op, OpError> {
+    // A name or a thread the op refuses is refused before anything is read.
+    if matches!(op, Op::Env(EnvOp::Set { value: None, .. })) {
+        kg_domain::check(&op).map_err(OpError::Invalid)?;
+    }
     match op {
         Op::Plugin(PluginOp::Config {
             id,
@@ -306,12 +310,14 @@ pub(crate) fn take_value_with(
             name,
             project_id,
             value: None,
+            thread_id,
         }) => {
             let value = read_line(&name, read)?;
             Ok(Op::Env(EnvOp::Set {
                 name,
                 project_id,
                 value: Some(value),
+                thread_id,
             }))
         }
         op => Ok(op),

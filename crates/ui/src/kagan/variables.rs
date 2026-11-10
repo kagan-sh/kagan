@@ -77,6 +77,7 @@ impl Variables {
             name,
             project_id: self.scope.clone(),
             value: Some(value),
+            thread_id: None,
         });
         self.send(op, window, cx);
     }
@@ -85,6 +86,7 @@ impl Variables {
         let op = Op::Env(EnvOp::Remove {
             name,
             project_id: self.scope.clone(),
+            thread_id: None,
         });
         self.send(op, window, cx);
     }

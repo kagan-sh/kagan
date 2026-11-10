@@ -1260,6 +1260,7 @@ async fn set_variable(
             name: name.into(),
             project_id,
             value: Some(value.into()),
+            thread_id: None,
         }),
         cx,
     )

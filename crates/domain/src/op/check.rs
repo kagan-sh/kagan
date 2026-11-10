@@ -194,9 +194,20 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
     }
 }
 
+// A thread's own terminal sends its thread id, so a program kagan started cannot change what
+// later programs get. The check keys off that id; a program that drops it is not stopped here.
 fn env_check(op: &EnvOp) -> Result<(), String> {
     match op {
         EnvOp::List { .. } => Ok(()),
+        EnvOp::Set {
+            thread_id: Some(_), ..
+        }
+        | EnvOp::Remove {
+            thread_id: Some(_), ..
+        } => Err(
+            "a thread cannot change environment variables; set them in Settings → General or on the project's page"
+                .into(),
+        ),
         EnvOp::Set { name, value, .. } => {
             variable_name(name)?;
             value.as_deref().map_or(Ok(()), variable_value)

@@ -3,7 +3,7 @@ use std::fmt;
 use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 
-use crate::ProjectId;
+use crate::{ProjectId, ThreadId};
 
 /// The longest value kept, in bytes. A value is one line, as a plugin secret is.
 pub(crate) const ENV_VALUE_MAX_BYTES: usize = 1024;
@@ -24,12 +24,19 @@ pub enum EnvOp {
         #[arg(skip)]
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<String>,
+        /// Set by a thread's own environment; a thread may not change variables
+        #[arg(long, env = "KG_THREAD_ID", hide = true)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        thread_id: Option<ThreadId>,
     },
     /// Remove a variable
     Remove {
         name: String,
         #[arg(long = "project")]
         project_id: Option<ProjectId>,
+        #[arg(long, env = "KG_THREAD_ID", hide = true)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        thread_id: Option<ThreadId>,
     },
 }
 
@@ -45,13 +52,16 @@ impl fmt::Debug for EnvOp {
                 name,
                 project_id,
                 value,
+                ..
             } => f
                 .debug_struct("Set")
                 .field("name", name)
                 .field("project_id", project_id)
                 .field("value", &value.as_ref().map(|_| "<hidden>"))
                 .finish(),
-            Self::Remove { name, project_id } => f
+            Self::Remove {
+                name, project_id, ..
+            } => f
                 .debug_struct("Remove")
                 .field("name", name)
                 .field("project_id", project_id)

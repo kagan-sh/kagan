@@ -11,6 +11,7 @@ fn set(name: &str, project_id: Option<ProjectId>, value: &str) -> Op {
         name: name.into(),
         project_id,
         value: Some(value.into()),
+        thread_id: None,
     })
 }
 
@@ -91,6 +92,7 @@ async fn a_kagan_name_an_unknown_project_or_an_unset_removal_is_refused(cx: &mut
         Op::Env(EnvOp::Remove {
             name: "TEST_NEVER_SET".into(),
             project_id: None,
+            thread_id: None,
         }),
         cx,
     )
@@ -199,6 +201,7 @@ async fn the_variables_file_is_owner_only_from_its_first_write(cx: &mut TestAppC
         Op::Env(EnvOp::Remove {
             name: "TEST_TOKEN".into(),
             project_id: None,
+            thread_id: None,
         }),
         cx,
     )
@@ -221,4 +224,136 @@ async fn a_value_never_reaches_a_reply_or_an_error(cx: &mut TestAppContext) {
     .unwrap_err();
     assert!(!broken.to_string().contains(secret), "{broken}");
     assert!(!format!("{broken:?}").contains(secret), "{broken:?}");
+}
+
+#[gpui_kit::test]
+async fn a_thread_cannot_change_a_variable_through_the_op(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    let thread = Some(ThreadId("thr_program".into()));
+    let set = Op::Env(EnvOp::Set {
+        name: "TEST_TOKEN".into(),
+        project_id: None,
+        value: Some("from-a-thread".into()),
+        thread_id: thread.clone(),
+    });
+    let refused = op(set, cx).await.unwrap_err();
+    assert!(matches!(refused, OpError::Invalid(_)), "{refused}");
+    let removed = op(
+        Op::Env(EnvOp::Remove {
+            name: "TEST_TOKEN".into(),
+            project_id: None,
+            thread_id: thread,
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(removed, OpError::Invalid(_)), "{removed}");
+    assert_eq!(
+        op(Op::Env(EnvOp::List { project_id: None }), cx)
+            .await
+            .unwrap(),
+        OpResult::Variables(Vec::new())
+    );
+}
+
+#[gpui_kit::test]
+async fn a_corrupt_file_does_not_stop_a_project_removal(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    std::fs::write(
+        data_dir(&fixture, cx).join("environment.json"),
+        "{ not json",
+    )
+    .unwrap();
+    let remove = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Project(ProjectOp::Remove {
+                id: fixture.project.clone(),
+            }),
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    let (approval, _) = pending_delete(cx);
+    cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx))
+        .await
+        .unwrap();
+    let result = remove.await.unwrap();
+    let OpResult::Warnings(warnings) = result else {
+        panic!("{result:?}")
+    };
+    assert!(
+        warnings
+            .iter()
+            .any(|line| line.contains("environment.json")),
+        "{warnings:?}"
+    );
+    assert!(cx.read(|cx| {
+        fixture
+            .workspace
+            .read(cx)
+            .project(&fixture.project)
+            .is_none()
+    }));
+}
+
+#[gpui_kit::test]
+async fn a_corrupt_file_names_its_path_and_a_set_moves_it_aside(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let dir = data_dir(&fixture, cx);
+    let file = dir.join("environment.json");
+    std::fs::write(&file, "{ not json").unwrap();
+    let start = crate::host::variables::for_project(&dir, &fixture.project).unwrap_err();
+    assert!(start.to_string().contains("environment.json"), "{start}");
+    let OpResult::Warnings(warnings) = op(set("TEST_TOKEN", None, "fresh-value"), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("warnings")
+    };
+    assert!(
+        warnings
+            .iter()
+            .any(|line| line.contains("environment.json.unreadable")),
+        "{warnings:?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.join("environment.json.unreadable")).unwrap(),
+        "{ not json"
+    );
+    assert_eq!(
+        op(Op::Env(EnvOp::List { project_id: None }), cx)
+            .await
+            .unwrap(),
+        OpResult::Variables(vec!["TEST_TOKEN".into()])
+    );
+    assert!(crate::host::variables::for_project(&dir, &fixture.project).is_ok());
+}
+
+#[gpui_kit::test]
+async fn removing_a_projects_last_variable_drops_its_entry(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    op(
+        set("TEST_TOKEN", Some(fixture.project.clone()), "project-value"),
+        cx,
+    )
+    .await
+    .unwrap();
+    op(
+        Op::Env(EnvOp::Remove {
+            name: "TEST_TOKEN".into(),
+            project_id: Some(fixture.project.clone()),
+            thread_id: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let file = data_dir(&fixture, cx).join("environment.json");
+    let stored: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+    assert!(
+        stored["projects"].get(fixture.project.0.as_str()).is_none(),
+        "{stored}"
+    );
 }

@@ -193,7 +193,7 @@ pub(crate) async fn remove_project(
             .extend(worktrees.iter().map(|environment| environment.id.clone()));
     })
     .map_err(closed)?;
-    let failures = remove_worktrees(this, &project.path, worktrees, cx).await?;
+    let mut failures = remove_worktrees(this, &project.path, worktrees, cx).await?;
     let at = crate::workspace::time(this, cx)?;
     let lookup = id.clone();
     let events = database
@@ -202,7 +202,10 @@ pub(crate) async fn remove_project(
     let data_dir = this
         .update(cx, |workspace, _| workspace.data_dir.clone())
         .map_err(closed)?;
-    crate::host::variables::forget_project(&data_dir, &id)?;
+    // The project is already gone, so a values file that cannot be read is a warning, not a failure.
+    if let Err(error) = crate::host::variables::forget_project(&data_dir, &id) {
+        failures.push(error.to_string());
+    }
     this.update(cx, |workspace, cx| {
         crate::thread::archive::forget_deleted(workspace, events, cx);
     })
