@@ -276,3 +276,36 @@ fn a_new_skill_starts_from_the_template_picked_in_the_menu(cx: &mut TestAppConte
     wait_until(cx, |cx| shows(cx, window, "skills-back"));
     assert!(label(cx, window, "skills-field-description").starts_with("Review a pull request"));
 }
+
+fn first_row_among(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    names: &[&str],
+) -> Option<String> {
+    for _ in 0..80 {
+        for name in names {
+            if focused_of(cx, window, &format!("skill-row-{name}")) == Some(true) {
+                return Some((*name).to_owned());
+            }
+        }
+        cx.simulate_keystrokes(window, "tab");
+        cx.run_until_parked();
+    }
+    None
+}
+
+#[gpui_kit::test]
+fn project_first_keeps_names_in_order_inside_each_source(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    write_user_skill(data.path(), "beta-skill");
+    write_user_skill(data.path(), "alpha-skill");
+    show_skills(cx, &kagan, window);
+    click(cx, window, "skills-sort");
+    cx.run_until_parked();
+    click(cx, window, "skills-sort-3");
+    cx.run_until_parked();
+    assert_eq!(
+        first_row_among(cx, window, &["alpha-skill", "beta-skill"]).as_deref(),
+        Some("alpha-skill")
+    );
+}

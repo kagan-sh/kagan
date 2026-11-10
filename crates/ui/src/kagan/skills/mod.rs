@@ -321,6 +321,7 @@ impl Page {
     }
 
     fn start_new(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.notice = None;
         let input = cx.new(|cx| InputState::new(window, cx).placeholder("skill-name"));
         let focus = input.read(cx).focus_handle(cx);
         window.focus(&focus, cx);
@@ -336,7 +337,7 @@ impl Page {
         let made = Workspace::dispatch(
             Op::Skill(SkillOp::New {
                 name: name.clone(),
-                project: self.save == Save::Project,
+                project: self.save == Save::Project && self.project.is_some(),
                 template: self.template,
                 project_id: self.project.clone(),
             }),
@@ -376,12 +377,16 @@ impl Page {
         match self.sort {
             Sort::Name => skills.sort_by(|a, b| a.name.cmp(&b.name)),
             Sort::Source => skills.sort_by(|a, b| {
-                source_rank(a.source)
-                    .cmp(&source_rank(b.source))
-                    .then_with(|| a.name.cmp(&b.name))
+                let by_source = source_rank(a.source).cmp(&source_rank(b.source));
+                let by_source = if self.descending {
+                    by_source.reverse()
+                } else {
+                    by_source
+                };
+                by_source.then_with(|| a.name.cmp(&b.name))
             }),
         }
-        if self.descending {
+        if self.descending && self.sort == Sort::Name {
             skills.reverse();
         }
         skills

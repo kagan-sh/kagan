@@ -312,7 +312,11 @@ fn template_menu(page: &Page, cx: &mut Context<Page>) -> impl IntoElement {
 }
 
 fn scope_menu(page: &Page, cx: &mut Context<Page>) -> impl IntoElement {
-    let current = page.save;
+    let current = if page.project.is_some() {
+        page.save
+    } else {
+        Save::Yours
+    };
     let label = format!(
         "Save in: {}",
         match current {

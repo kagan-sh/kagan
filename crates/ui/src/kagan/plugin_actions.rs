@@ -138,6 +138,7 @@ impl Kagan {
                     return;
                 }
                 this.plugins.form = false;
+                this.reconcile_setup_guide(cx);
                 let id = PluginHost::try_global(cx).and_then(|host| {
                     host.read(cx)
                         .status()

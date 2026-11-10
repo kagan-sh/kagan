@@ -80,6 +80,8 @@ impl Kagan {
             _appearance: crate::theme::watch_system(window, cx),
             _theme_paint: Self::theme_paint(cx),
             _theme_notice: Self::theme_notice(cx),
+            setup_replay: false,
+            agent_scan: None,
             asks: super::ask_form::AskState::default(),
             toast: None,
             toast_epoch: 0,
@@ -141,6 +143,10 @@ impl Kagan {
             .update(cx, |sidebar, _| sidebar.replace(listing, footer));
         self.wake_threads_plugin(cx);
         self.note_shown(cx);
+        self.reconcile_setup_guide(cx);
+        if matches!(self.screen.shown(), Shown::Nothing) {
+            self.scan_agents(cx);
+        }
         // A shown thread that was deleted leaves no terminal to hold the keyboard, so the window does.
         let listed = |id: &ProjectId| self.sidebar.read(cx).project(id).is_some();
         let gone = match self.screen.shown() {

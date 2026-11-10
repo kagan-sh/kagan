@@ -186,6 +186,8 @@ pub(crate) struct Kagan {
     _appearance: Subscription,
     _theme_paint: Subscription,
     _theme_notice: Subscription,
+    setup_replay: bool,
+    agent_scan: Option<Task<()>>,
     asks: ask_form::AskState,
     toast: Option<Toast>,
     toast_epoch: u64,
