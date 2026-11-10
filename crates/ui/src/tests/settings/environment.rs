@@ -1,6 +1,6 @@
-use gpui_kit::{AppContext as _, TestAppContext};
+use gpui_kit::TestAppContext;
 use kg_core::Workspace;
-use kg_domain::{EnvOp, Op, OpResult, ProjectId};
+use kg_domain::{EnvOp, Op, OpResult, ProjectId, SettingsOp};
 
 use crate::tests::kagan::{click, open, present, wait_until};
 
@@ -49,14 +49,17 @@ fn a_variable_set_in_general_is_listed_by_name_and_its_value_never_shown(cx: &mu
 
 #[gpui_kit::test]
 fn a_project_page_sets_its_own_variables_and_leaves_the_global_ones(cx: &mut TestAppContext) {
-    let (kagan, window, _data) = open(cx);
+    let (_kagan, window, _data) = open(cx);
     cx.run_until_parked();
-    cx.update_window(window, |_, window, cx| {
-        kagan.update(cx, |kagan, cx| {
-            kagan.open_project_page(ProjectId("prj_kagan".into()), window, cx);
-        });
+    cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Settings(SettingsOp::Project {
+                id: ProjectId("prj_kagan".into()),
+            }),
+            cx,
+        )
     })
-    .unwrap();
+    .detach();
     cx.run_until_parked();
     assert!(present(cx, window, "project-settings-done"));
     click(cx, window, "env-name");

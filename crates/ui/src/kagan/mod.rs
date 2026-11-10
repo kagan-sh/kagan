@@ -66,8 +66,8 @@ mod window;
 
 pub(crate) use window::shows;
 pub(crate) use window::{
-    front, show, show_plugin_settings, show_preview, show_settings, show_skills, start_plugin,
-    watch_waiting,
+    front, show, show_plugin_settings, show_preview, show_project_settings, show_settings,
+    show_skills, start_plugin, watch_waiting,
 };
 
 use std::collections::BTreeSet;

@@ -35,10 +35,14 @@ pub(crate) async fn list(
         )));
     }
     let project_program = match project_id {
-        Some(id) => database
-            .call(move |store| store.project(&id))
-            .await?
-            .and_then(|project| project.program),
+        Some(id) => {
+            let lookup = id.clone();
+            let project = database
+                .call(move |store| store.project(&lookup))
+                .await?
+                .ok_or_else(|| crate::workspace::missing("project", &id))?;
+            project.program
+        }
         None => None,
     };
     let recent = database
@@ -47,6 +51,8 @@ pub(crate) async fn list(
         .into_iter()
         .filter(|thread| thread.visibility == Visibility::Visible && !thread.provider.is_empty())
         .map(|thread| thread.provider);
+    // The project's program goes first, so it is the default when it is installed.
+    let recent = project_program.iter().cloned().chain(recent);
     let recent: Vec<String> = recent.fold(Vec::new(), |mut distinct, command| {
         if !distinct.contains(&command) && distinct.len() < RECENT_LIMIT {
             distinct.push(command);
@@ -62,7 +68,6 @@ pub(crate) async fn list(
                 pathext.as_deref(),
                 shell.as_deref(),
                 &recent,
-                project_program.as_deref(),
             );
             if include_versions {
                 versions(&mut list);
@@ -74,14 +79,12 @@ pub(crate) async fn list(
 }
 
 /// The programs found with `path` and `pathext`, the `shell`, and the `recent` commands, newest
-/// first. The default is `project_program` when it is installed, else the first installed recent
-/// command. Versions are filled in separately, so this reads nothing but the filesystem.
+/// first. Versions are filled in separately, so this reads nothing but the filesystem.
 pub(crate) fn discover(
     path: Option<&OsStr>,
     pathext: Option<&OsStr>,
     shell: Option<&OsStr>,
     recent: &[String],
-    project_program: Option<&str>,
 ) -> ProgramList {
     let mut programs = Vec::new();
     for (command, label) in KNOWN_PROGRAMS {
@@ -128,13 +131,12 @@ pub(crate) fn discover(
             version: None,
         });
     }
-    let default = project_program
-        .into_iter()
-        .chain(recent.iter().map(String::as_str))
+    let default = recent
+        .iter()
         .find_map(|command| {
             programs
                 .iter()
-                .find(|program| program.command == command && program.installed())
+                .find(|program| &program.command == command && program.installed())
         })
         .or_else(|| {
             programs

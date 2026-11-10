@@ -1,9 +1,10 @@
 use gpui_kit::TestAppContext;
 use kg_domain::*;
 
-use super::{Fixture, op};
+use super::{Fixture, op, pending_delete};
 #[cfg(unix)]
 use super::{fake_agent, ran, started};
+use crate::Workspace;
 
 fn set(name: &str, project_id: Option<ProjectId>, value: &str) -> Op {
     Op::Env(EnvOp::Set {
@@ -99,7 +100,7 @@ async fn a_kagan_name_an_unknown_project_or_an_unset_removal_is_refused(cx: &mut
 }
 
 #[gpui_kit::test]
-async fn a_removed_projects_variables_are_forgotten(cx: &mut TestAppContext) {
+async fn a_removed_project_takes_its_variables_with_it(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     op(
         set("TEST_TOKEN", Some(fixture.project.clone()), "project-value"),
@@ -107,10 +108,46 @@ async fn a_removed_projects_variables_are_forgotten(cx: &mut TestAppContext) {
     )
     .await
     .unwrap();
-    let dir = data_dir(&fixture, cx);
-    crate::host::variables::forget_project(&dir, &fixture.project).unwrap();
-    let merged = crate::host::variables::for_project(&dir, &fixture.project).unwrap();
+    let remove = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Project(ProjectOp::Remove {
+                id: fixture.project.clone(),
+            }),
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    let (approval, _) = pending_delete(cx);
+    cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx))
+        .await
+        .unwrap();
+    remove.await.unwrap();
+    let merged =
+        crate::host::variables::for_project(&data_dir(&fixture, cx), &fixture.project).unwrap();
     assert!(merged.is_empty(), "{merged:?}");
+}
+
+#[gpui_kit::test]
+async fn a_project_page_opens_only_for_a_live_project(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let missing = op(
+        Op::Settings(SettingsOp::Project {
+            id: ProjectId("prj_missing".into()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(missing, OpError::NotFound(_)), "{missing}");
+    let shown = op(
+        Op::Settings(SettingsOp::Project {
+            id: fixture.project.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert_eq!(shown, OpResult::Done);
 }
 
 #[gpui_kit::test]

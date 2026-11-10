@@ -11,7 +11,7 @@ use gpui_kit::{
     ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _,
     WeakEntity, div, px, relative,
 };
-use kg_domain::{Project, ProjectId, ProjectKind, ThreadId};
+use kg_domain::{Op, Project, ProjectId, ProjectKind, SettingsOp, ThreadId};
 
 use super::rows::icon_command;
 use crate::kagan::{ArchiveThread, ThreadActions};
@@ -216,7 +216,7 @@ pub(super) fn project_menu(
     view: WeakEntity<Sidebar>,
 ) -> PopupMenu {
     let settings = {
-        let (project, view) = (project.clone(), view.clone());
+        let project = project.clone();
         PopupMenuItem::element(|_, _| {
             div()
                 .id("project-settings")
@@ -227,7 +227,12 @@ pub(super) fn project_menu(
                 .child("Project settings…")
         })
         .on_click(move |_, _, cx| {
-            _ = view.update(cx, |_, cx| cx.emit(Event::ProjectSettings(project.clone())));
+            crate::kagan::dispatch::logged(
+                Op::Settings(SettingsOp::Project {
+                    id: project.clone(),
+                }),
+                cx,
+            );
         })
     };
     menu.item(settings).item(

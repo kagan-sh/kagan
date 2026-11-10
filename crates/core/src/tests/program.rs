@@ -1,5 +1,11 @@
 #[cfg(unix)]
 use super::fake_program;
+#[cfg(unix)]
+use super::{Fixture, op};
+#[cfg(unix)]
+use gpui_kit::TestAppContext;
+#[cfg(unix)]
+use kg_domain::{Op, OpError, OpResult, ProgramOp, ProjectId, ProjectOp};
 
 #[test]
 fn a_program_splits_on_spaces_outside_quotes() {
@@ -78,7 +84,6 @@ fn the_program_list_finds_known_agents_and_defaults_to_the_first_installed() {
             "claude".into(),
             "'unfinished".into(),
         ],
-        None,
     );
     let claude = list
         .programs
@@ -115,38 +120,6 @@ fn the_newest_installed_recent_program_is_the_default() {
         None,
         None,
         &["tool --fast".into(), "claude".into()],
-        None,
-    );
-    assert_eq!(list.default.as_deref(), Some("tool --fast"));
-}
-
-#[cfg(unix)]
-#[test]
-fn a_projects_installed_program_is_the_default_over_the_recent_ones() {
-    let dir = tempfile::tempdir().unwrap();
-    fake_program(dir.path(), "claude", "true");
-    fake_program(dir.path(), "tool", "true");
-    let list = crate::host::program::discover(
-        Some(dir.path().as_os_str()),
-        None,
-        None,
-        &["tool --fast".into(), "claude".into()],
-        Some("claude"),
-    );
-    assert_eq!(list.default.as_deref(), Some("claude"));
-}
-
-#[cfg(unix)]
-#[test]
-fn a_projects_program_that_is_not_installed_falls_back_to_the_recent_one() {
-    let dir = tempfile::tempdir().unwrap();
-    fake_program(dir.path(), "tool", "true");
-    let list = crate::host::program::discover(
-        Some(dir.path().as_os_str()),
-        None,
-        None,
-        &["tool --fast".into()],
-        Some("gone-tool"),
     );
     assert_eq!(list.default.as_deref(), Some("tool --fast"));
 }
@@ -157,13 +130,8 @@ fn only_installed_known_agents_get_a_version() {
     let dir = tempfile::tempdir().unwrap();
     fake_program(dir.path(), "claude", "echo 'claude 9.9.9 (test)'");
     fake_program(dir.path(), "tool", "echo 'tool 1.0'");
-    let mut list = crate::host::program::discover(
-        Some(dir.path().as_os_str()),
-        None,
-        None,
-        &["tool".into()],
-        None,
-    );
+    let mut list =
+        crate::host::program::discover(Some(dir.path().as_os_str()), None, None, &["tool".into()]);
     crate::host::program::versions(&mut list);
     let version = |command: &str| {
         list.programs
@@ -174,4 +142,46 @@ fn only_installed_known_agents_get_a_version() {
     assert_eq!(version("claude").as_deref(), Some("claude 9.9.9 (test)"));
     assert_eq!(version("tool"), None);
     assert_eq!(version("codex"), None);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_projects_installed_program_is_its_new_thread_default(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let bin = fixture.dir.path().join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    fake_program(&bin, "tool", "true");
+    fake_program(&bin, "claude", "true");
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.use_program_environment(&bin, std::path::Path::new("/bin/sh"));
+    });
+    op(
+        Op::Project(ProjectOp::SetProgram {
+            id: fixture.project.clone(),
+            program: Some("tool --fast".into()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let OpResult::Programs(list) = op(
+        Op::Program(ProgramOp::Discover {
+            project_id: Some(fixture.project.clone()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("programs")
+    };
+    assert_eq!(list.default.as_deref(), Some("tool --fast"));
+    let missing = op(
+        Op::Program(ProgramOp::Discover {
+            project_id: Some(ProjectId("prj_missing".into())),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(missing, OpError::NotFound(_)), "{missing}");
 }

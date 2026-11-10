@@ -2186,6 +2186,7 @@ Usage: kg settings [OPTIONS] <COMMAND>
 Commands:
   open     Show the settings page, opening the window if it is closed
   plugins  Show the plugin management section
+  project  Show a project's page: its environment variables, default program, and agent rules
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -2214,6 +2215,22 @@ Options:
 Show the plugin management section
 
 Usage: kg settings plugins
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg settings project`
+
+```text
+Show a project's page: its environment variables, default program, and agent rules
+
+Usage: kg settings project <ID>
+
+Arguments:
+  <ID>
+          
 
 Options:
   -h, --help

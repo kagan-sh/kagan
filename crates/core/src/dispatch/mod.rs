@@ -50,6 +50,14 @@ pub(crate) async fn execute(
         Op::Settings(SettingsOp::Plugins) => {
             announce(this, crate::WorkspaceEvent::SettingsPlugins, cx)
         }
+        Op::Settings(SettingsOp::Project { id }) => {
+            let lookup = id.clone();
+            database
+                .call(move |store| store.project(&lookup))
+                .await?
+                .ok_or_else(|| missing("project", &id))?;
+            announce(this, crate::WorkspaceEvent::ProjectSettings(id), cx)
+        }
         Op::Window(op) => announce(this, crate::WorkspaceEvent::Window(op), cx),
         Op::Sidebar => database.call(read_sidebar).await,
         Op::Project(op) => project_op(this, &database, op, requester, cx).await,
