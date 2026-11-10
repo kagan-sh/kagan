@@ -78,15 +78,21 @@ pub(super) fn materialize(data_dir: &Path, files: &[(&str, &str, &str)]) -> Resu
             }
             std::fs::write(target, text)?;
         }
-        if !stable.is_dir() {
-            std::fs::rename(&temp, &stable)?;
-        }
-        Ok(())
+        place(&temp, &stable)
     })();
     // After a rename the temp folder is gone; after a failure this tidies it.
     let _ = std::fs::remove_dir_all(&temp);
     result?;
     Ok(stable)
+}
+
+/// Moves a built folder into its final name. Another reader may have placed the same content first.
+pub(super) fn place(temp: &Path, stable: &Path) -> Result<()> {
+    match std::fs::rename(temp, stable) {
+        Ok(()) => Ok(()),
+        Err(_) if stable.is_dir() => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }
 
 pub(super) fn shared(

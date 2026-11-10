@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use kg_domain::{Skill, SkillSource};
 
-use super::catalog::{Catalog, Loaded, materialize, shared, valid_name, write};
+use super::catalog::{Catalog, Loaded, materialize, place, shared, valid_name, write};
 
 const DEMO: &[(&str, &str, &str)] = &[
     (
@@ -13,6 +13,22 @@ const DEMO: &[(&str, &str, &str)] = &[
     ),
     ("kg-demo", "references/long.md", "Long text.\n"),
 ];
+
+#[test]
+fn placing_over_a_folder_another_reader_built_keeps_theirs() {
+    let dir = tempfile::tempdir().unwrap();
+    let stable = dir.path().join("stable");
+    std::fs::create_dir_all(&stable).unwrap();
+    std::fs::write(stable.join("SKILL.md"), "theirs").unwrap();
+    let temp = dir.path().join("temp");
+    std::fs::create_dir_all(&temp).unwrap();
+    std::fs::write(temp.join("SKILL.md"), "mine").unwrap();
+    place(&temp, &stable).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(stable.join("SKILL.md")).unwrap(),
+        "theirs"
+    );
+}
 
 #[test]
 fn a_bundled_skill_lists_its_supporting_files_on_disk() {
