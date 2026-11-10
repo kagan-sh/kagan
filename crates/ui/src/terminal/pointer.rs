@@ -206,7 +206,7 @@ impl TerminalView {
         .detach();
     }
 
-    // Copy on select: once the selection is saved, its text goes to the clipboard, if the switch is on.
+    // Copy on select: once the selection is saved, its text goes to the clipboard. Unset counts as on.
     // An empty selection, such as a plain click, copies nothing and leaves the clipboard alone.
     fn finish_selection(&self, spot: Spot, right: bool, cx: &mut Context<Self>) {
         let select = Workspace::dispatch(
@@ -229,7 +229,7 @@ impl TerminalView {
         let thread = self.thread.clone();
         let terminal = self.terminal;
         cx.spawn(async move |_, cx| {
-            let on = matches!(setting.await, Ok(OpResult::Setting(Value::Bool(true))));
+            let on = !matches!(setting.await, Ok(OpResult::Setting(Value::Bool(false))));
             if select.await.is_err() || !on {
                 return;
             }

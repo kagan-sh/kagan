@@ -199,7 +199,7 @@ pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
         notify: NotifyLevel::default(),
         plugin_status: true,
         update_check: false,
-        copy_on_select: false,
+        copy_on_select: true,
         links_in_tab: false,
         setup_guide: None,
         agent_ready: None,
@@ -402,7 +402,7 @@ impl Kagan {
             let status = plugin_status.await.ok().flatten().unwrap_or(true);
             let update_check = update.await.ok().flatten().unwrap_or(false);
             let confirm_archive = confirm.await.ok().flatten().unwrap_or(false);
-            let copy_on_select = copy.await.ok().flatten().unwrap_or(false);
+            let copy_on_select = copy.await.ok().flatten().unwrap_or(true);
             let links_in_tab = links.await.ok().flatten().unwrap_or(false);
             let setup_guide = setup.await.ok().flatten();
             prefs.update(cx, |prefs, cx| {

@@ -516,6 +516,17 @@ fn copy_on_select_copies_a_drag_only_while_the_switch_is_on(cx: &mut TestAppCont
     };
 
     drag(cx);
+    wait_until(cx, |cx| clipboard(cx).as_deref() == Some("picke"));
+
+    let off = Op::Preference(kg_domain::PreferenceOp::Set {
+        key: kg_domain::prefs::TERMINAL_COPY_ON_SELECT.into(),
+        value: serde_json::json!(false),
+    });
+    let task = cx.update(|cx| kg_core::Workspace::dispatch(off, cx));
+    cx.foreground_executor().block_test(task).unwrap();
+    cx.run_until_parked();
+    cx.update(|cx| cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("before".into())));
+    drag(cx);
     wait_until(cx, |cx| selection(cx, &kagan).len() == 1);
     cx.run_until_parked();
     assert_eq!(
@@ -524,14 +535,64 @@ fn copy_on_select_copies_a_drag_only_while_the_switch_is_on(cx: &mut TestAppCont
         "the switch is off"
     );
 
-    let set = Op::Preference(kg_domain::PreferenceOp::Set {
+    let on = Op::Preference(kg_domain::PreferenceOp::Set {
         key: kg_domain::prefs::TERMINAL_COPY_ON_SELECT.into(),
         value: serde_json::json!(true),
     });
-    let task = cx.update(|cx| kg_core::Workspace::dispatch(set, cx));
+    let task = cx.update(|cx| kg_core::Workspace::dispatch(on, cx));
     cx.foreground_executor().block_test(task).unwrap();
     cx.run_until_parked();
     drag(cx);
+    wait_until(cx, |cx| clipboard(cx).as_deref() == Some("picke"));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn copy_on_select_skips_a_reported_release_and_copies_a_shift_drag(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    cx.simulate_input(window, &split_command("pick", "ed"));
+    cx.simulate_keystrokes(window, "enter");
+    wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
+    cx.simulate_input(window, "printf '\\033[?1000h\\033[?1006h'");
+    cx.simulate_keystrokes(window, "enter");
+    wait_for_shell(cx, |cx| {
+        cx.update(|cx| screen_read::terminal_grid(kagan.read(cx), cx))
+            .is_some_and(|grid| grid.mouse.is_some())
+    });
+    cx.update(|cx| cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("before".into())));
+
+    let drag = |cx: &mut TestAppContext, modifiers: Modifiers| {
+        let (row, _) = shown_row(cx, &kagan, "picked");
+        let start = cell_point_at(cx, window, &kagan, row, 0, 0.3);
+        press(cx, window, start, 1, modifiers);
+        let middle = cell_point(cx, window, &kagan, row, 2);
+        drag_to(cx, window, middle);
+        let end = cell_point_at(cx, window, &kagan, row, 4, 0.8);
+        release(cx, window, end, 1, modifiers);
+    };
+    let clipboard = |cx: &mut TestAppContext| {
+        cx.update(|cx| cx.read_from_clipboard())
+            .and_then(|item| item.text())
+    };
+
+    // The program asked for the mouse, so this release is its own.
+    drag(cx, Modifiers::default());
+    cx.executor().advance_clock(Duration::from_millis(500));
+    cx.run_until_parked();
+    assert!(selection(cx, &kagan).is_empty(), "a reported drag selected");
+    assert_eq!(
+        clipboard(cx).as_deref(),
+        Some("before"),
+        "a reported release copied"
+    );
+
+    let shift = Modifiers {
+        shift: true,
+        ..Modifiers::default()
+    };
+    drag(cx, shift);
     wait_until(cx, |cx| clipboard(cx).as_deref() == Some("picke"));
 }
 
