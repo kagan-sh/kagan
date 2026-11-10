@@ -267,7 +267,9 @@ pub(super) fn sidebar(
         .w(rems(14.))
         .flex_shrink_0()
         .h_full()
-        .p(px(space(SpaceStep::Sm, cx)))
+        .pl(px(space(SpaceStep::Xl, cx)))
+        .pr(px(space(SpaceStep::Sm, cx)))
+        .py(px(space(SpaceStep::Sm, cx)))
         .border_r_1()
         .border_color(line)
         .child(

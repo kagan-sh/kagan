@@ -393,7 +393,14 @@ fn settings_header(window: &mut Window, cx: &mut Context<Kagan>) -> AnyElement {
     h_flex()
         .justify_between()
         .items_center()
-        .child(div().type_title(cx).font_semibold().child("Settings"))
+        .child(
+            div()
+                .id("settings-title")
+                .ui_container()
+                .type_title(cx)
+                .font_semibold()
+                .child("Settings"),
+        )
         .child(
             div()
                 .id("settings-close")

@@ -293,3 +293,15 @@ fn a_plain_row_is_inset_16_by_12(cx: &mut TestAppContext) {
         title_y - row_y
     );
 }
+
+#[gpui_kit::test]
+fn the_title_and_the_search_box_share_a_left_edge(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    let (title_x, _, _, _) = bounds_of(cx, window, "settings-title");
+    let (search_x, _, _, _) = bounds_of(cx, window, "settings-search");
+    assert!(
+        (title_x - search_x).abs() < 0.5,
+        "title {title_x}, search {search_x}"
+    );
+}
