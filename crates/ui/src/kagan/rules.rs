@@ -151,11 +151,6 @@ impl RulesEditor {
             });
         }));
     }
-
-    fn focus(&self, window: &mut Window, cx: &mut App) {
-        let handle = self.text.read(cx).focus_handle(cx);
-        window.focus(&handle, cx);
-    }
 }
 
 impl Render for RulesEditor {
