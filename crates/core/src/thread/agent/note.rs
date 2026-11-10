@@ -1,7 +1,7 @@
 use std::path::Path;
 
-const INSTRUCTIONS_CAP: usize = 4096;
-const INSTRUCTIONS_PREFIX: &str = "Instructions from your kagan instructions file:";
+pub(crate) const INSTRUCTIONS_CAP: usize = 4096;
+pub(crate) const INSTRUCTIONS_PREFIX: &str = "Instructions from your kagan instructions file:";
 
 pub(crate) fn read_instructions(data_dir: &Path) -> String {
     let Some(bytes) = read_prefix(data_dir) else {

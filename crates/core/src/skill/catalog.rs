@@ -5,13 +5,10 @@ use std::path::{Path, PathBuf};
 use crate::host::database::Result;
 use crate::workspace::closed;
 
-use super::BUNDLED;
-
 pub(super) struct Loaded {
     pub(super) skill: Skill,
     pub(super) body: String,
     pub(super) files: Vec<PathBuf>,
-    pub(super) text: Option<&'static str>,
 }
 
 impl Loaded {
@@ -53,19 +50,131 @@ impl Catalog {
             .ok_or_else(|| OpError::NotFound(format!("skill {name} is unavailable")))
     }
 }
-pub(super) fn shared(plugins: Vec<kg_domain::Plugin>) -> Result<Catalog> {
+/// Writes the skill files, as (skill, path inside the skill, text), under
+/// `<data>/agent/bundled/<hash>`, named by their content, and returns that folder. The folder is
+/// built beside its final name and renamed into place.
+pub(super) fn materialize(data_dir: &Path, files: &[(&str, &str, &str)]) -> Result<PathBuf> {
+    use sha2::{Digest as _, Sha256};
+    let mut hash = Sha256::new();
+    for &(skill, path, text) in files {
+        hash.update(format!("{skill}\0{path}\0{text}\0").as_bytes());
+    }
+    let folder = data_dir.join("agent/bundled");
+    sweep(&folder);
+    let stable = folder.join(hex::encode(hash.finalize()));
+    if stable.is_dir() && intact(&stable, files) {
+        return Ok(stable);
+    }
+    std::fs::create_dir_all(&folder)?;
+    if stable.exists() {
+        // A reader may still be inside a damaged folder, so it is moved aside, not deleted.
+        let aside = folder.join(format!(".broken-{}", uuid::Uuid::new_v4()));
+        match std::fs::rename(&stable, &aside) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    let temp = folder.join(format!(
+        ".tmp-{}-{}",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    let result = (|| -> Result<()> {
+        for &(skill, path, text) in files {
+            let target = temp.join(skill).join(path);
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(target, text)?;
+        }
+        place(&temp, &stable)
+    })();
+    // After a rename the temp folder is gone; after a failure this tidies it.
+    let _ = std::fs::remove_dir_all(&temp);
+    result?;
+    Ok(stable)
+}
+
+/// Removes temp and broken folders that a killed run left behind. A recent one may still be in use.
+fn sweep(folder: &Path) {
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return;
+    };
+    let cutoff = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if !(name.starts_with(".tmp-") || name.starts_with(".broken-")) {
+            continue;
+        }
+        if entry
+            .metadata()
+            .and_then(|meta| meta.modified())
+            .is_ok_and(|modified| modified < cutoff)
+        {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
+/// True when the folder holds exactly these files, with this text, and no link.
+fn intact(root: &Path, files: &[(&str, &str, &str)]) -> bool {
+    let mut found = Vec::new();
+    if files_under(root, root, &mut found).is_err() {
+        return false;
+    }
+    let expected: BTreeSet<PathBuf> = files
+        .iter()
+        .map(|&(skill, path, _)| Path::new(skill).join(path))
+        .collect();
+    found.into_iter().collect::<BTreeSet<_>>() == expected
+        && files.iter().all(|&(skill, path, text)| {
+            std::fs::read_to_string(root.join(skill).join(path)).is_ok_and(|got| got == text)
+        })
+}
+
+fn files_under(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        if kind.is_symlink() {
+            return Err(std::io::Error::other("a link in a bundled folder"));
+        }
+        if kind.is_dir() {
+            files_under(root, &entry.path(), out)?;
+        } else {
+            out.push(
+                entry
+                    .path()
+                    .strip_prefix(root)
+                    .map_err(std::io::Error::other)?
+                    .to_owned(),
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Moves a built folder into its final name. Another reader may have placed the same content first.
+pub(super) fn place(temp: &Path, stable: &Path) -> Result<()> {
+    match std::fs::rename(temp, stable) {
+        Ok(()) => Ok(()),
+        Err(_) if stable.is_dir() => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+pub(super) fn shared(
+    plugins: Vec<kg_domain::Plugin>,
+    root: &Path,
+    names: &[&str],
+) -> Result<Catalog> {
     let mut catalog = Catalog::default();
-    for &(name, text) in BUNDLED {
-        let (skill, body) = Skill::parse(name, text, SkillSource::Bundled, None)?;
-        catalog.skills.insert(
-            name.into(),
-            Loaded {
-                skill,
-                body,
-                files: Vec::new(),
-                text: Some(text),
-            },
-        );
+    for &name in names {
+        catalog
+            .skills
+            .insert(name.into(), read(&root.join(name), SkillSource::Bundled)?);
     }
     let mut paths = Vec::new();
     for plugin in plugins.into_iter().filter(|plugin| plugin.enabled) {
@@ -103,10 +212,6 @@ pub(super) fn write(root: &Path, catalog: &Catalog) -> Result<()> {
     for (name, loaded) in &catalog.skills {
         let folder = next.join(name);
         std::fs::create_dir_all(&folder)?;
-        if let Some(text) = loaded.text {
-            std::fs::write(folder.join("SKILL.md"), text)?;
-            continue;
-        }
         let source = loaded
             .skill
             .path
@@ -171,6 +276,12 @@ impl Catalog {
                 ));
                 continue;
             }
+            if source == SkillSource::Plugin && name == super::plugin_commands::NAME {
+                self.errors.push(format!(
+                    "plugin skill {name} is reserved for kagan's generated list; dropped"
+                ));
+                continue;
+            }
             if source == SkillSource::Plugin
                 && self
                     .skills
@@ -226,12 +337,7 @@ pub(super) fn read(root: &Path, source: SkillSource) -> Result<Loaded> {
     let text = std::fs::read_to_string(root.join("SKILL.md"))?;
     let (skill, body) = Skill::parse(name, &text, source, Some(root.join("SKILL.md")))?;
     files.sort();
-    Ok(Loaded {
-        skill,
-        body,
-        files,
-        text: None,
-    })
+    Ok(Loaded { skill, body, files })
 }
 
 fn files_in(root: &Path, folder: &Path, files: &mut Vec<PathBuf>) -> Result<()> {

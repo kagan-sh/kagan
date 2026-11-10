@@ -22,7 +22,7 @@ This can occur after the program stops. Click **Start again**, and then send the
 
 ## A plugin fails
 
-In Settings → Plugins, open **Details…**, and then **Logs**. A tool or a page that fails shows **Logs**, **Reload**, and **Disable**.
+In Settings → Installed, open **Details…**, and then **Logs**. A tool or a page that fails shows **Logs**, **Reload**, and **Disable**.
 
 ```bash
 kg plugin logs <id> --follow

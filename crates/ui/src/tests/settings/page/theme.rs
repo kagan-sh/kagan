@@ -14,6 +14,7 @@ fn appearance_shows_a_missing_theme_and_keeps_its_id(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     set_theme(cx, "ocean");
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-appearance");
     assert_eq!(
         aria_label(cx, window, "theme-error").as_deref(),
         Some("Theme ocean is missing. Using Kagan until it returns.")
@@ -31,6 +32,7 @@ fn a_broken_theme_file_shows_its_error_on_its_card(cx: &mut TestAppContext) {
     cx.executor().advance_clock(Duration::from_millis(500));
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-appearance");
     let label = aria_label(cx, window, "theme-tide").unwrap_or_default();
     assert!(label.starts_with("tide theme, does not load: "), "{label}");
     assert_eq!(selected_of(cx, window, "theme-fjord"), Some(true));
@@ -70,6 +72,7 @@ fn an_oversized_odd_or_special_theme_file_shows_on_its_card(cx: &mut TestAppCont
     cx.executor().advance_clock(Duration::from_millis(500));
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-appearance");
     let mut cards = vec![
         ("theme-big", "big theme, does not load: larger than 64 KiB"),
         (
@@ -138,6 +141,7 @@ fn appearance_lists_built_in_user_and_plugin_themes(cx: &mut TestAppContext) {
     cx.executor().advance_clock(Duration::from_millis(500));
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-appearance");
     for (card, label) in [
         ("theme-fjord", "Ember Fjord theme, in use"),
         ("theme-tide", "Tide theme"),
@@ -189,6 +193,7 @@ fn disabling_a_plugin_drops_its_theme_and_says_so_once(cx: &mut TestAppContext) 
 fn new_theme_copies_the_theme_in_use_and_opens_it(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-appearance");
     click(cx, window, "theme-new");
     let path = data.path().join("themes").join("fjord-copy.json");
     let file = ThemeFile::parse(&std::fs::read(&path).unwrap()).unwrap();
@@ -244,6 +249,7 @@ fn open_themes_folder_makes_the_folder_and_opens_it(cx: &mut TestAppContext) {
     let path = data.path().join("themes");
     assert!(!path.exists());
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-appearance");
     click(cx, window, "theme-folder");
     assert!(path.is_dir());
     let url = cx.opened_url().unwrap_or_default();

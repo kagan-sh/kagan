@@ -75,6 +75,7 @@ fn a_secret_field_masks_what_is_typed_and_never_shows_it_back(cx: &mut TestAppCo
     let (_kagan, window, data) = open_with_plugins_then(cx, install);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.secret");
     assert!(present(cx, window, FIELD));
     assert!(!present(cx, window, CLEAR), "nothing to clear yet");
 

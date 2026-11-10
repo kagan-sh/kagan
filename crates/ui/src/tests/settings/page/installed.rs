@@ -14,6 +14,7 @@ const PREFS: &str = "dev.test.prefs";
 fn installed_names_how_to_make_a_plugin_when_none_are_installed(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     let note = aria_label(cx, window, "setting-row-none-note").unwrap_or_default();
     assert!(note.contains("kg plugin new <name>"), "{note}");
     assert!(note.contains("pages"), "{note}");
@@ -25,6 +26,7 @@ fn an_enabled_plugin_says_what_it_added_without_a_side(cx: &mut TestAppContext) 
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     let note = aria_label(cx, window, &format!("setting-row-{PREFS}-note")).unwrap_or_default();
     assert_eq!(note, "Adds 7 settings.");
     assert!(!note.starts_with("On"), "{note}");
@@ -36,6 +38,7 @@ fn plugin_settings_follow_the_order_in_the_manifest(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_ordered);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.example.order");
     let zeta = row_top(cx, window, "setting-row-dev.example.order/zeta");
     let alpha = row_top(cx, window, "setting-row-dev.example.order/alpha");
     assert!(zeta < alpha, "zeta {zeta} then alpha {alpha}");
@@ -56,6 +59,7 @@ fn a_folder_row_does_not_update_from_its_key(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     let before = cx.update(|cx| {
         kg_plugins::PluginHost::global(cx)
             .read(cx)
@@ -83,6 +87,7 @@ fn a_git_plugin_offers_update_and_a_new_power_waits_in_settings(cx: &mut TestApp
     let (_kagan, window, _data) = open_with_plugins_then(cx, |_| {});
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     let installing = cx.update(|cx| {
         Workspace::dispatch(
             Op::Plugin(PluginOp::Install {

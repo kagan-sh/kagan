@@ -112,7 +112,7 @@ Usage: kg guide [OPTIONS] [CHAPTER]
 
 Arguments:
   [CHAPTER]
-          [possible values: threads, projects, environments, plugins, skills, ui, json]
+          [possible values: threads, projects, environments, plugins, skills, ui, customize, json]
 
 Options:
       --json

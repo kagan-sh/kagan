@@ -443,3 +443,13 @@ pub struct PluginLog {
     pub id: PluginId,
     pub counts: LogCounts,
 }
+
+/// One `kg` command a running plugin provides. `usage` is the manifest's text, when it has one.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginCommand {
+    pub plugin: PluginId,
+    pub group: String,
+    pub command: String,
+    pub usage: Option<String>,
+}

@@ -379,7 +379,7 @@ mod review_wrap_tests {
 
     #[test]
     fn guide_names_every_preference() {
-        let guide = include_str!("../guide-map.md");
+        let guide = include_str!("../../../../docs/customize.md");
         let behaviour = include_str!("../../../../docs/behaviour.md");
         let command =
             <kg_domain::Op as clap::Subcommand>::augment_subcommands(clap::Command::new("kg"));
@@ -396,6 +396,9 @@ mod review_wrap_tests {
                 "behaviour missing {key}"
             );
             assert!(help.contains(key), "help missing {key}");
+        }
+        for key in ["slot.threads", "slot.review"] {
+            assert!(guide.contains(&format!("`{key}`")), "guide missing {key}");
         }
         for key in LAYOUT.iter().map(|(name, _)| *name) {
             assert!(

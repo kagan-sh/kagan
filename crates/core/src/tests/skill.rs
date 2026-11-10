@@ -1,7 +1,9 @@
 use super::{Fixture, op};
+use crate::PluginRequest;
 use gpui_kit::TestAppContext;
-use kg_domain::{Op, OpError, OpResult, Skill, SkillOp};
+use kg_domain::{Op, OpError, OpResult, PluginCommand, PluginId, Skill, SkillOp};
 use std::path::Path;
+use std::rc::Rc;
 
 #[cfg(unix)]
 use super::install_plugin;
@@ -28,6 +30,93 @@ async fn listed(fixture: &Fixture, cx: &mut TestAppContext) -> Vec<Skill> {
         panic!("skills")
     };
     skills
+}
+
+#[gpui_kit::test]
+async fn a_bundled_skill_lists_files_that_exist_on_disk(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Files(files) = op(
+        Op::Skill(SkillOp::Files {
+            name: "kg-cli".into(),
+            project_id: Some(fixture.project.clone()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("files")
+    };
+    assert_eq!(files.len(), 1, "{files:?}");
+    assert!(files[0].ends_with("SKILL.md"), "{files:?}");
+    assert_eq!(
+        std::fs::read_to_string(&files[0]).unwrap(),
+        include_str!("../../skills/kg-cli/SKILL.md")
+    );
+}
+
+#[gpui_kit::test]
+async fn plugin_commands_become_a_generated_skill(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    assert!(
+        listed(&fixture, cx)
+            .await
+            .iter()
+            .all(|skill| skill.name != "kg-plugin-commands")
+    );
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.plugins = Some(Rc::new(
+            |request: PluginRequest, _cx: &mut gpui_kit::App| {
+                let result = match request {
+                    PluginRequest::Commands => OpResult::PluginCommands(vec![PluginCommand {
+                        plugin: PluginId("dev.test.probe".into()),
+                        group: "probe".into(),
+                        command: "hang".into(),
+                        usage: Some("hang <seconds>".into()),
+                    }]),
+                    _ => OpResult::Warnings(Vec::new()),
+                };
+                gpui_kit::Task::ready(Ok(result))
+            },
+        ));
+    });
+    let OpResult::Skill { body, .. } = op(
+        Op::Skill(SkillOp::Show {
+            name: "kg-plugin-commands".into(),
+            project_id: Some(fixture.project.clone()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("skill")
+    };
+    assert!(
+        body.contains("- `kg probe hang <seconds>`, from dev.test.probe"),
+        "{body}"
+    );
+}
+
+#[gpui_kit::test]
+async fn a_split_skill_lists_the_reference_files_it_names(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Files(files) = op(
+        Op::Skill(SkillOp::Files {
+            name: "kg-plugin-port".into(),
+            project_id: Some(fixture.project.clone()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("files")
+    };
+    assert!(
+        files
+            .iter()
+            .any(|file| file.ends_with("references/mapping.md")),
+        "{files:?}"
+    );
+    assert!(files.iter().all(|file| file.exists()), "{files:?}");
 }
 
 #[gpui_kit::test]

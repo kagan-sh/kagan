@@ -16,6 +16,7 @@ fn cancelling_a_folder_picker_and_a_file_path_do_not_change_the_setting(cx: &mut
     let (_kagan, window, data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     cx.update_window(window, |_, window, cx| {
         crate::ui_dispatch::click(
             window,
@@ -59,6 +60,7 @@ fn an_older_text_save_cannot_overwrite_a_newer_one(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     let field = format!("plugin-text-{PREFS}/label");
     click(cx, window, &field);
     cx.simulate_input(window, "!");
@@ -91,6 +93,7 @@ fn an_older_select_cannot_overwrite_a_newer_one(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     press(cx, window, "option-dev.test.prefs/density/compact");
     press(cx, window, "option-dev.test.prefs/density/comfortable");
     until_saved(cx, "density", &json!("compact"));
@@ -116,6 +119,7 @@ fn an_older_folder_save_cannot_overwrite_a_newer_one(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     let older = data.path().join("older");
     let newer = data.path().join("newer");
     std::fs::create_dir(&older).unwrap();
@@ -146,6 +150,7 @@ fn an_external_save_clears_a_stale_setting_error(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
     let file = data.path().join("not-a-folder");
     std::fs::write(&file, "x").unwrap();
     choose_folder(cx, window, &file);
