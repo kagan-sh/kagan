@@ -74,9 +74,6 @@ fn shown_text(raw: &str) -> (String, bool) {
         }
         out.push_str(&short);
     }
-    if !truncated && raw.lines().nth(out.lines().count()).is_some() {
-        truncated = true;
-    }
     (out, truncated)
 }
 const TEARDOWN: &str = ".kagan/teardown";
@@ -501,6 +498,36 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[test]
+    fn a_long_line_is_cut_and_marked() {
+        let (shown, truncated) = shown_text(&"x".repeat(201));
+        assert_eq!(shown, "x".repeat(200));
+        assert!(truncated);
+    }
+
+    #[test]
+    fn shown_text_stops_at_its_character_cap() {
+        let lines: Vec<String> = [199, 199, 199, 199, 199, 199, 199, 199, 200, 200]
+            .iter()
+            .map(|n| "y".repeat(*n))
+            .collect();
+        let (shown, truncated) = shown_text(&lines.join("\n"));
+        assert!(truncated);
+        assert_eq!(shown.lines().count(), 9);
+        let fits: Vec<String> = [199, 199, 199, 199, 199, 199, 199, 199, 199, 200]
+            .iter()
+            .map(|n| "y".repeat(*n))
+            .collect();
+        let (shown, truncated) = shown_text(&fits.join("\n"));
+        assert!(!truncated);
+        assert_eq!(shown.lines().count(), 10);
+    }
+
+    #[test]
+    fn a_blank_last_line_is_not_a_cut() {
+        assert_eq!(shown_text("a\n\n"), ("a\n".to_owned(), false));
+    }
+
     #[test]
     fn file_mode_keeps_the_executable_bit() {
         use std::os::unix::fs::PermissionsExt as _;
