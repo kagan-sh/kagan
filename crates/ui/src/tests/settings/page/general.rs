@@ -153,7 +153,6 @@ fn a_failed_text_save_keeps_the_draft_until_revert(cx: &mut TestAppContext) {
             thread_id: None,
         }),
     );
-    click(cx, window, "settings-section-plugin-dev.test.prefs");
     assert_eq!(value_of(cx, window, &field), Some("hi!".into()));
     assert_eq!(plugin_config(cx, "label"), json!("hi"));
     assert_eq!(
@@ -190,7 +189,6 @@ fn a_failed_switch_keeps_the_saved_value_and_shows_the_error(cx: &mut TestAppCon
             thread_id: None,
         }),
     );
-    click(cx, window, "settings-section-plugin-dev.test.prefs");
     assert_eq!(
         value_of(cx, window, &format!("plugin-{PREFS}/sounds")).as_deref(),
         Some("on")

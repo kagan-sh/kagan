@@ -2,7 +2,10 @@ use gpui_kit::TestAppContext;
 
 use serde_json::json;
 
-use super::{install_plugins, saved, tab_to};
+use kg_domain::{Op, PluginId, PluginOp};
+use kg_plugins::PluginHost;
+
+use super::{install_plugins, run_op, saved, tab_to};
 use crate::tests::kagan::{click, open, open_with_plugins_then, present, selected_of};
 
 #[gpui_kit::test]
@@ -144,4 +147,29 @@ fn down_in_the_search_box_moves_to_the_next_result(cx: &mut TestAppContext) {
         selected_of(cx, window, "settings-section-keyboard"),
         Some(true)
     );
+}
+
+#[gpui_kit::test]
+fn a_plugin_section_comes_back_after_its_plugin_reloads(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
+    cx.run_until_parked();
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
+    cx.update(|cx| {
+        PluginHost::global(cx).update(cx, |host, cx| {
+            host.disable_loaded(&PluginId("dev.test.prefs".into()), cx);
+        });
+    });
+    cx.run_until_parked();
+    assert!(present(cx, window, "setting-row-notify"));
+
+    run_op(
+        cx,
+        Op::Plugin(PluginOp::Reload {
+            id: PluginId("dev.test.prefs".into()),
+            thread_id: None,
+        }),
+    );
+    cx.run_until_parked();
+    assert!(present(cx, window, "setting-row-dev.test.prefs/sounds"));
 }

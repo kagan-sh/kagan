@@ -195,10 +195,6 @@ impl Kagan {
     pub(super) fn reconcile_plugin_views(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         plugins::sync(&mut self.settings.drafts, window, cx);
         let entries = pages::plugin_entries(cx);
-        if matches!(&self.settings.section, Category::Plugin(id) if !entries.iter().any(|(entry, _)| entry == id))
-        {
-            self.settings.section = Category::default();
-        }
         let host = PluginHost::try_global(cx);
         self.slots.settings_views.retain(|id, (generation, _)| {
             entries.iter().any(|(entry, _)| entry == id)
@@ -326,7 +322,7 @@ pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) 
             })
             .into_any_element(),
     ];
-    let section = kagan.settings.section.clone();
+    let section = nav::shown(&kagan.settings.section, cx);
     items.extend(
         groups
             .into_iter()

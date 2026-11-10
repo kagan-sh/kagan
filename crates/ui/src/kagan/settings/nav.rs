@@ -131,6 +131,15 @@ pub(super) fn entries(kagan: &Kagan, groups: &[Group], cx: &App) -> Vec<Entry> {
     out
 }
 
+// The chosen section stays stored while its plugin is away, so it returns after a reload.
+pub(super) fn shown(section: &Category, cx: &App) -> Category {
+    if listed(cx).iter().any(|item| item.section == *section) {
+        section.clone()
+    } else {
+        Category::default()
+    }
+}
+
 pub(super) fn section_position(section: &Category, cx: &App) -> usize {
     listed(cx)
         .iter()
@@ -185,6 +194,7 @@ pub(super) fn sidebar(
     cx: &mut Context<Kagan>,
 ) -> AnyElement {
     let focus = kagan.settings.list.clone();
+    let chosen = shown(&kagan.settings.section, cx);
     let typing = kagan
         .settings
         .query
@@ -222,8 +232,7 @@ pub(super) fn sidebar(
                     .into_any_element(),
             );
         }
-        let selected =
-            matches!(entry, Entry::Category(item) if item.section == kagan.settings.section);
+        let selected = matches!(entry, Entry::Category(item) if item.section == chosen);
         rows.push(row(index, entry, selected, focused && index == cursor, cx));
     }
     let (line, radius) = (cx.theme().border, cx.theme().radius);
