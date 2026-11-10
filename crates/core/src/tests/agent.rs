@@ -1055,6 +1055,7 @@ async fn a_plugin_persona_and_its_tools_reach_the_thread(cx: &mut TestAppContext
                 crate::PluginRequest::Instruct { .. } => {
                     Ok(OpResult::Output(Some("PLUGIN_PERSONA".into())))
                 }
+                crate::PluginRequest::Commands => Ok(OpResult::PluginCommands(Vec::new())),
                 crate::PluginRequest::Tools { .. } => Ok(OpResult::Tools {
                     instructions: None,
                     tools: vec![
