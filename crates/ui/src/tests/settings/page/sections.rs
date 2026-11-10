@@ -305,3 +305,11 @@ fn the_title_and_the_search_box_share_a_left_edge(cx: &mut TestAppContext) {
         "title {title_x}, search {search_x}"
     );
 }
+
+#[gpui_kit::test]
+fn a_one_group_section_has_no_repeated_heading(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-updates");
+    assert!(!present(cx, window, "settings-heading-updates"));
+}

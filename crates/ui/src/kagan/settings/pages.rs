@@ -66,7 +66,7 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
             out.push(within(group, Category::Plugin(id.clone())));
         }
     }
-    out
+    headed(out)
 }
 
 fn set_flag(key: &str, on: bool, cx: &mut App) {
@@ -81,8 +81,17 @@ fn set_flag(key: &str, on: bool, cx: &mut App) {
 
 fn within(mut group: Group, section: Category) -> Group {
     group.section = section;
-    group.headed = true;
     group
+}
+
+// A section with one group needs no heading: the section name already says it.
+fn headed(mut out: Vec<Group>) -> Vec<Group> {
+    for index in 0..out.len() {
+        let section = out[index].section.clone();
+        let groups = out.iter().filter(|group| group.section == section).count();
+        out[index].headed = groups > 1;
+    }
+    out
 }
 
 pub(super) fn plugin_entries(cx: &App) -> Vec<(PluginId, String)> {
