@@ -60,6 +60,7 @@ pub(super) fn materialize(data_dir: &Path, files: &[(&str, &str, &str)]) -> Resu
         hash.update(format!("{skill}\0{path}\0{text}\0").as_bytes());
     }
     let folder = data_dir.join("agent/bundled");
+    sweep(&folder);
     let stable = folder.join(hex::encode(hash.finalize()));
     if stable.is_dir() && intact(&stable, files) {
         return Ok(stable);
@@ -93,6 +94,28 @@ pub(super) fn materialize(data_dir: &Path, files: &[(&str, &str, &str)]) -> Resu
     let _ = std::fs::remove_dir_all(&temp);
     result?;
     Ok(stable)
+}
+
+/// Removes temp and broken folders that a killed run left behind. A recent one may still be in use.
+fn sweep(folder: &Path) {
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return;
+    };
+    let cutoff = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if !(name.starts_with(".tmp-") || name.starts_with(".broken-")) {
+            continue;
+        }
+        if entry
+            .metadata()
+            .and_then(|meta| meta.modified())
+            .is_ok_and(|modified| modified < cutoff)
+        {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
 }
 
 /// True when the folder holds exactly these files, with this text, and no link.

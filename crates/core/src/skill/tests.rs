@@ -60,6 +60,30 @@ fn a_bundled_folder_with_a_stray_file_is_rebuilt() {
     assert!(!again.join("kg-demo/stray.md").exists());
 }
 
+#[cfg(unix)]
+#[test]
+fn leftovers_older_than_an_hour_are_swept_and_fresh_ones_are_kept() {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().join("agent/bundled");
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(2 * 3600);
+    let mut leftovers = Vec::new();
+    for name in [".tmp-old", ".broken-old"] {
+        let path = folder.join(name);
+        std::fs::create_dir_all(&path).unwrap();
+        std::fs::write(path.join("junk"), "x").unwrap();
+        std::fs::File::open(&path)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        leftovers.push(path);
+    }
+    let fresh = folder.join(".tmp-fresh");
+    std::fs::create_dir_all(&fresh).unwrap();
+    materialize(dir.path(), DEMO).unwrap();
+    assert!(leftovers.iter().all(|path| !path.exists()), "{leftovers:?}");
+    assert!(fresh.exists());
+}
+
 #[test]
 fn a_bundled_skill_lists_its_supporting_files_on_disk() {
     let dir = tempfile::tempdir().unwrap();
