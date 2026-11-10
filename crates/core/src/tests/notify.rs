@@ -7,7 +7,7 @@ use crate::Workspace;
 
 use super::{
     Fixture, Reap, ask_options, begin_wait, busy_of, events, finish_wait, op, outcome, script,
-    sent_text, started, wait_for_status, wait_for_waiting, wait_until_busy,
+    sent_text, started, wait_for_status, wait_for_waiting, wait_until_busy, waiting_count,
 };
 
 const SLEEP: &str = r#"/bin/sh -c "sleep 30""#;
@@ -375,4 +375,102 @@ async fn a_child_end_under_a_parent_with_no_run_adds_no_run(cx: &mut TestAppCont
             .workspace
             .read_with(cx, |workspace, _| workspace.runs.contains_key(&parent))
     );
+}
+
+#[test]
+fn an_exit_or_a_failure_is_a_report_to_the_parent() {
+    use crate::thread::notify::reports_end;
+    let event = |kind: EventKind| {
+        OpResult::Event(Some(Event {
+            thread_id: ThreadId("thr_1".into()),
+            seq: 1,
+            at: Timestamp(0),
+            kind,
+        }))
+    };
+    assert!(reports_end(&event(EventKind::Exited {
+        code: Some(1),
+        signal: None,
+    })));
+    assert!(reports_end(&event(EventKind::Failed {
+        error: Some("boom".into()),
+    })));
+    assert!(!reports_end(&event(EventKind::Idle)));
+}
+
+#[gpui_kit::test]
+async fn a_second_line_waits_out_the_settle_time(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (parent, _parent_run) = started(&fixture, SLEEP, cx).await;
+    let quick = finishing(fixture.dir.path(), "quick");
+    let gate = fixture.dir.path().join("gate");
+    let slow = script(
+        fixture.dir.path(),
+        "slow",
+        &format!(
+            "printf '\\033]0;\\342\\240\\213 working\\007'\nwhile [ ! -f '{}' ]; do sleep 0.05; done\nprintf '\\033]0;ready\\007'\nsleep 30",
+            gate.display()
+        ),
+    );
+    let (quick_id, _quick_run) = child(&fixture, &quick, &parent, false, cx).await;
+    let (slow_id, _slow_run) = child(&fixture, &slow, &parent, false, cx).await;
+    wait_for_waiting(&quick_id, 1, cx).await;
+    let sent = sent_to(&parent, cx).await;
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    let first_line = cx.executor().now();
+    std::fs::write(&gate, "").unwrap();
+    let mut waited_at = None;
+    let mut second_at = None;
+    for _ in 0..800 {
+        cx.executor().advance_clock(Duration::from_millis(50));
+        cx.run_until_parked();
+        let elapsed = cx.executor().now().duration_since(first_line);
+        if waited_at.is_none() && waiting_count(&slow_id, cx).await == 1 {
+            waited_at = Some(elapsed);
+        }
+        if sent_text(&events(&parent, cx).await).len() == 2 {
+            second_at = Some(elapsed);
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let waited_at = waited_at.expect("the slow child never waited");
+    let second_at = second_at.expect("the second line never came");
+    assert!(
+        waited_at < Duration::from_millis(1_900),
+        "the slow child waited at {waited_at:?}, too late to test the hold"
+    );
+    assert!(
+        second_at >= Duration::from_millis(1_900),
+        "the second line came at {second_at:?}, before the 2 s settle time"
+    );
+}
+
+#[gpui_kit::test]
+async fn a_busy_parent_is_not_told_while_its_turn_is_open_or_busy(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let parent_program = script(
+        fixture.dir.path(),
+        "busy-parent",
+        "printf '\\033]0;\\342\\240\\213 working\\007'\nsleep 30",
+    );
+    let (parent, _parent_run) = started(&fixture, &parent_program, cx).await;
+    wait_until_busy(&fixture, &parent, cx);
+    let parent_thread = cx.update(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .thread(&parent)
+            .cloned()
+            .expect("thread")
+    });
+    parent_thread.update(cx, |thread, _| thread.turn_open = false);
+    let program = finishing(fixture.dir.path(), "done");
+    let (child_id, _child_run) = child(&fixture, &program, &parent, false, cx).await;
+    wait_for_waiting(&child_id, 1, cx).await;
+    for _ in 0..100 {
+        cx.executor().advance_clock(Duration::from_millis(50));
+        cx.run_until_parked();
+    }
+    let told = sent_text(&events(&parent, cx).await).len();
+    assert_eq!(told, 0, "a busy parent was told");
 }

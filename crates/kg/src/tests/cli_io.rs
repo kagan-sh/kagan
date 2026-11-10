@@ -1,4 +1,4 @@
-use kg_domain::{ConfigOp, IndexOp, Op, OpError, PluginId, PluginOp, ThreadId, ThreadOp};
+use kg_domain::{ConfigOp, IndexOp, Op, OpError, PluginId, PluginOp, TEXT_MAX, ThreadId, ThreadOp};
 use serde_json::json;
 
 use clap::Parser;
@@ -136,6 +136,44 @@ fn paste_reads_a_file_or_stdin_and_sends_the_text() {
     assert!(matches!(err, OpError::Invalid(_)));
     assert!(message.contains("1048584"), "{message}");
     assert!(message.contains("1 MiB"), "{message}");
+}
+
+#[test]
+fn a_paste_file_past_the_cap_reports_its_real_size() {
+    use crate::cli::take_file_text;
+    let dir = tempfile::tempdir().unwrap();
+    let big = dir.path().join("big");
+    std::fs::File::create(&big)
+        .unwrap()
+        .set_len(TEXT_MAX as u64 + 8193)
+        .unwrap();
+    let err = take_file_text(
+        Op::Thread(ThreadOp::Paste {
+            id: ThreadId("thr_1".into()),
+            text: None,
+            file: Some(big.display().to_string()),
+            terminal: None,
+        }),
+        std::io::empty(),
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("1056769 bytes"), "{err}");
+}
+
+#[test]
+fn stdin_at_the_cap_is_accepted_and_one_byte_over_is_refused() {
+    use crate::cli::take_file_text;
+    let paste = || {
+        Op::Thread(ThreadOp::Paste {
+            id: ThreadId("thr_1".into()),
+            text: None,
+            file: Some("-".into()),
+            terminal: None,
+        })
+    };
+    assert!(take_file_text(paste(), std::io::Cursor::new(vec![b'a'; TEXT_MAX])).is_ok());
+    let err = take_file_text(paste(), std::io::Cursor::new(vec![b'a'; TEXT_MAX + 1])).unwrap_err();
+    assert!(matches!(err, OpError::Invalid(_)));
 }
 
 #[test]

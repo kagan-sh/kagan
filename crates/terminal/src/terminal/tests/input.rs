@@ -98,6 +98,23 @@ fn submit_reports_a_failed_write() {
     quit_within(terminal, Duration::from_secs(3));
     drop(reap);
 }
+#[cfg(unix)]
+#[test]
+fn a_paste_reaches_the_program() {
+    let terminal = Terminal::spawn(
+        sh("read line; printf 'got=%s\\n' \"$line\"; sleep 5"),
+        80,
+        24,
+    )
+    .unwrap();
+    let reap = Reap(terminal.process_id());
+    terminal.paste("kagan-paste\n").unwrap();
+    let frame = wait_for(&terminal, "got=kagan-paste");
+    assert!(frame.contains("got=kagan-paste"), "{frame}");
+    quit_within(terminal, Duration::from_secs(3));
+    drop(reap);
+}
+
 #[test]
 fn a_report_queues_no_scroll_reset_and_typing_queues_one() {
     let terminal = Terminal::spawn(shell_launch(), 80, 24).unwrap();

@@ -5,6 +5,27 @@ use super::{
     queue_folder_write,
 };
 
+#[test]
+fn plugin_folders_sit_under_the_data_folder() {
+    use std::path::PathBuf;
+    let data = PathBuf::from("data");
+    let id = kg_domain::PluginId("dev.test.echo".into());
+    assert_eq!(
+        crate::plugin_folder::plugins_dir(&data),
+        data.join("plugins")
+    );
+    let dir = data.join("plugins").join("dev.test.echo");
+    assert_eq!(crate::plugin_folder::plugin_dir(&data, &id), dir);
+    assert_eq!(
+        crate::plugin_folder::plugin_data_dir(&data, &id),
+        dir.join("data")
+    );
+    assert_eq!(
+        crate::plugin_folder::plugin_log_file(&data, &id),
+        dir.join("logs.jsonl")
+    );
+}
+
 #[gpui_kit::test]
 async fn a_queued_plugin_write_is_refused_once_its_permit_is_cleared(cx: &mut TestAppContext) {
     let fixture = folder_plugin_fixture(cx).await;

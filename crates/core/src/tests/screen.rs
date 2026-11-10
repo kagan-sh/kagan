@@ -636,3 +636,44 @@ async fn starting_a_thread_does_not_delete_an_old_saved_screen(cx: &mut TestAppC
     cx.run_until_parked();
     assert!(saved_screen(fixture.dir.path(), &started.id).is_some());
 }
+
+#[gpui_kit::test]
+async fn a_screen_of_a_long_archived_thread_is_dropped_at_start(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let project = fixture.project.clone();
+    let dir = fixture.dir.path().to_path_buf();
+    let fixture = fixture
+        .restart(cx, move |store| {
+            let now = crate::workspace::now();
+            for (id, archived) in [("thr_long_ago", Timestamp(1)), ("thr_just_now", now)] {
+                let mut record = idle_thread(id, project.clone());
+                record.archived_at = Some(archived);
+                store.put_thread(&record).unwrap();
+                let thread = ThreadId(id.into());
+                let started = store
+                    .append_events(&thread, Timestamp(1), [EventKind::Started])
+                    .unwrap();
+                store
+                    .put_screen(&ScreenRow {
+                        thread_id: thread,
+                        started_seq: started[0].seq,
+                        cols: 80,
+                        rows: 24,
+                        replay: b"kept?\n".to_vec(),
+                        history_dropped: 0,
+                        screen_kept: true,
+                    })
+                    .unwrap();
+            }
+        })
+        .await;
+    let left: Vec<String> = Store::open(dir.join("kagan.sqlite3"))
+        .unwrap()
+        .screens()
+        .unwrap()
+        .into_iter()
+        .map(|row| row.thread_id.to_string())
+        .collect();
+    assert_eq!(left, ["thr_just_now"]);
+    drop(fixture);
+}

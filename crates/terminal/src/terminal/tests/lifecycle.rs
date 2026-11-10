@@ -7,6 +7,21 @@ use crate::{Exit, Launch, Terminal};
 
 #[cfg(unix)]
 #[test]
+fn stop_ends_the_program() {
+    let terminal = Terminal::spawn(sh("sleep 30"), 80, 24).unwrap();
+    let reap = Reap(terminal.process_id());
+    terminal.stop();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while terminal.exit().is_none() {
+        assert!(Instant::now() < deadline, "stop did not end the program");
+        thread::sleep(Duration::from_millis(20));
+    }
+    quit_within(terminal, Duration::from_secs(3));
+    drop(reap);
+}
+
+#[cfg(unix)]
+#[test]
 fn env_reaches_the_program() {
     let launch = Launch {
         env: vec![(OsString::from("KAGAN_PROBE"), OsString::from("probe-value"))],

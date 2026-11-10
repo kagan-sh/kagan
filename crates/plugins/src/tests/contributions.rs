@@ -3,9 +3,19 @@ use kg_domain::PluginOp;
 use serde_json::{Value, json};
 
 use super::{
-    check_plugin, open, plugin_dir, plugin_op, read_manifest, sample_manifest, spare_data,
-    write_plugin,
+    check_plugin, installed_at, open, plugin_dir, plugin_op, read_manifest, sample_manifest,
+    spare_data, write_plugin,
 };
+
+#[gpui_kit::test]
+fn an_active_plugin_is_listed_for_the_window(cx: &mut TestAppContext) {
+    let dir = plugin_dir();
+    write_plugin(dir.path(), &sample_manifest());
+    open(cx, &[installed_at(dir.path())]);
+    let listed = cx.update(|cx| crate::contributions(cx)).unwrap();
+    let ids: Vec<&str> = listed.iter().map(|(id, _)| id.0.as_str()).collect();
+    assert_eq!(ids, [super::ID]);
+}
 
 #[test]
 fn a_plain_button_in_any_plugin_script_is_a_warning_and_a_kg_button_is_not() {

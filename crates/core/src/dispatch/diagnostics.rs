@@ -255,3 +255,7 @@ fn write_new(path: &Path, text: &str) -> std::result::Result<(), OpError> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "diagnostics_test.rs"]
+mod tests;
