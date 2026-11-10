@@ -45,6 +45,28 @@ fn deleting_an_environment_removes_it() {
 }
 
 #[test]
+fn all_environments_lists_every_one() {
+    let store = store();
+    store
+        .put_environment(&personal("env_1", "/code/kagan/personal/one"))
+        .unwrap();
+    store
+        .put_environment(&personal("env_2", "/code/kagan/personal/two"))
+        .unwrap();
+    let mut ids: Vec<_> = store
+        .all_environments()
+        .unwrap()
+        .into_iter()
+        .map(|env| env.id)
+        .collect();
+    ids.sort();
+    assert_eq!(
+        ids,
+        [EnvironmentId("env_1".into()), EnvironmentId("env_2".into())]
+    );
+}
+
+#[test]
 fn removal_pending_covers_a_destroyed_personal_folder_and_nothing_else() {
     let store = store();
     let folder = Path::new("/code/kagan/personal/one");

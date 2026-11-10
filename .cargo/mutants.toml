@@ -7,6 +7,8 @@ exclude_globs = [
     "crates/*/tests/**",
     "**/tests.rs",
     "**/*_test.rs",
+    # The Windows screen capture. It is platform-only, and CI's mutants run on Linux, which does not compile it.
+    "crates/ui/src/ui_driver/windows.rs",
 ]
 
 exclude_re = [
@@ -15,4 +17,30 @@ exclude_re = [
     # `highlight` returns early for "text" or an empty source. Without it, `highlight_cached` gives
     # the same empty result for "text", so the early return only saves a parse.
     'syntax\.rs:\d+:\d+: replace \|\| with && in highlight\b',
+    # The limit compares two clock readings; > and >= differ only within the same nanosecond.
+    'process\.rs:\d+:\d+: replace > with >= in Process::wait_within',
+    # The Windows and macOS clipboard write. CI's mutants run on Linux, which compiles the other write_png.
+    'clipboard\.rs:25:5: replace write_png -> Result<HostValue, HostError> with Ok\(Default::default\(\)\)',
+    # The production stub is compiled only outside tests; the test build has its own hold.
+    'runtime/host/mod\.rs:\d+:\d+: replace hold -> bool with true',
+    # The keychain module is compiled out of every test build, and it talks to the OS keychain.
+    'keychain\.rs:\d+:\d+: replace use_keychain with \(\)',
+    'keychain\.rs:\d+:\d+: replace <impl keyring_core::api::CredentialStoreApi for Keychain>::vendor',
+    # The macOS screen capture. CI's mutants run on Linux, which does not compile it.
+    'ui/src/ui_driver\.rs:\d+:\d+: replace macos::run',
+    # Painting pixels. A test can only see the grid, not the glyphs drawn from it.
+    'ui/src/terminal\.rs:\d+:\d+: replace paint_glyphs',
+    'ui/src/terminal\.rs:580:36: replace \+ with - in paint_glyphs',
+    'ui/src/terminal\.rs:580:64: replace \* with / in paint_glyphs',
+    # The busy colour of the activity dot is paint. No test reads an element's colour.
+    'ui/src/kagan/activity/summary\.rs:\d+:\d+: replace > with (<|==|>=) in Kagan::strip_summary',
+    # Loading the font files into the app. Its effect is pixels on screen.
+    'ui/src/theme/mod\.rs:\d+:\d+: replace load_fonts',
+    # The macOS-only website data store branch of `place`. Linux does not compile it.
+    'ui/src/components/webview/mod\.rs:228:12: delete ! in place',
+    'ui/src/components/webview/mod\.rs:231:43: replace < with (<=|==|>) in place',
+    # These need a live WebView, which needs a display, so CI's runner cannot run them.
+    'ui/src/web_page\.rs:\d+:\d+: replace open_windows',
+    'ui/src/web_page\.rs:\d+:\d+: replace restrain',
+    'ui/src/web_page\.rs:\d+:\d+: replace WebPage::eval',
 ]

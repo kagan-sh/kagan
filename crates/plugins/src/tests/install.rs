@@ -18,6 +18,18 @@ use super::{
     tool_names, unique, write_plugin,
 };
 
+#[test]
+fn clear_staging_removes_only_the_staging_folders() {
+    let dir = tempfile::tempdir().unwrap();
+    let left_behind = dir.path().join(".staging-old");
+    std::fs::create_dir_all(left_behind.join("inner")).unwrap();
+    let plugin = dir.path().join("dev.test.keep");
+    std::fs::create_dir_all(&plugin).unwrap();
+    source::clear_staging(dir.path());
+    assert!(!left_behind.exists());
+    assert!(plugin.exists());
+}
+
 #[cfg(unix)]
 #[test]
 fn git_fetch_respects_proxy_and_ssh_settings() {
@@ -1121,6 +1133,30 @@ fn cancel_stops_a_git_install_and_leaves_nothing_staged(cx: &mut TestAppContext)
         "no staging folder is left in {}",
         plugins.display()
     );
+}
+
+#[gpui_kit::test]
+fn the_plugin_list_hides_a_token_in_a_git_source(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    write_plugin(plugin.path(), &sample_manifest());
+    let root = dunce::canonicalize(plugin.path()).unwrap();
+    let record = Plugin {
+        id: PluginId(ID.into()),
+        source: "git:https://user:tok3n@example.com/acme/echo.git@main".into(),
+        approved: json!({"powers": {}, "downloads": {}}),
+        root,
+        commit: None,
+        enabled: true,
+        skills: Vec::new(),
+        error: None,
+    };
+    open(cx, &[record]);
+    let OpResult::Plugins(list) = run(cx, Op::Plugin(PluginOp::List)).unwrap() else {
+        panic!("list returned no plugins");
+    };
+    assert_eq!(list.len(), 1);
+    assert!(list[0].source.starts_with("git:"), "{}", list[0].source);
+    assert!(!list[0].source.contains("tok3n"), "{}", list[0].source);
 }
 
 #[gpui_kit::test]

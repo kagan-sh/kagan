@@ -420,6 +420,17 @@ fn a_window_image_stays_in_its_root_and_under_the_caps() {
     assert!(preview_image(Some(root.path()), &secret).is_none());
     assert!(preview_image(None, &secret).is_some());
     assert!(preview_image(Some(root.path()), &heavy).is_none());
+    let mut exact = png(2, 2);
+    exact.resize(8 * 1024 * 1024, 0);
+    let exact_path = root.path().join("exact.png");
+    std::fs::write(&exact_path, exact).unwrap();
+    assert!(preview_image(Some(root.path()), &exact_path).is_some());
+    let at_pixels = root.path().join("at-pixels.png");
+    std::fs::write(&at_pixels, png(8_000, 5_000)).unwrap();
+    assert!(preview_image(Some(root.path()), &at_pixels).is_some());
+    let over_pixels = root.path().join("over-pixels.png");
+    std::fs::write(&over_pixels, png(8_001, 5_000)).unwrap();
+    assert!(preview_image(Some(root.path()), &over_pixels).is_none());
 }
 
 fn png(width: u32, height: u32) -> Vec<u8> {

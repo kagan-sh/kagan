@@ -3,7 +3,7 @@ use std::time::Duration;
 use gpui_kit::TestAppContext;
 use kg_domain::PluginId;
 
-use crate::page::{FILE_CAP, MESSAGE_CAP, PageFileError, parse_message, read_plugin_file};
+use crate::page::{PageFileError, parse_message, read_plugin_file};
 
 use super::{
     PAGE_PLUGIN, deliver_page, flood_page, open_page, open_page_holding_next, pending_page_bytes,
@@ -77,7 +77,7 @@ fn a_file_over_the_cap_is_refused() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("big.html");
     let file = std::fs::File::create(&path).unwrap();
-    file.set_len(FILE_CAP + 1).unwrap();
+    file.set_len(8 * 1024 * 1024 + 1).unwrap();
     assert_eq!(
         read_plugin_file(root.path(), "big.html"),
         Err(PageFileError::TooBig)
@@ -85,10 +85,29 @@ fn a_file_over_the_cap_is_refused() {
 }
 
 #[test]
+fn a_file_at_the_cap_is_read() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("edge.html");
+    let file = std::fs::File::create(&path).unwrap();
+    file.set_len(8 * 1024 * 1024).unwrap();
+    assert!(read_plugin_file(root.path(), "edge.html").is_ok());
+}
+
+#[test]
+fn a_page_that_is_missing_fails_the_check() {
+    let root = tempfile::tempdir().unwrap();
+    assert!(crate::page::require_html(root.path(), "index.html").is_err());
+    std::fs::write(root.path().join("index.html"), "<p>hi</p>").unwrap();
+    assert!(crate::page::require_html(root.path(), "index.html").is_ok());
+}
+
+#[test]
 fn a_page_message_is_json_within_the_cap() {
     assert_eq!(parse_message(r#"{"ok":true}"#).unwrap()["ok"], true);
     assert!(parse_message("not json").is_err());
-    let huge = format!("\"{}\"", "x".repeat(MESSAGE_CAP));
+    let at = format!("\"{}\"", "x".repeat(1024 * 1024 - 2));
+    assert!(parse_message(&at).is_ok());
+    let huge = format!("\"{}\"", "x".repeat(1024 * 1024));
     assert!(
         parse_message(&huge)
             .unwrap_err()

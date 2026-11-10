@@ -112,3 +112,7 @@ impl Attention {
             .count()
     }
 }
+
+#[cfg(test)]
+#[path = "attention_test.rs"]
+mod tests;

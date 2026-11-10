@@ -390,14 +390,14 @@ fn a_call_input_is_capped_at_64_kib(cx: &mut TestAppContext) {
         &[installed_at(asker.path()), installed_at(target.path())],
     );
     // `{"word":""}` is 11 bytes, so this input is exactly the cap.
-    let at = "x".repeat(crate::call::CALL_CAP - 11);
+    let at = "x".repeat(64 * 1024 - 11);
     let (text, is_error) = ask_result(
         cx,
         json!({ "plugin": CALLEE, "name": "size", "input": { "word": at } }),
     );
     assert!(!is_error, "{text}");
     assert_eq!(text, at.len().to_string());
-    let over = "x".repeat(crate::call::CALL_CAP - 10);
+    let over = "x".repeat(64 * 1024 - 10);
     let (text, is_error) = ask_result(
         cx,
         json!({ "plugin": CALLEE, "name": "size", "input": { "word": over } }),
@@ -418,14 +418,14 @@ fn a_call_reply_is_capped_at_64_kib(cx: &mut TestAppContext) {
         &[installed_at(asker.path()), installed_at(target.path())],
     );
     // A JSON string spends two bytes on its quotes, so this reply is exactly the cap.
-    let at = crate::call::CALL_CAP - 2;
+    let at = 64 * 1024 - 2;
     let (text, is_error) = ask_result(
         cx,
         json!({ "plugin": CALLEE, "name": "echo_size", "input": { "n": at } }),
     );
     assert!(!is_error, "{text}");
     assert_eq!(text.len(), at + 2);
-    let over = crate::call::CALL_CAP - 1;
+    let over = 64 * 1024 - 1;
     let (text, is_error) = ask_result(
         cx,
         json!({ "plugin": CALLEE, "name": "echo_size", "input": { "n": over } }),

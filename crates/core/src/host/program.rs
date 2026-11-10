@@ -237,3 +237,7 @@ impl Workspace {
             .or_else(|| user_home().map(|home| home.join(folder)))
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "program_test.rs"]
+mod tests;

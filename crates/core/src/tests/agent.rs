@@ -1141,3 +1141,65 @@ async fn instructions_set_does_not_recreate_a_missing_project_folder(cx: &mut Te
     assert!(matches!(result, Err(OpError::Invalid(_))), "{result:?}");
     assert!(!checkout.exists(), "the project folder was built again");
 }
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_plugin_persona_and_its_tools_reach_the_thread(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.set_plugin_host(std::rc::Rc::new(|request, _| {
+            let result = match request {
+                crate::PluginRequest::Instruct { .. } => {
+                    Ok(OpResult::Output(Some("PLUGIN_PERSONA".into())))
+                }
+                crate::PluginRequest::Commands => Ok(OpResult::PluginCommands(Vec::new())),
+                crate::PluginRequest::Tools { .. } => Ok(OpResult::Tools {
+                    instructions: None,
+                    tools: vec![
+                        AgentTool {
+                            name: "zeta".into(),
+                            description: "a plugin tool".into(),
+                            input_schema: json!({}),
+                        },
+                        AgentTool {
+                            name: crate::skill::SKILL_LOAD.into(),
+                            description: "stale".into(),
+                            input_schema: json!({}),
+                        },
+                    ],
+                }),
+                _ => Err(OpError::Failed("unexpected plugin request".into())),
+            };
+            gpui_kit::Task::ready(result)
+        }));
+    });
+    let run = fixture.dir.path().join("persona-run");
+    let program = fake_agent(&run, "claude");
+    let (id, _reap) = started(&fixture, program.to_str().unwrap(), cx).await;
+    let instruct = cx.update(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .thread(&id)
+            .expect("thread")
+            .read(cx)
+            .instruct
+            .clone()
+    });
+    assert_eq!(instruct.as_deref(), Some("PLUGIN_PERSONA"));
+    let OpResult::Tools { tools, .. } = op(Op::Thread(ThreadOp::Tools { id: id.clone() }), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("tools returned no list")
+    };
+    let names: Vec<&str> = tools.iter().map(|tool| tool.name.as_str()).collect();
+    assert!(names.contains(&"zeta"), "{names:?}");
+    assert_eq!(
+        names
+            .iter()
+            .filter(|name| **name == crate::skill::SKILL_LOAD)
+            .count(),
+        1,
+        "{names:?}"
+    );
+}

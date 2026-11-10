@@ -32,6 +32,59 @@ fn killing_a_tree_walks_every_process_and_spares_the_rest() {
     running.wait().unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn killing_a_tree_ends_a_background_job_of_its_leader() -> std::io::Result<()> {
+    use std::os::unix::process::CommandExt as _;
+    let path = TempPath::new("tree-leader");
+    let mut command = tree_command(&path.0);
+    // SAFETY: setsid touches no memory of ours; it only makes the child the leader of its own group.
+    unsafe {
+        command.pre_exec(|| {
+            rustix::process::setsid()
+                .map(drop)
+                .map_err(std::io::Error::from)
+        });
+    }
+    let mut leader = command.spawn()?;
+    let pid = read_pid(&path.0)?;
+    let _reap = Reap(pid);
+    if !alive(pid) {
+        return Err(std::io::Error::other("background job was not alive"));
+    }
+    kill_tree(leader.id());
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while alive(pid) {
+        if Instant::now() >= deadline {
+            return Err(std::io::Error::other(format!(
+                "background job {pid} survived kill_tree"
+            )));
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    leader.wait()?;
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn killing_the_leader_ends_the_process() -> std::io::Result<()> {
+    let mut child = std::process::Command::new("sleep").arg("30").spawn()?;
+    crate::kill_leader(child.id());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            return Err(std::io::Error::other("the leader survived kill_leader"));
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    assert!(!status.success());
+    Ok(())
+}
+
 #[test]
 fn spawn_keeps_the_stdio_the_caller_set() -> std::io::Result<()> {
     let path = TempPath::new("stdio");

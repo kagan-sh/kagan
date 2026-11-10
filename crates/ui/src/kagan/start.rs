@@ -364,3 +364,7 @@ impl Kagan {
         cx.notify();
     }
 }
+
+#[cfg(test)]
+#[path = "start_test.rs"]
+mod tests;

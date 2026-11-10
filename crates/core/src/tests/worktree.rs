@@ -1198,3 +1198,48 @@ async fn set_base_stores_a_branch_of_the_repository_and_refuses_another(cx: &mut
         Err(OpError::NotFound(_))
     ));
 }
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_teardown_symlink_is_not_run_and_is_a_notice_on_the_thread(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = repo_dir(&fixture);
+    empty_repo(&repo);
+    let marker = std::env::temp_dir().join(format!("kg-teardown-link-{}", std::process::id()));
+    let _ = std::fs::remove_file(&marker);
+    let target = std::env::temp_dir().join(format!("kg-teardown-target-{}", std::process::id()));
+    std::fs::write(&target, format!("touch '{}'\n", marker.display())).unwrap();
+    std::fs::create_dir_all(repo.join(".kagan")).unwrap();
+    std::os::unix::fs::symlink(&target, repo.join(".kagan/teardown")).unwrap();
+    git_in(&repo, &["add", "--", ".kagan/teardown"]);
+    git_in(
+        &repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.test",
+            "commit",
+            "-qm",
+            "teardown link",
+        ],
+    );
+    let OpResult::Thread(started) = op(worktree_run(&fixture, Some("notes"), None), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("thread")
+    };
+    let environment_id = started.environment_id.clone().unwrap();
+    let folder = stop_archive_and_settle(&started.id, &environment_id, cx).await;
+    assert!(!folder.path.exists(), "{folder:?}");
+    assert!(!marker.exists());
+    let notice = events(&started.id, cx).await.into_iter().any(|event| {
+        matches!(
+            event.kind,
+            EventKind::Notice { ref text, .. } if text.contains(".kagan/teardown") && text.contains("link")
+        )
+    });
+    assert!(notice, "no teardown link notice on the thread");
+    let _ = std::fs::remove_file(&target);
+}
