@@ -30,7 +30,8 @@ ids!(
     ThreadId,
     SectionId,
     PendingInteractionId,
-    PluginId
+    PluginId,
+    AutomationId
 );
 
 impl ProjectId {

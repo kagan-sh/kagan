@@ -1,5 +1,6 @@
 //! The `Op` the CLI and the window share, its result, and its error.
 
+mod automation;
 mod browser;
 mod check;
 mod config;
@@ -38,6 +39,7 @@ use crate::{
     Thread, ThreadId,
 };
 
+pub use automation::{Automation, AutomationOp};
 pub use browser::{BrowserControl, BrowserOp, BrowserSnapshot, BrowserView};
 pub use check::check;
 pub use config::ConfigOp;
@@ -100,6 +102,9 @@ pub enum Op {
     /// Threads
     #[command(subcommand)]
     Thread(ThreadOp),
+    /// A named text, a program line, and a time, that starts a thread
+    #[command(subcommand)]
+    Automation(AutomationOp),
     /// Projects
     #[command(subcommand)]
     Project(ProjectOp),
@@ -238,6 +243,8 @@ pub enum OpResult {
     },
     Thread(Thread),
     Threads(Vec<Thread>),
+    Automation(Automation),
+    Automations(Vec<Automation>),
     Found(Vec<crate::Found>),
     Output(Option<String>),
     Screen(String),

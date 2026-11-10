@@ -18,6 +18,7 @@ Commands:
   skill         Find, read and create skills
   open          Open a window
   thread        Threads
+  automation    A named text, a program line, and a time, that starts a thread
   project       Projects
   program       Programs a new thread can run, as the new-thread picker lists them
   environment   Environments
@@ -1151,6 +1152,123 @@ Options:
 
       --archived
           Also search archived threads. Each result says whether it is archived
+
+  -h, --help
+          Print help
+```
+
+## `kg automation`
+
+```text
+A named text, a program line, and a time, that starts a thread
+
+Usage: kg automation [OPTIONS] <COMMAND>
+
+Commands:
+  add     Save an automation on a project
+  pause   Pause an automation. A thread it already started keeps running
+  resume  Let a paused automation start threads again
+  delete  Remove an automation. A thread it already started keeps running
+  list    List automations, and the thread each run started
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Print compact JSON; failures print the error envelope
+
+  -h, --help
+          Print help
+```
+
+## `kg automation add`
+
+```text
+Save an automation on a project
+
+Usage: kg automation add [OPTIONS] --project-id <PROJECT_ID> --program <PROGRAM> <NAME> <BODY>
+
+Arguments:
+  <NAME>
+          
+
+  <BODY>
+          The text to send once the program is running
+
+Options:
+      --project-id <PROJECT_ID>
+          [env: KG_PROJECT_ID=]
+
+      --program <PROGRAM>
+          The program line, such as `claude` or `codex`
+
+      --minutes <MINUTES>
+          Whole minutes between runs, from 1 to 1440
+
+      --at <AT>
+          When to run once, as milliseconds since the Unix epoch
+
+  -h, --help
+          Print help
+```
+
+## `kg automation pause`
+
+```text
+Pause an automation. A thread it already started keeps running
+
+Usage: kg automation pause <ID>
+
+Arguments:
+  <ID>
+          
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg automation resume`
+
+```text
+Let a paused automation start threads again
+
+Usage: kg automation resume <ID>
+
+Arguments:
+  <ID>
+          
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg automation delete`
+
+```text
+Remove an automation. A thread it already started keeps running
+
+Usage: kg automation delete <ID>
+
+Arguments:
+  <ID>
+          
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg automation list`
+
+```text
+List automations, and the thread each run started
+
+Usage: kg automation list [OPTIONS]
+
+Options:
+      --project-id <PROJECT_ID>
+          [env: KG_PROJECT_ID=]
 
   -h, --help
           Print help

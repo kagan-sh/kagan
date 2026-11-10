@@ -93,6 +93,12 @@ pub(crate) struct PreparedRun {
     metadata: Option<kg_domain::Metadata>,
 }
 
+impl PreparedRun {
+    pub(crate) fn thread_id(&self) -> &ThreadId {
+        &self.thread_id
+    }
+}
+
 pub(crate) async fn prepare(
     this: &WeakEntity<Workspace>,
     run: Run,

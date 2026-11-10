@@ -1,6 +1,7 @@
 use crate::theme::{SpaceStep, TypeScale as _, radius_md, space};
 
 mod appearance;
+mod automations;
 mod command;
 mod fonts;
 mod general;

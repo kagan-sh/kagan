@@ -1,5 +1,6 @@
 use crate::ThreadId;
 
+use super::automation::valid;
 use super::browser::browser_check;
 use super::env::{shell_name, variable_name, variable_value};
 use super::{
@@ -65,6 +66,7 @@ pub fn check(op: &Op) -> Result<(), String> {
                 printable(id).ok_or_else(|| "surface id must be a plain name".into())
             }
         },
+        Op::Automation(op) => valid(op),
         Op::Section(op) => match op {
             SectionOp::Create { thread_id, .. } => plain_opt(thread_id.as_ref()),
             SectionOp::File { thread_id, .. } => plain(thread_id),

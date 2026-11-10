@@ -178,6 +178,40 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - **Shows**: threads whose title, or whose kept terminal lines, hold the text, ignoring case: threads that are not archived first, then archived ones when `--archived` is given, each marked `archived`. Hidden threads are left out. Each has its project's name and, when a kept line matched, the last such line, cut around the match, and the lines to scroll back to show it. At most `--limit`, 50 when left out [decision 107]. Kept lines are the running program's scrollback, or the screen kept after it ended; an archived thread's screen is released when its grace ends, so then only its title is searched [decision 107] [decision 26].
 - **Refused when**: blank text, text longer than 256 characters, or a limit outside 1 to 200 — `invalid` [op/].
 
+## Automation
+
+An automation is a named text, a program line, and a time, that starts a thread in one project [CONTEXT] [decision 231]. The time is an interval of 1 to 1440 whole minutes, or one time to run once. It does not run while kagan is quit. The project page lists each automation and the thread each run started [decision 231].
+
+### `Add`
+
+- **Allowed when**: the project exists, the program line parses, and the time is either whole minutes from 1 to 1440 or one non-negative time [op/] [decision 231].
+- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A one-time automation is due at its time. The thread runs in the project folder [decision 231].
+- **Shows**: the automation [book:cli].
+- **Refused when**: an empty name, a name of only control characters, empty text, text over 1 MiB, an empty program, an unfinished quote, minutes outside 1 to 1440, a negative time, both an interval and a time, or neither — `invalid` [op/]. A missing project — `not-found` [op/].
+
+### `Pause`, `Resume`
+
+- **Allowed when**: the automation exists [book:cli].
+- **Changes**: a paused automation does not start another thread. A thread it already started keeps running. Resume lets a due automation start a thread again [decision 231].
+- **Shows**: the automation [book:cli].
+- **Refused when**: a missing automation — `not-found` [op/].
+
+### `Delete`
+
+- **Changes**: removes the automation. A thread it already started keeps running [decision 231].
+- **Refused when**: a missing automation — `not-found` [op/].
+
+### `List`
+
+- **Allowed when**: always [book:cli]. One project when a project is set.
+- **Shows**: each automation, and the thread each run started, oldest first. An interval that has not run yet has no thread [decision 231].
+
+### Due run (no operation)
+
+- **Allowed when**: kagan is open, the automation is not paused, its time is due, and no thread it started still has a running program [decision 231].
+- **Changes**: starts a thread in that project with that program line, then sends the body through the same path as `ThreadOp::Send` once the program is running. Runs of one automation do not overlap. A thread already running is left alone. After a start, the next interval is one interval from that start, so time spent quit does not start a run for every missed interval. A one-time automation does not start another thread after one has been started. Opening kagan starts one run that became due while it was quit [decision 231].
+- **Shows**: the thread on the automation, once a run has started [decision 231].
+
 ## Diagnostics
 
 `kg diagnostics export` writes one new local file. Omit `--path` and it goes under the data directory, in `diagnostics/`. A given path is refused when the parent folder is missing or the file already exists. Each plugin's warn and error counts come from the plugin host, which reads the last 64 KiB of its log; without a plugin host the line says `not read, no plugin host`.
@@ -709,7 +743,7 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 ### `SettingsOp::Project`
 
 - **Allowed when**: the id is a live project [op/] [decision 221].
-- **Changes**: shows that project's page, with its environment variables, its default program, and its agent rules, opening the window if it is closed [decision 221]. Escape or Close leaves the page [decision 221]. The sidebar's "Project settings…" menu item sends this op.
+- **Changes**: shows that project's page, with its environment variables, its default program, its agent rules, and its automations, opening the window if it is closed [decision 221] [decision 231]. Escape or Close leaves the page [decision 221]. The sidebar's "Project settings…" menu item sends this op. The automations list shows each one and the thread each run started, and can add, pause, resume, and delete [decision 231].
 - **Refused when**: a missing id — `not-found` [op/].
 
 ### `Hide`, `HideOthers`, `ShowAll`

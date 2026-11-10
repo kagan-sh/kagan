@@ -133,7 +133,7 @@ pub struct Workspace {
     pub(crate) socket: Option<std::ffi::OsString>,
     pub(crate) projects: BTreeMap<ProjectId, Entity<Project>>,
     pub(crate) preparing_projects: BTreeMap<ProjectId, usize>,
-    removing_projects: BTreeSet<ProjectId>,
+    pub(crate) removing_projects: BTreeSet<ProjectId>,
     pub(crate) environments: BTreeMap<EnvironmentId, Entity<Environment>>,
     pub(crate) threads: BTreeMap<ThreadId, Entity<Thread>>,
     pub(crate) tasks: BTreeMap<ThreadId, Task<()>>,
@@ -161,6 +161,7 @@ pub struct Workspace {
     _database_task: Task<()>,
     _requests_task: Task<()>,
     _retire_task: Task<()>,
+    _automation_task: Task<()>,
     _quit: Subscription,
 }
 #[derive(Clone, Debug)]
@@ -296,6 +297,7 @@ impl Workspace {
                         _database_task: database_task,
                         _requests_task: requests_task,
                         _retire_task: retire_task,
+                        _automation_task: crate::automation::watch(cx),
                         _quit: cx.on_app_quit(|workspace, _| {
                             workspace.end_programs();
                             async {}

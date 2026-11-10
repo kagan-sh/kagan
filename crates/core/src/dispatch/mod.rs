@@ -6,8 +6,9 @@ pub(crate) mod ui;
 
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{
-    EnvOp, EnvironmentOp, KeymapOp, NotifyOp, Op, OpError, OpResult, PreferenceOp, ProgramOp,
-    ProjectOp, SettingsOp, Sidebar, TerminalOp, ThemeOp, ThreadOp, order_sidebar_projects,
+    AutomationOp, EnvOp, EnvironmentOp, KeymapOp, NotifyOp, Op, OpError, OpResult, PreferenceOp,
+    ProgramOp, ProjectOp, SettingsOp, Sidebar, TerminalOp, ThemeOp, ThreadOp,
+    order_sidebar_projects,
 };
 
 use crate::host::database::{Database, Result};
@@ -111,6 +112,7 @@ pub(crate) async fn execute(
         Op::Diagnostics(op) => crate::dispatch::diagnostics::export(this, op, cx).await,
         Op::Update(op) => crate::update::run(&database, op, cx).await,
         Op::Thread(op) => dispatch_thread(this, database, op, requester, cx).await,
+        Op::Automation(op) => crate::automation::run(this, database, op, cx).await,
         Op::Section(op) => section(this, database, op, cx).await,
         Op::Plugin(kg_domain::PluginOp::Start) => {
             announce(this, crate::WorkspaceEvent::NewPlugin, cx)
@@ -235,6 +237,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
         )
         | Op::Section(_)
         | Op::Ui(_) => true,
+        Op::Automation(op) => !matches!(op, AutomationOp::List { .. }),
         Op::Surface(op) => !matches!(op, kg_domain::SurfaceOp::List),
         Op::Thread(op) => match op {
             ThreadOp::Stop { .. }
