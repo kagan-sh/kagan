@@ -537,7 +537,6 @@ fn row_element(
             row.control
         } else {
             h_flex()
-                .flex_1()
                 .min_w_0()
                 .justify_end()
                 .child(row.control)

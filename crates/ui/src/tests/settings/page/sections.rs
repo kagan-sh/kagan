@@ -255,3 +255,16 @@ fn the_first_group_starts_one_page_gap_below_the_top(cx: &mut TestAppContext) {
         group_top - page_top
     );
 }
+
+#[gpui_kit::test]
+fn a_note_runs_past_half_the_row(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-general");
+    let (_, _, row_width, _) = bounds_of(cx, window, "setting-row-notify");
+    let (_, _, note_width, _) = bounds_of(cx, window, "setting-row-notify-note");
+    assert!(
+        note_width > row_width * 0.6,
+        "the note is {note_width} px of a {row_width} px row"
+    );
+}
