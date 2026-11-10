@@ -228,15 +228,26 @@ pub(crate) async fn run(
             })
             .await
         }
-        SkillOp::Update { name, text, .. } => {
+        SkillOp::Update {
+            name,
+            text,
+            expected,
+            ..
+        } => {
             let loaded = catalog.get(&name)?;
-            update(loaded, &name, text, cx).await
+            update(loaded, &name, text, expected, cx).await
         }
         SkillOp::Remove { name, .. } => remove(catalog.get(&name)?, cx).await,
     }
 }
 
-async fn update(loaded: Loaded, name: &str, text: String, cx: &mut AsyncApp) -> Result<OpResult> {
+async fn update(
+    loaded: Loaded,
+    name: &str,
+    text: String,
+    expected: Option<String>,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
     let source = loaded.skill.source;
     if !matches!(source, SkillSource::User | SkillSource::Project) {
         return Err(OpError::Invalid(
@@ -249,6 +260,13 @@ async fn update(loaded: Loaded, name: &str, text: String, cx: &mut AsyncApp) -> 
         .ok_or_else(|| OpError::Invalid("skill file is missing".into()))?;
     Skill::parse(name, &text, source, None)?;
     cx.background_spawn(async move {
+        if let Some(expected) = expected
+            && std::fs::read_to_string(&path)? != expected
+        {
+            return Err(OpError::Invalid(
+                "SKILL.md changed since you opened it".into(),
+            ));
+        }
         std::fs::write(path, text)?;
         Ok(OpResult::Done)
     })

@@ -62,6 +62,10 @@ pub enum SkillOp {
         name: String,
         /// The whole SKILL.md, frontmatter included
         text: String,
+        /// The SKILL.md text the window read; refused when the file has changed since
+        #[arg(skip)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expected: Option<String>,
         /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,

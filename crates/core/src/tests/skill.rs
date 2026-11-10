@@ -63,6 +63,7 @@ async fn update(
         Op::Skill(SkillOp::Update {
             name: name.into(),
             text: text.into(),
+            expected: None,
             project_id: Some(fixture.project.clone()),
         }),
         cx,
@@ -121,6 +122,45 @@ async fn remove_refuses_a_plugin_skill(cx: &mut TestAppContext) {
             .join("demo-plugin/skills/demo/SKILL.md")
             .exists()
     );
+}
+
+#[gpui_kit::test]
+async fn update_refuses_a_file_changed_since_it_was_read(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    write_skill(&fixture.dir.path().join("skills"), "mine");
+    let path = fixture.dir.path().join("skills/mine/SKILL.md");
+    let before = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(&path, before.replace("A test skill.", "Changed elsewhere.")).unwrap();
+    let text = "---\nname: mine\ndescription: Edited.\n---\n\nNew body.\n";
+    let refused = op(
+        Op::Skill(SkillOp::Update {
+            name: "mine".into(),
+            text: text.into(),
+            expected: Some(before),
+            project_id: Some(fixture.project.clone()),
+        }),
+        cx,
+    )
+    .await;
+    assert!(matches!(refused, Err(OpError::Invalid(_))));
+    assert!(
+        std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("Changed elsewhere.")
+    );
+    let current = std::fs::read_to_string(&path).unwrap();
+    let saved = op(
+        Op::Skill(SkillOp::Update {
+            name: "mine".into(),
+            text: text.into(),
+            expected: Some(current),
+            project_id: Some(fixture.project.clone()),
+        }),
+        cx,
+    )
+    .await;
+    assert!(matches!(saved, Ok(OpResult::Done)));
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
 }
 
 #[gpui_kit::test]

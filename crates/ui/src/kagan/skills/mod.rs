@@ -233,6 +233,7 @@ impl Page {
             Op::Skill(SkillOp::Update {
                 name: shown.skill.name.clone(),
                 text,
+                expected: None,
                 project_id: self.project.clone(),
             }),
             cx,
