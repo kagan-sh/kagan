@@ -9,27 +9,46 @@ use crate::Workspace;
 use crate::host::database::Result;
 use crate::workspace::{WorkspaceEvent, closed, missing};
 
-const BUNDLED: &[(&str, &str)] = &[
-    ("kg-cli", include_str!("../../skills/kg-cli.md")),
+/// Each bundled skill, then each file in its folder as (path inside the folder, text).
+const BUNDLED: &[(&str, &[(&str, &str)])] = &[
+    (
+        "kg-cli",
+        &[("SKILL.md", include_str!("../../skills/kg-cli/SKILL.md"))],
+    ),
     (
         "kg-plugin-authoring",
-        include_str!("../../skills/kg-plugin-authoring.md"),
+        &[(
+            "SKILL.md",
+            include_str!("../../skills/kg-plugin-authoring/SKILL.md"),
+        )],
     ),
     (
         "kg-plugin-port",
-        include_str!("../../skills/kg-plugin-port.md"),
+        &[(
+            "SKILL.md",
+            include_str!("../../skills/kg-plugin-port/SKILL.md"),
+        )],
     ),
     (
         "kg-skill-creator",
-        include_str!("../../skills/kg-skill-creator.md"),
+        &[(
+            "SKILL.md",
+            include_str!("../../skills/kg-skill-creator/SKILL.md"),
+        )],
     ),
-    ("kg-threads", include_str!("../../skills/kg-threads.md")),
-    ("kg-ui", include_str!("../../skills/kg-ui.md")),
+    (
+        "kg-threads",
+        &[("SKILL.md", include_str!("../../skills/kg-threads/SKILL.md"))],
+    ),
+    (
+        "kg-ui",
+        &[("SKILL.md", include_str!("../../skills/kg-ui/SKILL.md"))],
+    ),
 ];
 
 mod catalog;
 
-use catalog::{Catalog, Loaded, read, shared, valid_name, write};
+use catalog::{Catalog, Loaded, materialize, read, shared, valid_name, write};
 
 pub(crate) async fn catalog(
     this: &WeakEntity<Workspace>,
@@ -57,7 +76,8 @@ pub(crate) async fn catalog(
         .map_err(closed)??;
     let plugins = database.call(|store| store.plugins()).await?;
     cx.background_spawn(async move {
-        let mut catalog = shared(plugins)?;
+        let root = materialize(&data_dir, BUNDLED)?;
+        let mut catalog = shared(plugins, &root, BUNDLED)?;
         catalog.folder(&data_dir.join("skills"), SkillSource::User);
         if let Some(project) = project {
             catalog.folder(&project.join(".kagan/skills"), SkillSource::Project);

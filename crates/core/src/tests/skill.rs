@@ -31,6 +31,28 @@ async fn listed(fixture: &Fixture, cx: &mut TestAppContext) -> Vec<Skill> {
 }
 
 #[gpui_kit::test]
+async fn a_bundled_skill_lists_files_that_exist_on_disk(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Files(files) = op(
+        Op::Skill(SkillOp::Files {
+            name: "kg-cli".into(),
+            project_id: Some(fixture.project.clone()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("files")
+    };
+    assert_eq!(files.len(), 1, "{files:?}");
+    assert!(files[0].ends_with("SKILL.md"), "{files:?}");
+    assert_eq!(
+        std::fs::read_to_string(&files[0]).unwrap(),
+        include_str!("../../skills/kg-cli/SKILL.md")
+    );
+}
+
+#[gpui_kit::test]
 async fn bb_folders_are_not_read(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     write_skill(&fixture.dir.path().join(".bb/skills"), "bb-project");

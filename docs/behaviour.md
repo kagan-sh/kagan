@@ -343,7 +343,7 @@ A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matche
 
 ### `Files`
 
-- **Shows**: the skill's file paths; bundled skills have none [docs:self-extend] [book:skills].
+- **Shows**: the skill's file paths. A bundled skill's files are real files under `<dataDir>/agent/bundled/<hash>` [decision 207] [docs:self-extend] [book:skills].
 - **Refused when**: an unknown name — `not-found` [op/].
 
 ### `New`

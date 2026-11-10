@@ -37,7 +37,7 @@ Sources, lowest precedence first:
 
 A higher source overrides a lower one with the same name. A user or project name that starts with `kg-` is dropped, because that prefix belongs to kagan's bundled and plugin skills. Two skills with the same name in one source are both dropped and shown as an error in `kg skill list`.
 
-**Reaching the agent.** `kg mcp` offers the agent tool `skill_load { name }`. The tool list names each skill and its description. The tool returns the body and the skill's absolute file paths. `kg skill files <name>` lists the same paths; the agent reads them with its own file tools. Bundled skills have no supporting files and return an empty list.
+**Reaching the agent.** `kg mcp` offers the agent tool `skill_load { name }`. The tool list names each skill and its description. The tool returns the body and the skill's absolute file paths. `kg skill files <name>` lists the same paths; the agent reads them with its own file tools. Bundled skills list their supporting files too. They are written to `<dataDir>/agent/bundled/<hash>` (decision 207), so each path is a real file.
 
 `skill_load` covers kagan's four skill sources. It is connected to `claude` and `codex` only, because those are the programs that get the `kg mcp` server.
 

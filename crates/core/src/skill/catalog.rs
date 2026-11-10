@@ -5,13 +5,10 @@ use std::path::{Path, PathBuf};
 use crate::host::database::Result;
 use crate::workspace::closed;
 
-use super::BUNDLED;
-
 pub(super) struct Loaded {
     pub(super) skill: Skill,
     pub(super) body: String,
     pub(super) files: Vec<PathBuf>,
-    pub(super) text: Option<&'static str>,
 }
 
 impl Loaded {
@@ -53,19 +50,58 @@ impl Catalog {
             .ok_or_else(|| OpError::NotFound(format!("skill {name} is unavailable")))
     }
 }
-pub(super) fn shared(plugins: Vec<kg_domain::Plugin>) -> Result<Catalog> {
+/// Writes the bundled skills under `<data>/agent/bundled/<hash>`, named by their content, and
+/// returns that folder. The folder is built beside its final name and renamed into place.
+pub(super) fn materialize(data_dir: &Path, bundled: &[(&str, &[(&str, &str)])]) -> Result<PathBuf> {
+    use sha2::{Digest as _, Sha256};
+    let mut hash = Sha256::new();
+    for &(name, files) in bundled {
+        for &(path, text) in files {
+            hash.update(format!("{name}\0{path}\0{text}\0").as_bytes());
+        }
+    }
+    let folder = data_dir.join("agent/bundled");
+    let stable = folder.join(hex::encode(hash.finalize()));
+    if stable.is_dir() {
+        return Ok(stable);
+    }
+    std::fs::create_dir_all(&folder)?;
+    let temp = folder.join(format!(
+        ".tmp-{}-{}",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    let result = (|| -> Result<()> {
+        for &(name, files) in bundled {
+            for &(path, text) in files {
+                let target = temp.join(name).join(path);
+                if let Some(parent) = target.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::write(target, text)?;
+            }
+        }
+        if !stable.is_dir() {
+            std::fs::rename(&temp, &stable)?;
+        }
+        Ok(())
+    })();
+    // After a rename the temp folder is gone; after a failure this tidies it.
+    let _ = std::fs::remove_dir_all(&temp);
+    result?;
+    Ok(stable)
+}
+
+pub(super) fn shared(
+    plugins: Vec<kg_domain::Plugin>,
+    root: &Path,
+    bundled: &[(&str, &[(&str, &str)])],
+) -> Result<Catalog> {
     let mut catalog = Catalog::default();
-    for &(name, text) in BUNDLED {
-        let (skill, body) = Skill::parse(name, text, SkillSource::Bundled, None)?;
-        catalog.skills.insert(
-            name.into(),
-            Loaded {
-                skill,
-                body,
-                files: Vec::new(),
-                text: Some(text),
-            },
-        );
+    for &(name, _) in bundled {
+        catalog
+            .skills
+            .insert(name.into(), read(&root.join(name), SkillSource::Bundled)?);
     }
     let mut paths = Vec::new();
     for plugin in plugins.into_iter().filter(|plugin| plugin.enabled) {
@@ -103,10 +139,6 @@ pub(super) fn write(root: &Path, catalog: &Catalog) -> Result<()> {
     for (name, loaded) in &catalog.skills {
         let folder = next.join(name);
         std::fs::create_dir_all(&folder)?;
-        if let Some(text) = loaded.text {
-            std::fs::write(folder.join("SKILL.md"), text)?;
-            continue;
-        }
         let source = loaded
             .skill
             .path
@@ -226,12 +258,7 @@ pub(super) fn read(root: &Path, source: SkillSource) -> Result<Loaded> {
     let text = std::fs::read_to_string(root.join("SKILL.md"))?;
     let (skill, body) = Skill::parse(name, &text, source, Some(root.join("SKILL.md")))?;
     files.sort();
-    Ok(Loaded {
-        skill,
-        body,
-        files,
-        text: None,
-    })
+    Ok(Loaded { skill, body, files })
 }
 
 fn files_in(root: &Path, folder: &Path, files: &mut Vec<PathBuf>) -> Result<()> {

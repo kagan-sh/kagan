@@ -3,7 +3,45 @@ use std::path::PathBuf;
 
 use kg_domain::{Skill, SkillSource};
 
-use super::catalog::{Catalog, Loaded, valid_name};
+use super::catalog::{Catalog, Loaded, materialize, shared, valid_name, write};
+
+const DEMO: &[(&str, &[(&str, &str)])] = &[(
+    "kg-demo",
+    &[
+        (
+            "SKILL.md",
+            "---\nname: kg-demo\ndescription: Demo.\n---\nBody.\n",
+        ),
+        ("references/long.md", "Long text.\n"),
+    ],
+)];
+
+#[test]
+fn a_bundled_skill_lists_its_supporting_files_on_disk() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = materialize(dir.path(), DEMO).unwrap();
+    let catalog = shared(Vec::new(), &root, DEMO).unwrap();
+    let paths = catalog.skills["kg-demo"].paths();
+    assert_eq!(paths.len(), 2, "{paths:?}");
+    let long = paths
+        .iter()
+        .find(|path| path.ends_with("references/long.md"))
+        .expect("the reference is listed");
+    assert_eq!(std::fs::read_to_string(long).unwrap(), "Long text.\n");
+}
+
+#[test]
+fn a_native_copy_of_a_bundled_skill_keeps_its_supporting_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = materialize(dir.path(), DEMO).unwrap();
+    let catalog = shared(Vec::new(), &root, DEMO).unwrap();
+    let out = dir.path().join("out");
+    write(&out, &catalog).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(out.join("kg-demo/references/long.md")).unwrap(),
+        "Long text.\n"
+    );
+}
 
 #[test]
 fn a_plugin_skill_cannot_replace_a_bundled_one() {
@@ -32,7 +70,6 @@ fn a_plugin_skill_cannot_replace_a_bundled_one() {
             skill,
             body,
             files: Vec::new(),
-            text: None,
         },
     );
     catalog.tier(vec![path], SkillSource::Plugin);
@@ -77,12 +114,7 @@ fn loaded(name: &str, path: Option<&str>, files: Vec<PathBuf>) -> Loaded {
     let text = format!("---\nname: {name}\ndescription: {name} does the thing\n---\nBody.");
     let (skill, body) =
         Skill::parse(name, &text, SkillSource::Bundled, path.map(PathBuf::from)).unwrap();
-    Loaded {
-        skill,
-        body,
-        files,
-        text: None,
-    }
+    Loaded { skill, body, files }
 }
 
 #[test]
