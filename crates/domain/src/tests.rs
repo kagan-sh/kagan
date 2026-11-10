@@ -1267,6 +1267,70 @@ fn browser_acting_ops_are_checked_and_named_on_the_wire() {
 }
 
 #[test]
+fn browser_input_at_the_edges_is_accepted() {
+    use crate::BrowserOp;
+    let thread_id = || ThreadId("thr_1".into());
+    let press = |key: &str| {
+        Op::Browser(BrowserOp::Press {
+            key: key.into(),
+            thread_id: thread_id(),
+        })
+    };
+    assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Type {
+            text: "x".repeat(1024 * 1024),
+            thread_id: thread_id(),
+        })),
+        Ok(())
+    );
+    assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Type {
+            text: "a".into(),
+            thread_id: thread_id(),
+        })),
+        Ok(())
+    );
+    assert_eq!(crate::check(&press("Enter")), Ok(()));
+    assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Scroll {
+            dy: 120.0,
+            thread_id: thread_id(),
+        })),
+        Ok(())
+    );
+}
+
+#[test]
+fn a_paste_carries_text_or_a_file_not_both() {
+    let paste = |text: Option<&str>, file: Option<&str>| {
+        Op::Thread(ThreadOp::Paste {
+            id: ThreadId("thr_1".into()),
+            terminal: None,
+            text: text.map(Into::into),
+            file: file.map(Into::into),
+        })
+    };
+    assert_eq!(crate::check(&paste(Some("hi"), None)), Ok(()));
+    assert_eq!(
+        crate::check(&paste(Some("hi"), Some("notes.txt"))),
+        Err("pass the text or --file, not both".into())
+    );
+}
+
+#[test]
+fn a_stopping_thread_runs_but_is_not_live() {
+    assert!(ThreadStatus::Active.running() && ThreadStatus::Active.live());
+    assert!(ThreadStatus::Stopping.running() && !ThreadStatus::Stopping.live());
+    assert!(!ThreadStatus::Idle.running() && !ThreadStatus::Idle.live());
+}
+
+#[test]
+fn a_git_plugin_source_starts_with_git_colon() {
+    assert!(crate::is_git_source("git:https://example.com/p.git@main"));
+    assert!(!crate::is_git_source("./plugins/mine"));
+}
+
+#[test]
 fn op_fields_are_camel_case_on_the_wire() {
     let op = Op::Status {
         thread_id: Some(ThreadId("thr_1".into())),

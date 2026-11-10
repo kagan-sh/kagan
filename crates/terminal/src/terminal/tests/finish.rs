@@ -14,9 +14,9 @@ use super::super::exit::DRAIN;
 use super::super::exit::finished_exit;
 #[cfg(unix)]
 use super::{Reap, sh};
-use crate::Exit;
 #[cfg(unix)]
-use crate::{Finished, Terminal};
+use crate::Terminal;
+use crate::{Exit, Finished};
 
 #[test]
 fn a_finished_process_needs_a_signalled_handle() {
@@ -161,6 +161,46 @@ fn a_poll_that_sees_the_settle_also_sees_the_final_frame() {
     );
     assert!(changed, "the final frame was lost");
     assert_eq!(finished.poll(), (false, false));
+    drop(reap);
+}
+
+#[test]
+fn a_replay_is_restored_up_to_four_mib_and_no_further() {
+    const FOUR_MIB: usize = 4 * 1024 * 1024;
+    assert!(Finished::restore(80, 24, &vec![b' '; FOUR_MIB]).is_some());
+    assert!(Finished::restore(80, 24, &vec![b' '; FOUR_MIB + 1]).is_none());
+}
+
+#[test]
+fn a_restored_screen_keeps_its_lines_and_its_tail() {
+    let restored = Finished::restore(80, 24, b"one\r\ntwo\r\nthree\r\n").expect("restore");
+    let view = restored.view();
+    let kept = view.kept();
+    assert!(kept.lines.iter().any(|line| line.text == "two"), "{kept:?}");
+    let transcript = view.transcript();
+    assert_eq!(
+        transcript,
+        "one\ntwo\nthree\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+    );
+    assert_eq!(view.tail(5), "\n\n\n\n\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_snapshot_bound_set_on_the_terminal_limits_the_snapshot() {
+    let terminal = Terminal::spawn(sh("echo SNAP-BOUND; exit 0"), 80, 24).unwrap();
+    let reap = Reap(terminal.process_id());
+    wait_for_exit(&terminal);
+    terminal.set_snapshot_bound(1);
+    let finished = terminal.finish();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !finished.settled() {
+        assert!(Instant::now() < deadline, "the output never settled");
+        thread::sleep(Duration::from_millis(5));
+    }
+    let snap = finished.snapshot();
+    assert!(!snap.screen_kept);
+    assert!(snap.replay.is_empty());
     drop(reap);
 }
 

@@ -346,52 +346,5 @@ fn canonical(key: &str) -> Option<String> {
 }
 
 #[cfg(test)]
-mod review_wrap_tests {
-    use super::{LAYOUT, PREFERENCES, known_preference, preference_value};
-
-    #[test]
-    fn guide_names_every_preference() {
-        let guide = include_str!("../../../../docs/customize.md");
-        let behaviour = include_str!("../../../../docs/behaviour.md");
-        let command =
-            <kg_domain::Op as clap::Subcommand>::augment_subcommands(clap::Command::new("kg"));
-        let help = command
-            .find_subcommand("preference")
-            .expect("preference command")
-            .get_about()
-            .expect("preference help")
-            .to_string();
-        for key in PREFERENCES.iter().map(|(name, _)| *name) {
-            assert!(guide.contains(&format!("`{key}`")), "guide missing {key}");
-            assert!(
-                behaviour.contains(&format!("`{key}`")),
-                "behaviour missing {key}"
-            );
-            assert!(help.contains(key), "help missing {key}");
-        }
-        for key in ["slot.threads", "slot.review"] {
-            assert!(guide.contains(&format!("`{key}`")), "guide missing {key}");
-        }
-        for key in LAYOUT.iter().map(|(name, _)| *name) {
-            assert!(
-                guide.contains(&format!("`<window>.{key}`")),
-                "guide missing {key}"
-            );
-            assert!(
-                behaviour.contains(&format!("`<window>.{key}`")),
-                "behaviour missing {key}"
-            );
-            assert!(
-                help.contains(&format!("<window>.{key}")),
-                "help missing {key}"
-            );
-        }
-    }
-
-    #[test]
-    fn review_wrap_is_a_window_boolean() {
-        assert!(known_preference("main.review-wrap").is_ok());
-        assert!(preference_value("main.review-wrap", &serde_json::json!(true)).is_ok());
-        assert!(preference_value("main.review-wrap", &serde_json::json!("true")).is_err());
-    }
-}
+#[path = "review_wrap_test.rs"]
+mod review_wrap_tests;

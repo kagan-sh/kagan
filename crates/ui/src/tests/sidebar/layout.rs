@@ -1359,3 +1359,16 @@ fn a_theme_row_height_and_body_size_reach_the_sidebar(cx: &mut TestAppContext) {
     let body = cx.update(|cx| crate::theme::type_body(cx));
     assert!((body - 12.).abs() < 0.5);
 }
+
+#[gpui_kit::test]
+fn focus_sidebar_leaves_settings_before_it_takes_focus(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    cx.simulate_keystrokes(window, &chord("OpenSettings"));
+    cx.run_until_parked();
+    assert_eq!(cx.update(|cx| kagan.read(cx).shown_thread(cx)), None);
+    cx.simulate_keystrokes(window, &chord("FocusSidebar"));
+    cx.run_until_parked();
+    assert_eq!(cx.update(|cx| kagan.read(cx).shown_thread(cx)), Some(id));
+}

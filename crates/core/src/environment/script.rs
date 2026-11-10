@@ -64,18 +64,15 @@ fn shown_text(raw: &str) -> (String, bool) {
         if short.chars().count() < line.chars().count() {
             truncated = true;
         }
-        let gap = usize::from(!out.is_empty());
+        let gap = usize::from(index > 0);
         if out.len() + gap + short.len() > SHOWN_CHARS {
             truncated = true;
             break;
         }
-        if !out.is_empty() {
+        if index > 0 {
             out.push('\n');
         }
         out.push_str(&short);
-    }
-    if !truncated && raw.lines().nth(out.lines().count()).is_some() {
-        truncated = true;
     }
     (out, truncated)
 }
@@ -426,91 +423,5 @@ impl Drop for StderrFile {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn only_a_full_sha_is_a_commit_id() {
-        assert!(commit_id(&"a".repeat(40)));
-        assert!(commit_id(&"b".repeat(64)));
-        assert!(!commit_id(&"a".repeat(39)));
-        assert!(!commit_id(&"a".repeat(41)));
-        assert!(!commit_id(&"z".repeat(40)));
-    }
-
-    #[test]
-    fn a_setup_file_matches_only_the_same_blob_and_mode() {
-        let file = Object {
-            mode: "100644".into(),
-            blob: "one".into(),
-        };
-        assert!(same(
-            &file,
-            &Object {
-                mode: "100644".into(),
-                blob: "one".into()
-            }
-        ));
-        assert!(!same(
-            &file,
-            &Object {
-                mode: "100644".into(),
-                blob: "two".into()
-            }
-        ));
-        #[cfg(unix)]
-        assert!(!same(
-            &file,
-            &Object {
-                mode: "100755".into(),
-                blob: "one".into()
-            }
-        ));
-    }
-
-    #[test]
-    fn the_timeout_message_names_the_ten_minute_limit_only_for_it() {
-        assert_eq!(
-            timeout_message(SETUP, SCRIPT_LIMIT),
-            ".kagan/setup ran longer than 10 minutes."
-        );
-        assert_eq!(
-            timeout_message(TEARDOWN, Duration::from_secs(1)),
-            ".kagan/teardown timed out."
-        );
-    }
-
-    #[test]
-    fn a_failed_setup_names_its_exit_code_and_stderr() {
-        let status = std::process::Command::new("sh")
-            .args(["-c", "exit 7"])
-            .status()
-            .unwrap();
-        assert_eq!(
-            script_error(SETUP, status, "").to_string(),
-            ".kagan/setup failed (exit 7)."
-        );
-        let status = std::process::Command::new("sh")
-            .args(["-c", "echo why >&2; exit 7"])
-            .status()
-            .unwrap();
-        assert_eq!(
-            script_error(SETUP, status, "why").to_string(),
-            ".kagan/setup failed (exit 7). why"
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn file_mode_keeps_the_executable_bit() {
-        use std::os::unix::fs::PermissionsExt as _;
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("setup");
-        std::fs::write(&path, "").unwrap();
-        let meta = std::fs::metadata(&path).unwrap();
-        assert_eq!(file_mode(&meta), "100644");
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let meta = std::fs::metadata(&path).unwrap();
-        assert_eq!(file_mode(&meta), "100755");
-    }
-}
+#[path = "script_test.rs"]
+mod tests;

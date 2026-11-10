@@ -15,6 +15,49 @@ fn the_user_path_exists() {
     assert!(user_path().is_some());
 }
 
+#[cfg(unix)]
+#[test]
+fn the_user_path_comes_from_the_login_shell() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let dir = temp("login-shell");
+    let shell = dir.join("fake-shell");
+    fs::write(&shell, "#!/bin/sh\nprintf %s /kg/login/bin\n").expect("write");
+    fs::set_permissions(&shell, fs::Permissions::from_mode(0o755)).expect("chmod");
+    // SAFETY: nextest runs each test in its own process, so no other thread reads SHELL here.
+    unsafe { std::env::set_var("SHELL", &shell) };
+    assert_eq!(user_path(), Some(std::ffi::OsString::from("/kg/login/bin")));
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[cfg(unix)]
+#[test]
+fn warming_the_user_path_starts_the_login_shell_without_a_caller() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let dir = temp("warm-shell");
+    let shell = dir.join("fake-shell");
+    let script = format!(
+        "#!/bin/sh\nprintf started > '{d}/started'\ni=0\nwhile [ ! -e '{d}/gate' ] && [ $i -lt 200 ]; do sleep 0.05; i=$((i+1)); done\nprintf %s /kg/warm/bin\n",
+        d = dir.display()
+    );
+    fs::write(&shell, script).expect("write");
+    fs::set_permissions(&shell, fs::Permissions::from_mode(0o755)).expect("chmod");
+    // SAFETY: nextest runs each test in its own process, so no other thread reads SHELL here.
+    unsafe { std::env::set_var("SHELL", &shell) };
+    crate::warm_user_path();
+    let started = dir.join("started");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !started.exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the login shell never started"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    fs::write(dir.join("gate"), b"").expect("gate");
+    assert_eq!(user_path(), Some(std::ffi::OsString::from("/kg/warm/bin")));
+    fs::remove_dir_all(&dir).ok();
+}
+
 #[cfg(not(windows))]
 #[test]
 fn pathext_is_only_set_on_windows() {

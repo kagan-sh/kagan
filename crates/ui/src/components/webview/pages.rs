@@ -132,3 +132,7 @@ pub(crate) fn native_shown(cx: &App, id: &str) -> Option<bool> {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "pages_test.rs"]
+mod tests;
