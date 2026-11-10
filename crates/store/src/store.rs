@@ -149,6 +149,8 @@ UPDATE projects SET sort = (
     REPAIR_THREAD_COLUMNS,
     "ALTER TABLE plugins ADD COLUMN skills TEXT NOT NULL DEFAULT '[]';",
     "ALTER TABLE threads ADD COLUMN quiet INTEGER NOT NULL DEFAULT 0;",
+    "ALTER TABLE threads ADD COLUMN notify TEXT NOT NULL DEFAULT 'default';",
+    "UPDATE settings SET value = CASE WHEN value = 'false' THEN '\"off\"' ELSE '\"all\"' END WHERE key = 'notify';",
     "ALTER TABLE projects ADD COLUMN program TEXT;",
 ];
 

@@ -23,10 +23,11 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, Subscription, Window, actions, div, px, rems,
 };
 use kg_core::{Approval, Workspace};
-use kg_domain::PluginId;
+use kg_domain::{NotifyLevel, PluginId};
 use kg_plugins::PluginHost;
 
 use super::question;
+use super::rules::RulesEditor;
 use super::surface::mount_error;
 use super::variables::Variables;
 use super::{Kagan, OpenSettings};
@@ -75,7 +76,7 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
 pub(super) struct Prefs {
     pub(super) agent_integration: bool,
     pub(super) confirm_archive: bool,
-    pub(super) notify: bool,
+    pub(super) notify: NotifyLevel,
     pub(super) plugin_status: bool,
     pub(super) update_check: bool,
     pub(super) loaded: bool,
@@ -92,6 +93,7 @@ pub(super) struct SettingsState {
     _query_watch: Subscription,
     pub(super) list: FocusHandle,
     pub(super) variables: Entity<Variables>,
+    pub(super) rules: Entity<RulesEditor>,
 }
 
 impl SettingsState {
@@ -109,6 +111,7 @@ impl SettingsState {
             }
         });
         let variables = cx.new(|cx| Variables::new(None, window, cx));
+        let rules = cx.new(|cx| RulesEditor::new(None, window, cx));
         Self {
             variables,
             scroll: ScrollHandle::new(),
@@ -120,6 +123,7 @@ impl SettingsState {
             query,
             _query_watch: watch,
             list: cx.focus_handle().tab_stop(true),
+            rules,
         }
     }
 }
@@ -128,7 +132,7 @@ pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
     cx.new(|_| Prefs {
         agent_integration: true,
         confirm_archive: false,
-        notify: true,
+        notify: NotifyLevel::default(),
         plugin_status: true,
         update_check: false,
         loaded: false,
@@ -166,6 +170,8 @@ impl Kagan {
         window.focus(&self.focus, cx);
         self.sync_panels_keeping_widths(window, cx);
         plugins::sync(&mut self.settings.drafts, window, cx);
+        let rules = self.settings.rules.clone();
+        rules.update(cx, |editor, cx| editor.refresh(window, cx));
         for (id, _) in pages::plugin_entries(cx) {
             self.mount_settings_view(&id, window, cx);
         }
@@ -271,14 +277,14 @@ impl Kagan {
 
     pub(super) fn load_prefs(&self, cx: &mut Context<Self>) {
         let agent = super::layout::read::<bool>(kg_domain::prefs::AGENT_INTEGRATION, cx);
-        let notify = super::layout::read::<bool>(kg_domain::prefs::NOTIFY, cx);
+        let notify = super::layout::read::<NotifyLevel>(kg_domain::prefs::NOTIFY, cx);
         let plugin_status = super::layout::read::<bool>(kg_domain::prefs::PLUGIN_STATUS, cx);
         let update = super::layout::read::<bool>(kg_domain::prefs::UPDATE_CHECK, cx);
         let confirm = super::layout::read::<bool>(kg_domain::prefs::CONFIRM_ARCHIVE, cx);
         let prefs = self.prefs.clone();
         cx.spawn(async move |_, cx| {
             let on = agent.await.ok().flatten().unwrap_or(true);
-            let notifications = notify.await.ok().flatten().unwrap_or(true);
+            let notifications = notify.await.ok().flatten().unwrap_or_default();
             let status = plugin_status.await.ok().flatten().unwrap_or(true);
             let update_check = update.await.ok().flatten().unwrap_or(false);
             let confirm_archive = confirm.await.ok().flatten().unwrap_or(false);

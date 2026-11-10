@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -92,8 +93,11 @@ pub(crate) enum SetupEnd {
     Mismatch(OpError),
 }
 
-pub(crate) fn become_ready(mut environment: Environment) -> SetupEnd {
-    let notices = match confirmed(&environment) {
+pub(crate) fn become_ready(
+    mut environment: Environment,
+    variables: &[(OsString, OsString)],
+) -> SetupEnd {
+    let notices = match confirmed(&environment, variables) {
         Ok(notices) => notices,
         Err(Check::Mismatch) => return SetupEnd::Mismatch(mismatch_message()),
         Err(Check::Failed(error)) => {
@@ -114,8 +118,8 @@ pub(crate) fn become_ready(mut environment: Environment) -> SetupEnd {
     })
 }
 
-pub(super) fn teardown(root: &Path) -> Result<Vec<String>> {
-    apply(root, TEARDOWN)
+pub(super) fn teardown(root: &Path, variables: &[(OsString, OsString)]) -> Result<Vec<String>> {
+    apply(root, TEARDOWN, variables)
 }
 
 struct Object {
@@ -148,7 +152,10 @@ impl From<OpError> for Check {
     }
 }
 
-fn confirmed(environment: &Environment) -> std::result::Result<Vec<String>, Check> {
+fn confirmed(
+    environment: &Environment,
+    variables: &[(OsString, OsString)],
+) -> std::result::Result<Vec<String>, Check> {
     let root = &environment.path;
     let expected = expected_setup(root, environment.base_branch.as_deref())?;
     let actual = working_object(root, SETUP)?;
@@ -163,7 +170,7 @@ fn confirmed(environment: &Environment) -> std::result::Result<Vec<String>, Chec
         None => Ok(Vec::new()),
         Some(object) if object.mode == "120000" => Ok(link_notice(SETUP)),
         Some(_) => {
-            run_script(root, &root.join(SETUP), SETUP, SCRIPT_LIMIT)?;
+            run_script(root, &root.join(SETUP), SETUP, SCRIPT_LIMIT, variables)?;
             Ok(Vec::new())
         }
     }
@@ -284,12 +291,12 @@ fn file_mode(meta: &std::fs::Metadata) -> &'static str {
     }
 }
 
-fn apply(root: &Path, name: &str) -> Result<Vec<String>> {
+fn apply(root: &Path, name: &str, variables: &[(OsString, OsString)]) -> Result<Vec<String>> {
     match repo_file(root, name)? {
         RepoFile::Absent => Ok(Vec::new()),
         RepoFile::Link => Ok(link_notice(name)),
         RepoFile::File(path) => {
-            run_script(root, &path, name, SCRIPT_LIMIT)?;
+            run_script(root, &path, name, SCRIPT_LIMIT, variables)?;
             Ok(Vec::new())
         }
     }
@@ -317,12 +324,21 @@ pub(crate) fn shell_from(path: Option<&std::ffi::OsStr>, name: &str) -> Result<P
         .ok_or_else(|| OpError::Failed(format!("sh is not on PATH, so {name} did not run.")))
 }
 
-pub(crate) fn run_script(root: &Path, script: &Path, name: &str, limit: Duration) -> Result<()> {
+pub(crate) fn run_script(
+    root: &Path,
+    script: &Path,
+    name: &str,
+    limit: Duration,
+    variables: &[(OsString, OsString)],
+) -> Result<()> {
     let shell = shell_from(kg_process::user_path().as_deref(), name)?;
     let log = StderrFile::create();
     let stderr = std::fs::File::create(&log.path)?;
     let mut command = std::process::Command::new(shell);
-    command.current_dir(root).arg(script);
+    command
+        .current_dir(root)
+        .envs(variables.iter().map(|(name, value)| (name, value)))
+        .arg(script);
     let mut process =
         kg_process::Process::spawn(command, Stdio::null(), Stdio::null(), Stdio::from(stderr))
             .map_err(|error| {

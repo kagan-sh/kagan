@@ -258,6 +258,12 @@ pub(crate) async fn remove_folder(
     let environment_id = environment.id.clone();
     let provider = environment.provider;
     let path = environment.path.clone();
+    let data_dir = this
+        .update(cx, |workspace, _| workspace.data_dir.clone())
+        .map_err(closed)?;
+    // A variables file that cannot be read must not block a removal, so the teardown runs without them.
+    let variables =
+        crate::host::variables::for_project(&data_dir, &environment.project_id).unwrap_or_default();
     let (outcome, notices) = cx
         .background_executor()
         .spawn(async move {
@@ -268,7 +274,7 @@ pub(crate) async fn remove_folder(
                 }
                 Provider::Worktree if path.exists() => {
                     // A teardown failure still attempts removal, and never with --force.
-                    if let Ok(found) = script::teardown(&path) {
+                    if let Ok(found) = script::teardown(&path, &variables) {
                         notices = found;
                     }
                     git(&project, &["worktree", "remove"], Some(&path), None)

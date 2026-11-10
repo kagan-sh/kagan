@@ -40,6 +40,7 @@ fn a_setup_script_that_runs_too_long_fails(_cx: &mut TestAppContext) {
         &script,
         ".kagan/setup",
         std::time::Duration::from_millis(200),
+        &[],
     )
     .unwrap_err();
     assert!(
@@ -532,7 +533,8 @@ fn become_ready_clears_a_removal_reason() {
         retire_at: None,
         error: Some("The worktree still has files git would keep.".into()),
     };
-    let crate::environment::SetupEnd::Ready(done) = crate::environment::become_ready(environment)
+    let crate::environment::SetupEnd::Ready(done) =
+        crate::environment::become_ready(environment, &[])
     else {
         panic!("ready");
     };
@@ -1242,4 +1244,107 @@ async fn a_teardown_symlink_is_not_run_and_is_a_notice_on_the_thread(cx: &mut Te
     });
     assert!(notice, "no teardown link notice on the thread");
     let _ = std::fs::remove_file(&target);
+}
+
+#[cfg(unix)]
+async fn set_variable(
+    fixture: &Fixture,
+    name: &str,
+    project: bool,
+    value: &str,
+    cx: &mut TestAppContext,
+) {
+    let project_id = project.then(|| fixture.project.clone());
+    op(
+        Op::Env(kg_domain::EnvOp::Set {
+            name: name.into(),
+            project_id,
+            value: Some(value.into()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+}
+
+// The global value comes first, then the project's, which wins over it.
+#[cfg(unix)]
+const SHOWN: &str = "printf '%s|%s|%s' \"$TEST_GLOBAL\" \"$TEST_SAME\" \"$TEST_PROJECT\"";
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_setup_script_gets_the_global_then_the_project_variables(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = repo_dir(&fixture);
+    empty_repo(&repo);
+    commit_file(&repo, ".kagan/setup", &format!("{SHOWN} > setup-env\n"));
+    set_variable(&fixture, "TEST_GLOBAL", false, "global-value", cx).await;
+    set_variable(&fixture, "TEST_SAME", false, "global-same", cx).await;
+    set_variable(&fixture, "TEST_SAME", true, "project-same", cx).await;
+    set_variable(&fixture, "TEST_PROJECT", true, "project-value", cx).await;
+    let OpResult::Thread(started) = op(worktree_run(&fixture, Some("notes"), None), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("thread")
+    };
+    let folder = environment_of(&started.environment_id.clone().unwrap(), cx).await;
+    assert_eq!(
+        std::fs::read_to_string(folder.path.join("setup-env")).unwrap(),
+        "global-value|project-same|project-value"
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_teardown_script_gets_the_global_then_the_project_variables(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = repo_dir(&fixture);
+    empty_repo(&repo);
+    let out = fixture.dir.path().join("teardown-env");
+    commit_file(
+        &repo,
+        ".kagan/teardown",
+        &format!("{SHOWN} > '{}'\n", out.display()),
+    );
+    set_variable(&fixture, "TEST_GLOBAL", false, "global-value", cx).await;
+    set_variable(&fixture, "TEST_SAME", false, "global-same", cx).await;
+    set_variable(&fixture, "TEST_SAME", true, "project-same", cx).await;
+    set_variable(&fixture, "TEST_PROJECT", true, "project-value", cx).await;
+    let OpResult::Thread(started) = op(worktree_run(&fixture, Some("notes"), None), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("thread")
+    };
+    op(
+        Op::Thread(ThreadOp::Stop {
+            id: started.id.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    wait_for_status(&started.id, ThreadStatus::Idle, cx).await;
+    op(
+        Op::Thread(ThreadOp::Archive {
+            id: started.id.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    for _ in 0..40 {
+        if out.exists() {
+            break;
+        }
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(1));
+        cx.run_until_parked();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert_eq!(
+        std::fs::read_to_string(&out).unwrap(),
+        "global-value|project-same|project-value"
+    );
 }

@@ -1,5 +1,5 @@
 //! The page for one project: its environment variables, its default program, and the spot where
-//! its agent rules will go. It lists the same way Settings does, and opens from the project's menu.
+//! its agent rules, which are the same editor the project menu opens. It lists the way Settings does.
 
 use crate::theme::{SpaceStep, TypeScale as _, space};
 
@@ -17,6 +17,7 @@ use super::group_block;
 use super::row::{Group, Row, group, row};
 use crate::kagan::Kagan;
 use crate::kagan::controls::control;
+use crate::kagan::rules::RulesEditor;
 use crate::kagan::screen::{Center, FocusReturn};
 use crate::kagan::variables::Variables;
 use crate::ui_registry::Facts;
@@ -27,6 +28,7 @@ pub(in crate::kagan) struct Page {
     program: Option<String>,
     programs: Vec<Program>,
     variables: Entity<Variables>,
+    rules: Entity<RulesEditor>,
     kagan: WeakEntity<Kagan>,
     note: Option<SharedString>,
     // Each task is kept while it runs; dropping one cancels it.
@@ -42,7 +44,8 @@ impl Page {
         cx: &mut Context<Self>,
     ) -> Self {
         let scope = project.clone();
-        let variables = cx.new(|cx| Variables::new(Some(scope), window, cx));
+        let variables = cx.new(|cx| Variables::new(Some(scope.clone()), window, cx));
+        let rules = cx.new(|cx| RulesEditor::new(Some(scope), window, cx));
         variables.update(cx, Variables::reload);
         let mut page = Self {
             project,
@@ -50,6 +53,7 @@ impl Page {
             program: None,
             programs: Vec::new(),
             variables,
+            rules,
             kagan,
             note: None,
             load: None,
@@ -163,23 +167,19 @@ impl Page {
     }
 
     fn groups(&self, cx: &mut Context<Self>) -> Vec<Group> {
-        let muted = cx.theme().muted_foreground;
         let variables = row(
             "project-variables",
             "Variables",
             "Only for this project. A value here wins over the same name set in General.",
             self.variables.clone().into_any_element(),
         );
-        let rules = row(
+        let mut rules = row(
             "project-rules",
             "Rules",
-            "Rules for agents in this project are not available yet.",
-            div()
-                .type_small(cx)
-                .text_color(muted)
-                .child("Not available yet")
-                .into_any_element(),
+            "Text each agent is told when it starts in this project. It comes after the global rules.",
+            self.rules.clone().into_any_element(),
         );
+        rules.wide = true;
         vec![
             Group {
                 headed: true,

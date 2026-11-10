@@ -26,7 +26,7 @@ fn note_with_appends_plugin_text() {
     assert!(with.starts_with(&plain));
     assert!(with.ends_with("Adopt this persona."));
     let instructed = note_with("thr_1", "Call me Ada.", "");
-    assert!(instructed.contains("Instructions from your kagan instructions file:\nCall me Ada."));
+    assert!(instructed.contains("\n\nCall me Ada."));
     assert!(instructed.contains("thr_1"));
 }
 
@@ -36,31 +36,10 @@ fn cursor_rule_names_the_variable_and_not_a_thread_id() {
     assert!(rule.starts_with("---\nalwaysApply: true\n---\n"));
     assert!(rule.contains("KG_THREAD_ID"));
     assert!(rule.contains("Task, Agent"));
-    assert!(rule.contains("Instructions from your kagan instructions file:\nCall me Ada."));
+    assert!(rule.contains("\n\nCall me Ada.\n"));
     assert!(rule.contains("Plugin extra."));
     assert!(!rule.contains("thr_"));
-    assert!(!cursor_rule("", "").contains("Instructions from your kagan instructions file:"));
-}
-
-#[test]
-fn read_instructions_caps_on_a_char_boundary() {
-    let dir = tempfile::tempdir().unwrap();
-    assert!(read_instructions(dir.path()).is_empty());
-    std::fs::write(dir.path().join("instructions.md"), "   \n").unwrap();
-    assert!(read_instructions(dir.path()).is_empty());
-
-    let mut ascii = vec![b'a'; 4096];
-    ascii.extend(b"TAIL");
-    std::fs::write(dir.path().join("instructions.md"), &ascii).unwrap();
-    assert_eq!(read_instructions(dir.path()), "a".repeat(4096));
-
-    let mut split = "é".repeat(2047).into_bytes();
-    split.extend("€TAIL".as_bytes());
-    std::fs::write(dir.path().join("instructions.md"), split).unwrap();
-    let text = read_instructions(dir.path());
-    assert_eq!(text, "é".repeat(2047));
-    assert!(!text.contains('€'));
-    assert!(!text.contains("TAIL"));
+    assert!(!cursor_rule("", "").contains("Call me Ada."));
 }
 
 fn line(items: &[&str]) -> Vec<OsString> {

@@ -12,32 +12,34 @@ kagan
 Usage: kg [OPTIONS] [COMMAND]
 
 Commands:
-  mcp          Serve a thread's agent tools to its agent over stdio MCP
-  status       Current thread context and plugin warnings
-  guide        Concepts and command chapters
-  skill        Find, read and create skills
-  open         Open a window
-  thread       Threads
-  project      Projects
-  program      Programs a new thread can run, as the new-thread picker lists them
-  environment  Environments
-  env          Environment variables every program kagan starts gets, global or per project
-  plugin       Plugins
-  sidebar      Projects, sections and threads as the sidebar shows them
-  section      Named groups threads are filed under
-  theme        Read or change appearance
-  settings     The settings page in the window
-  window       The application menu and the window
-  surface      Plugin surfaces in the window
-  keymap       Keyboard shortcuts: built-in ones and plugin commands
-  preference   Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
-  ui           Native window for QA and agents
-  browser      The Browser tab's page, driven by this thread
-  diff         A thread environment's diff. Reads git and never writes the worktree
-  preview      One file in the Preview tab, read-only
-  diagnostics  Write a local diagnostics file
-  update       Check for a newer kagan
-  help         Print this message or the help of the given subcommand(s)
+  mcp           Serve a thread's agent tools to its agent over stdio MCP
+  status        Current thread context and plugin warnings
+  guide         Concepts and command chapters
+  skill         Find, read and create skills
+  open          Open a window
+  thread        Threads
+  project       Projects
+  program       Programs a new thread can run, as the new-thread picker lists them
+  environment   Environments
+  env           Environment variables every program kagan starts gets, global or per project
+  plugin        Plugins
+  sidebar       Projects, sections and threads as the sidebar shows them
+  section       Named groups threads are filed under
+  theme         Read or change appearance
+  settings      The settings page in the window
+  window        The application menu and the window
+  surface       Plugin surfaces in the window
+  keymap        Keyboard shortcuts: built-in ones and plugin commands
+  preference    Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+  instructions  Agent rules: the global rules, or one project's, that a thread's program is told
+  ui            Native window for QA and agents
+  notify        System notifications
+  browser       The Browser tab's page, driven by this thread
+  diff          A thread environment's diff. Reads git and never writes the worktree
+  preview       One file in the Preview tab, read-only
+  diagnostics   Write a local diagnostics file
+  update        Check for a newer kagan
+  help          Print this message or the help of the given subcommand(s)
 
 Options:
       --json
@@ -356,6 +358,7 @@ Commands:
   unarchive     Bring back an archived thread
   delete        Delete a thread and its history for good
   set-pinned    Pin or unpin a thread
+  notify        When this thread posts a system notification: default follows the global level, all, asks (only when it asks you), or muted
   rename        Rename a thread
   mark-read     Mark a thread read
   metadata      A plugin's metadata on a thread
@@ -856,6 +859,25 @@ Arguments:
 
   <PINNED>
           [possible values: true, false]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg thread notify`
+
+```text
+When this thread posts a system notification: default follows the global level, all, asks (only when it asks you), or muted
+
+Usage: kg thread notify <ID> <LEVEL>
+
+Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
+  <LEVEL>
+          [possible values: default, all, asks, muted]
 
 Options:
   -h, --help
@@ -2716,6 +2738,79 @@ Options:
           Print help
 ```
 
+## `kg instructions`
+
+```text
+Agent rules: the global rules, or one project's, that a thread's program is told
+
+Usage: kg instructions [OPTIONS] <COMMAND>
+
+Commands:
+  get    Show the agent rules: global, or one project's with --project
+  set    Replace the agent rules. Give the text, or --file (`-` for stdin)
+  clear  Remove the agent rules
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Print compact JSON; failures print the error envelope
+
+  -h, --help
+          Print help
+```
+
+## `kg instructions get`
+
+```text
+Show the agent rules: global, or one project's with --project
+
+Usage: kg instructions get [OPTIONS]
+
+Options:
+      --project <PROJECT>
+          Project whose rules to show
+
+  -h, --help
+          Print help
+```
+
+## `kg instructions set`
+
+```text
+Replace the agent rules. Give the text, or --file (`-` for stdin)
+
+Usage: kg instructions set [OPTIONS] [TEXT]
+
+Arguments:
+  [TEXT]
+          The rules text. Omit it when `--file` is set
+
+Options:
+      --file <PATH>
+          Read the rules from this path, or `-` for stdin
+
+      --project <PROJECT>
+          Project whose rules to replace
+
+  -h, --help
+          Print help
+```
+
+## `kg instructions clear`
+
+```text
+Remove the agent rules
+
+Usage: kg instructions clear [OPTIONS]
+
+Options:
+      --project <PROJECT>
+          Project whose rules to remove
+
+  -h, --help
+          Print help
+```
+
 ## `kg ui`
 
 ```text
@@ -2904,6 +2999,37 @@ Options:
       --window <WINDOW>
           [default: 0]
 
+  -h, --help
+          Print help
+```
+
+## `kg notify`
+
+```text
+System notifications
+
+Usage: kg notify [OPTIONS] <COMMAND>
+
+Commands:
+  test  Send one test system notification. It is sent even when notifications are off
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Print compact JSON; failures print the error envelope
+
+  -h, --help
+          Print help
+```
+
+## `kg notify test`
+
+```text
+Send one test system notification. It is sent even when notifications are off
+
+Usage: kg notify test
+
+Options:
   -h, --help
           Print help
 ```

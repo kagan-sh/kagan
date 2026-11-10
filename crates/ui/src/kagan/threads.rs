@@ -101,6 +101,7 @@ impl Kagan {
     pub(crate) fn select(&mut self, id: ThreadId, window: &mut Window, cx: &mut Context<Self>) {
         self.sidebar
             .update(cx, |sidebar, cx| sidebar.reveal_thread(&id, cx));
+        super::notify::clear(&id, cx);
         self.start_on_load = None;
         if self.start.plugin_thread.as_ref() != Some(&id) {
             self.cancel_plugin_start();
@@ -307,6 +308,14 @@ impl Kagan {
     ) {
         match pick {
             ThreadPick::Pin => self.set_pinned(id, cx),
+            ThreadPick::Notify(level) => self.run(
+                Op::Thread(ThreadOp::Notify {
+                    id: id.clone(),
+                    level,
+                }),
+                "set the notifications",
+                cx,
+            ),
             ThreadPick::Archive => self.archive_thread(id, window, cx),
             ThreadPick::Rename => {
                 if self.shown_thread(cx).as_ref() != Some(id) {

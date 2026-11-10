@@ -177,3 +177,48 @@ async fn a_project_default_program_is_saved_and_must_parse(cx: &mut TestAppConte
     .unwrap_err();
     assert!(matches!(broken, OpError::Invalid(_)), "{broken}");
 }
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn the_variables_file_is_owner_only_from_its_first_write(cx: &mut TestAppContext) {
+    use std::os::unix::fs::PermissionsExt as _;
+    let fixture = Fixture::new(cx).await;
+    let file = data_dir(&fixture, cx).join("environment.json");
+    assert!(!file.exists());
+    let mode =
+        |path: &std::path::Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+    op(set("TEST_TOKEN", None, "first-value"), cx)
+        .await
+        .unwrap();
+    assert_eq!(mode(&file), 0o600);
+    op(set("TEST_OTHER", None, "second-value"), cx)
+        .await
+        .unwrap();
+    assert_eq!(mode(&file), 0o600);
+    op(
+        Op::Env(EnvOp::Remove {
+            name: "TEST_TOKEN".into(),
+            project_id: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert_eq!(mode(&file), 0o600);
+}
+
+#[gpui_kit::test]
+async fn a_value_never_reaches_a_reply_or_an_error(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    let secret = "sk-secret-value-9";
+    let done = op(set("TEST_TOKEN", None, secret), cx).await.unwrap();
+    assert!(!format!("{done:?}").contains(secret));
+    let broken = op(
+        set("TEST_TOKEN", None, &format!("{secret}\nsecond line")),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(!broken.to_string().contains(secret), "{broken}");
+    assert!(!format!("{broken:?}").contains(secret), "{broken:?}");
+}

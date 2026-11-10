@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    EnvironmentId, PendingInteractionId, PluginId, ProjectId, SectionId, ThreadId, Timestamp,
+    EnvironmentId, PendingInteractionId, PluginId, ProjectId, SectionId, ThreadId, ThreadNotify,
+    Timestamp,
 };
 
 /// The start of a plugin source that is a git address: `git:<url>@<ref>`.
@@ -179,6 +180,9 @@ pub struct Thread {
     /// The parent is not told when this thread's turn ends, asks the person, exits or fails.
     #[serde(default)]
     pub quiet: bool,
+    /// This thread's own notification level; `Default` follows the global one.
+    #[serde(default)]
+    pub notify: ThreadNotify,
     pub lifecycle_owner_thread_id: Option<ThreadId>,
     pub section_id: Option<SectionId>,
     pub pinned: bool,

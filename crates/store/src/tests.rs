@@ -42,6 +42,7 @@ fn thread(id: &str, created_at: i64) -> Thread {
         visibility: Visibility::Visible,
         parent_thread_id: None,
         quiet: false,
+        notify: kg_domain::ThreadNotify::Default,
         lifecycle_owner_thread_id: None,
         section_id: None,
         pinned: false,

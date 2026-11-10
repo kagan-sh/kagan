@@ -361,11 +361,7 @@ async fn configure(
     } = input;
     let id = record.id.0.as_str();
     let extra = collect_instruct(this, record, cx).await;
-    let instructions = {
-        let data_dir = data_dir.to_owned();
-        cx.background_spawn(async move { note::read_instructions(&data_dir) })
-            .await
-    };
+    let instructions = crate::instructions::for_thread(this, &record.project_id, cx).await?;
     let agent = data_dir.join("agent");
     let kimi_home = this
         .update(cx, |workspace, _| workspace.home_set("KIMI_CODE_HOME"))
@@ -536,7 +532,7 @@ async fn collect_instruct(
 mod files;
 pub(crate) mod note;
 
-pub(crate) use note::{cursor_rule, note_with, read_instructions};
+pub(crate) use note::{cursor_rule, note_with};
 
 use files::{environment, flags, write_agent_files};
 

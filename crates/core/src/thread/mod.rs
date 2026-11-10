@@ -11,7 +11,7 @@ mod run;
 mod search;
 mod terminal;
 
-pub(crate) use agent::{note_with, read_instructions};
+pub(crate) use agent::note_with;
 
 pub(crate) use extra::Extras;
 pub(crate) use halt::{retire, stop};
@@ -36,6 +36,20 @@ use crate::workspace::{closed, missing, time};
 use crate::{Requester, Thread, Workspace};
 
 use archive::{archive, delete, unarchive};
+
+async fn set_notify(
+    this: &WeakEntity<Workspace>,
+    database: Database,
+    id: ThreadId,
+    level: kg_domain::ThreadNotify,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    database
+        .call(move |store| store.set_notify(&id, level))
+        .await?;
+    Workspace::refresh(this, cx).await?;
+    Ok(OpResult::Done)
+}
 
 pub(crate) async fn dispatch_thread(
     this: &WeakEntity<Workspace>,
@@ -74,6 +88,7 @@ pub(crate) async fn dispatch_thread(
             id,
             approval_thread_id,
         } => delete(this, database, id, approval_thread_id, requester, cx).await,
+        ThreadOp::Notify { id, level } => set_notify(this, database, id, level, cx).await,
         ThreadOp::SetPinned { id, pinned } => {
             database
                 .call(move |store| store.set_pinned(&id, pinned))

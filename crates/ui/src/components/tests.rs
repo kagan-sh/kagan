@@ -267,6 +267,7 @@ fn seed_thread(dir: &std::path::Path) {
             visibility: Visibility::Visible,
             parent_thread_id: None,
             quiet: false,
+            notify: kg_domain::ThreadNotify::Default,
             lifecycle_owner_thread_id: None,
             section_id: None,
             pinned: false,

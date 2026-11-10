@@ -14,6 +14,7 @@ fn thread(visibility: Visibility, archived: bool) -> Thread {
         visibility,
         parent_thread_id: None,
         quiet: false,
+        notify: kg_domain::ThreadNotify::Default,
         lifecycle_owner_thread_id: None,
         section_id: None,
         pinned: false,

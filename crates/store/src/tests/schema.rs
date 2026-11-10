@@ -265,3 +265,61 @@ fn a_failed_migration_leaves_the_previous_schema() {
     drop(conn);
     std::fs::remove_file(&path).unwrap();
 }
+
+#[test]
+fn an_old_notify_switch_becomes_a_level_and_threads_default() {
+    fn migrated(stored: Option<&str>) -> (Option<String>, String) {
+        use rusqlite::OptionalExtension as _;
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        let before = crate::store::MIGRATIONS
+            .iter()
+            .position(|sql| sql.contains("ADD COLUMN notify"))
+            .unwrap();
+        crate::migrate(
+            &mut conn,
+            crate::store::MIGRATIONS[..before].iter().copied(),
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO projects (id, kind, name, path, git_remote_url) VALUES ('prj_1', 'standard', 'kagan', '/code/kagan', NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO threads (id, project_id, title, provider, status, visibility, pinned, latest_attention_at, created_at, updated_at) VALUES ('thr_1', 'prj_1', 't', 'claude-code', 'idle', 'visible', 0, 1, 1, 1)",
+            [],
+        )
+        .unwrap();
+        if let Some(stored) = stored {
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES ('notify', ?1)",
+                [stored],
+            )
+            .unwrap();
+        }
+        crate::migrate(&mut conn, crate::store::MIGRATIONS.iter().copied()).unwrap();
+        let value = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'notify'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .unwrap();
+        let level = conn
+            .query_row("SELECT notify FROM threads WHERE id = 'thr_1'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        (value, level)
+    }
+    assert_eq!(
+        migrated(Some("false")),
+        (Some("\"off\"".to_owned()), "default".to_owned())
+    );
+    assert_eq!(
+        migrated(Some("true")),
+        (Some("\"all\"".to_owned()), "default".to_owned())
+    );
+    assert_eq!(migrated(None), (None, "default".to_owned()));
+}

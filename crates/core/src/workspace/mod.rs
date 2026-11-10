@@ -181,6 +181,10 @@ pub enum WorkspaceEvent {
     Screen(ThreadId, Option<u32>),
     Waiting(ThreadId),
     Finished(ThreadId),
+    /// A thread may need the person; the window decides whether to post a system notification
+    Notice(ThreadId, kg_domain::NotifyReason),
+    /// `kg notify test`: post one test system notification
+    NotifyTest,
 }
 impl EventEmitter<WorkspaceEvent> for Workspace {}
 

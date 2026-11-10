@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use kg_domain::{
-    BrowserOp, BrowserSnapshot, ConfigOp, EnvOp, Op, OpError, OpResult, PluginOp, PreviewKind,
-    TEXT_MAX, ThreadOp, UiSnapshot, is_git_source,
+    BrowserOp, BrowserSnapshot, ConfigOp, EnvOp, InstructionsOp, Op, OpError, OpResult, PluginOp,
+    PreviewKind, TEXT_MAX, ThreadOp, UiSnapshot, is_git_source,
 };
 
 use crate::socket::Client;
@@ -248,6 +248,7 @@ pub(crate) fn take_file_text(mut op: Op, stdin: impl std::io::Read) -> Result<Op
             (text, file.take().map(PathBuf::from), "paste")
         }
         Op::Browser(BrowserOp::Fill { text, file, .. }) => (text, file.take(), "text"),
+        Op::Instructions(InstructionsOp::Set { text, file, .. }) => (text, file.take(), "rules"),
         _ => return Ok(op),
     };
     let Some(path) = path else {
