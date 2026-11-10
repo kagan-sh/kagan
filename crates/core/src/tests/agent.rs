@@ -262,6 +262,7 @@ async fn instructions_join_the_note_and_stop_at_the_cap(cx: &mut TestAppContext)
     assert!(!instructions.contains("FROM_FOLDER"));
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn instructions_op_sets_gets_and_clears_each_file(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -1124,6 +1125,7 @@ async fn instructions_get_refuses_a_file_that_is_not_utf8(cx: &mut TestAppContex
     assert!(matches!(result, Err(OpError::Invalid(_))), "{result:?}");
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn instructions_set_does_not_recreate_a_missing_project_folder(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
