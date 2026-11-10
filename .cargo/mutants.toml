@@ -7,6 +7,8 @@ exclude_globs = [
     "crates/*/tests/**",
     "**/tests.rs",
     "**/*_test.rs",
+    # The Windows screen capture. It is platform-only, and CI's mutants run on Linux, which does not compile it.
+    "crates/ui/src/ui_driver/windows.rs",
 ]
 
 exclude_re = [
@@ -24,10 +26,8 @@ exclude_re = [
     # The keychain module is compiled out of every test build, and it talks to the OS keychain.
     'keychain\.rs:\d+:\d+: replace use_keychain with \(\)',
     'keychain\.rs:\d+:\d+: replace <impl keyring_core::api::CredentialStoreApi for Keychain>::vendor',
-    # The macOS and Windows screen capture. CI's mutants run on Linux, which does not compile them.
+    # The macOS screen capture. CI's mutants run on Linux, which does not compile it.
     'ui/src/ui_driver\.rs:298:9: replace macos::run',
-    'ui/src/ui_driver\.rs:355:9: replace windows::capture',
-    'ui/src/ui_driver\.rs:\d+:\d+: .* in windows::capture$',
     # Painting pixels. A test can only see the grid, not the glyphs drawn from it.
     'ui/src/terminal\.rs:568:5: replace paint_glyphs',
     'ui/src/terminal\.rs:580:36: replace \+ with - in paint_glyphs',
