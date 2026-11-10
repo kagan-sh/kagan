@@ -551,7 +551,10 @@ fn row_element(
         .when(shortcut && noted, |item| {
             item.py(px(space(SpaceStep::Xs, cx)))
         })
-        .when(!shortcut, |item| item.p(px(space(SpaceStep::Xl, cx))))
+        .when(!shortcut, |item| {
+            item.px(px(space(SpaceStep::Lg, cx)))
+                .py(px(space(SpaceStep::Md, cx)))
+        })
         .when(!last, |item| item.border_b_1().border_color(line))
         .child(body)
         .into_any_element();

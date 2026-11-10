@@ -268,3 +268,28 @@ fn a_note_runs_past_half_the_row(cx: &mut TestAppContext) {
         "the note is {note_width} px of a {row_width} px row"
     );
 }
+
+#[gpui_kit::test]
+fn a_plain_row_is_inset_16_by_12(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-general");
+    let (row_x, row_y, _, _) = bounds_of(cx, window, "setting-row-notify");
+    let (title_x, title_y, _, _) = bounds_of(cx, window, "setting-row-notify-title");
+    let (across, down) = cx.update(|cx| {
+        (
+            crate::theme::space(crate::theme::SpaceStep::Lg, cx),
+            crate::theme::space(crate::theme::SpaceStep::Md, cx),
+        )
+    });
+    assert!(
+        (title_x - row_x - across).abs() < 0.5,
+        "across {}",
+        title_x - row_x
+    );
+    assert!(
+        (title_y - row_y - down).abs() < 0.5,
+        "down {}",
+        title_y - row_y
+    );
+}
