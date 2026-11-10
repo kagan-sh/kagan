@@ -146,8 +146,8 @@ pub(crate) async fn catalog(
             .collect();
         let mut names: Vec<&str> = BUNDLED.iter().map(|&(name, _)| name).collect();
         if let Some(text) = &generated {
-            files.push(("kg-plugin-commands", "SKILL.md", text));
-            names.push("kg-plugin-commands");
+            files.push((plugin_commands::NAME, "SKILL.md", text));
+            names.push(plugin_commands::NAME);
         }
         let root = materialize(&data_dir, &files)?;
         let mut catalog = shared(plugins, &root, &names)?;

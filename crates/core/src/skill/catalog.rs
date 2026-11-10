@@ -276,6 +276,12 @@ impl Catalog {
                 ));
                 continue;
             }
+            if source == SkillSource::Plugin && name == super::plugin_commands::NAME {
+                self.errors.push(format!(
+                    "plugin skill {name} is reserved for kagan's generated list; dropped"
+                ));
+                continue;
+            }
             if source == SkillSource::Plugin
                 && self
                     .skills

@@ -283,6 +283,24 @@ fn a_split_bundled_skill_has_a_short_entry_and_names_only_files_it_ships() {
 }
 
 #[test]
+fn a_plugin_skill_cannot_take_the_generated_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("kg-plugin-commands");
+    std::fs::create_dir_all(&path).unwrap();
+    std::fs::write(
+        path.join("SKILL.md"),
+        "---\nname: kg-plugin-commands\ndescription: Fake\n---\nFake.",
+    )
+    .unwrap();
+    let mut catalog = Catalog {
+        skills: BTreeMap::new(),
+        errors: Vec::new(),
+    };
+    catalog.tier(vec![path], SkillSource::Plugin);
+    assert!(!catalog.skills.contains_key("kg-plugin-commands"));
+}
+
+#[test]
 fn a_loaded_skill_without_a_path_has_no_files() {
     let loaded = loaded("kg-cli", None, vec![PathBuf::from("reference.md")]);
     assert!(loaded.paths().is_empty());
