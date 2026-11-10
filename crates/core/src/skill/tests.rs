@@ -65,7 +65,7 @@ fn a_bundled_folder_with_a_stray_file_is_rebuilt() {
 fn leftovers_older_than_an_hour_are_swept_and_fresh_ones_are_kept() {
     let dir = tempfile::tempdir().unwrap();
     let folder = dir.path().join("agent/bundled");
-    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(2 * 3600);
+    let old = std::time::SystemTime::now() - std::time::Duration::from_hours(2);
     let mut leftovers = Vec::new();
     for name in [".tmp-old", ".broken-old"] {
         let path = folder.join(name);
