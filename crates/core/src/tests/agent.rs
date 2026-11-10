@@ -1123,3 +1123,21 @@ async fn instructions_get_refuses_a_file_that_is_not_utf8(cx: &mut TestAppContex
     let result = op(Op::Instructions(InstructionsOp::Get { project: None }), cx).await;
     assert!(matches!(result, Err(OpError::Invalid(_))), "{result:?}");
 }
+
+#[gpui_kit::test]
+async fn instructions_set_does_not_recreate_a_missing_project_folder(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (project, checkout) = other_project(&fixture, cx).await;
+    std::fs::remove_dir_all(&checkout).unwrap();
+    let result = op(
+        Op::Instructions(InstructionsOp::Set {
+            text: Some("be brief".into()),
+            file: None,
+            project: Some(project),
+        }),
+        cx,
+    )
+    .await;
+    assert!(matches!(result, Err(OpError::Invalid(_))), "{result:?}");
+    assert!(!checkout.exists(), "the project folder was built again");
+}

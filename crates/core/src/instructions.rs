@@ -144,12 +144,29 @@ fn read_text(path: &Path) -> Result<String, OpError> {
     }
 }
 
+/// Creates only the file's own folder, so a project whose folder is gone is not built again.
+/// The text goes to a temp file first and is renamed into place, so a start never reads half a
+/// file.
 fn write(path: &Path, text: &str) -> Result<(), OpError> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
+    let Some(dir) = path.parent() else {
+        return Err(OpError::Failed(format!("{} has no folder", path.display())));
+    };
+    match std::fs::create_dir(dir) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(OpError::Invalid(
+                "the folder for these rules is missing".into(),
+            ));
+        }
+        Err(error) => return Err(error.into()),
     }
-    std::fs::write(path, text)?;
-    Ok(())
+    let temp = path.with_extension("md.tmp");
+    let written = std::fs::write(&temp, text).and_then(|()| std::fs::rename(&temp, path));
+    if written.is_err() {
+        _ = std::fs::remove_file(&temp);
+    }
+    Ok(written?)
 }
 
 fn remove(path: &Path) -> Result<(), OpError> {
