@@ -261,6 +261,7 @@ fn an_index_of_exactly_the_cap_is_read() {
     assert!(parse(&text, None).is_ok());
 }
 
+#[cfg(unix)]
 #[test]
 fn a_git_index_of_exactly_the_cap_is_read() {
     let repo = tempfile::tempdir().unwrap();
