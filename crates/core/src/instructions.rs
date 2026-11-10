@@ -1,6 +1,7 @@
 //! The agent rules: the global file in the data folder, and each project's file in its folder.
 //! A thread's program is told both when it starts.
 
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 use gpui_kit::{AppContext as _, AsyncApp, WeakEntity};
@@ -25,7 +26,7 @@ pub(crate) async fn run(
     let path = file_for(this, project.as_ref(), cx)?;
     match op {
         InstructionsOp::Get { .. } => {
-            let text = cx.background_spawn(async move { read(&path) }).await;
+            let text = cx.background_spawn(async move { read_text(&path) }).await?;
             Ok(OpResult::Text(text))
         }
         InstructionsOp::Set { text, .. } => {
@@ -70,8 +71,10 @@ pub(crate) async fn for_thread(
         .map_err(closed)?;
     Ok(cx
         .background_spawn(async move {
-            let project = project.map(|path| read(&path)).unwrap_or_default();
-            compose(&read(&global), &project)
+            let project = project
+                .map(|path| read_for_start(&path))
+                .unwrap_or_default();
+            compose(&read_for_start(&global), &project)
         })
         .await)
 }
@@ -100,11 +103,45 @@ fn project_file(folder: &Path) -> PathBuf {
     folder.join(".kagan").join("instructions.md")
 }
 
-/// A missing or unreadable file is empty: it adds nothing to a start.
-fn read(path: &Path) -> String {
-    std::fs::read(path)
-        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-        .unwrap_or_default()
+/// Most bytes a Get reads. A file past this is a mistake; the editor shows the start of it.
+const READ_MAX: u64 = 1024 * 1024;
+
+/// What a start reads. A missing or unreadable file adds nothing. Only the first bytes past the
+/// cap are read, because `compose` cuts the text at the cap anyway.
+fn read_for_start(path: &Path) -> String {
+    let Ok(file) = std::fs::File::open(path) else {
+        return String::new();
+    };
+    let mut bytes = Vec::new();
+    _ = file
+        .take(INSTRUCTIONS_MAX as u64 + 3)
+        .read_to_end(&mut bytes);
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+/// What Get shows. Only a missing file is empty; any other read error is refused. A file that
+/// is not UTF-8 is refused too, so Save cannot write replacement characters back.
+fn read_text(path: &Path) -> Result<String, OpError> {
+    let file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+        Err(error) => return Err(error.into()),
+    };
+    let mut bytes = Vec::new();
+    file.take(READ_MAX).read_to_end(&mut bytes)?;
+    let truncated = bytes.len() as u64 == READ_MAX;
+    match String::from_utf8(bytes) {
+        Ok(text) => Ok(text),
+        Err(error) => {
+            let cut_inside_a_character = truncated && error.utf8_error().error_len().is_none();
+            if cut_inside_a_character {
+                let valid = error.utf8_error().valid_up_to();
+                let bytes = error.into_bytes();
+                return Ok(String::from_utf8_lossy(&bytes[..valid]).into_owned());
+            }
+            Err(OpError::Invalid("the rules file is not UTF-8".into()))
+        }
+    }
 }
 
 fn write(path: &Path, text: &str) -> Result<(), OpError> {

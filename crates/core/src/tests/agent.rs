@@ -1093,3 +1093,33 @@ async fn a_start_retires_the_old_agent_skills_links(cx: &mut TestAppContext) {
             .contains(".agents/skills/kg-threads")
     );
 }
+
+#[gpui_kit::test]
+async fn instructions_get_reads_at_most_a_megabyte(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    std::fs::write(
+        fixture.dir.path().join("instructions.md"),
+        "a".repeat(2 * 1024 * 1024),
+    )
+    .unwrap();
+    let OpResult::Text(text) = op(Op::Instructions(InstructionsOp::Get { project: None }), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("get")
+    };
+    assert!(text.len() <= 1024 * 1024, "{}", text.len());
+    assert!(text.len() > INSTRUCTIONS_MAX, "{}", text.len());
+}
+
+#[gpui_kit::test]
+async fn instructions_get_refuses_a_file_that_is_not_utf8(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    std::fs::write(
+        fixture.dir.path().join("instructions.md"),
+        [b'a', 0xFF, b'b'],
+    )
+    .unwrap();
+    let result = op(Op::Instructions(InstructionsOp::Get { project: None }), cx).await;
+    assert!(matches!(result, Err(OpError::Invalid(_))), "{result:?}");
+}
