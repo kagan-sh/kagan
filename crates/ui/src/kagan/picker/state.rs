@@ -72,7 +72,7 @@ impl Picker {
         self.state = Programs::Loading;
         self.list
             .update(cx, |list, _| list.delegate_mut().loading = true);
-        let task = Workspace::dispatch(Op::Program(ProgramOp::Discover), cx);
+        let task = Workspace::dispatch(Op::Program(ProgramOp::Discover { project_id: None }), cx);
         let window = window.window_handle();
         self.load_task = Some(cx.spawn(async move |this, cx| {
             let result = task.await;
@@ -86,7 +86,9 @@ impl Picker {
                     cx.notify();
                 });
             });
-            let versions = cx.update(|cx| Workspace::dispatch(Op::Program(ProgramOp::List), cx));
+            let versions = cx.update(|cx| {
+                Workspace::dispatch(Op::Program(ProgramOp::List { project_id: None }), cx)
+            });
             if let Ok(OpResult::Programs(programs)) = versions.await {
                 _ = this.update(cx, |this, cx| {
                     this.list.update(cx, |state, cx| {

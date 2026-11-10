@@ -22,7 +22,7 @@ impl Kagan {
         }
         self.start.plugin_opening = true;
         cx.notify();
-        let list = Workspace::dispatch(Op::Program(ProgramOp::Discover), cx);
+        let list = Workspace::dispatch(Op::Program(ProgramOp::Discover { project_id: None }), cx);
         let window = window.window_handle();
         // Detached, so a thread switch cannot drop a start that is still creating its thread.
         cx.spawn(async move |this, cx| {

@@ -24,6 +24,7 @@ fn store() -> Store {
             path: "/code/kagan".into(),
             git_remote_url: Some("https://github.com/example/repo".into()),
             sort: 0,
+            program: None,
         })
         .unwrap();
     store

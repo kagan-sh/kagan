@@ -26,7 +26,7 @@ pub use id::{
 };
 pub use op::{
     Appearance, BranchList, BrowserControl, BrowserOp, BrowserSnapshot, BrowserView, CommandGroup,
-    ConfigOp, DiagnosticsOp, DiffOp, DiffQuery, DiffScope, DropSide, EnvironmentOp,
+    ConfigOp, DiagnosticsOp, DiffOp, DiffQuery, DiffScope, DropSide, EnvOp, EnvironmentOp,
     EnvironmentSpec, ExtraTerminal, FOLDER_IN_USE, GuideChapter, IndexOp, KeyPlatform, Keymap,
     KeymapAction, KeymapOp, Metadata, Op, OpError, OpResult, Order, PinnedSetup, PluginOp,
     PreferenceOp, ProgramOp, ProjectBranch, ProjectOp, Run, SCREEN_MAX_BYTES, SEARCH_DEFAULT,

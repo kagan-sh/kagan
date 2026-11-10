@@ -68,8 +68,8 @@ fn run_op() {
 #[test]
 fn discover_programs_round_trips() {
     round_trip(
-        &Op::Program(crate::ProgramOp::Discover),
-        &json!({"program": "discover"}),
+        &Op::Program(crate::ProgramOp::Discover { project_id: None }),
+        &json!({"program": {"discover": {}}}),
     );
 }
 

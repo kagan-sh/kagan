@@ -43,6 +43,7 @@ fn reorder_project_places_before_a_neighbour() {
             path: "/code/other".into(),
             git_remote_url: None,
             sort: 1,
+            program: None,
         })
         .unwrap();
     store
@@ -53,6 +54,7 @@ fn reorder_project_places_before_a_neighbour() {
             path: "/personal".into(),
             git_remote_url: None,
             sort: 0,
+            program: None,
         })
         .unwrap();
     store
@@ -66,4 +68,24 @@ fn reorder_project_places_before_a_neighbour() {
         store.reorder_project(&ProjectId("personal".into()), None),
         Err(Error::Conflict(_))
     ));
+}
+
+#[test]
+fn project_program_is_saved_cleared_and_refused_for_a_missing_project() {
+    let store = store();
+    let id = ProjectId("prj_1".into());
+    store
+        .set_project_program(&id, Some("claude --model x"))
+        .unwrap();
+    assert_eq!(
+        store.project(&id).unwrap().unwrap().program.as_deref(),
+        Some("claude --model x")
+    );
+    store.set_project_program(&id, None).unwrap();
+    assert_eq!(store.project(&id).unwrap().unwrap().program, None);
+    assert!(
+        store
+            .set_project_program(&ProjectId("prj_9".into()), Some("codex"))
+            .is_err()
+    );
 }
