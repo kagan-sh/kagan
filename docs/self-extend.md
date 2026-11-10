@@ -55,6 +55,7 @@ Short, and each points at `kg guide` chapters and the generated `.d.ts` files in
 - `kg-plugin-port`: map each surface onto one script and report what moved.
 - `kg-skill-creator`: writing and testing a skill.
 - `kg-ui`: drive the open window with `kg ui`. It cannot approve powers.
+- `kg-plugin-commands`: generated, not a file in the binary. One line per `kg` command of each running plugin, from its manifest usage. Present only when a plugin adds a command (decision 208).
 
 ## Plugin dev loop
 

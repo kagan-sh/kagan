@@ -50,15 +50,14 @@ impl Catalog {
             .ok_or_else(|| OpError::NotFound(format!("skill {name} is unavailable")))
     }
 }
-/// Writes the bundled skills under `<data>/agent/bundled/<hash>`, named by their content, and
-/// returns that folder. The folder is built beside its final name and renamed into place.
-pub(super) fn materialize(data_dir: &Path, bundled: &[(&str, &[(&str, &str)])]) -> Result<PathBuf> {
+/// Writes the skill files, as (skill, path inside the skill, text), under
+/// `<data>/agent/bundled/<hash>`, named by their content, and returns that folder. The folder is
+/// built beside its final name and renamed into place.
+pub(super) fn materialize(data_dir: &Path, files: &[(&str, &str, &str)]) -> Result<PathBuf> {
     use sha2::{Digest as _, Sha256};
     let mut hash = Sha256::new();
-    for &(name, files) in bundled {
-        for &(path, text) in files {
-            hash.update(format!("{name}\0{path}\0{text}\0").as_bytes());
-        }
+    for &(skill, path, text) in files {
+        hash.update(format!("{skill}\0{path}\0{text}\0").as_bytes());
     }
     let folder = data_dir.join("agent/bundled");
     let stable = folder.join(hex::encode(hash.finalize()));
@@ -72,14 +71,12 @@ pub(super) fn materialize(data_dir: &Path, bundled: &[(&str, &[(&str, &str)])]) 
         uuid::Uuid::new_v4()
     ));
     let result = (|| -> Result<()> {
-        for &(name, files) in bundled {
-            for &(path, text) in files {
-                let target = temp.join(name).join(path);
-                if let Some(parent) = target.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                std::fs::write(target, text)?;
+        for &(skill, path, text) in files {
+            let target = temp.join(skill).join(path);
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent)?;
             }
+            std::fs::write(target, text)?;
         }
         if !stable.is_dir() {
             std::fs::rename(&temp, &stable)?;
@@ -95,10 +92,10 @@ pub(super) fn materialize(data_dir: &Path, bundled: &[(&str, &[(&str, &str)])]) 
 pub(super) fn shared(
     plugins: Vec<kg_domain::Plugin>,
     root: &Path,
-    bundled: &[(&str, &[(&str, &str)])],
+    names: &[&str],
 ) -> Result<Catalog> {
     let mut catalog = Catalog::default();
-    for &(name, _) in bundled {
+    for &name in names {
         catalog
             .skills
             .insert(name.into(), read(&root.join(name), SkillSource::Bundled)?);

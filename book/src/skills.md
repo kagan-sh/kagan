@@ -53,6 +53,7 @@ The same name twice in one place: kagan uses neither, and `kg skill list` shows 
 - `kg-plugin-port`: port a bb plugin.
 - `kg-skill-creator`: write a skill.
 - `kg-ui`: operate the open window from `kg`.
+- `kg-plugin-commands`: the `kg` commands that running plugins add. Only when a plugin adds one.
 
 ## Where skills come from
 

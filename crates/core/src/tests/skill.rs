@@ -1,7 +1,9 @@
 use super::{Fixture, op};
+use crate::PluginRequest;
 use gpui_kit::TestAppContext;
-use kg_domain::{Op, OpError, OpResult, Skill, SkillOp};
+use kg_domain::{Op, OpError, OpResult, PluginCommand, PluginId, Skill, SkillOp};
 use std::path::Path;
+use std::rc::Rc;
 
 #[cfg(unix)]
 use super::install_plugin;
@@ -49,6 +51,48 @@ async fn a_bundled_skill_lists_files_that_exist_on_disk(cx: &mut TestAppContext)
     assert_eq!(
         std::fs::read_to_string(&files[0]).unwrap(),
         include_str!("../../skills/kg-cli/SKILL.md")
+    );
+}
+
+#[gpui_kit::test]
+async fn plugin_commands_become_a_generated_skill(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    assert!(
+        listed(&fixture, cx)
+            .await
+            .iter()
+            .all(|skill| skill.name != "kg-plugin-commands")
+    );
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.plugins = Some(Rc::new(
+            |request: PluginRequest, _cx: &mut gpui_kit::App| {
+                let result = match request {
+                    PluginRequest::Commands => OpResult::PluginCommands(vec![PluginCommand {
+                        plugin: PluginId("dev.test.probe".into()),
+                        group: "probe".into(),
+                        command: "hang".into(),
+                        usage: Some("hang <seconds>".into()),
+                    }]),
+                    _ => OpResult::Warnings(Vec::new()),
+                };
+                gpui_kit::Task::ready(Ok(result))
+            },
+        ));
+    });
+    let OpResult::Skill { body, .. } = op(
+        Op::Skill(SkillOp::Show {
+            name: "kg-plugin-commands".into(),
+            project_id: Some(fixture.project.clone()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("skill")
+    };
+    assert!(
+        body.contains("- `kg probe hang <seconds>`, from dev.test.probe"),
+        "{body}"
     );
 }
 

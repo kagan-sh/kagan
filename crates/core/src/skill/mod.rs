@@ -95,6 +95,7 @@ const BUNDLED: &[(&str, &[(&str, &str)])] = &[
 ];
 
 mod catalog;
+mod plugin_commands;
 
 use catalog::{Catalog, Loaded, materialize, read, shared, valid_name, write};
 
@@ -123,9 +124,26 @@ pub(crate) async fn catalog(
         })
         .map_err(closed)??;
     let plugins = database.call(|store| store.plugins()).await?;
+    let OpResult::PluginCommands(commands) =
+        crate::dispatch::forward(this, crate::PluginRequest::Commands, cx).await?
+    else {
+        return Err(OpError::Failed("plugin host returned no commands".into()));
+    };
+    let generated = plugin_commands::skill(&commands);
     cx.background_spawn(async move {
-        let root = materialize(&data_dir, BUNDLED)?;
-        let mut catalog = shared(plugins, &root, BUNDLED)?;
+        let mut files: Vec<(&str, &str, &str)> = BUNDLED
+            .iter()
+            .flat_map(|&(name, entries)| {
+                entries.iter().map(move |&(path, text)| (name, path, text))
+            })
+            .collect();
+        let mut names: Vec<&str> = BUNDLED.iter().map(|&(name, _)| name).collect();
+        if let Some(text) = &generated {
+            files.push(("kg-plugin-commands", "SKILL.md", text));
+            names.push("kg-plugin-commands");
+        }
+        let root = materialize(&data_dir, &files)?;
+        let mut catalog = shared(plugins, &root, &names)?;
         catalog.folder(&data_dir.join("skills"), SkillSource::User);
         if let Some(project) = project {
             catalog.folder(&project.join(".kagan/skills"), SkillSource::Project);

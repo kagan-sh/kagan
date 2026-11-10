@@ -178,7 +178,7 @@ pub(crate) struct CliGroup {
 pub(crate) struct CliCommand {
     pub(crate) name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    usage: Option<String>,
+    pub(crate) usage: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

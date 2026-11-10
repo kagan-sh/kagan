@@ -6,7 +6,7 @@ use serde_json::json;
 
 use super::{
     ID, answer_standalone, install, installed, open, plugin_dir, plugin_op, records, run,
-    sample_manifest,
+    sample_manifest, write_plugin,
 };
 
 fn with_skill(dir: &Path, name: &str) {
@@ -98,4 +98,29 @@ fn reload_replaces_the_plugin_skill_list(cx: &mut TestAppContext) {
         vec![Path::new("skills/next").to_path_buf()]
     );
     assert_eq!(names(&plugin_skills(cx)), ["next"]);
+}
+
+#[gpui_kit::test]
+fn a_running_plugins_cli_commands_appear_in_the_generated_skill(cx: &mut TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let mut manifest = sample_manifest();
+    manifest["cli"] =
+        json!([{ "name": "probe", "commands": [{ "name": "hang", "usage": "hang <seconds>" }] }]);
+    write_plugin(dir.path(), &manifest);
+    open(cx, &[installed(dir.path())]);
+    cx.run_until_parked();
+    let OpResult::Skill { body, .. } = run(
+        cx,
+        Op::Skill(SkillOp::Show {
+            name: "kg-plugin-commands".into(),
+            project_id: None,
+        }),
+    )
+    .unwrap() else {
+        panic!("skill")
+    };
+    assert!(
+        body.contains(&format!("- `kg probe hang <seconds>`, from {ID}")),
+        "{body}"
+    );
 }

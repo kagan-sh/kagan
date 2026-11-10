@@ -5,22 +5,20 @@ use kg_domain::{Skill, SkillSource};
 
 use super::catalog::{Catalog, Loaded, materialize, shared, valid_name, write};
 
-const DEMO: &[(&str, &[(&str, &str)])] = &[(
-    "kg-demo",
-    &[
-        (
-            "SKILL.md",
-            "---\nname: kg-demo\ndescription: Demo.\n---\nBody.\n",
-        ),
-        ("references/long.md", "Long text.\n"),
-    ],
-)];
+const DEMO: &[(&str, &str, &str)] = &[
+    (
+        "kg-demo",
+        "SKILL.md",
+        "---\nname: kg-demo\ndescription: Demo.\n---\nBody.\n",
+    ),
+    ("kg-demo", "references/long.md", "Long text.\n"),
+];
 
 #[test]
 fn a_bundled_skill_lists_its_supporting_files_on_disk() {
     let dir = tempfile::tempdir().unwrap();
     let root = materialize(dir.path(), DEMO).unwrap();
-    let catalog = shared(Vec::new(), &root, DEMO).unwrap();
+    let catalog = shared(Vec::new(), &root, &["kg-demo"]).unwrap();
     let paths = catalog.skills["kg-demo"].paths();
     assert_eq!(paths.len(), 2, "{paths:?}");
     let long = paths
@@ -34,7 +32,7 @@ fn a_bundled_skill_lists_its_supporting_files_on_disk() {
 fn a_native_copy_of_a_bundled_skill_keeps_its_supporting_files() {
     let dir = tempfile::tempdir().unwrap();
     let root = materialize(dir.path(), DEMO).unwrap();
-    let catalog = shared(Vec::new(), &root, DEMO).unwrap();
+    let catalog = shared(Vec::new(), &root, &["kg-demo"]).unwrap();
     let out = dir.path().join("out");
     write(&out, &catalog).unwrap();
     assert_eq!(
@@ -155,6 +153,36 @@ fn a_loaded_skill_resolves_its_files_beside_skill_md() {
         loaded.paths(),
         vec![PathBuf::from("/base/kg-cli/reference.md")]
     );
+}
+
+fn command(usage: Option<&str>) -> kg_domain::PluginCommand {
+    kg_domain::PluginCommand {
+        plugin: kg_domain::PluginId("dev.test.probe".into()),
+        group: "probe".into(),
+        command: "hang".into(),
+        usage: usage.map(Into::into),
+    }
+}
+
+#[test]
+fn no_plugin_commands_means_no_generated_skill() {
+    assert_eq!(super::plugin_commands::skill(&[]), None);
+}
+
+#[test]
+fn the_generated_skill_lists_each_command_with_its_usage_and_plugin() {
+    let text =
+        super::plugin_commands::skill(&[command(Some("hang <seconds>")), command(None)]).unwrap();
+    assert!(
+        text.contains("- `kg probe hang <seconds>`, from dev.test.probe"),
+        "{text}"
+    );
+    assert!(
+        text.contains("- `kg probe hang`, from dev.test.probe"),
+        "{text}"
+    );
+    let (skill, _) = Skill::parse("kg-plugin-commands", &text, SkillSource::Bundled, None).unwrap();
+    assert_eq!(skill.name, "kg-plugin-commands");
 }
 
 #[test]
