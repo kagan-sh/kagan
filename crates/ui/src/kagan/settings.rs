@@ -450,7 +450,7 @@ fn group_block(group: row::Group, cx: &App) -> AnyElement {
                         .aria_label(title.clone())
                         .type_caption(cx)
                         .font_semibold()
-                        .text_color(muted)
+                        .text_color(cx.theme().foreground)
                         .child(title),
                 )
             })
