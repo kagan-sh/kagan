@@ -9,6 +9,7 @@ use gpui_kit::{
     ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
     div, point, px, rems,
 };
+use kg_core::Workspace;
 use kg_domain::PluginId;
 
 use super::row::Group;
@@ -102,12 +103,12 @@ pub(super) fn entries(kagan: &Kagan, groups: &[Group], cx: &App) -> Vec<Entry> {
             .find(|item| item.section == group.section)
             .map(|item| item.label.clone())
             .unwrap_or_default();
-        // Questions is item 0 of the content column, so a group's position starts at 1.
+        // The position among this section's groups; settings_activate adds the Questions block.
         let at = groups
             .iter()
             .filter(|item| item.section == group.section)
             .position(|item| item.key == group.key)
-            .map_or(0, |position| position + 1);
+            .unwrap_or(0);
         for row in &group.rows {
             let hit = [&row.title, &row.note]
                 .iter()
@@ -175,6 +176,10 @@ impl Kagan {
             Entry::Category(listed) => self.select_section(listed.section, window, cx),
             Entry::Result { section, at, .. } => {
                 self.select_section(section, window, cx);
+                // Questions, when it is shown, is child 0 of the content column.
+                let questions =
+                    usize::from(Workspace::global(cx).read(cx).approvals().next().is_some());
+                let at = at + questions;
                 let kagan = cx.entity();
                 window.defer(cx, move |_, cx| {
                     kagan.update(cx, |this, cx| {

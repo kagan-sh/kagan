@@ -225,3 +225,33 @@ fn the_cursor_ring_does_not_change_a_row_height(cx: &mut TestAppContext) {
     let with_ring = height_of(cx, window, "settings-section-appearance");
     assert_eq!(at_rest, with_ring, "the ring moved the row");
 }
+
+fn bounds_of(cx: &mut TestAppContext, window: AnyWindowHandle, id: &str) -> (f32, f32, f32, f32) {
+    cx.update_window(window, |_, window, _| {
+        crate::ui_registry::find(window, &ElementId::Name(id.into())).map(|element| {
+            let bounds = element.bounds;
+            (
+                f32::from(bounds.origin.x),
+                f32::from(bounds.origin.y),
+                f32::from(bounds.size.width),
+                f32::from(bounds.size.height),
+            )
+        })
+    })
+    .unwrap()
+    .unwrap()
+}
+
+#[gpui_kit::test]
+fn the_first_group_starts_one_page_gap_below_the_top(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    let (_, page_top, _, _) = bounds_of(cx, window, "settings-page");
+    let (_, group_top, _, _) = bounds_of(cx, window, "settings-group-agents");
+    let gap = cx.update(|cx| crate::theme::space(crate::theme::SpaceStep::Xl, cx));
+    assert!(
+        (group_top - page_top - gap).abs() < 0.5,
+        "first group at {} below the top, expected {gap}",
+        group_top - page_top
+    );
+}

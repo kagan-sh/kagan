@@ -313,15 +313,17 @@ pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) 
             .into_any_element()
         })
         .collect();
-    // Questions is always the first child: a new approval scrolls back to it.
-    let mut items = vec![
-        v_flex()
-            .gap(px(space(SpaceStep::Sm, cx)))
-            .when(!cards.is_empty(), |block| {
-                block.child("Questions").children(cards)
-            })
-            .into_any_element(),
-    ];
+    // Questions is the first child only while a question waits; a new approval scrolls to the top.
+    let mut items = Vec::new();
+    if !cards.is_empty() {
+        items.push(
+            v_flex()
+                .gap(px(space(SpaceStep::Sm, cx)))
+                .child("Questions")
+                .children(cards)
+                .into_any_element(),
+        );
+    }
     let section = nav::shown(&kagan.settings.section, cx);
     items.extend(
         groups
