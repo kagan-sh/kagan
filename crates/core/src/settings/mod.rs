@@ -68,6 +68,7 @@ enum Kind {
     BranchPrefix,
     Density,
     FontName,
+    SidebarOrder,
 }
 
 const PREFERENCES: &[(&str, Kind)] = &[
@@ -77,6 +78,10 @@ const PREFERENCES: &[(&str, Kind)] = &[
     (prefs::PLUGIN_STATUS, Kind::Flag),
     (prefs::UPDATE_CHECK, Kind::Flag),
     (prefs::SETUP_GUIDE, Kind::Flag),
+    (prefs::SIDEBAR_ORDER, Kind::SidebarOrder),
+    (prefs::SIDEBAR_HIDE_EMPTY_PROJECTS, Kind::Flag),
+    (prefs::SIDEBAR_HIDE_EMPTY_SECTIONS, Kind::Flag),
+    (prefs::SIDEBAR_UNREAD_FIRST, Kind::Flag),
     (prefs::TERMINAL_FONT_SIZE, Kind::FontSize),
     (prefs::BRANCH_PREFIX, Kind::BranchPrefix),
     (prefs::TERMINAL_COPY_ON_SELECT, Kind::Flag),
@@ -150,6 +155,11 @@ fn accepts(kind: Kind, key: &str, value: &serde_json::Value) -> Result<()> {
             .ok_or_else(|| {
                 OpError::Invalid(format!("{key} must be compact, default or roomy"))
             }),
+        Kind::SidebarOrder => value
+            .as_str()
+            .filter(|text| prefs::SIDEBAR_ORDERS.contains(text))
+            .map(|_| ())
+            .ok_or_else(|| OpError::Invalid(format!("{key} must be current or attention"))),
         Kind::BranchPrefix => value
             .as_str()
             .filter(|text| prefs::valid_branch_prefix(text))

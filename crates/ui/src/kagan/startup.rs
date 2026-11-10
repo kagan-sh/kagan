@@ -103,6 +103,8 @@ impl Kagan {
         self.activity
             .update_state(Updater::global(cx).read(cx).state());
         self.refresh(window, cx);
+        self.sidebar
+            .update(cx, super::sidebar::Sidebar::load_options);
         self.show_newest(window, cx);
     }
 
@@ -205,6 +207,8 @@ fn listen(
                 WorkspaceEvent::Changed => {
                     this.refresh(window, cx);
                     this.load_settings(cx);
+                    this.sidebar
+                        .update(cx, super::sidebar::Sidebar::load_options);
                 }
                 WorkspaceEvent::Event { event, .. } => {
                     this.saw_turn(event, cx);

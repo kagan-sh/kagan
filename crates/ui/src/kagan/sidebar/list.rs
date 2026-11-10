@@ -4,19 +4,20 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::InteractiveElementExt as _;
 use gpui_kit::component::scroll::Scrollbar;
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{IconName, v_flex};
+use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
-use kg_domain::{ProjectId, Thread, ThreadId};
+use kg_domain::{ProjectId, Section, SectionId, Thread, ThreadId};
 
 use crate::theme::{SpaceStep, row_height, space};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 use super::marks::{parent_suffixes, row_glyph};
+use super::options;
 use super::rail::footer;
 use super::rows::{project_line, row_line};
 use super::{Kind, Row, Shows, Sidebar};
@@ -30,6 +31,7 @@ pub(in crate::kagan) fn list(
     cx: &mut Context<Sidebar>,
 ) -> AnyElement {
     sidebar.row_order.clear();
+    sidebar.line_order.clear();
     let rows = sidebar_rows(sidebar, shows, cx);
     sidebar.reveal_selected(&rows);
     let thread_scroll = sidebar.thread_scroll.clone();
@@ -63,24 +65,36 @@ pub(in crate::kagan) fn list(
                         .pt(px(space(SpaceStep::Md, cx)))
                         .px(px(space(SpaceStep::Md, cx)))
                         .child(
-                            div()
-                                .id("sidebar-new-thread")
-                                .ui_observe_as(Facts::button("New thread"))
-                                .h(px(row_height(cx)))
-                                .px(px(space(SpaceStep::Sm, cx)))
-                                .gap(px(space(SpaceStep::Sm, cx)))
-                                .flex()
+                            h_flex()
+                                .w_full()
                                 .items_center()
-                                .rounded(cx.theme().radius)
-                                .hover(|line| line.bg(cx.theme().list_hover))
-                                .tooltip(move |window, cx| {
-                                    Tooltip::new(tooltip.clone()).build(window, cx)
-                                })
-                                .child(row_glyph(IconName::Plus, cx))
-                                .child("New thread")
-                                .on_click(|_, window, cx| {
-                                    window.dispatch_action(Box::new(crate::kagan::NewThread), cx);
-                                }),
+                                .gap(px(space(SpaceStep::Sm, cx)))
+                                .child(
+                                    div()
+                                        .id("sidebar-new-thread")
+                                        .flex_1()
+                                        .min_w_0()
+                                        .ui_observe_as(Facts::button("New thread"))
+                                        .h(px(row_height(cx)))
+                                        .px(px(space(SpaceStep::Sm, cx)))
+                                        .gap(px(space(SpaceStep::Sm, cx)))
+                                        .flex()
+                                        .items_center()
+                                        .rounded(cx.theme().radius)
+                                        .hover(|line| line.bg(cx.theme().list_hover))
+                                        .tooltip(move |window, cx| {
+                                            Tooltip::new(tooltip.clone()).build(window, cx)
+                                        })
+                                        .child(row_glyph(IconName::Plus, cx))
+                                        .child("New thread")
+                                        .on_click(|_, window, cx| {
+                                            window.dispatch_action(
+                                                Box::new(crate::kagan::NewThread),
+                                                cx,
+                                            );
+                                        }),
+                                )
+                                .child(super::menu::button(sidebar, cx)),
                         )
                         .child(threads.unwrap_or_else(|| {
                             scroll_port(
@@ -109,18 +123,53 @@ pub(in crate::kagan) fn list(
         .into_any_element()
 }
 
+pub(super) enum Line {
+    Row(Row),
+    Section { id: String, name: SharedString },
+}
+
 fn thread_lines(
-    rows: &[Row],
+    rows: &[Line],
     sidebar: &mut Sidebar,
     window: &mut Window,
     cx: &mut Context<Sidebar>,
 ) -> Vec<AnyElement> {
     rows.iter()
-        .map(|row| match &row.kind {
-            Kind::Project { id, open, .. } => project_line(row, sidebar, id, *open, window, cx),
-            Kind::Thread { .. } => row_line(row, sidebar, true, window, cx).into_any_element(),
+        .map(|line| match line {
+            Line::Row(row) => match &row.kind {
+                Kind::Project { id, open, .. } => project_line(row, sidebar, id, *open, window, cx),
+                Kind::Thread { .. } => row_line(row, sidebar, true, window, cx).into_any_element(),
+            },
+            Line::Section { id, name } => {
+                sidebar.add_line(id.clone());
+                section_line(id, name, cx)
+            }
         })
         .collect()
+}
+
+fn section_line(id: &str, name: &SharedString, cx: &App) -> AnyElement {
+    use gpui_kit::Role;
+    use gpui_kit::component::ActiveTheme as _;
+
+    use crate::theme::TypeScale as _;
+
+    div()
+        .id(gpui_kit::ElementId::Name(id.to_owned().into()))
+        .w_full()
+        .px(px(space(SpaceStep::Sm, cx)))
+        .pt(px(space(SpaceStep::Sm, cx)))
+        .pb(px(space(SpaceStep::Xs, cx)))
+        .flex()
+        .items_center()
+        .type_caption(cx)
+        .text_color(cx.theme().muted_foreground)
+        .ui_observe_as(crate::ui_registry::Facts {
+            role: Role::Label,
+            ..crate::ui_registry::Facts::button(name.clone())
+        })
+        .child(name.clone())
+        .into_any_element()
 }
 
 fn scroll_port(
@@ -175,9 +224,11 @@ struct Scope<'a> {
     sidebar: &'a Sidebar,
     cx: &'a App,
     shown: Option<ThreadId>,
+    project: ProjectId,
+    sections: &'a [Section],
 }
 
-pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Row> {
+pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Line> {
     let listing = &sidebar.listing;
     let suffixes = parent_suffixes(&listing.projects);
     let on_screen = if shows.page.is_some() || shows.archived {
@@ -185,20 +236,23 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Ro
     } else {
         shows.thread.clone()
     };
-    let scope = Scope {
-        sidebar,
-        cx,
-        shown: on_screen,
-    };
     let mut rows = Vec::new();
     for project in &listing.projects {
+        let mut threads: Vec<&Thread> = listing
+            .threads
+            .iter()
+            .filter(|thread| thread.archived_at.is_none() && thread.project_id == project.id)
+            .collect();
+        if threads.is_empty() && sidebar.options.hide_empty_projects {
+            continue;
+        }
         let open = !sidebar.closed.contains(&project.id);
         let suffix = suffixes.get(&project.id).cloned();
         let label = match &suffix {
             Some(suffix) => format!("{} · {suffix}", project.name),
             None => project.name.clone(),
         };
-        rows.push(Row {
+        rows.push(Line::Row(Row {
             kind: Kind::Project {
                 id: project.id.clone(),
                 name: project.name.clone().into(),
@@ -210,16 +264,11 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Ro
             detail: suffix.map(SharedString::from),
             selected: project_selected(sidebar, shows, &project.id),
             open: false,
-        });
+        }));
         if !open {
             continue;
         }
-        let mut threads: Vec<&Thread> = listing
-            .threads
-            .iter()
-            .filter(|thread| thread.archived_at.is_none() && thread.project_id == project.id)
-            .collect();
-        threads.sort_by_key(|thread| !thread.pinned);
+        options::sort_threads(&mut threads, sidebar.options);
         let ids: BTreeSet<_> = threads.iter().map(|thread| &thread.id).collect();
         let mut children: BTreeMap<&ThreadId, Vec<&Thread>> = BTreeMap::new();
         for &thread in &threads {
@@ -227,6 +276,14 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Ro
                 children.entry(parent).or_default().push(thread);
             }
         }
+        let scope = Scope {
+            sidebar,
+            cx,
+            shown: on_screen.clone(),
+            project: project.id.clone(),
+            sections: &listing.sections,
+        };
+        let mut seen = BTreeSet::new();
         let mut visited = BTreeSet::new();
         for thread in &threads {
             if thread
@@ -234,32 +291,68 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Ro
                 .as_ref()
                 .is_none_or(|parent| !ids.contains(parent))
             {
-                append_thread(&mut rows, thread, &children, &mut visited, 0, &scope);
+                append_thread(
+                    &mut rows,
+                    thread,
+                    &children,
+                    &mut visited,
+                    &mut seen,
+                    0,
+                    &scope,
+                );
             }
         }
         for thread in &threads {
             if !visited.contains(&thread.id) {
-                append_thread(&mut rows, thread, &children, &mut visited, 0, &scope);
+                append_thread(
+                    &mut rows,
+                    thread,
+                    &children,
+                    &mut visited,
+                    &mut seen,
+                    0,
+                    &scope,
+                );
+            }
+        }
+    }
+    if !sidebar.options.hide_empty_sections {
+        for section in &listing.sections {
+            if !section_has_thread(&listing.threads, &section.id) {
+                rows.push(Line::Section {
+                    id: options::section_row_id(None, &section.id),
+                    name: section.name.clone().into(),
+                });
             }
         }
     }
     rows
 }
 
+fn section_has_thread(threads: &[Thread], section: &SectionId) -> bool {
+    threads
+        .iter()
+        .any(|thread| thread.archived_at.is_none() && thread.section_id.as_ref() == Some(section))
+}
+
 fn append_thread(
-    rows: &mut Vec<Row>,
+    rows: &mut Vec<Line>,
     thread: &Thread,
     children_of: &BTreeMap<&ThreadId, Vec<&Thread>>,
     visited: &mut BTreeSet<ThreadId>,
+    seen: &mut BTreeSet<SectionId>,
     depth: u16,
     scope: &Scope,
 ) {
     if !visited.insert(thread.id.clone()) {
         return;
     }
+    if let Some(header) = section_header(thread, seen, scope) {
+        rows.push(header);
+    }
     let children = children_of.contains_key(&thread.id);
     let expanded = !scope.sidebar.closed_threads.contains(&thread.id);
-    rows.push(Row {
+    rows.push(Line::Row(Row {
         kind: Kind::Thread {
             id: thread.id.clone(),
             tone: crate::kagan::attention::global(scope.cx)
@@ -275,14 +368,26 @@ fn append_thread(
         detail: None,
         selected: scope.shown.as_ref() == Some(&thread.id),
         open: false,
-    });
+    }));
     for &child in children_of.get(&thread.id).into_iter().flatten() {
         if expanded {
-            append_thread(rows, child, children_of, visited, depth + 1, scope);
+            append_thread(rows, child, children_of, visited, seen, depth + 1, scope);
         } else {
             mark_descendants(child, children_of, visited);
         }
     }
+}
+
+fn section_header(thread: &Thread, seen: &mut BTreeSet<SectionId>, scope: &Scope) -> Option<Line> {
+    let id = thread.section_id.as_ref()?;
+    if !seen.insert(id.clone()) {
+        return None;
+    }
+    let section = scope.sections.iter().find(|section| &section.id == id)?;
+    Some(Line::Section {
+        id: options::section_row_id(Some(&scope.project), &section.id),
+        name: section.name.clone().into(),
+    })
 }
 
 fn mark_descendants(
