@@ -1,4 +1,4 @@
-use gpui_kit::{AppContext as _, ElementId, TestAppContext, px, size};
+use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, TestAppContext, px, size};
 use kg_domain::{KeymapOp, Op};
 
 use super::{aria_label, bound_keycap, run_op};
@@ -60,10 +60,25 @@ fn the_keyboard_page_shows_bound_keycaps_only(cx: &mut TestAppContext) {
     assert!(!present(cx, window, "settings-heading-shortcuts"));
 }
 
+fn height_of(cx: &mut TestAppContext, window: AnyWindowHandle, id: &str) -> f32 {
+    cx.update_window(window, |_, window, _| {
+        f32::from(
+            crate::ui_registry::find(window, &ElementId::Name(id.into()))
+                .unwrap()
+                .bounds
+                .size
+                .height,
+        )
+    })
+    .unwrap()
+}
+
 #[gpui_kit::test]
 fn keyboard_groups_shortcuts_by_where_they_apply(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-appearance");
+    let text_size = height_of(cx, window, "setting-row-terminal-font-size");
     click(cx, window, "settings-section-keyboard");
     for (section, row) in [
         ("window", "NewThread"),
@@ -76,7 +91,13 @@ fn keyboard_groups_shortcuts_by_where_they_apply(cx: &mut TestAppContext) {
         cx.update_window(window, |_, window, _| {
             let element =
                 crate::ui_registry::find(window, &ElementId::Name(row.clone().into())).unwrap();
-            assert!((f32::from(element.bounds.size.height) - 24.).abs() < 0.5);
+            let height = f32::from(element.bounds.size.height);
+            // These rows are not last in their group, so the bottom border adds
+            // a pixel. The terminal text size row is last in its group.
+            assert!(
+                (height - text_size - 1.).abs() < 0.5,
+                "{row} is {height} px and setting-row-terminal-font-size is {text_size} px"
+            );
             assert!(
                 element.path.iter().any(|id| *id
                     == ElementId::Name(format!("settings-group-shortcuts-{section}").into()))
