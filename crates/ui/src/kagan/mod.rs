@@ -35,6 +35,7 @@ mod screen;
 mod settings;
 mod shown;
 mod sidebar;
+mod skills;
 mod start;
 mod surface;
 mod tabs;
@@ -64,7 +65,8 @@ mod window;
 
 pub(crate) use window::shows;
 pub(crate) use window::{
-    front, show, show_plugin_settings, show_preview, show_settings, start_plugin, watch_waiting,
+    front, show, show_plugin_settings, show_preview, show_settings, show_skills, start_plugin,
+    watch_waiting,
 };
 
 use std::collections::BTreeSet;
@@ -108,6 +110,7 @@ actions!(
         DismissRightOverlay,
         DismissLeftOverlay,
         OpenSettings,
+        OpenSkills,
         UseProjectFolder,
         UseWorktreeFolder,
         RetryBranches,
@@ -143,7 +146,8 @@ pub(crate) struct Kagan {
     questions: Entity<attention::Attention>,
     _questions_watch: Subscription,
     note: Option<SharedString>,
-    plugin_prompt_notice: Option<ThreadId>,
+    // A prompt the program did not take, with the thread it belongs to, for the person to copy.
+    plugin_prompt: Option<(ThreadId, String)>,
     focus: FocusHandle,
     surface_close_focus: FocusHandle,
     slots: surface::SlotState,

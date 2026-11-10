@@ -58,7 +58,9 @@ impl Kagan {
                         ids.push(view.entity_id());
                     }
                 }
-                screen::Center::Work(_) | screen::Center::Archived(_) => {}
+                screen::Center::Work(_)
+                | screen::Center::Archived(_)
+                | screen::Center::Skills(..) => {}
             }
         }
         ids
@@ -127,6 +129,9 @@ impl Render for Kagan {
                 this.dismiss_overlay(screen::Side::Left, window, cx);
             }))
             .on_action(cx.listener(Self::toggle_settings))
+            .on_action(cx.listener(|_, _: &super::OpenSkills, _, cx| {
+                super::dispatch::logged(kg_domain::Op::Skill(kg_domain::SkillOp::Open), cx);
+            }))
             .on_action(cx.listener(Self::use_project_folder))
             .on_action(cx.listener(Self::use_worktree_folder))
             .on_action(cx.listener(Self::retry_branches_action))
@@ -228,7 +233,9 @@ impl Kagan {
                     .children(update::notice(cx))
                     .children(
                         self.plugin_prompt_visible(cx)
-                            .then(|| Self::plugin_prompt_notice(cx)),
+                            .then(|| self.plugin_prompt.clone())
+                            .flatten()
+                            .map(|(_, text)| Self::plugin_prompt_notice(&text, cx)),
                     )
                     .child(main)
                     .children(overlays::render(self, cx))
@@ -252,6 +259,7 @@ impl Kagan {
                 self.render_review(replaced, window, cx)
             }
             screen::Center::Archived(_) => archived::list(self, window, cx).into_any_element(),
+            screen::Center::Skills(open) => open.page.clone().into_any_element(),
             screen::Center::Work(Shown::Thread(view)) => {
                 self.render_thread(view, cx).into_any_element()
             }

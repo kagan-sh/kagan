@@ -130,11 +130,13 @@ Find, read and create skills
 Usage: kg skill [OPTIONS] <COMMAND>
 
 Commands:
+  open    Show the skills page, opening the window if it is closed
   list    List skills
   show    Show one skill
   files   List a skill's files
   new     Create a skill
   add     Add a skill from a folder
+  update  Replace a user or project skill's SKILL.md text
   remove  Remove a skill
   help    Print this message or the help of the given subcommand(s)
 
@@ -142,6 +144,18 @@ Options:
       --json
           Print compact JSON; failures print the error envelope
 
+  -h, --help
+          Print help
+```
+
+## `kg skill open`
+
+```text
+Show the skills page, opening the window if it is closed
+
+Usage: kg skill open
+
+Options:
   -h, --help
           Print help
 ```
@@ -244,6 +258,30 @@ Options:
       --project
           Add it to the project folder instead of the user folder
 
+      --project-id <PROJECT_ID>
+          Project whose skills to include
+          
+          [env: KG_PROJECT_ID=]
+
+  -h, --help
+          Print help
+```
+
+## `kg skill update`
+
+```text
+Replace a user or project skill's SKILL.md text
+
+Usage: kg skill update [OPTIONS] <NAME> <TEXT>
+
+Arguments:
+  <NAME>
+          Skill name
+
+  <TEXT>
+          The whole SKILL.md, frontmatter included
+
+Options:
       --project-id <PROJECT_ID>
           Project whose skills to include
           

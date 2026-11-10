@@ -78,7 +78,8 @@ fn drawn_over(kagan: &Kagan, cx: &App) -> bool {
         Center::Work(Shown::Nothing | Shown::Start(_))
         | Center::Review(_)
         | Center::Settings
-        | Center::Archived(_) => false,
+        | Center::Archived(_)
+        | Center::Skills(..) => false,
     };
     let shown = kagan.shown_thread(cx);
     let waiting = Workspace::global(cx).read(cx).approvals().next().is_some()

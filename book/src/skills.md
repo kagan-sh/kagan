@@ -54,16 +54,11 @@ The same name twice in one place: kagan uses neither, and `kg skill list` shows 
 - `kg-skill-creator`: write a skill.
 - `kg-ui`: operate the open window from `kg`.
 
-## Skills from BB
+## Where skills come from
 
-With agent integration on, a new thread also sees skills from a BB install. kagan does not copy BB's built-in or plugin skills. Those stay in the BB installation and often depend on `bb`.
+kagan reads only its own skill folders: built-in, plugin, your skills in `<data folder>/skills`, and project skills in `.kagan/skills`. It does not read another app's skills.
 
-- Your BB skills: `$BB_DATA_DIR/skills`, or `~/.bb/skills` when `BB_DATA_DIR` is unset.
-- The project's BB skills: `<thread folder>/.bb/skills`.
-
-kagan puts those next to its own skills, in this order: built-in, plugin, your kagan skills, then project skills. A kagan skill wins over a BB skill with the same name. A BB project skill wins over a BB user skill.
-
-Each start resolves that set. A change gets a new hash, so a running thread keeps the folder it started with. Your skills in `<data folder>/skills` and `.kagan/skills` are in that same set. Claude and Codex can also load them with `skill_load`. The other programs do not get that tool.
+Each start resolves those. A change gets a new hash, so a running thread keeps the folder it started with. Claude and Codex can also load them with `skill_load`. The other programs do not get that tool.
 
 ### Where each program looks
 

@@ -364,14 +364,8 @@ async fn configure(
     let kimi_home = this
         .update(cx, |workspace, _| workspace.home_set("KIMI_CODE_HOME"))
         .map_err(closed)?;
-    let (skills_root, skills, skill_errors) = skill::mirror(
-        this,
-        agent.clone(),
-        folder.to_owned(),
-        record.project_id.clone(),
-        cx,
-    )
-    .await?;
+    let (skills_root, skills, skill_errors) =
+        skill::mirror(this, agent.clone(), record.project_id.clone(), cx).await?;
     let files = files::AgentFiles {
         agent: &agent,
         id,

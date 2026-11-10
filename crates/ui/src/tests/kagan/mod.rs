@@ -22,6 +22,7 @@ mod review_comments;
 mod review_wrap;
 mod setup;
 mod sidebar;
+mod skills;
 mod start;
 mod support;
 mod surfaces;

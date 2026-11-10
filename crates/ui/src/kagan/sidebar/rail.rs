@@ -1,4 +1,5 @@
 use super::{ActivateRow, EnterRow, ManagePlugins, NewPlugin, Threads, surface_event};
+use crate::kagan::OpenSkills;
 use crate::theme::TypeScale as _;
 use std::collections::BTreeSet;
 
@@ -32,6 +33,10 @@ pub(in crate::kagan) fn rail(
     sidebar
         .row_focus
         .insert("plugins-manage".into(), manage_focus.clone());
+    let skills_focus = crate::kagan::tab_stop(window, cx, "skills-focus");
+    sidebar
+        .row_focus
+        .insert("skills".into(), skills_focus.clone());
     let mut plugins = BTreeSet::new();
     let (pages, tools): (Vec<_>, Vec<_>) = surface::nav_items(cx)
         .into_iter()
@@ -55,6 +60,7 @@ pub(in crate::kagan) fn rail(
         .items_center()
         .gap(px(6.))
         .child(threads_home(shows, cx))
+        .child(skills_row(shows.skills, &skills_focus, cx))
         .children(tools)
         .children(pages)
         .child(manage_row(manage_focus, cx))
@@ -171,6 +177,41 @@ pub(super) fn rail_tool(
             })),
         )
         .into_any_element()
+}
+
+fn skills_row(active: bool, focus: &FocusHandle, cx: &mut Context<Sidebar>) -> impl IntoElement {
+    let click_focus = focus.clone();
+    div()
+        .id("skills-rail")
+        .flex_shrink_0()
+        .key_context("SidebarRow")
+        .track_focus(focus)
+        .ui_observe_as(Facts {
+            focus: Some(focus.clone()),
+            selected: Some(active),
+            ..Facts::button("Skills")
+        })
+        .on_action(cx.listener(|_, _: &ActivateRow, _, cx| open_skills(cx)))
+        .on_action(cx.listener(|_, _: &EnterRow, _, cx| open_skills(cx)))
+        .child(
+            Button::new("skills-rail-button")
+                .small()
+                .rounded(px(radius_xs(cx)))
+                .icon(IconName::BookOpen)
+                .accessibility_label("Skills")
+                .tooltip(tip("Skills", &OpenSkills, cx))
+                .ghost()
+                .selected(active)
+                .tab_stop(false)
+                .on_click(cx.listener(move |_, _, window, cx| {
+                    window.focus(&click_focus, cx);
+                    open_skills(cx);
+                })),
+        )
+}
+
+fn open_skills(cx: &mut gpui_kit::App) {
+    crate::kagan::dispatch::logged(kg_domain::Op::Skill(kg_domain::SkillOp::Open), cx);
 }
 
 pub(super) fn threads_home(shows: &Shows, cx: &mut Context<Sidebar>) -> impl IntoElement {

@@ -2,7 +2,7 @@
 pub(crate) mod tests;
 use gpui_kit::{App, Context, WeakFocusHandle, Window};
 
-use super::{Kagan, Shown, archived, changes::Changes, layout::Panes, review, surface};
+use super::{Kagan, Shown, archived, changes::Changes, layout::Panes, review, skills, surface};
 use kg_domain::ThreadId;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -29,6 +29,7 @@ pub(super) enum Center {
     Page(Box<surface::Slot>),
     Settings,
     Archived(archived::List),
+    Skills(skills::Open),
 }
 
 struct Pending {

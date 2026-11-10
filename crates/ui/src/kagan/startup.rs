@@ -40,7 +40,7 @@ impl Kagan {
                 },
             ),
             note: None,
-            plugin_prompt_notice: None,
+            plugin_prompt: None,
             focus: cx.focus_handle(),
             surface_close_focus: cx.focus_handle().tab_stop(true),
             slots: surface::SlotState::default(),
@@ -214,6 +214,7 @@ fn listen(
                 WorkspaceEvent::Open
                 | WorkspaceEvent::Settings
                 | WorkspaceEvent::SettingsPlugins
+                | WorkspaceEvent::Skills
                 | WorkspaceEvent::NewPlugin
                 | WorkspaceEvent::Window(_)
                 | WorkspaceEvent::Screen(..) => {}

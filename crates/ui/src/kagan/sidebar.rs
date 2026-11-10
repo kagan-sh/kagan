@@ -81,6 +81,7 @@ pub(super) struct Shows {
     pub(super) page: Option<(PluginId, String)>,
     pub(super) tool: Option<PluginId>,
     pub(super) archived: bool,
+    pub(super) skills: bool,
     pub(super) in_settings: bool,
     pub(super) waiting: Option<usize>,
 }

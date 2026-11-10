@@ -10,6 +10,8 @@ use super::OpError;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
 #[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum SkillOp {
+    /// Show the skills page, opening the window if it is closed
+    Open,
     /// List skills
     List {
         /// Project whose skills to include
@@ -50,6 +52,20 @@ pub enum SkillOp {
         /// Add it to the project folder instead of the user folder
         #[arg(long)]
         project: bool,
+        /// Project whose skills to include
+        #[arg(long, env = "KG_PROJECT_ID")]
+        project_id: Option<ProjectId>,
+    },
+    /// Replace a user or project skill's SKILL.md text
+    Update {
+        /// Skill name
+        name: String,
+        /// The whole SKILL.md, frontmatter included
+        text: String,
+        /// The SKILL.md text the window read; refused when the file has changed since
+        #[arg(skip)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expected: Option<String>,
         /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
@@ -143,7 +159,6 @@ pub enum SkillSource {
     Plugin,
     User,
     Project,
-    External,
 }
 
 #[cfg(test)]

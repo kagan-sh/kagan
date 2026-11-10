@@ -7,7 +7,7 @@ use gpui_kit::{
 use kg_core::Workspace;
 use kg_domain::{EnvironmentSpec, Op, OpResult, ProgramOp, ProjectId, Run, ThreadOp};
 
-use super::{NO_AGENT, PLUGIN_PROMPT, follow_plugin_prompt};
+use super::{BUILD_PLUGIN_PROMPT, NO_AGENT, follow_prompt};
 use crate::kagan::Kagan;
 use crate::ui_observe::UiObserveExt as _;
 impl Kagan {
@@ -79,9 +79,16 @@ impl Kagan {
                     this.start.plugin_opening = false;
                     this.start.plugin_thread = Some(id.clone());
                     this.select(id.clone(), window, cx);
-                    let handle = window.window_handle();
                     this.start.plugin_start = Some(cx.spawn(async move |this, cx| {
-                        follow_plugin_prompt(this, handle, id, cx).await;
+                        let pasted =
+                            follow_prompt(id.clone(), BUILD_PLUGIN_PROMPT.into(), cx).await;
+                        _ = this.update(cx, |this, cx| {
+                            if !pasted {
+                                this.plugin_prompt = Some((id, BUILD_PLUGIN_PROMPT.into()));
+                            }
+                            this.cancel_plugin_start();
+                            cx.notify();
+                        });
                     }));
                 });
             });
@@ -90,25 +97,28 @@ impl Kagan {
     }
 
     pub(in crate::kagan) fn plugin_prompt_visible(&self, cx: &App) -> bool {
-        self.plugin_prompt_notice.is_some()
-            && self.plugin_prompt_notice.as_ref() == self.shown_thread(cx).as_ref()
+        self.plugin_prompt
+            .as_ref()
+            .is_some_and(|(id, _)| self.shown_thread(cx).as_ref() == Some(id))
     }
 
-    pub(in crate::kagan) fn plugin_prompt_notice(cx: &mut Context<Self>) -> impl IntoElement {
+    pub(in crate::kagan) fn plugin_prompt_notice(
+        text: &str,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let copied = text.to_owned();
         h_flex()
             .id("plugin-prompt-notice")
             .ui_container()
             .px_4()
             .py_2()
-            .child(format!("Copy this prompt: {PLUGIN_PROMPT}"))
+            .child(format!("Copy this prompt: {text}"))
             .child(
                 Button::new("copy-plugin-prompt")
                     .label("Copy")
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
-                            PLUGIN_PROMPT.into(),
-                        ));
-                        this.plugin_prompt_notice = None;
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(copied.clone()));
+                        this.plugin_prompt = None;
                         cx.notify();
                     })),
             )

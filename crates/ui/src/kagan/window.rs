@@ -65,6 +65,12 @@ pub(crate) fn show_settings(cx: &mut App) -> gpui_kit::Result<()> {
     Ok(())
 }
 
+pub(crate) fn show_skills(cx: &mut App) -> gpui_kit::Result<()> {
+    show(cx)?;
+    with_front(cx, Kagan::show_skills);
+    Ok(())
+}
+
 pub(crate) fn show_plugin_settings(cx: &mut App) -> gpui_kit::Result<()> {
     show(cx)?;
     with_front(cx, Kagan::manage_plugins);

@@ -1,4 +1,4 @@
-use super::FolderUse;
+use super::{FolderUse, follow_prompt};
 use gpui_kit::{App, AppContext as _, Context, Window};
 use kg_core::Workspace;
 use kg_domain::{
@@ -351,7 +351,25 @@ impl Kagan {
                         this.start.setup_failure = Some(error.clone());
                         cx.notify();
                     } else {
+                        let follow = match (&result, this.start.prompt.take()) {
+                            (Ok(OpResult::Thread(thread)), Some(text)) => {
+                                Some((thread.id.clone(), text))
+                            }
+                            _ => None,
+                        };
                         this.finish(result, "start the thread", window, cx);
+                        if let Some((id, text)) = follow {
+                            this.start.fork_follow = Some(cx.spawn(async move |this, cx| {
+                                let pasted = follow_prompt(id.clone(), text.clone(), cx).await;
+                                _ = this.update(cx, |this, cx| {
+                                    if !pasted {
+                                        this.plugin_prompt = Some((id, text));
+                                    }
+                                    this.start.fork_follow = None;
+                                    cx.notify();
+                                });
+                            }));
+                        }
                     }
                 });
             });

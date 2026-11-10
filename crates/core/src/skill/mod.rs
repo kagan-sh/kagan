@@ -3,11 +3,11 @@ use std::sync::OnceLock;
 
 use futures::lock::Mutex;
 use gpui_kit::{AppContext as _, AsyncApp, Entity, WeakEntity};
-use kg_domain::{OpError, OpResult, ProjectId, SkillOp, SkillSource};
+use kg_domain::{OpError, OpResult, ProjectId, Skill, SkillOp, SkillSource};
 
 use crate::Workspace;
 use crate::host::database::Result;
-use crate::workspace::{closed, missing};
+use crate::workspace::{WorkspaceEvent, closed, missing};
 
 const BUNDLED: &[(&str, &str)] = &[
     ("kg-cli", include_str!("../../skills/kg-cli.md")),
@@ -29,7 +29,7 @@ const BUNDLED: &[(&str, &str)] = &[
 
 mod catalog;
 
-use catalog::{Catalog, read, shared, valid_name, write};
+use catalog::{Catalog, Loaded, read, shared, valid_name, write};
 
 pub(crate) async fn catalog(
     this: &WeakEntity<Workspace>,
@@ -79,27 +79,11 @@ static MIRROR: OnceLock<Mutex<()>> = OnceLock::new();
 pub(crate) async fn mirror(
     this: &WeakEntity<Workspace>,
     agent: PathBuf,
-    folder: PathBuf,
     project_id: ProjectId,
     cx: &mut AsyncApp,
 ) -> Result<(PathBuf, Vec<String>, Vec<String>)> {
-    let mut resolved = catalog(this, Some(project_id), cx).await?;
-    let bb = this
-        .update(cx, |workspace, _| workspace.home("BB_DATA_DIR", ".bb"))
-        .map_err(closed)?;
+    let resolved = catalog(this, Some(project_id), cx).await?;
     cx.background_spawn(async move {
-        let mut external = Catalog::default();
-        if let Some(bb) = bb {
-            external.folder(&bb.join("skills"), SkillSource::External);
-        }
-        external.folder(&folder.join(".bb/skills"), SkillSource::External);
-        resolved.errors.extend(external.errors);
-        for (name, loaded) in external.skills {
-            if reserved(&name) {
-                continue;
-            }
-            resolved.skills.entry(name).or_insert(loaded);
-        }
         let names = resolved.skills.keys().cloned().collect();
         let errors = resolved.errors.clone();
         let _turn = MIRROR.get_or_init(|| Mutex::new(())).lock().await;
@@ -166,16 +150,24 @@ pub(crate) async fn run(
     op: SkillOp,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
+    if let SkillOp::Open = op {
+        this.update(cx, |_, cx| cx.emit(WorkspaceEvent::Skills))
+            .map_err(closed)?;
+        return Ok(OpResult::Done);
+    }
     let project_id = match &op {
+        SkillOp::Open => None,
         SkillOp::List { project_id }
         | SkillOp::Show { project_id, .. }
         | SkillOp::Files { project_id, .. }
         | SkillOp::New { project_id, .. }
         | SkillOp::Add { project_id, .. }
+        | SkillOp::Update { project_id, .. }
         | SkillOp::Remove { project_id, .. } => project_id.clone(),
     };
     let mut catalog = catalog(this, project_id.clone(), cx).await?;
     match op {
+        SkillOp::Open => Ok(OpResult::Done),
         SkillOp::List { .. } => Ok(OpResult::Skills {
             skills: catalog
                 .skills
@@ -236,28 +228,70 @@ pub(crate) async fn run(
             })
             .await
         }
-        SkillOp::Remove { name, .. } => {
+        SkillOp::Update {
+            name,
+            text,
+            expected,
+            ..
+        } => {
             let loaded = catalog.get(&name)?;
-            if !matches!(
-                loaded.skill.source,
-                SkillSource::User | SkillSource::Project
-            ) {
-                return Err(OpError::Invalid(
-                    "only user and project skills can be removed".into(),
-                ));
-            }
-            let path = loaded
-                .skill
-                .path
-                .and_then(|path| path.parent().map(Path::to_owned))
-                .ok_or_else(|| OpError::Invalid("skill folder is missing".into()))?;
-            cx.background_spawn(async move {
-                std::fs::remove_dir_all(path)?;
-                Ok(OpResult::Done)
-            })
-            .await
+            update(loaded, &name, text, expected, cx).await
         }
+        SkillOp::Remove { name, .. } => remove(catalog.get(&name)?, cx).await,
     }
+}
+
+async fn update(
+    loaded: Loaded,
+    name: &str,
+    text: String,
+    expected: Option<String>,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let source = loaded.skill.source;
+    if !matches!(source, SkillSource::User | SkillSource::Project) {
+        return Err(OpError::Invalid(
+            "only user and project skills can be edited".into(),
+        ));
+    }
+    let path = loaded
+        .skill
+        .path
+        .ok_or_else(|| OpError::Invalid("skill file is missing".into()))?;
+    Skill::parse(name, &text, source, None)?;
+    cx.background_spawn(async move {
+        if let Some(expected) = expected
+            && std::fs::read_to_string(&path)? != expected
+        {
+            return Err(OpError::Invalid(
+                "SKILL.md changed since you opened it".into(),
+            ));
+        }
+        std::fs::write(path, text)?;
+        Ok(OpResult::Done)
+    })
+    .await
+}
+
+async fn remove(loaded: Loaded, cx: &mut AsyncApp) -> Result<OpResult> {
+    if !matches!(
+        loaded.skill.source,
+        SkillSource::User | SkillSource::Project
+    ) {
+        return Err(OpError::Invalid(
+            "only user and project skills can be removed".into(),
+        ));
+    }
+    let path = loaded
+        .skill
+        .path
+        .and_then(|path| path.parent().map(Path::to_owned))
+        .ok_or_else(|| OpError::Invalid("skill folder is missing".into()))?;
+    cx.background_spawn(async move {
+        std::fs::remove_dir_all(path)?;
+        Ok(OpResult::Done)
+    })
+    .await
 }
 
 fn destination(

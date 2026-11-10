@@ -1,8 +1,5 @@
 use gpui_kit::component::input::InputState;
-use gpui_kit::{
-    AnyWindowHandle, App, AppContext as _, AsyncApp, Context, Entity, FocusHandle, Subscription,
-    Task, WeakEntity, Window, actions,
-};
+use gpui_kit::{App, AsyncApp, Context, Entity, FocusHandle, Subscription, Task, Window, actions};
 use kg_core::Workspace;
 use kg_domain::{
     BranchList, EnvironmentId, EnvironmentOp, EnvironmentStatus, Op, OpError, OpResult,
@@ -13,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use super::{Kagan, Shown};
 
-pub(super) const PLUGIN_PROMPT: &str = "Build a kagan plugin that ";
+pub(super) const BUILD_PLUGIN_PROMPT: &str = "Build a kagan plugin that ";
 const NO_AGENT: &str = "No agent is installed, so kagan cannot start a plugin thread. Install Claude Code or Codex, then try again.";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -149,6 +146,10 @@ pub(super) struct StartState {
     pub(super) plugin_opening: bool,
     pub(super) plugin_start: Option<Task<()>>,
     pub(super) plugin_thread: Option<kg_domain::ThreadId>,
+    // Text to type into the new thread's program after Start, such as a skill's fork prompt.
+    pub(super) prompt: Option<String>,
+    // Types the fork prompt once its thread is up. Kept apart from plugin_start.
+    pub(super) fork_follow: Option<Task<()>>,
 }
 
 impl StartState {
@@ -158,6 +159,7 @@ impl StartState {
         self.pick = BranchPick::Current;
         self.intent = ProjectIntent::Current;
         self.panel = Panel::Closed;
+        self.prompt = None;
         self.branch_query = None;
         self.branch_watch = None;
         self.branches = Branches::Loading;
@@ -220,14 +222,9 @@ fn project_kind(project: &ProjectId, cx: &App) -> Option<ProjectKind> {
         .map(|project| project.read(cx).record().kind)
 }
 
-// Waits for the new plugin thread to show its prompt, then pastes the prompt once the screen
-// settles. After 15 seconds, the window offers the prompt to copy instead.
-async fn follow_plugin_prompt(
-    this: WeakEntity<Kagan>,
-    window: AnyWindowHandle,
-    id: ThreadId,
-    cx: &mut AsyncApp,
-) {
+// Waits for the new thread to show its prompt, then pastes the text once the screen settles.
+// Returns false when it did not paste, after 15 seconds or when the paste fails.
+async fn follow_prompt(id: ThreadId, text: String, cx: &mut AsyncApp) -> bool {
     let started = Instant::now();
     let mut previous = None;
     let mut changed = Instant::now();
@@ -251,28 +248,18 @@ async fn follow_plugin_prompt(
                     Workspace::dispatch(
                         Op::Thread(ThreadOp::Paste {
                             id: id.clone(),
-                            text: Some(PLUGIN_PROMPT.into()),
+                            text: Some(text.clone()),
                             file: None,
                             terminal: None,
                         }),
                         cx,
                     )
                 });
-                if task.await.is_ok() {
-                    _ = this.update(cx, |this, _| this.cancel_plugin_start());
-                    return;
-                }
-                break;
+                return task.await.is_ok();
             }
         }
     }
-    _ = cx.update_window(window, |_, _, cx| {
-        _ = this.update(cx, |this, cx| {
-            this.plugin_prompt_notice = Some(id);
-            this.cancel_plugin_start();
-            cx.notify();
-        });
-    });
+    false
 }
 
 mod branches;
