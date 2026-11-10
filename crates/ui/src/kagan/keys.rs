@@ -137,6 +137,7 @@ pub(crate) fn install_keys(cx: &mut App) {
     cx.bind_keys(terminal_bindings());
     cx.bind_keys(tree_bindings());
     cx.bind_keys(sidebar::bindings());
+    cx.bind_keys(super::skills::bindings());
     cx.bind_keys(super::archived::bindings());
     cx.bind_keys(settings::bindings());
     cx.bind_keys(super::changes::bindings());

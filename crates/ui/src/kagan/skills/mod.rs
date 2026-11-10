@@ -2,8 +2,9 @@ use std::path::PathBuf;
 
 use gpui_kit::component::input::{InputEvent, InputState, TextareaState};
 use gpui_kit::{
-    AppContext as _, Context, Entity, EventEmitter, Focusable as _, IntoElement, Render,
-    Subscription, Task, Window,
+    AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable as _,
+    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Render, Styled as _,
+    Subscription, Task, Window, actions, div,
 };
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, ProjectId, Skill, SkillOp, SkillSource};
@@ -13,6 +14,18 @@ use super::screen::Center;
 
 mod detail;
 mod list;
+
+pub(in crate::kagan) const CONTEXT: &str = "SkillsPage";
+pub(in crate::kagan) const ROW_CONTEXT: &str = "SkillRow";
+
+actions!(skills, [Back, OpenRow]);
+
+pub(in crate::kagan) fn bindings() -> Vec<KeyBinding> {
+    vec![
+        KeyBinding::new("escape", Back, Some(CONTEXT)),
+        KeyBinding::new("enter", OpenRow, Some(ROW_CONTEXT)),
+    ]
+}
 
 // The skill page's own state. Kagan keeps only the center slot that holds this entity.
 pub(in crate::kagan) struct Page {
@@ -31,6 +44,10 @@ pub(in crate::kagan) struct Page {
     confirming: bool,
     list_task: Option<Task<()>>,
     detail_task: Option<Task<()>>,
+    // The page's own focus, so keys still reach it when a row or the detail is swapped in.
+    focus: FocusHandle,
+    // Set when the page swaps between list and detail; the next frame moves focus to the page.
+    refocus: bool,
     _watch: Subscription,
 }
 
@@ -86,6 +103,8 @@ impl Page {
             confirming: false,
             list_task: None,
             detail_task: None,
+            focus: cx.focus_handle(),
+            refocus: false,
             expected: String::new(),
             _watch: watch,
         };
@@ -137,6 +156,7 @@ impl Page {
                     Ok(OpResult::Skill { skill, body, files }) => {
                         page.selected = Some(Shown { skill, body, files });
                         page.notice = None;
+                        page.refocus = true;
                     }
                     Ok(_) => page.notice = Some("The skill did not load.".into()),
                     Err(error) => page.notice = Some(error.to_string()),
@@ -157,6 +177,7 @@ impl Page {
     }
 
     fn back(&mut self, cx: &mut Context<Self>) {
+        self.refocus = true;
         self.selected = None;
         self.editor = None;
         self.confirming = false;
@@ -360,12 +381,23 @@ pub(in crate::kagan) fn source_rank(source: SkillSource) -> u8 {
 }
 
 impl Render for Page {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if self.selected.is_some() {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if std::mem::take(&mut self.refocus) {
+            let focus = self.focus.clone();
+            window.defer(cx, move |window, cx| window.focus(&focus, cx));
+        }
+        let content = if self.selected.is_some() {
             detail::render(self, cx)
         } else {
-            list::render(self, cx)
-        }
+            list::render(self, window, cx)
+        };
+        div()
+            .key_context(CONTEXT)
+            .track_focus(&self.focus)
+            .size_full()
+            .min_h_0()
+            .on_action(cx.listener(|this, _: &Back, _, cx| this.back(cx)))
+            .child(content)
     }
 }
 

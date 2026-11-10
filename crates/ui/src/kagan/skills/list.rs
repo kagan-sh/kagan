@@ -4,7 +4,7 @@ use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, Role,
-    StatefulInteractiveElement as _, Styled as _, div,
+    StatefulInteractiveElement as _, Styled as _, Window, div,
 };
 use kg_domain::{Skill, SkillSource};
 
@@ -16,7 +16,7 @@ use crate::ui_registry::Facts;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::scroll::ScrollableElement as _;
 
-pub(super) fn render(page: &Page, cx: &mut Context<Page>) -> AnyElement {
+pub(super) fn render(page: &Page, window: &mut Window, cx: &mut Context<Page>) -> AnyElement {
     let skills = page.visible(cx);
     let body = if page.listing.is_none() {
         note(
@@ -46,7 +46,11 @@ pub(super) fn render(page: &Page, cx: &mut Context<Page>) -> AnyElement {
             .border_1()
             .border_color(cx.theme().border)
             .rounded(cx.theme().radius)
-            .children(skills.iter().map(|skill| row(skill, cx).into_any_element()))
+            .children(
+                skills
+                    .iter()
+                    .map(|skill| row(skill, window, cx).into_any_element()),
+            )
             .into_any_element()
     };
     v_flex()
@@ -192,13 +196,22 @@ fn create_row(
         ))
 }
 
-fn row(skill: &Skill, cx: &mut Context<Page>) -> impl IntoElement {
+fn row(skill: &Skill, window: &mut Window, cx: &mut Context<Page>) -> impl IntoElement {
     let name = skill.name.clone();
+    let opened = name.clone();
+    let focus = crate::kagan::tab_stop(
+        window,
+        cx,
+        gpui_kit::ElementId::Name(format!("skill-focus-{}", skill.name).into()),
+    );
     let included = matches!(skill.source, SkillSource::Plugin | SkillSource::Bundled);
     h_flex()
         .id(gpui_kit::ElementId::Name(
             format!("skill-row-{}", skill.name).into(),
         ))
+        .key_context(super::ROW_CONTEXT)
+        .track_focus(&focus)
+        .focus_visible(|line| line.border_1().border_color(cx.theme().ring))
         .w_full()
         .px_3()
         .py_2()
@@ -210,8 +223,12 @@ fn row(skill: &Skill, cx: &mut Context<Page>) -> impl IntoElement {
         .hover(|row| row.bg(cx.theme().list_hover))
         .ui_observe_as(Facts {
             role: Role::Button,
+            focus: Some(focus.clone()),
             ..Facts::button(skill.name.clone())
         })
+        .on_action(cx.listener(move |this, _: &super::OpenRow, _, cx| {
+            this.open(opened.clone(), cx);
+        }))
         .on_click(cx.listener(move |this, _, _, cx| this.open(name.clone(), cx)))
         .child(Icon::new(source_icon(skill.source)).small())
         .child(

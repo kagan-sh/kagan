@@ -1,7 +1,7 @@
 use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, TestAppContext};
 
 use crate::kagan::Kagan;
-use crate::tests::kagan::{chord, click, label, open, shows, wait_until};
+use crate::tests::kagan::{chord, click, focused_of, label, open, shows, wait_until};
 
 fn show_skills(cx: &mut TestAppContext, kagan: &Entity<Kagan>, window: AnyWindowHandle) {
     cx.update_window(window, |_, window, cx| {
@@ -129,4 +129,24 @@ fn a_new_skill_is_in_the_list_after_going_back(cx: &mut TestAppContext) {
     click(cx, window, "skills-back");
     cx.run_until_parked();
     assert!(shows(cx, window, "skill-row-fresh-one"));
+}
+
+#[gpui_kit::test]
+fn a_skill_row_opens_from_the_keyboard_and_escape_goes_back(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    show_skills(cx, &kagan, window);
+    for _ in 0..40 {
+        if focused_of(cx, window, "skill-row-kg-cli") == Some(true) {
+            break;
+        }
+        cx.simulate_keystrokes(window, "tab");
+        cx.run_until_parked();
+    }
+    assert_eq!(focused_of(cx, window, "skill-row-kg-cli"), Some(true));
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert!(shows(cx, window, "skills-read-only"));
+    cx.simulate_keystrokes(window, "escape");
+    cx.run_until_parked();
+    assert!(shows(cx, window, "skill-row-kg-cli"));
 }
