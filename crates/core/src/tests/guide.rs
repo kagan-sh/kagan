@@ -31,7 +31,7 @@ async fn the_customize_chapter_says_which_agents_get_instructions_and_how_to_res
         "{text}"
     );
     assert!(
-        text.contains("`kimi` and `opencode` do not get it"),
+        text.contains("`kimi` and `opencode` do not get them"),
         "{text}"
     );
     assert!(
@@ -40,9 +40,9 @@ async fn the_customize_chapter_says_which_agents_get_instructions_and_how_to_res
     );
     assert!(text.contains("off by default"));
     assert!(text.contains("a plugin id, or `kagan`"));
-    let cap = crate::thread::agent::note::INSTRUCTIONS_CAP.to_string();
-    assert!(text.contains(&cap));
-    assert!(text.contains(crate::thread::agent::note::INSTRUCTIONS_PREFIX));
+    assert!(text.contains("16 KiB"), "{text}");
+    assert!(text.contains("kg instructions set"), "{text}");
+    assert!(text.contains(".kagan/instructions.md"), "{text}");
 }
 
 #[test]

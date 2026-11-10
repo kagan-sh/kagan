@@ -85,6 +85,7 @@ pub(crate) async fn execute(
         Op::Theme(op) => theme(this, database, op, cx).await,
         Op::Keymap(op) => keymap(this, database, op, cx).await,
         Op::Preference(op) => preference(this, database, op, cx).await,
+        Op::Instructions(op) => crate::instructions::run(this, op, cx).await,
         Op::Ui(op) => crate::dispatch::ui::drive(this, crate::UiJob::Op(op), cx).await,
         Op::Browser(op) => crate::dispatch::ui::drive(this, crate::UiJob::Browser(op), cx).await,
         Op::Surface(op) => crate::dispatch::ui::drive(this, crate::UiJob::Surface(op), cx).await,
@@ -184,6 +185,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Theme(ThemeOp::Get | ThemeOp::New { .. } | ThemeOp::Folder)
         | Op::Keymap(KeymapOp::Get)
         | Op::Preference(PreferenceOp::Get { .. })
+        | Op::Instructions(kg_domain::InstructionsOp::Get { .. })
         | Op::Plugin(_)
         | Op::Diff(_)
         | Op::Preview(_)
@@ -199,6 +201,9 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Theme(ThemeOp::Set { .. })
         | Op::Keymap(KeymapOp::Set { .. } | KeymapOp::Remove { .. })
         | Op::Preference(PreferenceOp::Set { .. })
+        | Op::Instructions(
+            kg_domain::InstructionsOp::Set { .. } | kg_domain::InstructionsOp::Clear { .. },
+        )
         | Op::Section(_)
         | Op::Ui(_) => true,
         Op::Surface(op) => !matches!(op, kg_domain::SurfaceOp::List),

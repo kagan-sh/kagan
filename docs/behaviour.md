@@ -598,6 +598,26 @@ Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integrat
 - **Changes**: stores the value when the shape matches [person 2026-10-08]. `confirm-archive` is a boolean [person 2026-10-08], and so are `agent-integration`, `notify` [settings.rs] and `plugin-status` [decision 157]. `agent-integration` set to `false` drops kagan's tools from claude (--mcp-config, --plugin-dir, --append-system-prompt-file, --disallowed-tools, and --session-id or --resume, so Start again does not resume the conversation), codex (--disable multi_agent, --disable multi_agent_v2, -c mcp_servers.kagan.*, and resume <id>), cursor-agent and agent (--plugin-dir, the workspace rule, and --new-session-id or --resume), and pi (--skill and --append-system-prompt). Every program still gets the KG_ variables and PATH with kg's folder first. `notify` set to `false` stops the system notification for a thread that needs you while that thread is not on screen. An unset `notify` counts as on [notify.rs]. `plugin-status` set to `false` hides every plugin item in the activity strip; an unset one counts as on, and a plugin can still be turned off in Installed [decision 157]. `update-check` is a boolean; an unset one counts as off, and on runs the automatic update check at launch and then daily [decision 113]. `terminal-font-size` is an integer from 9 to 24. `<window>.right-sidebar` is a boolean that says whether the right sidebar is open; an open window reads it when it opens, so a change applies the next time the window opens [decision 48]. `<window>.review-wrap` is a boolean that wraps long lines in the review. `<window>.left-width` and `<window>.right-width` are numbers of pixels. `review-viewed` is a map from a reviewed file's path to the revision marked as viewed.
 - **Refused when**: any other key — `invalid`, message `unknown preference <key>` [person 2026-10-08] [op/]. A wrong shape — `invalid` [person 2026-10-08] [op/].
 
+## Agent rules
+
+The agent rules are text a thread's program is told when it starts: the global file `<dataDir>/instructions.md`, and a project's `<project>/.kagan/instructions.md` [decision 211]. Each file holds at most 16 KiB (16,384 bytes) [decision 211]. They reach `claude`, `codex`, `cursor-agent` and `pi`, not `kimi` or `opencode` [decision 211] [docs:self-extend].
+
+### `Get`
+
+- **Shows**: the file's text as it is on disk. A missing file shows nothing [decision 211].
+- **Refused when**: an unknown project — `not-found` [op/].
+
+### `Set`
+
+- **Changes**: writes the file and creates its folder. The text comes from the argument, or from `--file` (`-` for stdin) [book:cli].
+- **Refused when**: more than 16 KiB — `invalid`, and nothing is written [decision 211]. No text — `invalid`. An unknown project — `not-found` [op/].
+- **Applies**: a start reads the files then. A running thread keeps the text it started with. Codex's `kg mcp` server reads them when it lists tools [decision 211].
+
+### `Clear`
+
+- **Changes**: deletes the file. Clearing a missing file succeeds.
+- **Refused when**: an unknown project — `not-found` [op/].
+
 ## Config
 
 Plugin settings, reached as `kg plugin config <id> get|set|clear` [docs:plugin-api] [book:cli]. Setting types are string, boolean, number, select, folder, project, secret, and provider [docs:plugin-api]. A number is a finite JSON number. A provider setting is left out of the settings read. A thread a plugin starts names its program in `spawn` [docs:plugin-api].

@@ -1,4 +1,6 @@
-use kg_domain::{ConfigOp, IndexOp, Op, OpError, PluginId, PluginOp, ThreadId, ThreadOp};
+use kg_domain::{
+    ConfigOp, IndexOp, InstructionsOp, Op, OpError, PluginId, PluginOp, ThreadId, ThreadOp,
+};
 use serde_json::json;
 
 use clap::Parser;
@@ -290,5 +292,54 @@ fn install_sends_a_bare_name_to_the_indexes_and_a_folder_as_its_path() {
         source(&["plugin", "search"]),
         String::new(),
         "search with no text lists every plugin"
+    );
+}
+
+#[test]
+fn instructions_set_reads_a_file_or_stdin_and_sends_the_text() {
+    use crate::cli::take_file_text;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("rules.md");
+    let body = "Call me Ada.\n";
+    std::fs::write(&path, body).unwrap();
+    let from_file = take_file_text(
+        Op::Instructions(InstructionsOp::Set {
+            text: None,
+            file: Some(path),
+            project: None,
+        }),
+        std::io::empty(),
+    )
+    .unwrap();
+    let sent = Op::Instructions(InstructionsOp::Set {
+        text: Some(body.into()),
+        file: None,
+        project: None,
+    });
+    assert_eq!(from_file, sent);
+    assert_eq!(
+        take_file_text(
+            Op::Instructions(InstructionsOp::Set {
+                text: None,
+                file: Some("-".into()),
+                project: None,
+            }),
+            std::io::Cursor::new(body),
+        )
+        .unwrap(),
+        sent
+    );
+    assert_eq!(
+        parse(&["instructions", "set", "--project", "prj_1", "Call me Ada."]),
+        Op::Instructions(InstructionsOp::Set {
+            text: Some("Call me Ada.".into()),
+            file: None,
+            project: Some(kg_domain::ProjectId("prj_1".into())),
+        })
+    );
+    assert!(Cli::try_parse_from(["kg", "instructions", "set"]).is_err());
+    assert_eq!(
+        parse(&["instructions", "get"]),
+        Op::Instructions(InstructionsOp::Get { project: None })
     );
 }
