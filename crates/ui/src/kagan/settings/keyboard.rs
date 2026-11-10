@@ -119,10 +119,6 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     out
 }
 
-pub(super) fn count(cx: &App) -> usize {
-    4 + plugin_commands(cx).len()
-}
-
 fn shortcut_group(mut group: Group, style: GroupStyle) -> Group {
     group.headed = true;
     group.style = style;

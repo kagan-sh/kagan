@@ -16,6 +16,7 @@ use serde_json::json;
 
 use super::indexes;
 use super::installed;
+use super::nav::Section;
 use super::plugins;
 use super::row::{Group, Row, group, row, save, switch};
 use super::{ActivateItem, ITEM, Kagan};
@@ -25,40 +26,63 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) -> Vec<Group> {
-    let (agent, notify, plugin_status) = {
-        let prefs = kagan.prefs.read(cx);
-        (prefs.agent_integration, prefs.notify, prefs.plugin_status)
-    };
+    let prefs = kagan.prefs.read(cx);
+    let (agent, notify) = (prefs.agent_integration, prefs.notify);
+    let (confirm_archive, plugin_status) = (prefs.confirm_archive, prefs.plugin_status);
     let mut appearance = theme_group(window, cx);
     appearance.key = "appearance".into();
     appearance.title = "Appearance".into();
     appearance.rows.extend(mode_group(cx).rows);
     appearance.rows.push(terminal_size(kagan));
-    appearance.rows.push(plugin_status_row(plugin_status));
-    appearance
-        .rows
-        .extend(Slot::ALL.map(|slot| super::slots::row(kagan, slot, cx)));
-    appearance.headed = true;
-    let mut agents = general(agent, notify);
-    agents.headed = true;
-    let shortcuts = super::keyboard::groups(kagan, window, cx);
+    let mut out = vec![
+        within(general(agent, notify, confirm_archive), Section::General),
+        within(appearance, Section::Appearance),
+    ];
+    out.extend(
+        super::keyboard::groups(kagan, window, cx)
+            .into_iter()
+            .map(|group| within(group, Section::Keyboard)),
+    );
     let mut installed = installed::group(kagan, window, cx);
-    installed.title = "Plugins".into();
-    installed.headed = true;
-    let mut updates = super::updates::group(kagan, cx);
-    updates.headed = true;
-    let mut out = vec![appearance, agents, updates];
-    out.extend(shortcuts);
-    out.push(installed);
-    out.push(indexes::group(kagan, cx));
+    installed.title = "Installed".into();
+    let slots = Slot::ALL.map(|slot| super::slots::row(kagan, slot, cx));
+    out.push(within(installed, Section::Installed));
+    out.push(within(indexes::group(kagan, cx), Section::Installed));
+    out.push(within(
+        group(
+            "activity",
+            "Activity",
+            vec![plugin_status_row(plugin_status)],
+        ),
+        Section::Installed,
+    ));
+    out.push(within(
+        group("slots", "Replace parts", slots.into()),
+        Section::Installed,
+    ));
+    out.push(within(super::updates::group(kagan, cx), Section::Updates));
     for (id, _) in plugin_entries(cx) {
-        let mut groups = plugins::groups(kagan, &id, cx);
-        for group in &mut groups {
-            group.headed = true;
+        for group in plugins::groups(kagan, &id, cx) {
+            out.push(within(group, Section::Plugin(id.clone())));
         }
-        out.extend(groups);
     }
     out
+}
+
+fn set_flag(key: &str, on: bool, cx: &mut App) {
+    save(
+        Op::Preference(PreferenceOp::Set {
+            key: key.into(),
+            value: json!(on),
+        }),
+        cx,
+    );
+}
+
+fn within(mut group: Group, section: Section) -> Group {
+    group.section = section;
+    group.headed = true;
+    group
 }
 
 pub(super) fn plugin_entries(cx: &App) -> Vec<(PluginId, String)> {
@@ -88,7 +112,7 @@ pub(super) fn plugin_entries(cx: &App) -> Vec<(PluginId, String)> {
         .collect()
 }
 
-fn general(agent: bool, notify: bool) -> Group {
+fn general(agent: bool, notify: bool, confirm_archive: bool) -> Group {
     group(
         "agents",
         "Agents",
@@ -96,35 +120,36 @@ fn general(agent: bool, notify: bool) -> Group {
             row(
                 "agent-integration",
                 "Agent integration",
-                "Off drops kagan’s tools from claude (--mcp-config, --plugin-dir, --append-system-prompt-file, --disallowed-tools, and --session-id or --resume, so Start again does not resume the conversation), codex (--disable multi_agent, --disable multi_agent_v2, -c mcp_servers.kagan.*, and resume <id>), cursor-agent and agent (--plugin-dir, the workspace rule, and --new-session-id or --resume), and pi (--skill and --append-system-prompt). Every program still gets the KG_ variables and PATH with kg’s folder first.",
+                "Off keeps kagan’s tools out of the agents it starts.",
                 switch(
                     "agent-integration",
                     "Agent integration",
                     agent,
                     |on, _, cx| {
-                        save(
-                            Op::Preference(PreferenceOp::Set {
-                                key: kg_domain::prefs::AGENT_INTEGRATION.into(),
-                                value: json!(on),
-                            }),
-                            cx,
-                        );
+                        set_flag(kg_domain::prefs::AGENT_INTEGRATION, on, cx);
                     },
                 ),
             ),
             row(
                 "notify",
                 "Notifications",
-                "",
+                "A system notification when a thread needs you and is not on screen.",
                 switch("notify", "Notifications", notify, |on, _, cx| {
-                    save(
-                        Op::Preference(PreferenceOp::Set {
-                            key: kg_domain::prefs::NOTIFY.into(),
-                            value: json!(on),
-                        }),
-                        cx,
-                    );
+                    set_flag(kg_domain::prefs::NOTIFY, on, cx);
                 }),
+            ),
+            row(
+                "confirm-archive",
+                "Ask before archiving",
+                "Ask before a thread moves to Archived.",
+                switch(
+                    "confirm-archive",
+                    "Ask before archiving",
+                    confirm_archive,
+                    |on, _, cx| {
+                        set_flag(kg_domain::prefs::CONFIRM_ARCHIVE, on, cx);
+                    },
+                ),
             ),
         ],
     )
@@ -136,13 +161,7 @@ fn plugin_status_row(on: bool) -> Row {
         "Plugin status",
         "Show items that plugins add to the activity strip. Off hides them all; each plugin can still be turned off in Installed.",
         switch("plugin-status", "Plugin status", on, |on, _, cx| {
-            save(
-                Op::Preference(PreferenceOp::Set {
-                    key: kg_domain::prefs::PLUGIN_STATUS.into(),
-                    value: json!(on),
-                }),
-                cx,
-            );
+            set_flag(kg_domain::prefs::PLUGIN_STATUS, on, cx);
         }),
     )
 }
