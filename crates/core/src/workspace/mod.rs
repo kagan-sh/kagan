@@ -42,6 +42,7 @@ pub(crate) enum Hold {
     Run,
     Delete,
     Screen,
+    Start,
 }
 
 #[cfg(any(test, feature = "test"))]
@@ -200,6 +201,26 @@ impl Workspace {
         socket: Option<std::ffi::OsString>,
         cx: &mut App,
     ) -> Task<Result<Entity<Self>>> {
+        Self::open_prepared(data_dir, cli, socket, |_| {}, cx)
+    }
+    // Like `open`, but `prepare` runs before the restart's resume, so a test sets up what resume reads.
+    #[cfg(test)]
+    pub(crate) fn open_with(
+        data_dir: PathBuf,
+        cli: PathBuf,
+        socket: Option<std::ffi::OsString>,
+        prepare: impl FnOnce(&mut Self) + 'static,
+        cx: &mut App,
+    ) -> Task<Result<Entity<Self>>> {
+        Self::open_prepared(data_dir, cli, socket, prepare, cx)
+    }
+    fn open_prepared(
+        data_dir: PathBuf,
+        cli: PathBuf,
+        socket: Option<std::ffi::OsString>,
+        prepare: impl FnOnce(&mut Self) + 'static,
+        cx: &mut App,
+    ) -> Task<Result<Entity<Self>>> {
         let executor = cx.background_executor().clone();
         let opened = executor.spawn(async move { open_data(&data_dir) });
         cx.spawn(async move |cx| {
@@ -273,6 +294,7 @@ impl Workspace {
                         }),
                     }
                 });
+                workspace.update(cx, |workspace, _| prepare(workspace));
                 cx.set_global(WorkspaceGlobal(workspace.clone()));
                 workspace
             });

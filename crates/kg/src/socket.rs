@@ -19,8 +19,8 @@ const START_TIMEOUT: Duration = Duration::from_secs(10);
 #[cfg(unix)]
 const SOCKET_PATH_MAX: usize = if cfg!(target_os = "linux") { 107 } else { 103 };
 
-fn non_empty(key: &str) -> Option<std::ffi::OsString> {
-    std::env::var_os(key).filter(|value| !value.is_empty())
+pub(crate) fn non_empty(value: Option<std::ffi::OsString>) -> Option<std::ffi::OsString> {
+    value.filter(|value| !value.is_empty())
 }
 
 fn socket_id(bytes: &[u8]) -> String {
@@ -47,23 +47,23 @@ fn os_bytes(value: &std::ffi::OsStr) -> Vec<u8> {
 pub(crate) fn location() -> io::Result<std::ffi::OsString> {
     use std::path::PathBuf;
 
-    if let Some(socket) = non_empty("KG_SOCKET") {
+    if let Some(socket) = non_empty(std::env::var_os("KG_SOCKET")) {
         return Ok(socket);
     }
-    if let Some(data) = non_empty("KG_DATA_DIR") {
+    if let Some(data) = non_empty(std::env::var_os("KG_DATA_DIR")) {
         let data = std::path::absolute(data)?;
         return Ok(socket_beside(&data));
     }
-    let dir = if let Some(runtime) = non_empty("XDG_RUNTIME_DIR") {
+    let dir = if let Some(runtime) = non_empty(std::env::var_os("XDG_RUNTIME_DIR")) {
         PathBuf::from(runtime).join("kagan")
     } else {
-        let home = non_empty("HOME")
+        let home = non_empty(std::env::var_os("HOME"))
             .map(PathBuf::from)
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME is not set"))?;
         if cfg!(target_os = "macos") {
             home.join("Library/Application Support/kagan")
         } else {
-            non_empty("XDG_DATA_HOME")
+            non_empty(std::env::var_os("XDG_DATA_HOME"))
                 .map_or_else(|| home.join(".local/share"), PathBuf::from)
                 .join("kagan")
         }
@@ -119,10 +119,10 @@ pub(crate) fn name(location: &std::ffi::OsStr) -> io::Result<Name<'static>> {
 
 #[cfg(windows)]
 pub(crate) fn location() -> io::Result<std::ffi::OsString> {
-    if let Some(socket) = non_empty("KG_SOCKET") {
+    if let Some(socket) = non_empty(std::env::var_os("KG_SOCKET")) {
         return Ok(socket);
     }
-    if let Some(data) = non_empty("KG_DATA_DIR") {
+    if let Some(data) = non_empty(std::env::var_os("KG_DATA_DIR")) {
         let data = std::path::absolute(data)?;
         return Ok(format!("kagan-{}", socket_id(&os_bytes(data.as_os_str()))).into());
     }
@@ -410,7 +410,7 @@ impl Client {
         if let Ok(client) = Self::open(&location) {
             return Ok(client);
         }
-        if non_empty("KG_NO_START").is_some() {
+        if non_empty(std::env::var_os("KG_NO_START")).is_some() {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 format!(

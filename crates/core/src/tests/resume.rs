@@ -4,7 +4,7 @@ use gpui_kit::TestAppContext;
 use kg_domain::*;
 use serde_json::json;
 
-use super::{Fixture, events, op, started, wait_for_status};
+use super::{Fixture, events, op, open_at, started, wait_for_status};
 #[cfg(unix)]
 use super::{claude_line, fake_agent, ran};
 use crate::workspace::recovery::{remember_resume, resume_threads, set_resume_threads};
@@ -189,40 +189,12 @@ async fn a_restart_resumes_the_conversation_without_start_again(cx: &mut TestApp
     let conversation = after(&ran(&run).0, "--session-id").unwrap();
     said(&config, &conversation);
     std::fs::remove_file(run.join("out").join("env")).unwrap();
-    let _config_dir = EnvVar::set("CLAUDE_CONFIG_DIR", &config);
     let fixture = fixture.restart(cx, |_| {}).await;
     cx.run_until_parked();
     assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Active);
     assert!(super::pid_of(&id, cx).is_some());
     assert_eq!(after(&ran(&run).0, "--resume"), Some(conversation));
     drop(fixture);
-}
-
-struct EnvVar {
-    name: &'static str,
-    previous: Option<std::ffi::OsString>,
-}
-
-impl EnvVar {
-    fn set(name: &'static str, dir: &Path) -> Self {
-        let previous = std::env::var_os(name);
-        // SAFETY: nextest runs each test in its own process, so this test owns the variable
-        // while the guard is alive and restores it on drop.
-        unsafe { std::env::set_var(name, dir) };
-        Self { name, previous }
-    }
-}
-
-impl Drop for EnvVar {
-    fn drop(&mut self) {
-        // SAFETY: see `EnvVar::set`.
-        unsafe {
-            match self.previous.take() {
-                Some(value) => std::env::set_var(self.name, value),
-                None => std::env::remove_var(self.name),
-            }
-        }
-    }
 }
 
 #[cfg(unix)]
@@ -236,7 +208,6 @@ async fn a_restart_resumes_the_codex_conversation_without_start_again(cx: &mut T
     ran(&run);
     let conversation = began(&home, fixture.dir.path(), later());
     std::fs::remove_file(run.join("out").join("env")).unwrap();
-    let _home = EnvVar::set("CODEX_HOME", &home);
     let fixture = fixture.restart(cx, |_| {}).await;
     cx.run_until_parked();
     assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Active);
@@ -264,13 +235,55 @@ async fn a_restart_resumes_the_cursor_conversation_without_start_again(cx: &mut 
         &conversation,
     );
     std::fs::remove_file(run.join("out").join("env")).unwrap();
-    let _config = EnvVar::set("CURSOR_CONFIG_DIR", &config);
     let fixture = fixture.restart(cx, |_| {}).await;
     cx.run_until_parked();
     assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Active);
     assert!(super::pid_of(&id, cx).is_some());
     assert_eq!(after(&ran(&run).0, "--resume"), Some(conversation));
     drop(fixture);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_killed_resume_pass_brings_back_a_thread_that_exited_cleanly(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (first, _first_reap) = started(&fixture, super::program(), cx).await;
+    // Resume starts threads in the order they were created, so the first must be older.
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(1));
+    let (second, _second_reap) = started(&fixture, super::program(), cx).await;
+    let Fixture {
+        dir,
+        project,
+        workspace,
+    } = fixture;
+    cx.update(gpui_kit::App::remove_global::<crate::workspace::WorkspaceGlobal>);
+    drop(workspace);
+    cx.run_until_parked();
+    // One token lets the first start through; the second start waits on the hold.
+    let (release, held) = async_channel::bounded(1);
+    release.send(()).await.unwrap();
+    let pass = open_at(&dir, cx, move |workspace| {
+        workspace.holds.insert(crate::workspace::Hold::Start, held);
+    });
+    wait_for_status(&first, ThreadStatus::Active, cx).await;
+    wait_for_status(&second, ThreadStatus::Starting, cx).await;
+    super::op(Op::Thread(ThreadOp::Stop { id: first.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&first, ThreadStatus::Idle, cx).await;
+    // The app is killed mid-pass: the pass is dropped before it finishes.
+    drop(pass);
+    cx.update(gpui_kit::App::remove_global::<crate::workspace::WorkspaceGlobal>);
+    cx.run_until_parked();
+    let workspace = open_at(&dir, cx, |_| {}).await.unwrap();
+    wait_for_status(&first, ThreadStatus::Active, cx).await;
+    drop(release);
+    drop(Fixture {
+        dir,
+        project,
+        workspace,
+    });
 }
 
 #[cfg(unix)]
@@ -696,7 +709,6 @@ async fn start_again_resumes_the_one_kimi_conversation_in_its_folder(cx: &mut Te
     assert_eq!(remembered(&fixture, &id), Some(conversation.clone()));
 
     std::fs::remove_file(run.join("out").join("env")).unwrap();
-    let _home = EnvVar::set("KIMI_CODE_HOME", &home);
     let fixture = fixture.restart(cx, |_| {}).await;
     cx.run_until_parked();
     assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Active);
