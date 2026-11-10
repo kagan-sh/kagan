@@ -34,6 +34,7 @@ Quit (Cmd+Q) and Close (Cmd+W) are only on macOS. On Linux and Windows, Ctrl+Shi
 | Cmd+Shift+E | Show or hide the activity log at the bottom of the window |
 | Cmd+Shift+A | Command list |
 | Cmd+Alt+F | Search threads |
+| Cmd+Shift+G | Saved prompts |
 | Cmd+Enter | Send review |
 | Cmd+F | Find in diff |
 | Alt+] and Alt+[ | Next change, previous change |

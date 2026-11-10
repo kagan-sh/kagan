@@ -443,6 +443,37 @@ A section is a user-named group that threads can be filed under in the sidebar [
 - **Changes**: files the thread under the section, or clears the section when the id is omitted [book:cli].
 - **Refused when**: a missing thread or section — `not-found` [op/].
 
+## Saved prompt
+
+A saved prompt is stored text the person can send, with a title, a body, and a starred flag. It is not a question waiting for an answer [CONTEXT] [decision 232]. Rows live in SQLite. Add, star, and delete are serialized. Search and send are not, and send follows `ThreadOp::Send` [decision 232].
+
+### `Add`
+
+- **Allowed when**: the title trims to at most 200 characters with no control character, and the body trims to text of at most 1 MiB [op/].
+- **Changes**: stores the trimmed title, the body as given, and starred off. The id starts with `svp_` [decision 232].
+- **Refused when**: an empty title or body, a longer title, a control character in the title, or a body over 1 MiB — `invalid` [op/].
+
+### `Search`
+
+- **Allowed when**: the text is at most 256 characters. Empty text lists every saved prompt [op/].
+- **Shows**: saved prompts whose title or body contains the text, ignoring case. A `%`, `_`, or `\` in the text is literal. Starred rows come first, then title, then id [decision 232].
+
+### `Star`
+
+- **Changes**: sets the starred flag [decision 232].
+- **Refused when**: a missing id — `not-found`. An id that is not a plain identifier — `invalid` [op/].
+
+### `Delete`
+
+- **Changes**: removes the saved prompt [decision 232].
+- **Refused when**: a missing id — `not-found`. An id that is not a plain identifier — `invalid` [op/].
+
+### `Send`
+
+- **Allowed when**: a thread is shown. The window reports that thread, including when Settings covers it, so Settings counts as no thread shown [decision 232].
+- **Changes**: pastes the body into that thread through the same path as `ThreadOp::Send` [decision 232].
+- **Refused when**: no thread is shown — `invalid`. A missing id — `not-found`. An id that is not a plain identifier — `invalid`. The same refusals as `ThreadOp::Send` once a thread is shown [op/].
+
 ## Diff
 
 A thread environment's diff reads git and never writes the worktree [book:cli]. Scopes are uncommitted, the branch against a base, and one commit [docs:look] [book:cli].
@@ -616,7 +647,7 @@ Built-in shortcut overrides, and the keys of plugin commands, named `<plugin-id>
 
 ### `Get`
 
-- **Shows**: the saved overrides under `shared`, and under `plugins` each enabled plugin command with its key, or null when it has none [decision 102]. Defaults, before an override, are NewThread `secondary-n`, StopThread `secondary-.`, ArchiveThread `secondary-shift-backspace`, TogglePinned `secondary-shift-p`, OpenSettings `secondary-,`, UseProjectFolder `secondary-alt-p`, UseWorktreeFolder `secondary-alt-w`, RetryBranches `secondary-alt-r`, RetryPrograms `secondary-alt-l`, ToggleCustomCommand `secondary-alt-c`, ThreadActions `secondary-shift-m`, ToggleSidebar `secondary-b`, ToggleRightSidebar `secondary-\`, AddProject `secondary-shift-o`, NextHunk `alt-]`, PrevHunk `alt-[`, FindInDiff `secondary-f`, NextMatch `secondary-g`, PrevMatch `secondary-alt-g`, StartAgain `secondary-shift-s`, FocusSidebar `secondary-shift-l`, RestoreThread `secondary-shift-r`, UseBuiltInSidebar `secondary-alt-b`, UseBuiltInReview `secondary-alt-v`, OpenCommandList `secondary-shift-a`, SearchThreads `secondary-alt-f`, NewTerminal `secondary-t`, CloseTerminal `secondary-shift-w`, NextTerminal `secondary-alt-]`, PreviousTerminal `secondary-alt-[`, and OpenLocalLink `secondary-alt-o` [op/]. Bigger is `secondary-=`, Smaller `secondary--`, ActualSize `secondary-0`, NextThread `secondary-shift-]`, PreviousThread `secondary-shift-[`, NextThreadNeedingYou `secondary-alt-j`, Thread1 through Thread9 `secondary-1` through `secondary-9`, SendReview `secondary-enter`, and ToggleWrap `alt-z` [op/]. Off macOS a `secondary` chord is bound as `ctrl-shift` plus the rest, and a following `shift-` is already in that. A saved override is used as saved. ShowHelp, NextFile and PrevFile were removed as unused (decision 54). The command list came back as OpenCommandList (decision 107).
+- **Shows**: the saved overrides under `shared`, and under `plugins` each enabled plugin command with its key, or null when it has none [decision 102]. Defaults, before an override, are NewThread `secondary-n`, StopThread `secondary-.`, ArchiveThread `secondary-shift-backspace`, TogglePinned `secondary-shift-p`, OpenSettings `secondary-,`, UseProjectFolder `secondary-alt-p`, UseWorktreeFolder `secondary-alt-w`, RetryBranches `secondary-alt-r`, RetryPrograms `secondary-alt-l`, ToggleCustomCommand `secondary-alt-c`, ThreadActions `secondary-shift-m`, ToggleSidebar `secondary-b`, ToggleRightSidebar `secondary-\`, AddProject `secondary-shift-o`, NextHunk `alt-]`, PrevHunk `alt-[`, FindInDiff `secondary-f`, NextMatch `secondary-g`, PrevMatch `secondary-alt-g`, StartAgain `secondary-shift-s`, FocusSidebar `secondary-shift-l`, RestoreThread `secondary-shift-r`, UseBuiltInSidebar `secondary-alt-b`, UseBuiltInReview `secondary-alt-v`, OpenCommandList `secondary-shift-a`, SearchThreads `secondary-alt-f`, OpenSavedPrompts `secondary-shift-g`, NewTerminal `secondary-t`, CloseTerminal `secondary-shift-w`, NextTerminal `secondary-alt-]`, PreviousTerminal `secondary-alt-[`, and OpenLocalLink `secondary-alt-o` [op/]. Bigger is `secondary-=`, Smaller `secondary--`, ActualSize `secondary-0`, NextThread `secondary-shift-]`, PreviousThread `secondary-shift-[`, NextThreadNeedingYou `secondary-alt-j`, Thread1 through Thread9 `secondary-1` through `secondary-9`, SendReview `secondary-enter`, and ToggleWrap `alt-z` [op/]. Off macOS a `secondary` chord is bound as `ctrl-shift` plus the rest, and a following `shift-` is already in that. A saved override is used as saved. ShowHelp, NextFile and PrevFile were removed as unused (decision 54). The command list came back as OpenCommandList (decision 107).
 
 ### `Set`
 
@@ -729,10 +760,10 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 
 - **Changes**: closes the window. Programs keep running [decision 46] [docs:look]. Clicking the Dock icon opens the window again [decision 66].
 
-### `CommandList`, `SearchThreads`
+### `CommandList`, `SearchThreads`, `SavedPrompts`
 
-- **Changes**: opens the window when it is closed, and shows the command list, or the list on thread search. When the list is open, each switches it to its own view [decision 107].
-- **Shows**: every window command and each enabled plugin's commands, grouped, with the key that runs it from where the keyboard was. A command that cannot run there is greyed with its reason. Enter runs it from there; Escape or a click outside closes the list and gives the keyboard back. Thread search shows the same rows as `kg thread search --archived`, under Threads and Archived; Enter opens the thread at the matched line [decision 107].
+- **Changes**: opens the window when it is closed, and shows the command list, the list on thread search, or the list of saved prompts. When the list is open, each switches it to its own view [decision 107] [decision 232].
+- **Shows**: every window command and each enabled plugin's commands, grouped, with the key that runs it from where the keyboard was. A command that cannot run there is greyed with its reason. Enter runs it from there; Escape or a click outside closes the list and gives the keyboard back. Thread search shows the same rows as `kg thread search --archived`, under Threads and Archived; Enter opens the thread at the matched line [decision 107]. Saved prompts lists the same rows as `SavedPromptOp::Search`, starred first. The field searches title and body. Enter sends the selected body into the shown thread and closes the list, or stays open and shows the refusal. Star and Delete change that row. New saved prompt writes a title and a body in the same list [decision 232].
 
 ## Activity strip
 
