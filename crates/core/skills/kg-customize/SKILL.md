@@ -1,6 +1,6 @@
 ---
 name: kg-customize
-description: Change how kagan looks or behaves, with its theme, keys, preferences, agent rules, or skill folders. Use when the person asks to change the theme or colors, rebind a key, turn a setting on or off, change a sidebar, or set a rule for every agent.
+description: Change how kagan looks or behaves, with its theme, keys, preferences, agent rules, or skill folders. Use when the person asks to change the theme or colors, rebind a key, turn a setting on or off, change a sidebar, or set a standing rule for agents.
 ---
 
 Read `kg guide customize` first. It has every command, key, and file.
