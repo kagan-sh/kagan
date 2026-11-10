@@ -1,5 +1,6 @@
 use crate::theme::{SpaceStep, TypeScale as _, control_height, radius_md, space};
 
+mod command;
 mod indexes;
 mod installed;
 mod keyboard;
@@ -79,6 +80,7 @@ pub(super) struct Prefs {
     pub(super) update_check: bool,
     pub(super) setup_guide: bool,
     pub(super) agent_ready: Option<bool>,
+    pub(super) kg_on_path: Option<bool>,
     pub(super) loaded: bool,
 }
 
@@ -131,6 +133,7 @@ pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
         update_check: false,
         setup_guide: true,
         agent_ready: None,
+        kg_on_path: None,
         loaded: false,
     })
 }
@@ -263,8 +266,24 @@ impl Kagan {
         Self::load_layout(cx);
         self.load_prefs(cx);
         self.load_agent_ready(cx);
+        self.load_kg_on_path(cx);
         self.load_slots(cx);
         self.load_terminal_size(cx);
+    }
+
+    pub(super) fn load_kg_on_path(&self, cx: &mut Context<Self>) {
+        let prefs = self.prefs.clone();
+        cx.spawn(async move |_, cx| {
+            let found = cx
+                .background_executor()
+                .spawn(async { command::on_login_path() })
+                .await;
+            prefs.update(cx, |prefs, cx| {
+                prefs.kg_on_path = Some(found);
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     // Reads the agents on the PATH, without starting any of them.

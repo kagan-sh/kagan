@@ -23,3 +23,11 @@ fn hide_removes_the_guide_and_settings_brings_it_back(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(shows(cx, window, "setup-guide"));
 }
+
+#[gpui_kit::test]
+fn general_settings_has_the_command_line_row(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    cx.run_until_parked();
+    assert!(shows(cx, window, "setting-row-kg-command"));
+}

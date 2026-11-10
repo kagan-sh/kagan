@@ -37,6 +37,7 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     let mut out = vec![
         within(general(agent, notify, confirm_archive), Category::General),
         within(setup_guide_group(cx), Category::General),
+        within(super::command::group(kagan, cx), Category::General),
         within(appearance, Category::Appearance),
     ];
     out.extend(

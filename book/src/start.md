@@ -16,7 +16,7 @@ On macOS 11 or later, Intel or Apple silicon:
 
 1. Download the signed `.dmg` from [Releases](https://github.com/kagan-sh/kagan/releases).
 2. Open it and drag `kagan.app` to `/Applications`.
-3. Add `kg` to your `PATH`:
+3. Add `kg` to your `PATH`. Settings → General shows the command with a Copy button when `kg` is not found:
 
    ```bash
    sudo mkdir -p /usr/local/bin
