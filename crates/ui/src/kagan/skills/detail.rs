@@ -48,6 +48,7 @@ pub(super) fn render(page: &Page, cx: &mut Context<Page>) -> AnyElement {
 
 fn breadcrumb(name: &str, cx: &Context<Page>) -> impl IntoElement {
     h_flex()
+        .min_w_0()
         .gap(gpui_kit::px(space(SpaceStep::Xs, cx)))
         .type_small(cx)
         .text_color(cx.theme().muted_foreground)
@@ -61,7 +62,14 @@ fn breadcrumb(name: &str, cx: &Context<Page>) -> impl IntoElement {
                 .label("My skills")
                 .on_click(cx.listener(|this, _, _, cx| this.back(cx))),
         ))
-        .child(format!("> {name}"))
+        .child(
+            div()
+                .min_w_0()
+                .overflow_hidden()
+                .text_ellipsis()
+                .whitespace_nowrap()
+                .child(format!("> {name}")),
+        )
 }
 
 fn title(page: &Page, shown: &Shown, editable: bool, cx: &mut Context<Page>) -> impl IntoElement {
@@ -75,11 +83,24 @@ fn title(page: &Page, shown: &Shown, editable: bool, cx: &mut Context<Page>) -> 
         .gap(gpui_kit::px(space(SpaceStep::Md, cx)))
         .child(
             v_flex()
+                .flex_1()
                 .min_w_0()
                 .gap(gpui_kit::px(space(SpaceStep::Xs, cx)))
-                .child(div().type_title(cx).child(shown.skill.name.clone()))
                 .child(
                     div()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .whitespace_nowrap()
+                        .type_title(cx)
+                        .child(shown.skill.name.clone()),
+                )
+                .child(
+                    div()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .whitespace_nowrap()
                         .type_small(cx)
                         .text_color(cx.theme().muted_foreground)
                         .child(source_line),
@@ -93,6 +114,7 @@ fn title(page: &Page, shown: &Shown, editable: bool, cx: &mut Context<Page>) -> 
 fn actions(page: &Page, shown: &Shown, editable: bool, cx: &mut Context<Page>) -> AnyElement {
     if page.confirming {
         return h_flex()
+            .flex_wrap()
             .gap(gpui_kit::px(space(SpaceStep::Sm, cx)))
             .items_center()
             .child(note(
@@ -125,6 +147,7 @@ fn actions(page: &Page, shown: &Shown, editable: bool, cx: &mut Context<Page>) -
             .into_any_element();
     }
     let mut row = h_flex()
+        .flex_wrap()
         .gap(gpui_kit::px(space(SpaceStep::Sm, cx)))
         .items_center();
     if editable {

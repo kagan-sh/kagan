@@ -239,7 +239,15 @@ fn row(skill: &Skill, window: &mut Window, cx: &mut Context<Page>) -> impl IntoE
                 .child(
                     h_flex()
                         .gap(gpui_kit::px(space(SpaceStep::Sm, cx)))
-                        .child(div().type_body(cx).child(skill.name.clone()))
+                        .child(
+                            div()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .whitespace_nowrap()
+                                .type_body(cx)
+                                .child(skill.name.clone()),
+                        )
                         .child(
                             div()
                                 .type_caption(cx)
