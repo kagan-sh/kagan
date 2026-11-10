@@ -44,6 +44,7 @@ impl Kagan {
                     .update(cx, |sidebar, cx| sidebar.open_row_menu(&thread, window, cx));
             }
             Event::RemoveProject(id) => self.remove_project(id.clone(), cx),
+            Event::AgentRules(id) => super::rules::open_project(id.clone(), window, cx),
             Event::Reorder { id, before } => {
                 self.reorder_project(id.clone(), before.clone(), cx);
             }

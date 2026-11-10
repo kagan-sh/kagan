@@ -7,6 +7,7 @@ pub(super) fn chord(action: &str) -> String {
     chord_for(action, &Keymap::default(), KeyPlatform::host())
 }
 
+mod agent_rules;
 mod approvals;
 mod commands;
 mod ended;
@@ -45,7 +46,7 @@ pub(in crate::tests) use plugins::{
 };
 pub(in crate::tests) use remove::{only_worktree, worktree_dirs};
 pub(in crate::tests) use review::two_changes;
-pub(in crate::tests) use setup::commit_setup;
+pub(in crate::tests) use setup::{commit_setup, disabled};
 pub(in crate::tests) use start::press_key;
 pub(in crate::tests) use support::{
     app_then, click, click_within, count_repaints, git, grid_text, host_grid, host_then, input,

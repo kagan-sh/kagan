@@ -41,6 +41,7 @@ pub fn check(op: &Op) -> Result<(), String> {
         | Op::Theme(_)
         | Op::Keymap(_)
         | Op::Preference(_)
+        | Op::Instructions(_)
         | Op::Settings(_)
         | Op::Window(_)
         | Op::Sidebar

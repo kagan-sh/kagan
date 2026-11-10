@@ -219,7 +219,9 @@ async fn instructions_join_the_note_and_stop_at_the_cap(cx: &mut TestAppContext)
     let fixture = Fixture::new(cx).await;
     let (project, checkout) = other_project(&fixture, cx).await;
     std::fs::write(checkout.join("instructions.md"), "FROM_FOLDER\n").unwrap();
-    let mut body = "a".repeat(4096);
+    std::fs::create_dir_all(checkout.join(".kagan")).unwrap();
+    std::fs::write(checkout.join(".kagan/instructions.md"), "FROM_PROJECT\n").unwrap();
+    let mut body = "a".repeat(16 * 1024);
     body.push_str("TAIL");
     std::fs::write(fixture.dir.path().join("instructions.md"), body).unwrap();
     let run = fixture.dir.path().join("capped");
@@ -238,8 +240,12 @@ async fn instructions_join_the_note_and_stop_at_the_cap(cx: &mut TestAppContext)
         note.contains("Instructions from your kagan instructions file:\n"),
         "{note}"
     );
-    assert!(note.contains(&"a".repeat(4096)), "{note}");
+    assert!(note.contains(&"a".repeat(16 * 1024)), "{note}");
     assert!(!note.contains("TAIL"), "{note}");
+    assert!(
+        note.contains("Instructions from this project's kagan instructions file:\nFROM_PROJECT"),
+        "{note}"
+    );
     assert!(!note.contains("FROM_FOLDER"), "{note}");
     let OpResult::Tools { instructions, .. } =
         op(Op::Thread(ThreadOp::Tools { id: id.clone() }), cx)
@@ -250,9 +256,53 @@ async fn instructions_join_the_note_and_stop_at_the_cap(cx: &mut TestAppContext)
     };
     let instructions = instructions.unwrap();
     assert!(instructions.contains("Instructions from your kagan instructions file:"));
-    assert!(instructions.contains(&"a".repeat(4096)));
+    assert!(instructions.contains(&"a".repeat(16 * 1024)));
+    assert!(instructions.contains("FROM_PROJECT"));
     assert!(!instructions.contains("TAIL"));
     assert!(!instructions.contains("FROM_FOLDER"));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn instructions_op_sets_gets_and_clears_each_file(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (project, checkout) = other_project(&fixture, cx).await;
+    let set = |text: &str, project: Option<ProjectId>| {
+        Op::Instructions(InstructionsOp::Set {
+            text: Some(text.into()),
+            file: None,
+            project,
+        })
+    };
+    let get = |project: Option<ProjectId>| Op::Instructions(InstructionsOp::Get { project });
+    let clear = |project: Option<ProjectId>| Op::Instructions(InstructionsOp::Clear { project });
+    let text = |result: Result<OpResult, OpError>| match result.unwrap() {
+        OpResult::Text(text) => text,
+        other => panic!("{other:?}"),
+    };
+    op(set("be brief", None), cx).await.unwrap();
+    op(set("run cargo t", Some(project.clone())), cx)
+        .await
+        .unwrap();
+    assert_eq!(text(op(get(None), cx).await), "be brief");
+    assert_eq!(
+        text(op(get(Some(project.clone())), cx).await),
+        "run cargo t"
+    );
+    assert_eq!(
+        std::fs::read_to_string(checkout.join(".kagan/instructions.md")).unwrap(),
+        "run cargo t"
+    );
+    let too_long = "a".repeat(INSTRUCTIONS_MAX + 1);
+    assert!(matches!(
+        op(set(&too_long, None), cx).await,
+        Err(OpError::Invalid(_))
+    ));
+    assert_eq!(text(op(get(None), cx).await), "be brief");
+    op(clear(Some(project.clone())), cx).await.unwrap();
+    assert!(!checkout.join(".kagan/instructions.md").exists());
+    assert_eq!(text(op(get(Some(project)), cx).await), "");
+    assert_eq!(text(op(get(None), cx).await), "be brief");
 }
 
 #[cfg(unix)]
@@ -1043,6 +1093,55 @@ async fn a_start_retires_the_old_agent_skills_links(cx: &mut TestAppContext) {
             .unwrap()
             .contains(".agents/skills/kg-threads")
     );
+}
+
+#[gpui_kit::test]
+async fn instructions_get_reads_at_most_a_megabyte(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    std::fs::write(
+        fixture.dir.path().join("instructions.md"),
+        "a".repeat(2 * 1024 * 1024),
+    )
+    .unwrap();
+    let OpResult::Text(text) = op(Op::Instructions(InstructionsOp::Get { project: None }), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("get")
+    };
+    assert!(text.len() <= 1024 * 1024, "{}", text.len());
+    assert!(text.len() > INSTRUCTIONS_MAX, "{}", text.len());
+}
+
+#[gpui_kit::test]
+async fn instructions_get_refuses_a_file_that_is_not_utf8(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    std::fs::write(
+        fixture.dir.path().join("instructions.md"),
+        [b'a', 0xFF, b'b'],
+    )
+    .unwrap();
+    let result = op(Op::Instructions(InstructionsOp::Get { project: None }), cx).await;
+    assert!(matches!(result, Err(OpError::Invalid(_))), "{result:?}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn instructions_set_does_not_recreate_a_missing_project_folder(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (project, checkout) = other_project(&fixture, cx).await;
+    std::fs::remove_dir_all(&checkout).unwrap();
+    let result = op(
+        Op::Instructions(InstructionsOp::Set {
+            text: Some("be brief".into()),
+            file: None,
+            project: Some(project),
+        }),
+        cx,
+    )
+    .await;
+    assert!(matches!(result, Err(OpError::Invalid(_))), "{result:?}");
+    assert!(!checkout.exists(), "the project folder was built again");
 }
 
 #[cfg(unix)]

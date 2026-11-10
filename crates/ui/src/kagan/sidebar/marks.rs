@@ -215,7 +215,25 @@ pub(super) fn project_menu(
     project: ProjectId,
     view: WeakEntity<Sidebar>,
 ) -> PopupMenu {
+    let rules_view = view.clone();
+    let rules_project = project.clone();
     menu.item(
+        PopupMenuItem::element(|_, _| {
+            div()
+                .id("project-agent-rules")
+                .ui_observe_as(Facts {
+                    role: Role::MenuItem,
+                    ..Facts::button("Agent rules…")
+                })
+                .child("Agent rules…")
+        })
+        .on_click(move |_, _, cx| {
+            _ = rules_view.update(cx, |_, cx| {
+                cx.emit(Event::AgentRules(rules_project.clone()));
+            });
+        }),
+    )
+    .item(
         PopupMenuItem::element(|_, _| {
             div()
                 .id("project-remove")

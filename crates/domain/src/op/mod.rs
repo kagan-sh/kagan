@@ -8,6 +8,7 @@ mod diff;
 mod environment;
 mod guide;
 mod index;
+mod instructions;
 mod keymap;
 mod plugin;
 mod preference;
@@ -46,6 +47,7 @@ pub use environment::{
 };
 pub use guide::GuideChapter;
 pub use index::IndexOp;
+pub use instructions::{INSTRUCTIONS_MAX, InstructionsOp};
 pub use keymap::{
     CommandGroup, KeyPlatform, Keymap, KeymapAction, KeymapOp, SHORTCUTS, Shortcut, ShortcutGroup,
     ShortcutScope, ShortcutWhen, default_chord, expand_secondary,
@@ -129,6 +131,9 @@ pub enum Op {
     /// Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
     #[command(subcommand)]
     Preference(PreferenceOp),
+    /// Agent rules: the global rules, or one project's, that a thread's program is told
+    #[command(subcommand)]
+    Instructions(InstructionsOp),
     /// Native window for QA and agents
     #[command(subcommand)]
     Ui(UiOp),
