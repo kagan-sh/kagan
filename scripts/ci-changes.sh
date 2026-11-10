@@ -13,7 +13,7 @@ while IFS= read -r path; do
     crates/*) skip=0 ;;
     # Read by the Rust code or by the hygiene job.
     docs/CONTEXT.md | docs/architecture.md | docs/behaviour.md | docs/plugin-api.md | \
-      docs/self-extend.md | docs/ui-driver.md | docs/themes/* | book/src/cli.md | book/src/start.md) skip=0 ;;
+      docs/customize.md | docs/self-extend.md | docs/ui-driver.md | docs/themes/* | book/src/cli.md | book/src/start.md) skip=0 ;;
     *.md | docs/* | book/* | LICENSE | .githooks/* | .github/ISSUE_TEMPLATE/* | .github/dependabot.yml | \
       .github/workflows/docs.yml | .github/workflows/pr-title.yml | .github/workflows/release.yml | \
       scripts/brand-icons.sh | scripts/brand-marks.py | scripts/release-version.sh | scripts/typos-version) ;;
