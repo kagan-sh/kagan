@@ -9,7 +9,6 @@ use crate::Workspace;
 use crate::host::database::Result;
 use crate::workspace::{WorkspaceEvent, closed, missing};
 
-/// Each bundled skill, then each file in its folder as (path inside the folder, text).
 const BUNDLED: &[(&str, &[(&str, &str)])] = &[
     (
         "kg-cli",
