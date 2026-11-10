@@ -1312,3 +1312,54 @@ async fn unarchive_waits_for_an_archived_lifecycle_owner(cx: &mut TestAppContext
     .unwrap();
     assert!(thread(&dependent.id, cx).await.archived_at.is_some());
 }
+
+#[gpui_kit::test]
+async fn a_rename_for_a_requester_locks_the_title_after_one(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    empty_repo(fixture.dir.path());
+    let OpResult::Thread(started) = op(
+        Op::Thread(ThreadOp::Run(Run {
+            project_id: fixture.project.clone(),
+            program: program().into(),
+            title: None,
+            environment: EnvironmentSpec::Worktree {
+                base_branch: None,
+                branch: None,
+            },
+            visibility: None,
+            parent_thread_id: None,
+            quiet: false,
+            lifecycle_owner_thread_id: None,
+            metadata: None,
+        })),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("run")
+    };
+    let rename = |title: &str| {
+        let (_keep, gone) = async_channel::bounded::<()>(1);
+        let requester = crate::Requester::new(gone);
+        let op = Op::Thread(ThreadOp::Rename {
+            id: started.id.clone(),
+            title: title.into(),
+        });
+        (op, requester)
+    };
+    let (op, requester) = rename("Named");
+    let named = cx
+        .update(|cx| Workspace::dispatch_for(op, Some(requester), cx))
+        .await
+        .unwrap();
+    assert!(matches!(named, OpResult::Thread(ref thread) if thread.title == "Named"));
+    let (op, requester) = rename("Other");
+    let kept = cx
+        .update(|cx| Workspace::dispatch_for(op, Some(requester), cx))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        kept.to_string(),
+        "the title is kept; rename it in the window"
+    );
+}
