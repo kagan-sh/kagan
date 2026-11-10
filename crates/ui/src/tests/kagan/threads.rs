@@ -628,3 +628,33 @@ fn archive_asks_first_when_the_preference_is_on(cx: &mut TestAppContext) {
     );
     assert!(thread_record(cx, &id).archived_at.is_none());
 }
+
+#[gpui_kit::test]
+fn a_muted_thread_shows_its_mark_beside_the_title(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    assert!(!shows(cx, window, "title-muted"));
+    let task = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::Notify {
+                id: id.clone(),
+                level: kg_domain::ThreadNotify::Muted,
+            }),
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(task).unwrap();
+    wait_until(cx, |cx| shows(cx, window, "title-muted"));
+    let task = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::Notify {
+                id: id.clone(),
+                level: kg_domain::ThreadNotify::Default,
+            }),
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(task).unwrap();
+    wait_until(cx, |cx| !shows(cx, window, "title-muted"));
+}

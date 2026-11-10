@@ -60,6 +60,7 @@ const KEYMAP: &str = "keymap";
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
     Flag,
+    Notify,
     FontSize,
     Slot,
     Pixels,
@@ -69,7 +70,7 @@ enum Kind {
 const PREFERENCES: &[(&str, Kind)] = &[
     (prefs::CONFIRM_ARCHIVE, Kind::Flag),
     (prefs::AGENT_INTEGRATION, Kind::Flag),
-    (prefs::NOTIFY, Kind::Flag),
+    (prefs::NOTIFY, Kind::Notify),
     (prefs::PLUGIN_STATUS, Kind::Flag),
     (prefs::UPDATE_CHECK, Kind::Flag),
     (prefs::TERMINAL_FONT_SIZE, Kind::FontSize),
@@ -116,6 +117,9 @@ fn accepts(kind: Kind, key: &str, value: &serde_json::Value) -> Result<()> {
         Kind::Slot => serde_json::from_value::<kg_domain::SlotChoice>(value.clone())
             .map(|_| ())
             .map_err(|_| OpError::Invalid(format!("{key} must be a plugin id or kagan"))),
+        Kind::Notify => serde_json::from_value::<kg_domain::NotifyLevel>(value.clone())
+            .map(|_| ())
+            .map_err(|_| OpError::Invalid(format!("{key} must be all, asks or off"))),
         Kind::Pixels => serde_json::from_value::<f32>(value.clone())
             .map(|_| ())
             .map_err(|_| OpError::Invalid(format!("{key} must be a number of pixels"))),

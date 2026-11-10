@@ -340,6 +340,7 @@ impl<'a> From<&'a kg_domain::Thread> for PluginThread<'a> {
             visibility,
             parent_thread_id,
             quiet: _,
+            notify: _,
             lifecycle_owner_thread_id,
             section_id,
             pinned,

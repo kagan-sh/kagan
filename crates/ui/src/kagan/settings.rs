@@ -22,7 +22,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, Subscription, Window, actions, div, px, rems,
 };
 use kg_core::{Approval, Workspace};
-use kg_domain::PluginId;
+use kg_domain::{NotifyLevel, PluginId};
 use kg_plugins::PluginHost;
 
 use super::question;
@@ -74,7 +74,7 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
 pub(super) struct Prefs {
     pub(super) agent_integration: bool,
     pub(super) confirm_archive: bool,
-    pub(super) notify: bool,
+    pub(super) notify: NotifyLevel,
     pub(super) plugin_status: bool,
     pub(super) update_check: bool,
     pub(super) loaded: bool,
@@ -127,7 +127,7 @@ pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
     cx.new(|_| Prefs {
         agent_integration: true,
         confirm_archive: false,
-        notify: true,
+        notify: NotifyLevel::default(),
         plugin_status: true,
         update_check: false,
         loaded: false,
@@ -269,14 +269,14 @@ impl Kagan {
 
     pub(super) fn load_prefs(&self, cx: &mut Context<Self>) {
         let agent = super::layout::read::<bool>(kg_domain::prefs::AGENT_INTEGRATION, cx);
-        let notify = super::layout::read::<bool>(kg_domain::prefs::NOTIFY, cx);
+        let notify = super::layout::read::<NotifyLevel>(kg_domain::prefs::NOTIFY, cx);
         let plugin_status = super::layout::read::<bool>(kg_domain::prefs::PLUGIN_STATUS, cx);
         let update = super::layout::read::<bool>(kg_domain::prefs::UPDATE_CHECK, cx);
         let confirm = super::layout::read::<bool>(kg_domain::prefs::CONFIRM_ARCHIVE, cx);
         let prefs = self.prefs.clone();
         cx.spawn(async move |_, cx| {
             let on = agent.await.ok().flatten().unwrap_or(true);
-            let notifications = notify.await.ok().flatten().unwrap_or(true);
+            let notifications = notify.await.ok().flatten().unwrap_or_default();
             let status = plugin_status.await.ok().flatten().unwrap_or(true);
             let update_check = update.await.ok().flatten().unwrap_or(false);
             let confirm_archive = confirm.await.ok().flatten().unwrap_or(false);

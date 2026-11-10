@@ -572,3 +572,26 @@ fn owned_threads_reaches_every_lifecycle_descendant() {
         ])
     );
 }
+
+#[test]
+fn a_thread_keeps_its_own_notification_level() {
+    let store = store();
+    let record = thread("thr_1", 7);
+    store.put_thread(&record).unwrap();
+    assert_eq!(
+        store.thread(&record.id).unwrap().unwrap().notify,
+        kg_domain::ThreadNotify::Default
+    );
+    store
+        .set_notify(&record.id, kg_domain::ThreadNotify::Muted)
+        .unwrap();
+    assert_eq!(
+        store.thread(&record.id).unwrap().unwrap().notify,
+        kg_domain::ThreadNotify::Muted
+    );
+    assert!(
+        store
+            .set_notify(&id("thr_missing"), kg_domain::ThreadNotify::All)
+            .is_err()
+    );
+}

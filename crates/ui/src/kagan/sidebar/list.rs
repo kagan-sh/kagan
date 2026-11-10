@@ -266,6 +266,7 @@ fn append_thread(
                 .read(scope.cx)
                 .tone(thread, scope.cx),
             pinned: thread.pinned,
+            muted: thread.notify == kg_domain::ThreadNotify::Muted,
             depth,
             children,
             expanded,

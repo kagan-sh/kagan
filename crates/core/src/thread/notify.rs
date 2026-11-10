@@ -1,10 +1,10 @@
 use std::time::{Duration, Instant};
 
 use gpui_kit::Context;
-use kg_domain::{Event, EventKind, OpResult, ThreadId, TurnOutcome, WaitOutcome};
+use kg_domain::{Event, EventKind, NotifyReason, OpResult, ThreadId, TurnOutcome, WaitOutcome};
 
 use super::terminal::{self, Shown};
-use crate::Workspace;
+use crate::{Workspace, WorkspaceEvent};
 
 // A parent that just got a line may still be starting its turn; hold the next line this long.
 const SETTLE: Duration = Duration::from_secs(2);
@@ -28,6 +28,9 @@ pub(crate) fn after(
 ) {
     let kinds: Vec<&EventKind> = events.iter().map(|event| &event.kind).collect();
     if let Some(report) = report(&kinds) {
+        if !matches!(report, Report::Finished) {
+            cx.emit(WorkspaceEvent::Notice(id.clone(), NotifyReason::Failed));
+        }
         tell(workspace, id, &sentence(&report), cx);
     }
     schedule(workspace, id, cx);

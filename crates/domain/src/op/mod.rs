@@ -10,6 +10,7 @@ mod guide;
 mod index;
 mod instructions;
 mod keymap;
+mod notify;
 mod plugin;
 mod preference;
 mod program;
@@ -52,6 +53,7 @@ pub use keymap::{
     CommandGroup, KeyPlatform, Keymap, KeymapAction, KeymapOp, SHORTCUTS, Shortcut, ShortcutGroup,
     ShortcutScope, ShortcutWhen, default_chord, expand_secondary,
 };
+pub use notify::NotifyOp;
 pub use plugin::PluginOp;
 pub use preference::PreferenceOp;
 pub use program::ProgramOp;
@@ -137,6 +139,9 @@ pub enum Op {
     /// Native window for QA and agents
     #[command(subcommand)]
     Ui(UiOp),
+    /// System notifications
+    #[command(subcommand)]
+    Notify(NotifyOp),
     /// The Browser tab's page, driven by this thread
     #[command(subcommand)]
     Browser(BrowserOp),

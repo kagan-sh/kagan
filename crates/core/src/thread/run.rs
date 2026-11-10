@@ -183,6 +183,7 @@ pub(crate) async fn commit(
         visibility,
         parent_thread_id,
         quiet,
+        notify: kg_domain::ThreadNotify::Default,
         lifecycle_owner_thread_id,
         section_id: None,
         pinned: false,

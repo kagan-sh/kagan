@@ -10,7 +10,7 @@ use gpui_kit::{
     ParentElement as _, Pixels, Role, SharedString, StatefulInteractiveElement as _, Styled as _,
     Window, div, rems,
 };
-use kg_domain::{Appearance, Op, PluginId, PreferenceOp, Slot, ThemeFile, ThemeOp};
+use kg_domain::{Appearance, NotifyLevel, Op, PluginId, PreferenceOp, Slot, ThemeFile, ThemeOp};
 use kg_plugins::{PluginHost, Setting};
 use serde_json::json;
 
@@ -124,7 +124,7 @@ pub(super) fn plugin_entries(cx: &App) -> Vec<(PluginId, String)> {
         .collect()
 }
 
-fn general(agent: bool, notify: bool, confirm_archive: bool) -> Group {
+fn general(agent: bool, notify: NotifyLevel, confirm_archive: bool) -> Group {
     group(
         "agents",
         "Agents",
@@ -142,14 +142,7 @@ fn general(agent: bool, notify: bool, confirm_archive: bool) -> Group {
                     },
                 ),
             ),
-            row(
-                "notify",
-                "Notifications",
-                "A system notification when a thread needs you and is not on screen.",
-                switch("notify", "Notifications", notify, |on, _, cx| {
-                    set_flag(kg_domain::prefs::NOTIFY, on, cx);
-                }),
-            ),
+            notify_row(notify),
             row(
                 "confirm-archive",
                 "Ask before archiving",
@@ -167,8 +160,55 @@ fn general(agent: bool, notify: bool, confirm_archive: bool) -> Group {
     )
 }
 
+fn notify_row(level: NotifyLevel) -> Row {
+    let choices = [
+        (NotifyLevel::All, "all", "All"),
+        (NotifyLevel::Asks, "asks", "Only when it asks me"),
+        (NotifyLevel::Off, "off", "Off"),
+    ];
+    let control = h_flex()
+        .gap_1()
+        .children(choices.map(|(choice, id, label)| {
+            let button = Button::new(ElementId::Name(format!("button-notify-{id}").into()))
+                .small()
+                .label(label)
+                .on_click(move |_, _, cx| {
+                    save(
+                        Op::Preference(PreferenceOp::Set {
+                            key: kg_domain::prefs::NOTIFY.into(),
+                            value: json!(choice),
+                        }),
+                        cx,
+                    );
+                });
+            let button = if choice == level {
+                button.primary()
+            } else {
+                button.outline()
+            };
+            control(
+                format!("notify-{id}"),
+                Facts {
+                    role: Role::RadioButton,
+                    selected: Some(choice == level),
+                    ..Facts::button(label)
+                },
+                button,
+            )
+        }));
+    Row {
+        wide: true,
+        ..row(
+            "notify",
+            "Notifications",
+            "Post a system notification for a thread that is off screen.",
+            control.into_any_element(),
+        )
+    }
+}
+
 // The agent rules row sits in the Agents group: a second group in General would add a heading.
-fn agents(kagan: &Kagan, agent: bool, notify: bool, confirm_archive: bool) -> Group {
+fn agents(kagan: &Kagan, agent: bool, notify: NotifyLevel, confirm_archive: bool) -> Group {
     let mut group = general(agent, notify, confirm_archive);
     let mut rules = row(
         "agent-rules",

@@ -46,6 +46,7 @@ pub fn check(op: &Op) -> Result<(), String> {
         | Op::Window(_)
         | Op::Sidebar
         | Op::Ui(_)
+        | Op::Notify(_)
         | Op::Diagnostics(_)
         | Op::Update(_) => Ok(()),
         Op::Surface(op) => match op {
@@ -167,6 +168,7 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
         | ThreadOp::Archive { id, .. }
         | ThreadOp::Unarchive { id, .. }
         | ThreadOp::SetPinned { id, .. }
+        | ThreadOp::Notify { id, .. }
         | ThreadOp::Rename { id, .. }
         | ThreadOp::MarkRead { id, .. }
         | ThreadOp::Metadata { id, .. }
