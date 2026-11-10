@@ -319,3 +319,12 @@ pub(in crate::tests) const TIDE: &str = r##"{
     "working": "#9bb5ff", "needs": "#e8cf80", "failed": "#ffa1ad", "idle": "#a4b2d6"
   }
 }"##;
+
+#[gpui_kit::test]
+fn with_no_index_the_shipped_plugins_are_suggested(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |_| {});
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
+    assert!(shows(cx, window, "suggested-install-dev.kagan.canvas"));
+    assert!(shows(cx, window, "suggested-install-dev.kagan.kanban"));
+}

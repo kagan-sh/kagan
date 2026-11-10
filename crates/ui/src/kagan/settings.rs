@@ -8,6 +8,7 @@ mod pages;
 mod plugins;
 mod row;
 mod slots;
+mod suggested;
 mod updates;
 
 use crate::ui_registry::Facts;

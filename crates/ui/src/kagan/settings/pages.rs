@@ -48,6 +48,9 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     let slots = Slot::ALL.map(|slot| super::slots::row(kagan, slot, cx));
     out.push(within(installed, Category::Installed));
     out.push(within(indexes::group(kagan, cx), Category::Installed));
+    if let Some(suggested) = super::suggested::group(cx) {
+        out.push(within(suggested, Category::Installed));
+    }
     out.push(within(
         group(
             "activity",
