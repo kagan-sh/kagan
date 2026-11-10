@@ -403,32 +403,46 @@ async fn a_second_line_waits_out_the_settle_time(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let (parent, _parent_run) = started(&fixture, SLEEP, cx).await;
     let quick = finishing(fixture.dir.path(), "quick");
-    let slower = script(
+    let gate = fixture.dir.path().join("gate");
+    let slow = script(
         fixture.dir.path(),
-        "slower",
-        "printf '\\033]0;\\342\\240\\213 working\\007'\nsleep 2\nprintf '\\033]0;ready\\007'\nsleep 30",
+        "slow",
+        &format!(
+            "printf '\\033]0;\\342\\240\\213 working\\007'\nwhile [ ! -f '{}' ]; do sleep 0.05; done\nprintf '\\033]0;ready\\007'\nsleep 30",
+            gate.display()
+        ),
     );
     let (quick_id, _quick_run) = child(&fixture, &quick, &parent, false, cx).await;
-    let (slow_id, _slow_run) = child(&fixture, &slower, &parent, false, cx).await;
+    let (slow_id, _slow_run) = child(&fixture, &slow, &parent, false, cx).await;
     wait_for_waiting(&quick_id, 1, cx).await;
     let sent = sent_to(&parent, cx).await;
     assert_eq!(sent.len(), 1, "{sent:?}");
     let first_line = cx.executor().now();
-    let mut second_line = None;
+    std::fs::write(&gate, "").unwrap();
+    let mut waited_at = None;
+    let mut second_at = None;
     for _ in 0..800 {
         cx.executor().advance_clock(Duration::from_millis(50));
         cx.run_until_parked();
+        let elapsed = cx.executor().now().duration_since(first_line);
+        if waited_at.is_none() && waiting_count(&slow_id, cx).await == 1 {
+            waited_at = Some(elapsed);
+        }
         if sent_text(&events(&parent, cx).await).len() == 2 {
-            second_line = Some(cx.executor().now());
+            second_at = Some(elapsed);
             break;
         }
         std::thread::sleep(Duration::from_millis(20));
     }
-    let second_line = second_line.expect("the second line never came");
-    assert_eq!(waiting_count(&slow_id, cx).await, 1);
+    let waited_at = waited_at.expect("the slow child never waited");
+    let second_at = second_at.expect("the second line never came");
     assert!(
-        second_line.duration_since(first_line) >= Duration::from_millis(1_900),
-        "the second line came too soon after the first"
+        waited_at < Duration::from_millis(1_900),
+        "the slow child waited at {waited_at:?}, too late to test the hold"
+    );
+    assert!(
+        second_at >= Duration::from_millis(1_900),
+        "the second line came at {second_at:?}, before the 2 s settle time"
     );
 }
 
