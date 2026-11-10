@@ -211,12 +211,13 @@ A project is a named body of work, usually one repository, with one folder on th
 
 ### `List`, `Discover`
 
-- **Allowed when**: `--project` names a live project to read its default [book:cli] [decision 212]. Without it, the default is the first installed recent program, as before.
-- **Shows**: the known programs, the shell, and the recent programs, with the default marked [book:cli]. The default is the project's program when it is installed [decision 212].
+- **Allowed when**: always. With `--project`, the project's program is read as the first recent program, so it is the default when it is installed [decision 212].
+- **Shows**: the known programs, the shell, and the recent programs, with the default marked [book:cli].
+- **Refused when**: `--project` names no live project — `not-found` [op/].
 
 ## Env
 
-An environment variable is a name and a value that every program kagan starts gets: the global ones, and the ones set for one project, which win [decision 211]. A program started before a change keeps what it had.
+An environment variable is a name and a value that every program kagan starts gets: the global ones, and the ones set for one project, which win [decision 211]. A program started before a change keeps what it had. Setup and teardown scripts (`.kagan/setup`, `.kagan/teardown`) do not get them yet: they run with kagan's own environment [decision 211].
 
 ### `List`
 
@@ -666,6 +667,12 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 - **Allowed when**: always.
 - **Changes**: `Open` shows Settings with the section it last showed, General on the first open. `Plugins` shows Settings with Installed selected, and Installed is where plugins are managed [decision 207]. Neither takes a section name; search finds any row [decision 207].
 - **Shows**: the settings list on the left and the chosen section on the right [decision 207].
+
+### `SettingsOp::Project`
+
+- **Allowed when**: the id is a live project [op/] [decision 212].
+- **Changes**: shows that project's page, with its environment variables, its default program, and a spot for its agent rules, opening the window if it is closed [decision 212]. The sidebar's "Project settings…" menu item sends this op.
+- **Refused when**: a missing id — `not-found` [op/].
 
 ### `Hide`, `HideOthers`, `ShowAll`
 
