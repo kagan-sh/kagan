@@ -72,7 +72,7 @@ A theme without a `terminal` object keeps the xterm colors, with the window's `b
 | `type.title` | 15 | a page title |
 | `type.mono` | 12 | diff code and other monospace text |
 | `row` | 28 | a list row, such as a thread row |
-| `control` | 24 | a compact row that holds controls, such as a settings keyboard row |
+| `control` | 24 | a compact control, such as a sidebar project row |
 
 No host view uses `space.xxl` yet; a plugin web panel still gets it. A theme can set density and type without a new file version: `docs/themes/ocean.json` carries an example.
 
