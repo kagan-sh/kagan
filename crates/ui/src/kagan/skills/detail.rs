@@ -245,7 +245,6 @@ fn editor_view(
         )
 }
 
-// The frontmatter, as a key and value table.
 fn frontmatter(shown: &Shown, cx: &Context<Page>) -> impl IntoElement {
     let mut rows = vec![
         ("name", shown.skill.name.clone()),
@@ -292,7 +291,6 @@ fn frontmatter(shown: &Shown, cx: &Context<Page>) -> impl IntoElement {
         )
 }
 
-// The instructions, rendered as Markdown in a bordered box that scrolls.
 const BODY_MAX_HEIGHT: f32 = 420.;
 fn body(shown: &Shown, cx: &Context<Page>) -> impl IntoElement {
     div()

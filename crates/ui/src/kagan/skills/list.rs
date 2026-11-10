@@ -142,7 +142,6 @@ fn toolbar(page: &Page, cx: &mut Context<Page>) -> impl IntoElement {
         ))
 }
 
-// The filter steps through every source, then back to all.
 fn next_filter(filter: Option<SkillSource>) -> Option<SkillSource> {
     match filter {
         None => Some(SkillSource::Bundled),

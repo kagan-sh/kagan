@@ -27,7 +27,6 @@ pub(in crate::kagan) fn bindings() -> Vec<KeyBinding> {
     ]
 }
 
-// The skill page's own state. Kagan keeps only the center slot that holds this entity.
 pub(in crate::kagan) struct Page {
     project: Option<ProjectId>,
     listing: Option<Vec<Skill>>,
@@ -57,13 +56,11 @@ pub(in crate::kagan) enum Sort {
     Source,
 }
 
-// The center slot: the page, and the subscription that keeps its fork requests coming.
 pub(in crate::kagan) struct Open {
     pub(super) page: Entity<Page>,
     _fork: Subscription,
 }
 
-// The page asks the window to start a new thread in this project with this prompt.
 pub(crate) struct ForkSkill {
     project: ProjectId,
     prompt: String,
@@ -356,7 +353,6 @@ impl Page {
     }
 }
 
-// The prompt a new thread gets: it makes its own skill and leaves this one alone.
 fn fork_prompt(skill: &Skill) -> String {
     let source = match &skill.path {
         Some(path) => format!("Read its instructions first: {}.", path.display()),
