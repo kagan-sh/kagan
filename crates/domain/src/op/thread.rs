@@ -5,7 +5,9 @@ use clap::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{AskField, InteractionOption, PluginId, ProjectId, ThreadId, Timestamp, Visibility};
+use crate::{
+    AskField, InteractionOption, PluginId, ProjectId, ThreadId, ThreadNotify, Timestamp, Visibility,
+};
 
 use super::EnvironmentSpec;
 use super::environment::environment_spec;
@@ -188,6 +190,12 @@ pub enum ThreadOp {
         id: ThreadId,
         #[arg(action = clap::ArgAction::Set)]
         pinned: bool,
+    },
+    /// When this thread posts a system notification: default follows the global level, all, asks (only when it asks you), or muted
+    Notify {
+        #[arg(env = "KG_THREAD_ID")]
+        id: ThreadId,
+        level: ThreadNotify,
     },
     /// Rename a thread
     Rename {

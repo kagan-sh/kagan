@@ -186,6 +186,7 @@ fn open_kept(cx: &mut TestAppContext, data: &Path, keep: TempDir, plugins: &[Plu
             visibility: Visibility::Visible,
             parent_thread_id: None,
             quiet: false,
+            notify: kg_domain::ThreadNotify::Default,
             lifecycle_owner_thread_id: None,
             section_id: None,
             pinned: false,

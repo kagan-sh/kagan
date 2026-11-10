@@ -265,3 +265,53 @@ fn a_failed_migration_leaves_the_previous_schema() {
     drop(conn);
     std::fs::remove_file(&path).unwrap();
 }
+
+#[test]
+fn an_old_notify_switch_becomes_a_level_and_threads_default() {
+    fn migrated(stored: &str) -> (String, String) {
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        let before = crate::store::MIGRATIONS.len() - 2;
+        crate::migrate(
+            &mut conn,
+            crate::store::MIGRATIONS[..before].iter().copied(),
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO projects (id, kind, name, path, git_remote_url) VALUES ('prj_1', 'standard', 'kagan', '/code/kagan', NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO threads (id, project_id, title, provider, status, visibility, pinned, latest_attention_at, created_at, updated_at) VALUES ('thr_1', 'prj_1', 't', 'claude-code', 'idle', 'visible', 0, 1, 1, 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES ('notify', ?1)",
+            [stored],
+        )
+        .unwrap();
+        crate::migrate(&mut conn, crate::store::MIGRATIONS.iter().copied()).unwrap();
+        let value = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'notify'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let level = conn
+            .query_row("SELECT notify FROM threads WHERE id = 'thr_1'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        (value, level)
+    }
+    assert_eq!(
+        migrated("false"),
+        ("\"off\"".to_owned(), "default".to_owned())
+    );
+    assert_eq!(
+        migrated("true"),
+        ("\"all\"".to_owned(), "default".to_owned())
+    );
+}
