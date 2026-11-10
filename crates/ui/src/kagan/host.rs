@@ -55,6 +55,7 @@ impl Kagan {
     }
 
     pub(super) fn tell_host(&self, window: &Window, cx: &mut App) {
+        self.remember_shown(cx);
         let Some(host) = HostUi::global(cx) else {
             return;
         };

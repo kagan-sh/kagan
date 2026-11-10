@@ -24,6 +24,7 @@ pub(crate) use terminal::StopReason;
 pub(crate) use terminal::exited;
 #[cfg(test)]
 pub(crate) use terminal::remember;
+pub(crate) use terminal::send;
 pub(crate) use terminal::start as start_terminal;
 pub(crate) use terminal::start_again;
 pub(crate) use terminal::{Run, Shown};

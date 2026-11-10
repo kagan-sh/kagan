@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    EnvironmentId, PendingInteractionId, PluginId, ProjectId, SectionId, ThreadId, ThreadNotify,
-    Timestamp,
+    EnvironmentId, PendingInteractionId, PluginId, ProjectId, SavedPromptId, SectionId, ThreadId,
+    ThreadNotify, Timestamp,
 };
 
 /// The start of a plugin source that is a git address: `git:<url>@<ref>`.
@@ -252,6 +252,16 @@ pub fn archive_span(threads: &[Thread], id: &ThreadId) -> usize {
 pub struct Section {
     pub id: SectionId,
     pub name: String,
+}
+
+/// Stored text the person can send. Not a question waiting for an answer.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedPrompt {
+    pub id: SavedPromptId,
+    pub title: String,
+    pub body: String,
+    pub starred: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

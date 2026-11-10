@@ -23,12 +23,13 @@ use super::{Kagan, Shown};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
+mod saved;
 mod search;
 
 #[cfg(test)]
 pub(crate) use search::found;
 
-actions!(kagan, [OpenCommandList, SearchThreads]);
+actions!(kagan, [OpenCommandList, SearchThreads, OpenSavedPrompts]);
 
 const TOP: f32 = 48.;
 const WIDTH: f32 = 560.;
@@ -38,6 +39,7 @@ const HEIGHT: f32 = 420.;
 enum Mode {
     Commands,
     Threads,
+    Saved,
 }
 
 pub(super) struct CommandList {
@@ -45,6 +47,8 @@ pub(super) struct CommandList {
     mode: Mode,
     back: Option<FocusHandle>,
     found: Vec<Found>,
+    prompts: Vec<kg_domain::SavedPrompt>,
+    draft: Option<saved::Draft>,
     failed: Option<SharedString>,
     search: Task<()>,
 }
@@ -64,10 +68,10 @@ struct Entry {
 }
 
 pub(super) fn perform(op: WindowOp, cx: &mut App) {
-    let mode = if op == WindowOp::SearchThreads {
-        Mode::Threads
-    } else {
-        Mode::Commands
+    let mode = match op {
+        WindowOp::SearchThreads => Mode::Threads,
+        WindowOp::SavedPrompts => Mode::Saved,
+        _ => Mode::Commands,
     };
     if super::show(cx).is_err() {
         return;
@@ -81,6 +85,10 @@ pub(super) fn open_list(_: &OpenCommandList, _: &mut Window, cx: &mut App) {
 
 pub(super) fn search_threads(_: &SearchThreads, _: &mut Window, cx: &mut App) {
     super::window::dispatch(WindowOp::SearchThreads, cx);
+}
+
+pub(super) fn open_saved_prompts(_: &OpenSavedPrompts, _: &mut Window, cx: &mut App) {
+    super::window::dispatch(WindowOp::SavedPrompts, cx);
 }
 
 pub(super) fn rail_button(cx: &App) -> impl IntoElement {
@@ -107,6 +115,8 @@ impl Kagan {
             Some(mut list) => {
                 list.mode = mode;
                 list.found.clear();
+                list.prompts.clear();
+                list.draft = None;
                 list.failed = None;
                 list.search = Task::ready(());
                 list.state
@@ -118,12 +128,17 @@ impl Kagan {
                 mode,
                 back: window.focused(cx),
                 found: Vec::new(),
+                prompts: Vec::new(),
+                draft: None,
                 failed: None,
                 search: Task::ready(()),
             },
         };
         list.state.update(cx, |state, cx| state.focus(window, cx));
         self.commands = Some(list);
+        if mode == Mode::Saved {
+            self.search_saved("", window, cx);
+        }
         cx.notify();
     }
 
@@ -165,6 +180,7 @@ pub(super) fn layer(
     let command = match list.mode {
         Mode::Commands => commands(kagan, list, this, window, cx),
         Mode::Threads => search::threads(list, this),
+        Mode::Saved => saved::view(list, &this),
     };
     Some(
         div()

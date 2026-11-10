@@ -26,6 +26,10 @@ impl Kagan {
             .filter(|thread| thread.archived_at.is_none())
     }
 
+    pub(crate) fn remember_shown(&self, cx: &mut App) {
+        Workspace::remember_shown_thread(self.shown_thread(cx), cx);
+    }
+
     pub(crate) fn shown_thread(&self, cx: &App) -> Option<ThreadId> {
         match self.screen.shown() {
             Shown::Thread(view) if !self.in_settings() => Some(view.read(cx).thread().clone()),

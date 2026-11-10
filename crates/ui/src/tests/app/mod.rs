@@ -7,4 +7,5 @@ mod navigation;
 #[cfg(unix)]
 mod notify;
 pub(super) mod picker;
+mod saved_prompts;
 mod update;

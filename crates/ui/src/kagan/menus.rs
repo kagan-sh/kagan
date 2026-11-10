@@ -56,7 +56,9 @@ fn perform(op: WindowOp, cx: &mut App) {
         | WindowOp::PreviousThread
         | WindowOp::Thread { .. }
         | WindowOp::NextThreadNeedingYou => super::navigation::perform(op, cx),
-        WindowOp::CommandList | WindowOp::SearchThreads => super::commands::perform(op, cx),
+        WindowOp::CommandList | WindowOp::SearchThreads | WindowOp::SavedPrompts => {
+            super::commands::perform(op, cx);
+        }
         WindowOp::NextTerminal | WindowOp::PreviousTerminal | WindowOp::OpenLocalLink => {
             super::tabs::perform(op, cx);
         }

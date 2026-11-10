@@ -26,11 +26,13 @@ sidebar: `kg sidebar`.
 
 section: `kg section create`, `kg section rename`, `kg section delete`, `kg section file`.
 
+saved-prompt: `kg saved-prompt add`, `kg saved-prompt search`, `kg saved-prompt star`, `kg saved-prompt delete`, `kg saved-prompt send`.
+
 theme: `kg theme get`, `kg theme set`, `kg theme new`, `kg theme folder`.
 
 settings: `kg settings open`, `kg settings plugins`, `kg settings project`.
 
-window: `kg window about`, `kg window hide`, `kg window hide-others`, `kg window show-all`, `kg window quit`, `kg window minimize`, `kg window zoom`, `kg window close`, `kg window next-thread`, `kg window previous-thread`, `kg window thread`, `kg window next-thread-needing-you`, `kg window toggle-review-wrap`, `kg window toggle-activity-log`, `kg window command-list`, `kg window search-threads`, `kg window next-terminal`, `kg window previous-terminal`, `kg window open-local-link`.
+window: `kg window about`, `kg window hide`, `kg window hide-others`, `kg window show-all`, `kg window quit`, `kg window minimize`, `kg window zoom`, `kg window close`, `kg window next-thread`, `kg window previous-thread`, `kg window thread`, `kg window next-thread-needing-you`, `kg window toggle-review-wrap`, `kg window toggle-activity-log`, `kg window command-list`, `kg window search-threads`, `kg window saved-prompts`, `kg window next-terminal`, `kg window previous-terminal`, `kg window open-local-link`.
 
 surface: `kg surface list`, `kg surface threads`, `kg surface open`, `kg surface close`.
 
