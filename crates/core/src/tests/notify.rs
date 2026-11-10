@@ -376,3 +376,24 @@ async fn a_child_end_under_a_parent_with_no_run_adds_no_run(cx: &mut TestAppCont
             .read_with(cx, |workspace, _| workspace.runs.contains_key(&parent))
     );
 }
+
+#[test]
+fn an_exit_or_a_failure_is_a_report_to_the_parent() {
+    use crate::thread::notify::reports_end;
+    let event = |kind: EventKind| {
+        OpResult::Event(Some(Event {
+            thread_id: ThreadId("thr_1".into()),
+            seq: 1,
+            at: Timestamp(0),
+            kind,
+        }))
+    };
+    assert!(reports_end(&event(EventKind::Exited {
+        code: Some(1),
+        signal: None,
+    })));
+    assert!(reports_end(&event(EventKind::Failed {
+        error: Some("boom".into()),
+    })));
+    assert!(!reports_end(&event(EventKind::Idle)));
+}

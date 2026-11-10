@@ -343,7 +343,39 @@ fn canonical(key: &str) -> Option<String> {
 
 #[cfg(test)]
 mod review_wrap_tests {
-    use super::{LAYOUT, PREFERENCES, known_preference, preference_value};
+    use super::{Kind, LAYOUT, PREFERENCES, kind, known_preference, preference_value};
+
+    #[test]
+    fn each_window_layout_key_has_its_own_kind() {
+        use kg_domain::prefs;
+        assert_eq!(
+            kind(&format!("main.{}", prefs::LEFT_SIDEBAR)),
+            Some(Kind::Flag)
+        );
+        assert_eq!(
+            kind(&format!("main.{}", prefs::LEFT_WIDTH)),
+            Some(Kind::Pixels)
+        );
+        assert_eq!(
+            kind(&format!("main.{}", prefs::RIGHT_SIDEBAR)),
+            Some(Kind::Flag)
+        );
+        assert_eq!(
+            kind(&format!("main.{}", prefs::RIGHT_WIDTH)),
+            Some(Kind::Pixels)
+        );
+        assert_eq!(
+            kind(&format!("main.{}", prefs::REVIEW_WRAP)),
+            Some(Kind::Flag)
+        );
+    }
+
+    #[test]
+    fn only_a_known_preference_passes_the_check() {
+        use kg_domain::prefs;
+        assert!(known_preference(&format!("main.{}", prefs::LEFT_WIDTH)).is_ok());
+        assert!(known_preference("main.not-a-setting").is_err());
+    }
 
     #[test]
     fn guide_names_every_preference() {

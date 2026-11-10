@@ -26,6 +26,7 @@ mod screen;
 mod search;
 mod settings;
 mod skill;
+mod skill_names;
 mod terminal;
 mod thread;
 mod turn;
