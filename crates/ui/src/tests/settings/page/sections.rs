@@ -128,3 +128,20 @@ fn enter_after_typing_opens_the_first_result_not_the_old_cursor(cx: &mut TestApp
         Some(true)
     );
 }
+
+#[gpui_kit::test]
+fn down_in_the_search_box_moves_to_the_next_result(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    tab_to(cx, window, "settings-search");
+    cx.simulate_input(window, "text size");
+    cx.run_until_parked();
+    cx.simulate_keystrokes(window, "down");
+    cx.run_until_parked();
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(
+        selected_of(cx, window, "settings-section-keyboard"),
+        Some(true)
+    );
+}

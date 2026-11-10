@@ -42,8 +42,6 @@ actions!(
         ActivateItem,
         NextItem,
         PreviousItem,
-        NextSection,
-        PreviousSection,
         OpenSection
     ]
 );
@@ -64,8 +62,6 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
         KeyBinding::new("space", ActivateItem, Some(ITEM)),
         KeyBinding::new("down", NextItem, Some(ITEM)),
         KeyBinding::new("up", PreviousItem, Some(ITEM)),
-        KeyBinding::new("down", NextSection, Some(CONTEXT_SECTIONS)),
-        KeyBinding::new("up", PreviousSection, Some(CONTEXT_SECTIONS)),
         KeyBinding::new("enter", OpenSection, Some(CONTEXT_SECTIONS)),
     ]
 }

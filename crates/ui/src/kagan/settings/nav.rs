@@ -5,13 +5,14 @@ use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{ActiveTheme as _, Icon, StyledExt as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
-    Role, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, point, px, rems,
+    AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, KeyDownEvent,
+    ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
+    div, point, px, rems,
 };
 use kg_domain::PluginId;
 
 use super::row::Group;
-use super::{CONTEXT_SECTIONS, Kagan, NextSection, OpenSection, PreviousSection, pages};
+use super::{CONTEXT_SECTIONS, Kagan, OpenSection, pages};
 use crate::kagan::controls::note;
 use crate::theme::{SpaceStep, TypeScale as _, space};
 use crate::ui_observe::UiObserveExt as _;
@@ -184,7 +185,14 @@ pub(super) fn sidebar(
     cx: &mut Context<Kagan>,
 ) -> AnyElement {
     let focus = kagan.settings.list.clone();
-    let focused = focus.is_focused(window);
+    let typing = kagan
+        .settings
+        .query
+        .read(cx)
+        .focus_handle(cx)
+        .is_focused(window)
+        && !kagan.settings.query.read(cx).value().trim().is_empty();
+    let focused = focus.is_focused(window) || typing;
     let len = entries.len();
     let cursor = kagan.settings.cursor.min(len.saturating_sub(1));
     let first_plugin = entries.iter().position(
@@ -232,14 +240,6 @@ pub(super) fn sidebar(
         .gap_0p5()
         .rounded(radius)
         .overflow_y_scrollbar()
-        .on_action(cx.listener(move |this, _: &NextSection, _, cx| {
-            this.settings.cursor = (cursor + 1).min(len.saturating_sub(1));
-            cx.notify();
-        }))
-        .on_action(cx.listener(move |this, _: &PreviousSection, _, cx| {
-            this.settings.cursor = cursor.saturating_sub(1);
-            cx.notify();
-        }))
         .children(rows);
     div()
         .w(rems(14.))
@@ -253,6 +253,21 @@ pub(super) fn sidebar(
                 .size_full()
                 .gap(px(space(SpaceStep::Sm, cx)))
                 .key_context(CONTEXT_SECTIONS)
+                .capture_key_down(cx.listener(move |this, event: &KeyDownEvent, _, cx| {
+                    // Captured before the search box, which would otherwise take Up and Down itself.
+                    let step = match event.keystroke.key.as_str() {
+                        "down" => 1,
+                        "up" => -1,
+                        _ => return,
+                    };
+                    if event.keystroke.modifiers.modified() {
+                        return;
+                    }
+                    this.settings.cursor =
+                        (cursor as isize + step).clamp(0, len.saturating_sub(1) as isize) as usize;
+                    cx.stop_propagation();
+                    cx.notify();
+                }))
                 .on_action(cx.listener(move |this, _: &OpenSection, window, cx| {
                     if let Some(entry) = open.clone() {
                         this.settings_activate(cursor, entry, window, cx);
