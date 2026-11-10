@@ -166,7 +166,7 @@ impl Kagan {
         self.sync_panels_keeping_widths(window, cx);
         plugins::sync(&mut self.settings.drafts, window, cx);
         let rules = self.settings.rules.clone();
-        rules.update(cx, |editor, cx| editor.load(window, cx));
+        rules.update(cx, |editor, cx| editor.refresh(window, cx));
         for (id, _) in pages::plugin_entries(cx) {
             self.mount_settings_view(&id, window, cx);
         }
