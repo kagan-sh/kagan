@@ -1,4 +1,4 @@
-use gpui_kit::{AppContext as _, TestAppContext, px};
+use gpui_kit::{AppContext as _, TestAppContext, px, size};
 use kg_core::Workspace;
 use kg_domain::{Op, SettingsOp, UiOp};
 use serde_json::{Value, json};
@@ -23,7 +23,10 @@ fn a_long_note_above_a_settings_row_does_not_block_its_click(cx: &mut TestAppCon
             "export default class Plugin {}\n",
         );
     });
+    cx.simulate_window_resize(window, size(px(1100.), px(560.)));
+    cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     click(cx, window, "plugin-details-dev.test.long-note");
     let note =
         aria_label(cx, window, "setting-row-dev.test.long-note-details-note").unwrap_or_default();
@@ -37,7 +40,6 @@ fn a_long_note_above_a_settings_row_does_not_block_its_click(cx: &mut TestAppCon
             window: 0,
         }),
     );
-    assert!(!shows(cx, window, "plugin-install-open"));
     run_op(
         cx,
         Op::Ui(UiOp::Click {

@@ -40,7 +40,7 @@ A program runs with your user access and your environment variables. Those varia
 
 The program also gets `kg`. With `kg` it can control threads and the window. It cannot answer an approval. Only you can approve a plugin install or more plugin powers. Only you can approve a request to delete a thread.
 
-For Claude Code, Codex, Cursor Agent, and Pi, kagan adds a short note about kagan. Claude Code and Codex also get the `kg` tools. Claude Code starts with `--disallowed-tools Task,Agent`. Codex starts with `--disable multi_agent` and `--disable multi_agent_v2`. Cursor Agent also gets the note as `.cursor/rules/kagan.mdc` in the thread folder. Pi gets the note on its system prompt. A file at `<data folder>/instructions.md` is added to that note. Claude Code, Codex, Kimi, OpenCode, Pi, and Cursor Agent get the composed skill folders in [Skills](skills.md#skills-from-bb). Turn this off in Settings → Agents.
+For Claude Code, Codex, Cursor Agent, and Pi, kagan adds a short note about kagan. Claude Code and Codex also get the `kg` tools. Claude Code starts with `--disallowed-tools Task,Agent`. Codex starts with `--disable multi_agent` and `--disable multi_agent_v2`. Cursor Agent also gets the note as `.cursor/rules/kagan.mdc` in the thread folder. Pi gets the note on its system prompt. A file at `<data folder>/instructions.md` is added to that note. Claude Code, Codex, Kimi, OpenCode, Pi, and Cursor Agent get the composed skill folders in [Skills](skills.md#skills-from-bb). Turn this off in Settings → General.
 
 ## Plugins
 

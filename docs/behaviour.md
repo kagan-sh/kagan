@@ -595,7 +595,7 @@ Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integrat
 
 ### `Set`
 
-- **Changes**: stores the value when the shape matches [person 2026-10-08]. `confirm-archive` is a boolean [person 2026-10-08], and so are `agent-integration`, `notify` [settings.rs] and `plugin-status` [decision 157]. `notify` set to `false` stops the system notification for a thread that needs you while that thread is not on screen. An unset `notify` counts as on [notify.rs]. `plugin-status` set to `false` hides every plugin item in the activity strip; an unset one counts as on, and a plugin can still be turned off in Installed [decision 157]. `update-check` is a boolean; an unset one counts as off, and on runs the automatic update check at launch and then daily [decision 113]. `terminal-font-size` is an integer from 9 to 24. `<window>.right-sidebar` is a boolean that says whether the right sidebar is open; an open window reads it when it opens, so a change applies the next time the window opens [decision 48]. `<window>.review-wrap` is a boolean that wraps long lines in the review. `<window>.left-width` and `<window>.right-width` are numbers of pixels. `review-viewed` is a map from a reviewed file's path to the revision marked as viewed.
+- **Changes**: stores the value when the shape matches [person 2026-10-08]. `confirm-archive` is a boolean [person 2026-10-08], and so are `agent-integration`, `notify` [settings.rs] and `plugin-status` [decision 157]. `agent-integration` set to `false` drops kagan's tools from claude (--mcp-config, --plugin-dir, --append-system-prompt-file, --disallowed-tools, and --session-id or --resume, so Start again does not resume the conversation), codex (--disable multi_agent, --disable multi_agent_v2, -c mcp_servers.kagan.*, and resume <id>), cursor-agent and agent (--plugin-dir, the workspace rule, and --new-session-id or --resume), and pi (--skill and --append-system-prompt). Every program still gets the KG_ variables and PATH with kg's folder first. `notify` set to `false` stops the system notification for a thread that needs you while that thread is not on screen. An unset `notify` counts as on [notify.rs]. `plugin-status` set to `false` hides every plugin item in the activity strip; an unset one counts as on, and a plugin can still be turned off in Installed [decision 157]. `update-check` is a boolean; an unset one counts as off, and on runs the automatic update check at launch and then daily [decision 113]. `terminal-font-size` is an integer from 9 to 24. `<window>.right-sidebar` is a boolean that says whether the right sidebar is open; an open window reads it when it opens, so a change applies the next time the window opens [decision 48]. `<window>.review-wrap` is a boolean that wraps long lines in the review. `<window>.left-width` and `<window>.right-width` are numbers of pixels. `review-viewed` is a map from a reviewed file's path to the revision marked as viewed.
 - **Refused when**: any other key — `invalid`, message `unknown preference <key>` [person 2026-10-08] [op/]. A wrong shape — `invalid` [person 2026-10-08] [op/].
 
 ## Config
@@ -627,6 +627,12 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 
 - **Allowed when**: always. The kagan mark's menu on the rail runs it, and the same menu runs `SettingsOp::Open` for Settings… [decision 108].
 - **Shows**: its own window with the app icon, kagan, the version with the short commit of the build, a tagline, the GitHub, Book, License and Acknowledgements links, and the copyright. A second About focuses the open window. Escape, Cmd+W, or a click in another window closes it [decision 99] [docs:look].
+
+### `SettingsOp::Open` and `SettingsOp::Plugins`
+
+- **Allowed when**: always.
+- **Changes**: `Open` shows Settings with the section it last showed, General on the first open. `Plugins` shows Settings with Installed selected, and Installed is where plugins are managed [decision 207]. Neither takes a section name; search finds any row [decision 207].
+- **Shows**: the settings list on the left and the chosen section on the right [decision 207].
 
 ### `Hide`, `HideOthers`, `ShowAll`
 

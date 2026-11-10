@@ -49,13 +49,13 @@ kg plugin install <name>
 - `kg plugin index list` shows your indexes. kagan searches the first index first.
 - `kg plugin index remove <address>` removes an index.
 - `kg plugin install <index>/<name>` installs from one index.
-- Settings → Plugins → Indexes does the same.
+- Settings → Installed → Indexes does the same.
 
 The install card shows the git address, the commit, and the index. It shows a caution for a local folder, or for an owner whose index you did not add. kagan saves the git address and the commit, not the name. A later change to the index does not change your plugin.
 
 ## Enable, disable, or remove
 
-Settings → Plugins has a switch for each plugin. A disabled plugin does not load.
+Settings → Installed has a switch for each plugin. A disabled plugin does not load.
 
 ```bash
 kg plugin list
@@ -70,7 +70,7 @@ A plugin id looks like `dev.kagan.hello`.
 
 A **tool** sits below the threads. A **page** replaces the center. A **right panel** is a tab in the right sidebar. Click the rail icon to open it, and click again, or **Close**, to return.
 
-A plugin can offer to draw the thread list, the review, or both. Nothing changes until you pick it in Settings → Appearance → Sidebar or Review.
+A plugin can offer to draw the thread list, the review, or both. Nothing changes until you pick it in Settings → Installed → Replace parts.
 
 ```bash
 kg plugin use threads <id>
@@ -80,7 +80,7 @@ kg plugin use threads kagan
 
 `kagan` is the built-in version. kagan always keeps the rail, New thread, Questions, and the review buttons. Only kagan sends your review comments to the agent.
 
-A plugin can put one short status line at the right of the [activity strip](window.md#activity-strip). A line with a command is a button that runs that command. Otherwise you cannot click it. Turn **Plugin status** off in Settings → Appearance to hide every line, or turn that plugin off in Installed. [Build a plugin](build-plugin.md#status-line) shows the manifest.
+A plugin can put one short status line at the right of the [activity strip](window.md#activity-strip). A line with a command is a button that runs that command. Otherwise you cannot click it. Turn **Plugin status** off in Settings → Installed to hide every line, or turn that plugin off in Installed. [Build a plugin](build-plugin.md#status-line) shows the manifest.
 
 A plugin can also add a theme. [Themes](themes.md#themes-from-plugins).
 

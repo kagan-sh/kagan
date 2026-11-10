@@ -393,6 +393,7 @@ fn the_thread_actions_items_are_named_and_activate_through_kg_ui(cx: &mut TestAp
 fn the_plugin_folder_field_reports_its_text_and_focus(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins(cx, false);
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     click(cx, window, "plugin-install-open");
     click(cx, window, "plugin-source");
     assert_eq!(focused_of(cx, window, "plugin-source"), Some(true));

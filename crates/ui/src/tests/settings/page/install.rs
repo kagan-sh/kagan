@@ -78,6 +78,7 @@ fn an_index_added_in_settings_finds_a_plugin_and_install_asks_for_approval(
         .to_string();
 
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     assert!(!shows(cx, window, "plugin-search"), "no index, no search");
     click(cx, window, "plugin-index");
     cx.simulate_input(window, &location);
@@ -166,5 +167,6 @@ pub(in crate::tests) fn keyboard_with_navigator(
     cx.simulate_window_resize(window, size(px(1400.), px(900.)));
     cx.run_until_parked();
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-keyboard");
     (window, data)
 }

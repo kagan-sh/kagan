@@ -4,7 +4,7 @@ The window ships with three themes: `fjord` (the default), `ember`, and `grey`. 
 
 ## Change the theme
 
-Open Settings → Appearance (Cmd+,). Click a theme card, then select System, Light, or Dark.
+Open Settings (Cmd+,) and choose Appearance. Click a theme card, then select System, Light, or Dark.
 
 ```bash
 kg theme get

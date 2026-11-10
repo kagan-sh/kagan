@@ -65,7 +65,7 @@ impl Kagan {
             },
             left_overlay_focus: cx.focus_handle().tab_stop(true),
             start_on_load: None,
-            settings: settings::SettingsState::default(),
+            settings: settings::SettingsState::new(window, cx),
             settling: false,
             columns,
             window: window.window_handle(),
@@ -131,9 +131,7 @@ impl Kagan {
         self.start.busy = start::FolderUse::of(self.compute_busy(cx));
         let approvals = Workspace::global(cx).read(cx).approvals().count();
         if self.in_settings() && approvals > self.settings.approvals {
-            self.settings
-                .scroll
-                .scroll_to_top_of_item(super::settings::QUESTIONS_ITEM);
+            self.settings.scroll.scroll_to_top_of_item(0);
         }
         self.settings.approvals = approvals;
         self.announce_questions(window, cx);

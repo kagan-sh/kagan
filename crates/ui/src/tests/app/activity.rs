@@ -570,6 +570,7 @@ fn the_plugin_status_preference_hides_and_shows_every_item(cx: &mut TestAppConte
     wait_until(cx, |cx| shows(cx, window, STATUS_ITEM));
 
     click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
     click(cx, window, "plugin-status");
     wait_until(cx, |cx| {
         crate::tests::settings::page::saved(cx, "plugin-status") == serde_json::json!(false)
