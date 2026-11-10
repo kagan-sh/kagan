@@ -103,7 +103,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Notify`
 
 - **Allowed when**: the thread exists [book:cli].
-- **Changes**: sets the thread's own notification level: `default` follows the global `notify`, `all` and `asks` replace it with that level, and `muted` posts nothing for this thread. A muted thread shows a muted mark in its sidebar row. It writes no event [decision 212].
+- **Changes**: sets the thread's own notification level: `default` follows the global `notify`, `all` and `asks` replace it with that level, and `muted` posts nothing for this thread. A muted thread shows a muted mark beside its title and in its sidebar row. It writes no event [decision 212].
 - **Refused when**: a missing thread — `not-found` [op/].
 
 ### `Rename`

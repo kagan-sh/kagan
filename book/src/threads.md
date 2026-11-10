@@ -98,7 +98,7 @@ kagan keeps a Personal folder until you delete its thread. kagan never removes a
 
 When a thread needs you and is not on screen, kagan can show a system notification with the thread title. Settings → General → Notifications picks which events post: **All**, **Only when it asks me**, or **Off**. Or run `kg preference set notify all|asks|off`.
 
-One thread can differ. Open the thread's menu (title bar or sidebar row), choose **Notifications**, then **Default**, **All**, **Only when it asks me**, or **Muted**. Muted threads show a small muted mark in the sidebar. `kg thread notify <id> default|all|asks|muted` does the same.
+One thread can differ. Open the thread's menu (title bar or sidebar row), choose **Notifications**, then **Default**, **All**, **Only when it asks me**, or **Muted**. Muted threads show a small muted mark beside the title and in the sidebar. `kg thread notify <id> default|all|asks|muted` does the same.
 
 Opening a thread clears its notification. `kg notify test` sends one test notification.
 
