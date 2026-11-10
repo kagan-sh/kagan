@@ -36,6 +36,7 @@ keymap: `kg keymap get`, `kg keymap set`, `kg keymap remove`.
 
 preference: `kg preference get`, `kg preference set`.
 notify: `kg notify test`.
+instructions: `kg instructions get`, `kg instructions set`, `kg instructions clear`. The agent rules, global or `--project`; see `kg guide customize`.
 
 ui: `kg ui snapshot`, `kg ui click`, `kg ui type`, `kg ui key`, `kg ui scroll`, `kg ui drag`, `kg ui drop`, `kg ui screenshot`.
 

@@ -35,7 +35,10 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     appearance.rows.extend(mode_group(cx).rows);
     appearance.rows.push(terminal_size(kagan));
     let mut out = vec![
-        within(general(agent, notify, confirm_archive), Category::General),
+        within(
+            agents(kagan, agent, notify, confirm_archive),
+            Category::General,
+        ),
         within(appearance, Category::Appearance),
     ];
     out.extend(
@@ -202,6 +205,20 @@ fn notify_row(level: NotifyLevel) -> Row {
             control.into_any_element(),
         )
     }
+}
+
+// The agent rules row sits in the Agents group: a second group in General would add a heading.
+fn agents(kagan: &Kagan, agent: bool, notify: NotifyLevel, confirm_archive: bool) -> Group {
+    let mut group = general(agent, notify, confirm_archive);
+    let mut rules = row(
+        "agent-rules",
+        "Agent rules",
+        "Text each agent is told when it starts. Projects add their own from the project menu.",
+        kagan.settings.rules.clone().into_any_element(),
+    );
+    rules.wide = true;
+    group.rows.push(rules);
+    group
 }
 
 fn plugin_status_row(on: bool) -> Row {

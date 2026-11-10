@@ -11,7 +11,7 @@ mod run;
 mod search;
 mod terminal;
 
-pub(crate) use agent::{note_with, read_instructions};
+pub(crate) use agent::note_with;
 
 pub(crate) use extra::Extras;
 pub(crate) use halt::{retire, stop};

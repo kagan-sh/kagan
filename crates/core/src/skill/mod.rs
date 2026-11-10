@@ -417,14 +417,9 @@ pub(crate) async fn tools(
     let (id, project_id) = thread.read_with(cx, |thread, _| {
         (thread.record.id.clone(), thread.record.project_id.clone())
     });
-    let catalog = catalog(this, Some(project_id), cx).await?;
+    let catalog = catalog(this, Some(project_id.clone()), cx).await?;
     let instruct = thread.read_with(cx, |thread, _| thread.instruct.clone());
-    let data_dir = this
-        .update(cx, |workspace, _| workspace.data_dir.clone())
-        .map_err(closed)?;
-    let instructions = cx
-        .background_spawn(async move { crate::thread::read_instructions(&data_dir) })
-        .await;
+    let instructions = crate::instructions::for_thread(this, &project_id, cx).await?;
     let note = crate::thread::note_with(&id.0, &instructions, instruct.as_deref().unwrap_or(""));
     let result =
         crate::dispatch::forward(this, crate::PluginRequest::Tools { thread_id: id }, cx).await?;

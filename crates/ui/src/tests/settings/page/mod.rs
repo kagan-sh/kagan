@@ -6,6 +6,7 @@ mod keys;
 mod layout;
 mod mode;
 mod plugins;
+mod rules;
 mod saves;
 mod sections;
 mod settings;
