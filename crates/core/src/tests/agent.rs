@@ -626,8 +626,6 @@ fn write_skill_as(root: &Path, folder: &str, name: &str, body: &str) {
 #[gpui_kit::test]
 async fn bb_skills_stay_out_of_the_plugin_tree(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
-    let bb = fixture.dir.path().join("bb");
-    write_skill(&bb.join("skills"), "bb-user", "user body");
     write_skill(
         &fixture.dir.path().join(".bb/skills"),
         "bb-project",
@@ -637,7 +635,6 @@ async fn bb_skills_stay_out_of_the_plugin_tree(cx: &mut TestAppContext) {
     let (_id, _reap) = started(&fixture, &claude_line(&run), cx).await;
     let (args, _env) = ran(&run);
     let skills = PathBuf::from(&args[3]).join("skills");
-    assert!(!skills.join("bb-user").exists());
     assert!(!skills.join("bb-project").exists());
     assert!(skills.join("kg-cli/SKILL.md").exists());
 }

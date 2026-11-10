@@ -3,6 +3,9 @@ use gpui_kit::TestAppContext;
 use kg_domain::{Op, OpError, OpResult, Skill, SkillOp};
 use std::path::Path;
 
+#[cfg(unix)]
+use super::install_plugin;
+
 fn write_skill(root: &Path, name: &str) {
     let folder = root.join(name);
     std::fs::create_dir_all(&folder).unwrap();
@@ -30,23 +33,22 @@ async fn listed(fixture: &Fixture, cx: &mut TestAppContext) -> Vec<Skill> {
 #[gpui_kit::test]
 async fn bb_folders_are_not_read(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
-    write_skill(&fixture.dir.path().join("bb/skills"), "bb-only");
     write_skill(&fixture.dir.path().join(".bb/skills"), "bb-project");
     let skills = listed(&fixture, cx).await;
     assert!(
         skills.iter().all(|skill| !skill.name.starts_with("bb-")),
         "{skills:?}"
     );
-    let text = "---\nname: bb-only\ndescription: Edited.\n---\n\nNew body.\n";
+    let text = "---\nname: bb-project\ndescription: Edited.\n---\n\nNew body.\n";
     assert!(matches!(
-        update(&fixture, "bb-only", text, cx).await,
+        update(&fixture, "bb-project", text, cx).await,
         Err(OpError::NotFound(_))
     ));
     assert!(
         fixture
             .dir
             .path()
-            .join("bb/skills/bb-only/SKILL.md")
+            .join(".bb/skills/bb-project/SKILL.md")
             .exists()
     );
 }
@@ -82,13 +84,43 @@ async fn update_replaces_a_user_skill_text(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-async fn update_refuses_a_bundled_kg_skill(cx: &mut TestAppContext) {
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn update_refuses_a_plugin_skill(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
-    let text = "---\nname: kg-cli\ndescription: Edited.\n---\n\nNew body.\n";
+    install_plugin(fixture.dir.path(), true);
+    let text = "---\nname: demo\ndescription: Edited.\n---\n\nNew body.\n";
     assert!(matches!(
-        update(&fixture, "kg-cli", text, cx).await,
+        update(&fixture, "demo", text, cx).await,
         Err(OpError::Invalid(_))
     ));
+    let written =
+        std::fs::read_to_string(fixture.dir.path().join("demo-plugin/skills/demo/SKILL.md"))
+            .unwrap();
+    assert!(written.contains("A demo skill."), "{written}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn remove_refuses_a_plugin_skill(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    install_plugin(fixture.dir.path(), true);
+    let removed = op(
+        Op::Skill(SkillOp::Remove {
+            name: "demo".into(),
+            project_id: Some(fixture.project.clone()),
+        }),
+        cx,
+    )
+    .await;
+    assert!(matches!(removed, Err(OpError::Invalid(_))));
+    assert!(
+        fixture
+            .dir
+            .path()
+            .join("demo-plugin/skills/demo/SKILL.md")
+            .exists()
+    );
 }
 
 #[gpui_kit::test]
@@ -108,11 +140,21 @@ async fn update_refuses_text_with_another_name(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-async fn open_is_accepted_without_a_window(cx: &mut TestAppContext) {
+async fn open_asks_the_window_for_the_skills_page(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
+    let asked = std::rc::Rc::new(std::cell::Cell::new(0));
+    let _asks = cx.update(|cx| {
+        let asked = asked.clone();
+        cx.subscribe(&fixture.workspace, move |_, event, _| {
+            if matches!(event, crate::WorkspaceEvent::Skills) {
+                asked.set(asked.get() + 1);
+            }
+        })
+    });
     assert!(matches!(
         op(Op::Skill(SkillOp::Open), cx).await,
         Ok(OpResult::Done)
     ));
-    let _ = fixture;
+    cx.run_until_parked();
+    assert_eq!(asked.get(), 1);
 }
