@@ -96,6 +96,6 @@ kagan keeps a Personal folder until you delete its thread. kagan never removes a
 
 ## Notifications
 
-When a thread needs you and is not on screen, kagan shows a system notification with the thread title. Turn them off with the Notifications switch in Settings → Agents, or `kg preference set notify false`.
+When a thread needs you and is not on screen, kagan shows a system notification with the thread title. Turn them off with the Notifications switch in Settings → General, or `kg preference set notify false`.
 
 [`kg` command](cli.md) lists the thread commands and their flags.
