@@ -78,8 +78,19 @@ fn a_plugin_setting_saves_from_its_page(cx: &mut TestAppContext) {
     click(cx, window, "plugin-dev.test.prefs/sounds");
     assert_eq!(plugin_config(cx, "sounds"), json!(false));
 
+    let select = "setting-select-dev.test.prefs/density";
+    assert_eq!(label(cx, window, select), "comfortable");
+    assert!(
+        !shows(cx, window, "option-dev.test.prefs/density/compact"),
+        "the choices stay in the menu until it opens"
+    );
+    click(cx, window, select);
+    wait_until(cx, |cx| {
+        shows(cx, window, "option-dev.test.prefs/density/compact")
+    });
     click(cx, window, "option-dev.test.prefs/density/compact");
     assert_eq!(plugin_config(cx, "density"), json!("compact"));
+    wait_until(cx, |cx| label(cx, window, select) == "compact");
 }
 
 #[gpui_kit::test]

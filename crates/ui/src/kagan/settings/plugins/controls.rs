@@ -1,6 +1,6 @@
 use crate::theme::TypeScale as _;
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::button::Button;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::tooltip::Tooltip;
@@ -310,52 +310,82 @@ pub(super) fn select_control(
     value: &Value,
 ) -> AnyElement {
     let current = value.as_str().unwrap_or_default().to_owned();
-    h_flex()
-        .w_full()
-        .min_w_0()
-        .gap_1()
-        .flex_wrap()
-        .justify_end()
-        .children(options.iter().map(|option| {
-            let option_id = format!("option-{scope}/{option}");
-            let (plugin, setting_key, pick, scope, weak) = (
-                id.clone(),
-                key.to_owned(),
-                option.clone(),
-                scope.to_owned(),
-                weak.clone(),
-            );
-            let button = Button::new(ElementId::Name(
-                format!("button-option-{scope}/{option}").into(),
-            ))
-            .small()
-            .label(option.clone())
+    let shown = options
+        .iter()
+        .find(|option| *option == &current)
+        .cloned()
+        .unwrap_or_else(|| current.clone());
+    let options = options.to_vec();
+    let (plugin, setting_key, scope) = (id.clone(), key.to_owned(), scope.to_owned());
+    let weak = weak.clone();
+    control(
+        format!("setting-select-{scope}"),
+        Facts::button(shown.clone()),
+        Button::new(ElementId::Name(
+            format!("button-setting-select-{scope}").into(),
+        ))
+        .small()
+        .outline()
+        .label(shown)
+        .dropdown_menu(move |menu, _, _| {
+            select_menu(
+                menu,
+                &weak,
+                &plugin,
+                &setting_key,
+                &scope,
+                &current,
+                &options,
+            )
+        }),
+    )
+    .into_any_element()
+}
+
+fn select_menu(
+    menu: PopupMenu,
+    weak: &WeakEntity<Kagan>,
+    plugin: &PluginId,
+    key: &str,
+    scope: &str,
+    current: &str,
+    options: &[String],
+) -> PopupMenu {
+    options.iter().fold(menu.scrollable(true), |menu, option| {
+        let selected = option == current;
+        let item_id = format!("option-{scope}/{option}");
+        let label = option.clone();
+        let (weak, scope, plugin, key, pick) = (
+            weak.clone(),
+            scope.to_owned(),
+            plugin.clone(),
+            key.to_owned(),
+            option.clone(),
+        );
+        menu.item(
+            PopupMenuItem::element(move |_, _| {
+                div()
+                    .id(ElementId::Name(item_id.clone().into()))
+                    .ui_observe_as(Facts {
+                        role: Role::MenuItem,
+                        selected: Some(selected),
+                        ..Facts::button(label.clone())
+                    })
+                    .child(label.clone())
+            })
+            .checked(selected)
             .on_click(move |_, _, cx| {
                 save_value(
                     &weak,
                     scope.clone(),
                     plugin.clone(),
-                    setting_key.clone(),
-                    Change::Set(json!(pick)),
+                    key.clone(),
+                    Change::Set(json!(pick.clone())),
                     cx,
                 );
-            });
-            let button = if *option == current {
-                button.primary()
-            } else {
-                button.outline()
-            };
-            div().flex_shrink_0().child(control(
-                option_id,
-                Facts {
-                    role: Role::RadioButton,
-                    selected: Some(*option == current),
-                    ..Facts::button(option.clone())
-                },
-                button,
-            ))
-        }))
-        .into_any_element()
+            }),
+        )
+    })
 }
 
 pub(super) fn folder_control(
