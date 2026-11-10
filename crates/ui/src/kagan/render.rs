@@ -129,6 +129,9 @@ impl Render for Kagan {
                 this.dismiss_overlay(screen::Side::Left, window, cx);
             }))
             .on_action(cx.listener(Self::toggle_settings))
+            .on_action(cx.listener(|_, _: &super::OpenSkills, _, cx| {
+                super::dispatch::logged(kg_domain::Op::Skill(kg_domain::SkillOp::Open), cx);
+            }))
             .on_action(cx.listener(Self::use_project_folder))
             .on_action(cx.listener(Self::use_worktree_folder))
             .on_action(cx.listener(Self::retry_branches_action))

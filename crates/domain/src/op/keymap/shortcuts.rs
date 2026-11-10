@@ -103,6 +103,7 @@ pub const SHORTCUTS: &[Shortcut] = &[
     bind("Thread8", "kagan::Thread8", "secondary-8", "Thread 8", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Threads, ShortcutGroup::Window)),
     bind("Thread9", "kagan::Thread9", "secondary-9", "Thread 9", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Threads, ShortcutGroup::Window)),
     bind("OpenSettings", "kagan::OpenSettings", "secondary-,", "Settings", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Settings, ShortcutGroup::Window)),
+    bind("OpenSkills", "kagan::OpenSkills", "secondary-shift-k", "Skills", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Window, ShortcutGroup::Window)),
     bind("UseProjectFolder", "kagan::UseProjectFolder", "secondary-alt-p", "Project folder", (ShortcutScope::Window, ShortcutWhen::NewThread, CommandGroup::NewThread, ShortcutGroup::NewThread)),
     bind("UseWorktreeFolder", "kagan::UseWorktreeFolder", "secondary-alt-w", "New worktree", (ShortcutScope::Window, ShortcutWhen::NewThread, CommandGroup::NewThread, ShortcutGroup::NewThread)),
     bind("RetryBranches", "kagan::RetryBranches", "secondary-alt-r", "Retry branches", (ShortcutScope::Window, ShortcutWhen::NewThread, CommandGroup::NewThread, ShortcutGroup::NewThread)),

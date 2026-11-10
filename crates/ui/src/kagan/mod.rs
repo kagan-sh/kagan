@@ -110,6 +110,7 @@ actions!(
         DismissRightOverlay,
         DismissLeftOverlay,
         OpenSettings,
+        OpenSkills,
         UseProjectFolder,
         UseWorktreeFolder,
         RetryBranches,

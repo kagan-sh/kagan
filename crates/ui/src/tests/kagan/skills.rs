@@ -1,7 +1,7 @@
 use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, TestAppContext};
 
 use crate::kagan::Kagan;
-use crate::tests::kagan::{click, open, shows};
+use crate::tests::kagan::{chord, click, open, shows};
 
 fn show_skills(cx: &mut TestAppContext, kagan: &Entity<Kagan>, window: AnyWindowHandle) {
     cx.update_window(window, |_, window, cx| {
@@ -25,6 +25,14 @@ fn write_user_skill(data: &std::path::Path, name: &str) {
 fn the_skills_page_lists_the_built_in_skills(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);
     show_skills(cx, &kagan, window);
+    assert!(shows(cx, window, "skill-row-kg-cli"));
+}
+
+#[gpui_kit::test]
+fn the_skills_shortcut_opens_the_page(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    cx.simulate_keystrokes(window, &chord("OpenSkills"));
+    cx.run_until_parked();
     assert!(shows(cx, window, "skill-row-kg-cli"));
 }
 
