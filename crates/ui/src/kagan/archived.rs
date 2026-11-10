@@ -331,3 +331,7 @@ fn removal_line(
         ))
         .into_any_element()
 }
+
+#[cfg(test)]
+#[path = "archived_test.rs"]
+mod tests;

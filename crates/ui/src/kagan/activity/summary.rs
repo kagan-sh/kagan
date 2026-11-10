@@ -47,7 +47,7 @@ impl Kagan {
             .flex_none()
             .size(px(DOT))
             .rounded_full()
-            .bg(if working > 0 {
+            .bg(if is_working(working) {
                 Tone::Busy.color(cx)
             } else {
                 cx.theme().muted_foreground
@@ -189,3 +189,11 @@ fn update_part(focus: &FocusHandle, cx: &Context<Kagan>) -> Option<AnyElement> {
         .into_any_element()
     })
 }
+
+fn is_working(working: usize) -> bool {
+    working > 0
+}
+
+#[cfg(test)]
+#[path = "summary_test.rs"]
+mod tests;
