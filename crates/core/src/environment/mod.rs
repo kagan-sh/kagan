@@ -422,7 +422,7 @@ fn provision(
                 .branch
                 .clone()
                 .ok_or_else(|| OpError::Invalid("worktree has no branch".into()))?;
-            if !crate::host::git::valid_branch(&requested) {
+            if !kg_domain::valid_branch(&requested) {
                 return Err(
                     OpError::Invalid(format!("branch name {requested} is not allowed")).into(),
                 );
@@ -441,7 +441,7 @@ fn provision(
                         ],
                     )
                     .is_ok();
-                if !crate::host::git::valid_branch(base) || !known {
+                if !kg_domain::valid_branch(base) || !known {
                     return Err(OpError::Invalid(format!(
                         "base {base} is not a branch or commit in this repository"
                     ))
@@ -526,7 +526,7 @@ fn unique_branch(project: &Path, name: &str) -> Result<String> {
     }
     for suffix in 2..100 {
         let candidate = format!("{name}-{suffix}");
-        if crate::host::git::valid_branch(&candidate) && !names.contains(&candidate) {
+        if kg_domain::valid_branch(&candidate) && !names.contains(&candidate) {
             return Ok(candidate);
         }
     }

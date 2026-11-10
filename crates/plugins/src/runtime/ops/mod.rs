@@ -4,7 +4,7 @@ use gpui_kit::{AsyncApp, Entity};
 use kg_core::{Requester, Workspace};
 use kg_domain::{
     Op, OpError, OpResult, Plugin, PluginId, PluginOp, PreferenceOp, ProjectId, ProjectOp, Slot,
-    SlotChoice, ThreadId, ThreadOp,
+    SlotChoice, ThreadId, ThreadOp, UpdateTarget,
 };
 use serde_json::Value;
 
@@ -16,7 +16,7 @@ use crate::{Discovered, PluginHost, Result};
 use approve::{choose, options};
 use config::config;
 use develop::{check, dev, disable, enable, logs, new, reload_enabled, remove, share, types};
-use install::{install, update};
+use install::{install, outdated, update, update_all};
 
 mod approve;
 mod config;
@@ -103,7 +103,15 @@ pub(crate) async fn run(
             plugin,
             thread_id,
         } => install(host, source, plugin, thread_id, requester, cx).await,
-        PluginOp::Update { id, thread_id } => update(host, &id, thread_id, requester, cx).await,
+        PluginOp::Update {
+            target: UpdateTarget::One(id),
+            thread_id,
+        } => update(host, &id, thread_id, requester, cx).await,
+        PluginOp::Update {
+            target: UpdateTarget::All,
+            ..
+        } => update_all(host, cx).await,
+        PluginOp::Outdated => outdated(host, cx).await,
         PluginOp::Index { op } => crate::index::run(host, op, cx).await,
         PluginOp::Search { text } => crate::index::search(host, text, cx).await,
         PluginOp::Enable { id } => enable(host, id, cx).await,

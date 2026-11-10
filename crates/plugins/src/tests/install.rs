@@ -4,7 +4,9 @@ use std::time::Duration;
 
 use gpui_kit::TestAppContext;
 use kg_core::Workspace;
-use kg_domain::{ConfigOp, Op, OpError, OpResult, Plugin, PluginId, PluginOp, ThreadOp};
+use kg_domain::{
+    ConfigOp, Op, OpError, OpResult, OutdatedPlugin, Plugin, PluginId, PluginOp, ThreadOp,
+};
 use serde_json::json;
 
 use crate::host::Hold;
@@ -260,7 +262,7 @@ fn git_installs_lock_to_a_commit_and_updates_ask_only_for_new_powers(cx: &mut Te
     );
 
     let update = |thread_id| PluginOp::Update {
-        id: PluginId(ID.into()),
+        target: kg_domain::UpdateTarget::One(PluginId(ID.into())),
         thread_id,
     };
     assert_eq!(
@@ -333,7 +335,7 @@ fn powers_that_grow_on_disk_are_not_loaded_until_approved(cx: &mut TestAppContex
     let updating = plugin_op(
         cx,
         PluginOp::Update {
-            id: id(),
+            target: kg_domain::UpdateTarget::One(id()),
             thread_id: Some(thread()),
         },
     );
@@ -425,7 +427,7 @@ fn an_update_that_adds_a_read_folder_asks_again(cx: &mut TestAppContext) {
     let updating = plugin_op(
         cx,
         PluginOp::Update {
-            id: id(),
+            target: kg_domain::UpdateTarget::One(id()),
             thread_id: Some(thread()),
         },
     );
@@ -615,7 +617,7 @@ fn a_failed_update_leaves_a_running_plugin_active(cx: &mut TestAppContext) {
     let error = run(
         cx,
         Op::Plugin(PluginOp::Update {
-            id: PluginId(ID.into()),
+            target: kg_domain::UpdateTarget::One(PluginId(ID.into())),
             thread_id: None,
         }),
     )
@@ -632,7 +634,7 @@ fn a_folder_save_queued_across_update_does_not_persist(cx: &mut TestAppContext) 
     let updating = plugin_op(
         cx,
         PluginOp::Update {
-            id: PluginId(ID.into()),
+            target: kg_domain::UpdateTarget::One(PluginId(ID.into())),
             thread_id: None,
         },
     );
@@ -827,7 +829,7 @@ fn a_folder_approved_while_an_update_waits_is_kept(cx: &mut TestAppContext) {
     let updating = plugin_op(
         cx,
         PluginOp::Update {
-            id: PluginId(ID.into()),
+            target: kg_domain::UpdateTarget::One(PluginId(ID.into())),
             thread_id: Some(thread()),
         },
     );
@@ -1223,4 +1225,216 @@ fn a_failed_store_delete_keeps_its_id_and_says_why(cx: &mut TestAppContext) {
         ));
     assert!(removal.removed.is_empty(), "a failed delete keeps store.id");
     assert_eq!(removal.warnings, vec!["the store is locked".to_owned()]);
+}
+
+#[gpui_kit::test]
+fn outdated_lists_a_git_plugin_behind_its_ref_and_update_all_moves_it(cx: &mut TestAppContext) {
+    let repo = tempfile::tempdir().unwrap();
+    git(repo.path(), &["init", "--quiet", "--initial-branch=main"]);
+    write_plugin(&repo.path().join("echo"), &sample_manifest());
+    git(repo.path(), &["add", "."]);
+    git(repo.path(), &["commit", "--quiet", "-m", "one"]);
+    let first = git(repo.path(), &["rev-parse", "HEAD"]);
+    let source = format!("git:{}@main", repo.path().display());
+    open(cx, &[]);
+
+    let installing = plugin_op(cx, install(source, Some(thread()), Some("echo")));
+    answer(cx, "approve");
+    cx.foreground_executor().block_test(installing).unwrap();
+    assert_eq!(
+        run(cx, Op::Plugin(PluginOp::Outdated)).unwrap(),
+        OpResult::Outdated {
+            plugins: vec![],
+            failed: vec![]
+        },
+        "a plugin on its newest commit is not behind"
+    );
+
+    let mut newer = sample_manifest();
+    newer["version"] = json!("1.1.0");
+    write_plugin(&repo.path().join("echo"), &newer);
+    git(repo.path(), &["commit", "--quiet", "-am", "two"]);
+    let second = git(repo.path(), &["rev-parse", "HEAD"]);
+    assert_eq!(
+        run(cx, Op::Plugin(PluginOp::Outdated)).unwrap(),
+        OpResult::Outdated {
+            plugins: vec![OutdatedPlugin {
+                id: PluginId(ID.into()),
+                name: "Echo".into(),
+                current: first.clone(),
+                latest: second.clone(),
+            }],
+            failed: vec![]
+        }
+    );
+    assert_eq!(records(cx)[0].commit.as_deref(), Some(first.as_str()));
+
+    assert_eq!(
+        run(
+            cx,
+            Op::Plugin(PluginOp::Update {
+                target: kg_domain::UpdateTarget::All,
+                thread_id: None,
+            })
+        )
+        .unwrap(),
+        OpResult::Updated {
+            updated: vec![PluginId(ID.into())],
+            failed: vec![],
+            needs_approval: vec![],
+        }
+    );
+    assert_eq!(records(cx)[0].commit.as_deref(), Some(second.as_str()));
+}
+
+#[gpui_kit::test]
+fn a_plugin_pinned_to_a_commit_is_not_checked(cx: &mut TestAppContext) {
+    let repo = tempfile::tempdir().unwrap();
+    git(repo.path(), &["init", "--quiet", "--initial-branch=main"]);
+    write_plugin(&repo.path().join("echo"), &sample_manifest());
+    git(repo.path(), &["add", "."]);
+    git(repo.path(), &["commit", "--quiet", "-m", "one"]);
+    let first = git(repo.path(), &["rev-parse", "HEAD"]);
+    let source = format!("git:{}@{first}", repo.path().display());
+    open(cx, &[]);
+
+    let installing = plugin_op(cx, install(source, Some(thread()), Some("echo")));
+    answer(cx, "approve");
+    cx.foreground_executor().block_test(installing).unwrap();
+    let mut newer = sample_manifest();
+    newer["version"] = json!("1.1.0");
+    write_plugin(&repo.path().join("echo"), &newer);
+    git(repo.path(), &["commit", "--quiet", "-am", "two"]);
+    assert_eq!(
+        run(cx, Op::Plugin(PluginOp::Outdated)).unwrap(),
+        OpResult::Outdated {
+            plugins: vec![],
+            failed: vec![]
+        }
+    );
+}
+
+#[gpui_kit::test]
+fn outdated_checks_a_branch_whose_name_looks_like_a_hash(cx: &mut TestAppContext) {
+    let repo = tempfile::tempdir().unwrap();
+    git(
+        repo.path(),
+        &["init", "--quiet", "--initial-branch=cafe123"],
+    );
+    write_plugin(&repo.path().join("echo"), &sample_manifest());
+    git(repo.path(), &["add", "."]);
+    git(repo.path(), &["commit", "--quiet", "-m", "one"]);
+    let source = format!("git:{}@cafe123", repo.path().display());
+    open(cx, &[]);
+    let installing = plugin_op(cx, install(source, Some(thread()), Some("echo")));
+    answer(cx, "approve");
+    cx.foreground_executor().block_test(installing).unwrap();
+
+    let mut newer = sample_manifest();
+    newer["version"] = json!("1.1.0");
+    write_plugin(&repo.path().join("echo"), &newer);
+    git(repo.path(), &["commit", "--quiet", "-am", "two"]);
+    let second = git(repo.path(), &["rev-parse", "HEAD"]);
+    let OpResult::Outdated { plugins, failed } = run(cx, Op::Plugin(PluginOp::Outdated)).unwrap()
+    else {
+        panic!("outdated")
+    };
+    assert!(failed.is_empty(), "{failed:?}");
+    assert_eq!(plugins.len(), 1, "a branch named like a hash was skipped");
+    assert_eq!(plugins[0].latest, second);
+}
+
+#[gpui_kit::test]
+fn an_annotated_tag_pin_is_not_behind(cx: &mut TestAppContext) {
+    let repo = tempfile::tempdir().unwrap();
+    git(repo.path(), &["init", "--quiet", "--initial-branch=main"]);
+    write_plugin(&repo.path().join("echo"), &sample_manifest());
+    git(repo.path(), &["add", "."]);
+    git(repo.path(), &["commit", "--quiet", "-m", "one"]);
+    git(repo.path(), &["tag", "-a", "v1", "-m", "release"]);
+    let source = format!("git:{}@v1", repo.path().display());
+    open(cx, &[]);
+    let installing = plugin_op(cx, install(source, Some(thread()), Some("echo")));
+    answer(cx, "approve");
+    cx.foreground_executor().block_test(installing).unwrap();
+
+    let mut newer = sample_manifest();
+    newer["version"] = json!("1.1.0");
+    write_plugin(&repo.path().join("echo"), &newer);
+    git(repo.path(), &["commit", "--quiet", "-am", "two"]);
+    assert_eq!(
+        run(cx, Op::Plugin(PluginOp::Outdated)).unwrap(),
+        OpResult::Outdated {
+            plugins: vec![],
+            failed: vec![]
+        },
+        "the tag still names the first commit, so nothing is behind"
+    );
+}
+
+#[gpui_kit::test]
+fn a_plugin_whose_remote_is_gone_is_reported_not_hidden(cx: &mut TestAppContext) {
+    let repo = tempfile::tempdir().unwrap();
+    git(repo.path(), &["init", "--quiet", "--initial-branch=main"]);
+    write_plugin(&repo.path().join("echo"), &sample_manifest());
+    git(repo.path(), &["add", "."]);
+    git(repo.path(), &["commit", "--quiet", "-m", "one"]);
+    let source = format!("git:{}@main", repo.path().display());
+    open(cx, &[]);
+    let installing = plugin_op(cx, install(source, Some(thread()), Some("echo")));
+    answer(cx, "approve");
+    cx.foreground_executor().block_test(installing).unwrap();
+    // Move the repo away instead of deleting it: git's read-only object files do not delete on Windows.
+    let elsewhere = tempfile::tempdir().unwrap();
+    let moved = elsewhere.path().join("moved");
+    std::fs::rename(repo.path(), &moved).unwrap();
+    assert!(!repo.path().exists());
+    let OpResult::Outdated { plugins, failed } = run(cx, Op::Plugin(PluginOp::Outdated)).unwrap()
+    else {
+        panic!("outdated")
+    };
+    assert!(plugins.is_empty());
+    assert_eq!(
+        failed.len(),
+        1,
+        "a gone remote was not reported: {failed:?}"
+    );
+    assert!(failed[0].starts_with(ID), "{failed:?}");
+}
+
+#[gpui_kit::test]
+fn update_all_reports_a_plugin_that_needs_approval_and_leaves_it(cx: &mut TestAppContext) {
+    let repo = tempfile::tempdir().unwrap();
+    git(repo.path(), &["init", "--quiet", "--initial-branch=main"]);
+    write_plugin(&repo.path().join("echo"), &sample_manifest());
+    git(repo.path(), &["add", "."]);
+    git(repo.path(), &["commit", "--quiet", "-m", "one"]);
+    let first = git(repo.path(), &["rev-parse", "HEAD"]);
+    let source = format!("git:{}@main", repo.path().display());
+    open(cx, &[]);
+    let installing = plugin_op(cx, install(source, Some(thread()), Some("echo")));
+    answer(cx, "approve");
+    cx.foreground_executor().block_test(installing).unwrap();
+
+    let mut grown = sample_manifest();
+    grown["version"] = json!("1.1.0");
+    grown["powers"]["run"] = json!([{ "program": "gh" }]);
+    write_plugin(&repo.path().join("echo"), &grown);
+    git(repo.path(), &["commit", "--quiet", "-am", "two"]);
+    assert_eq!(
+        run(
+            cx,
+            Op::Plugin(PluginOp::Update {
+                target: kg_domain::UpdateTarget::All,
+                thread_id: None,
+            })
+        )
+        .unwrap(),
+        OpResult::Updated {
+            updated: vec![],
+            failed: vec![],
+            needs_approval: vec![PluginId(ID.into())],
+        }
+    );
+    assert_eq!(records(cx)[0].commit.as_deref(), Some(first.as_str()));
 }

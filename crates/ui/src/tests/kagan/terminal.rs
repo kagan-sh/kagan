@@ -490,3 +490,102 @@ pub(in crate::tests) fn split_command(left: &str, right: &str) -> String {
         format!("echo {left}''{right}")
     }
 }
+
+#[gpui_kit::test]
+fn copy_on_select_copies_a_drag_only_while_the_switch_is_on(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    cx.simulate_input(window, &split_command("pick", "ed"));
+    cx.simulate_keystrokes(window, "enter");
+    wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
+    cx.update(|cx| cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("before".into())));
+
+    let drag = |cx: &mut TestAppContext| {
+        let (row, _) = shown_row(cx, &kagan, "picked");
+        let start = cell_point_at(cx, window, &kagan, row, 0, 0.3);
+        press(cx, window, start, 1, Modifiers::default());
+        let middle = cell_point(cx, window, &kagan, row, 2);
+        drag_to(cx, window, middle);
+        let end = cell_point_at(cx, window, &kagan, row, 4, 0.8);
+        release(cx, window, end, 1, Modifiers::default());
+    };
+    let clipboard = |cx: &mut TestAppContext| {
+        cx.update(|cx| cx.read_from_clipboard())
+            .and_then(|item| item.text())
+    };
+
+    drag(cx);
+    wait_until(cx, |cx| selection(cx, &kagan).len() == 1);
+    cx.run_until_parked();
+    assert_eq!(
+        clipboard(cx).as_deref(),
+        Some("before"),
+        "the switch is off"
+    );
+
+    let set = Op::Preference(kg_domain::PreferenceOp::Set {
+        key: kg_domain::prefs::TERMINAL_COPY_ON_SELECT.into(),
+        value: serde_json::json!(true),
+    });
+    let task = cx.update(|cx| kg_core::Workspace::dispatch(set, cx));
+    cx.foreground_executor().block_test(task).unwrap();
+    cx.run_until_parked();
+    drag(cx);
+    wait_until(cx, |cx| clipboard(cx).as_deref() == Some("picke"));
+}
+
+#[gpui_kit::test]
+fn a_plain_click_with_copy_on_leaves_the_clipboard_alone(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    cx.simulate_input(window, &split_command("pick", "ed"));
+    cx.simulate_keystrokes(window, "enter");
+    wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
+    let set = Op::Preference(kg_domain::PreferenceOp::Set {
+        key: kg_domain::prefs::TERMINAL_COPY_ON_SELECT.into(),
+        value: serde_json::json!(true),
+    });
+    let task = cx.update(|cx| Workspace::dispatch(set, cx));
+    cx.foreground_executor().block_test(task).unwrap();
+    cx.update(|cx| cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("before".into())));
+
+    let (row, _) = shown_row(cx, &kagan, "picked");
+    let at = cell_point(cx, window, &kagan, row, 2);
+    press(cx, window, at, 1, Modifiers::default());
+    release(cx, window, at, 1, Modifiers::default());
+    cx.run_until_parked();
+    let clipboard = cx
+        .update(|cx| cx.read_from_clipboard())
+        .and_then(|item| item.text());
+    assert_eq!(clipboard.as_deref(), Some("before"), "a plain click copied");
+}
+
+#[gpui_kit::test]
+fn a_double_click_with_copy_on_copies_the_word(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    cx.simulate_input(window, &split_command("pick", "ed"));
+    cx.simulate_keystrokes(window, "enter");
+    wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
+    let set = Op::Preference(kg_domain::PreferenceOp::Set {
+        key: kg_domain::prefs::TERMINAL_COPY_ON_SELECT.into(),
+        value: serde_json::json!(true),
+    });
+    let task = cx.update(|cx| Workspace::dispatch(set, cx));
+    cx.foreground_executor().block_test(task).unwrap();
+    cx.update(|cx| cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("before".into())));
+    let (row, _) = shown_row(cx, &kagan, "picked");
+    let at = cell_point(cx, window, &kagan, row, 2);
+    press(cx, window, at, 1, Modifiers::default());
+    release(cx, window, at, 1, Modifiers::default());
+    press(cx, window, at, 2, Modifiers::default());
+    release(cx, window, at, 2, Modifiers::default());
+    wait_until(cx, |cx| {
+        cx.update(|cx| cx.read_from_clipboard())
+            .and_then(|item| item.text())
+            .is_some_and(|text| text == "picked")
+    });
+}

@@ -50,6 +50,7 @@ pub(crate) fn worktree_branch(
     environment: &kg_domain::EnvironmentSpec,
     title: &str,
     thread_id: &ThreadId,
+    prefix: &str,
 ) -> Result<Option<String>> {
     let requested = match environment {
         kg_domain::EnvironmentSpec::Worktree { branch, .. } => branch.as_deref(),
@@ -64,12 +65,12 @@ pub(crate) fn worktree_branch(
         let slug = kg_domain::branch_slug(title);
         if slug.is_empty() {
             let suffix = thread_id.0.strip_prefix("thr_").unwrap_or(&thread_id.0);
-            format!("thread-{suffix}")
+            format!("{prefix}thread-{suffix}")
         } else {
-            slug
+            format!("{prefix}{slug}")
         }
     };
-    if crate::host::git::valid_branch(&name) {
+    if kg_domain::valid_branch(&name) {
         Ok(Some(name))
     } else {
         Err(OpError::Invalid(format!(
@@ -120,7 +121,14 @@ pub(crate) async fn prepare(
         }
         clean_title(&program).unwrap_or_else(|_| "Thread".into())
     };
-    let branch = worktree_branch(&run.environment, &title, &thread_id)?;
+    let prefix = database
+        .call(|store| store.setting(kg_domain::prefs::BRANCH_PREFIX))
+        .await?;
+    let prefix = prefix
+        .as_ref()
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    let branch = worktree_branch(&run.environment, &title, &thread_id, prefix)?;
     let environment =
         crate::environment::prepare(this, &project, run.environment, branch, &title, cx).await?;
     Ok(PreparedRun {
@@ -223,4 +231,54 @@ fn created_with(notices: Vec<String>) -> Vec<EventKind> {
         text,
     }));
     kinds
+}
+
+#[cfg(test)]
+mod tests {
+    use kg_domain::{EnvironmentSpec, ProjectBranch, ThreadId};
+
+    use super::worktree_branch;
+
+    fn thread() -> ThreadId {
+        ThreadId("thr_abc123".into())
+    }
+
+    #[test]
+    fn kagan_named_branches_get_the_prefix() {
+        let worktree = EnvironmentSpec::Worktree {
+            base_branch: None,
+            branch: None,
+        };
+        let new_on_project = EnvironmentSpec::ProjectOn {
+            branch: ProjectBranch::New {
+                base: "main".into(),
+            },
+        };
+        for spec in [&worktree, &new_on_project] {
+            let branch = worktree_branch(spec, "Fix login", &thread(), "bb/").unwrap();
+            assert_eq!(branch.as_deref(), Some("bb/fix-login"));
+        }
+        let empty_title = worktree_branch(&worktree, "!!", &thread(), "bb/").unwrap();
+        assert_eq!(empty_title.as_deref(), Some("bb/thread-abc123"));
+    }
+
+    #[test]
+    fn a_typed_branch_is_used_as_typed() {
+        let typed = EnvironmentSpec::Worktree {
+            base_branch: None,
+            branch: Some("feat/login".into()),
+        };
+        let branch = worktree_branch(&typed, "Fix login", &thread(), "bb/").unwrap();
+        assert_eq!(branch.as_deref(), Some("feat/login"));
+    }
+
+    #[test]
+    fn an_empty_prefix_keeps_the_old_name() {
+        let worktree = EnvironmentSpec::Worktree {
+            base_branch: None,
+            branch: None,
+        };
+        let branch = worktree_branch(&worktree, "Fix login", &thread(), "").unwrap();
+        assert_eq!(branch.as_deref(), Some("fix-login"));
+    }
 }

@@ -520,7 +520,7 @@ fn install_by_name_reads_the_index_and_still_asks_a_person(cx: &mut TestAppConte
     .unwrap();
     git(index, &["commit", "--quiet", "-am", "moved"]);
     let update = PluginOp::Update {
-        id: PluginId(ID.into()),
+        target: kg_domain::UpdateTarget::One(PluginId(ID.into())),
         thread_id: None,
     };
     assert_eq!(

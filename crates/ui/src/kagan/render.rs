@@ -95,6 +95,8 @@ impl Render for Kagan {
             .on_action(cx.listener(Self::toggle_details_action))
             .on_action(cx.listener(Self::toggle_fill_action))
             .on_action(cx.listener(Self::toggle_form_action))
+            .on_action(cx.listener(Self::check_updates_action))
+            .on_action(cx.listener(Self::update_all_action))
             .on_action(cx.listener(Self::new_thread))
             .on_action(cx.listener(Self::stop))
             .on_action(cx.listener(Self::new_terminal))

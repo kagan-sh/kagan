@@ -3,7 +3,7 @@ use gpui_kit::{
     AppContext as _, Context, Entity, KeyBinding, PathPromptOptions, Task, Window, actions,
 };
 use kg_core::Workspace;
-use kg_domain::{Listing, Op, OpError, OpResult, PluginId, PluginOp};
+use kg_domain::{Listing, Op, OpError, OpResult, OutdatedPlugin, PluginId, PluginOp};
 use kg_plugins::PluginHost;
 
 use super::Kagan;
@@ -23,6 +23,8 @@ actions!(
         ToggleInstallForm,
         AddIndex,
         SearchIndexes,
+        CheckPluginUpdates,
+        UpdateAllPlugins,
     ]
 );
 
@@ -40,7 +42,17 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
     ]
 }
 
+pub(super) struct Updates {
+    pub(super) plugins: Vec<OutdatedPlugin>,
+    pub(super) failed: Vec<String>,
+}
+
 pub(super) struct Plugins {
+    pub(super) updates: Option<Updates>,
+    /// What the last Update all did, shown until the next check.
+    pub(super) note: Option<String>,
+    /// True while a check or an update runs, so its buttons wait.
+    pub(super) busy: bool,
     pub(super) source: Entity<InputState>,
     pub(super) form: bool,
     pub(super) expanded: Option<PluginId>,
@@ -56,6 +68,9 @@ pub(super) struct Plugins {
 impl Plugins {
     pub(super) fn new(window: &mut Window, cx: &mut Context<Kagan>) -> Self {
         Self {
+            updates: None,
+            note: None,
+            busy: false,
             source: cx.new(|cx| {
                 InputState::new(window, cx).placeholder("Folder path or git:<url>@<ref>")
             }),
@@ -197,6 +212,77 @@ impl Kagan {
         cx: &mut Context<Self>,
     ) {
         self.toggle_form(cx);
+    }
+
+    pub(super) fn check_updates_action(
+        &mut self,
+        _: &CheckPluginUpdates,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.check_updates(cx);
+    }
+
+    fn check_updates(&mut self, cx: &mut Context<Self>) {
+        if self.plugins.busy {
+            return;
+        }
+        self.plugins.busy = true;
+        self.plugin_op(
+            PluginOp::Outdated,
+            "check for updates",
+            |this, result, _| {
+                this.plugins.busy = false;
+                if let Ok(OpResult::Outdated { plugins, failed }) = result {
+                    this.plugins.note = None;
+                    this.plugins.updates = Some(Updates {
+                        plugins: plugins.clone(),
+                        failed: failed.clone(),
+                    });
+                }
+            },
+            cx,
+        );
+    }
+
+    pub(super) fn update_all_action(
+        &mut self,
+        _: &UpdateAllPlugins,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.plugins.busy {
+            return;
+        }
+        self.plugins.busy = true;
+        self.plugin_op(
+            PluginOp::Update {
+                target: kg_domain::UpdateTarget::All,
+                thread_id: None,
+            },
+            "update the plugins",
+            |this, result, cx| {
+                this.plugins.busy = false;
+                match result {
+                    Ok(OpResult::Updated {
+                        updated,
+                        failed,
+                        needs_approval,
+                    }) => {
+                        this.plugins.note = Some(super::settings::update_outcome(
+                            updated,
+                            failed,
+                            needs_approval,
+                        ));
+                    }
+                    Err(error) => this.plugins.note = Some(error.to_string()),
+                    Ok(_) => {}
+                }
+                this.plugins.updates = None;
+                this.check_updates(cx);
+            },
+            cx,
+        );
     }
 
     pub(super) fn toggle_details(&mut self, id: &PluginId, cx: &mut Context<Self>) {

@@ -1,13 +1,16 @@
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::rc::Rc;
 
 use gpui_kit::{AppContext as _, AsyncApp, Entity};
 use kg_core::{Requester, Workspace};
-use kg_domain::{Op, OpError, OpResult, Plugin, PluginId, ThreadId, ThreadOp, is_git_source};
+use kg_domain::{
+    Op, OpError, OpResult, OutdatedPlugin, Plugin, PluginId, ThreadId, ThreadOp, is_git_source,
+};
 
 use crate::manifest::Grant;
-use crate::source::{Fetched, Source, checkout, fetch};
+use crate::source::{Fetched, Named, Source, checkout, fetch, redact, remote_commit};
 use crate::{PluginHost, Result};
 
 use super::approve::approve;
@@ -139,6 +142,150 @@ pub(in crate::runtime::ops) async fn install(
     keep(host, fetched, source, grant, &plugins, true, cx).await
 }
 
+// Every plugin installed from a git ref. Whether a ref is pinned is decided by the remote.
+fn git_records(host: &Entity<PluginHost>, cx: &mut AsyncApp) -> Vec<Plugin> {
+    host.read_with(cx, |host, _| {
+        host.records
+            .values()
+            .filter(|record| matches!(Source::parse(&record.source), Ok(Source::Git { .. })))
+            .cloned()
+            .collect()
+    })
+}
+
+// The display name of each running or stopped plugin, from its manifest.
+fn plugin_names(host: &Entity<PluginHost>, cx: &mut AsyncApp) -> BTreeMap<PluginId, String> {
+    host.read_with(cx, |host, _| {
+        host.status()
+            .iter()
+            .map(|status| (status.id.clone(), status.name.as_str().to_owned()))
+            .collect()
+    })
+}
+
+// Reads what a plugin's ref names now. Nothing is kept until the caller keeps it.
+async fn latest(host: &Entity<PluginHost>, record: &Plugin, cx: &mut AsyncApp) -> Result<Fetched> {
+    let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
+    let plugins = kg_core::plugins_dir(&data_dir);
+    let record = record.clone();
+    cx.background_spawn(async move {
+        let subfolder = match &record.commit {
+            Some(commit) => record
+                .root
+                .strip_prefix(checkout(&plugins, &record.id, commit))
+                .map(Path::to_path_buf)
+                .ok(),
+            None => None,
+        };
+        let (_keep, never) = async_channel::bounded::<()>(1);
+        fetch(
+            &Source::parse(&record.source)?,
+            subfolder.as_deref(),
+            &plugins,
+            &data_dir,
+            &never,
+        )
+    })
+    .await
+}
+
+pub(in crate::runtime::ops) async fn outdated(
+    host: &Entity<PluginHost>,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let names = plugin_names(host, cx);
+    let mut plugins = Vec::new();
+    let mut failed = Vec::new();
+    for record in git_records(host, cx) {
+        let Ok(Source::Git { url, reference }) = Source::parse(&record.source) else {
+            continue;
+        };
+        let installed = record.commit.clone();
+        let (_keep, never) = async_channel::bounded::<()>(1);
+        let checked = cx
+            .background_spawn(async move {
+                remote_commit(&url, &reference, installed.as_deref(), &never)
+            })
+            .await;
+        match checked {
+            Ok(Named::Commit(latest)) if Some(&latest) != record.commit.as_ref() => {
+                plugins.push(OutdatedPlugin {
+                    id: record.id.clone(),
+                    name: names
+                        .get(&record.id)
+                        .cloned()
+                        .unwrap_or_else(|| record.id.0.clone()),
+                    current: record.commit.clone().unwrap_or_default(),
+                    latest,
+                });
+            }
+            Ok(_) => {}
+            Err(error) => failed.push(redact(&format!("{}: {error}", record.id))),
+        }
+    }
+    Ok(OpResult::Outdated { plugins, failed })
+}
+
+// Updates every git plugin in turn. A plugin that adds powers is not moved here: it is listed
+// under needs_approval, so the person approves it alone. A failure does not stop the others.
+pub(in crate::runtime::ops) async fn update_all(
+    host: &Entity<PluginHost>,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
+    let plugins = kg_core::plugins_dir(&data_dir);
+    let mut updated = Vec::new();
+    let mut failed = Vec::new();
+    let mut needs_approval = Vec::new();
+    for record in git_records(host, cx) {
+        let fetched = match latest(host, &record, cx).await {
+            Ok(fetched) => fetched,
+            Err(error) => {
+                failed.push(redact(&format!("{}: {error}", record.id)));
+                continue;
+            }
+        };
+        if fetched.commit == record.commit {
+            continue;
+        }
+        if fetched.discovered.manifest.id != record.id {
+            failed.push(format!("{}: the ref now holds another plugin", record.id));
+            continue;
+        }
+        let grant = Grant::of(&fetched.discovered.manifest, &fetched.root);
+        match approved(&record) {
+            Ok(previous) if grant.within(&previous) => {}
+            Ok(_) => {
+                needs_approval.push(record.id.clone());
+                continue;
+            }
+            Err(error) => {
+                failed.push(redact(&format!("{}: {error}", record.id)));
+                continue;
+            }
+        }
+        match keep(
+            host,
+            fetched,
+            record.source.clone(),
+            grant,
+            &plugins,
+            false,
+            cx,
+        )
+        .await
+        {
+            Ok(_) => updated.push(record.id.clone()),
+            Err(error) => failed.push(redact(&format!("{}: {error}", record.id))),
+        }
+    }
+    Ok(OpResult::Updated {
+        updated,
+        failed,
+        needs_approval,
+    })
+}
+
 pub(in crate::runtime::ops) async fn update(
     host: &Entity<PluginHost>,
     id: &PluginId,
@@ -149,28 +296,7 @@ pub(in crate::runtime::ops) async fn update(
     let record = record(host, id, cx)?;
     let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
     let plugins = kg_core::plugins_dir(&data_dir);
-    let fetched = {
-        let (plugins, record, data_dir) = (plugins.clone(), record.clone(), data_dir.clone());
-        cx.background_spawn(async move {
-            let subfolder = match &record.commit {
-                Some(commit) => record
-                    .root
-                    .strip_prefix(checkout(&plugins, &record.id, commit))
-                    .map(Path::to_path_buf)
-                    .ok(),
-                None => None,
-            };
-            let (_keep, never) = async_channel::bounded::<()>(1);
-            fetch(
-                &Source::parse(&record.source)?,
-                subfolder.as_deref(),
-                &plugins,
-                &data_dir,
-                &never,
-            )
-        })
-        .await?
-    };
+    let fetched = latest(host, &record, cx).await?;
     let manifest = &fetched.discovered.manifest;
     if manifest.id != *id {
         return Err(OpError::Invalid(format!(

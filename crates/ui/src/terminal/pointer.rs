@@ -1,9 +1,10 @@
 use gpui_kit::{
-    Context, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
-    ScrollEvent, Window, px,
+    ClipboardItem, Context, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    Pixels, Point, ScrollEvent, Window, px,
 };
-use kg_core::Motion;
-use kg_domain::{SelectMode, ThreadOp};
+use kg_core::{Motion, Workspace};
+use kg_domain::{Op, OpResult, PreferenceOp, SelectMode, ThreadOp, prefs};
+use serde_json::Value;
 
 use super::mouse::{Button, Phase, Spot};
 use super::{TerminalView, dispatch, steps};
@@ -44,7 +45,7 @@ impl TerminalView {
                 .grid
                 .link_at(usize::from(spot.row), usize::from(spot.column))
         {
-            cx.open_url(&link);
+            Self::open_link(link, cx);
             return;
         }
         if self.grid.mouse.is_some() && !event.modifiers.shift {
@@ -70,7 +71,7 @@ impl TerminalView {
         // The release is the last word on where a selection ends.
         let (spot, right) = self.locate(event.position);
         if self.pointer.selecting {
-            self.select(SelectMode::Extend, spot, right, cx);
+            self.finish_selection(spot, right, cx);
         }
         self.pointer.selecting = false;
         let Some(button) = button_of(event.button) else {
@@ -180,6 +181,74 @@ impl TerminalView {
                 cx,
             );
         }
+    }
+
+    // A link opens in the Browser tab when the person turned that on; otherwise the system browser.
+    fn open_link(link: String, cx: &mut Context<Self>) {
+        let setting = Workspace::dispatch(
+            Op::Preference(PreferenceOp::Get {
+                key: prefs::TERMINAL_LINKS_BROWSER.into(),
+            }),
+            cx,
+        );
+        cx.spawn(async move |_, cx| {
+            let in_tab = matches!(setting.await, Ok(OpResult::Setting(Value::Bool(true))));
+            cx.update(|cx| {
+                if in_tab {
+                    crate::kagan::with_front(cx, |kagan, window, cx| {
+                        kagan.open_link(&link, window, cx);
+                    });
+                } else {
+                    cx.open_url(&link);
+                }
+            });
+        })
+        .detach();
+    }
+
+    // Copy on select: once the selection is saved, its text goes to the clipboard, if the switch is on.
+    // An empty selection, such as a plain click, copies nothing and leaves the clipboard alone.
+    fn finish_selection(&self, spot: Spot, right: bool, cx: &mut Context<Self>) {
+        let select = Workspace::dispatch(
+            Op::Thread(ThreadOp::Select {
+                id: self.thread.clone(),
+                mode: SelectMode::Extend,
+                column: spot.column,
+                row: spot.row,
+                right,
+                terminal: self.terminal,
+            }),
+            cx,
+        );
+        let setting = Workspace::dispatch(
+            Op::Preference(PreferenceOp::Get {
+                key: prefs::TERMINAL_COPY_ON_SELECT.into(),
+            }),
+            cx,
+        );
+        let thread = self.thread.clone();
+        let terminal = self.terminal;
+        cx.spawn(async move |_, cx| {
+            let on = matches!(setting.await, Ok(OpResult::Setting(Value::Bool(true))));
+            if select.await.is_err() || !on {
+                return;
+            }
+            let copied = cx.update(|cx| {
+                Workspace::dispatch(
+                    Op::Thread(ThreadOp::Copy {
+                        id: thread,
+                        terminal,
+                    }),
+                    cx,
+                )
+            });
+            if let Ok(OpResult::Text(text)) = copied.await
+                && !text.is_empty()
+            {
+                cx.update(|cx| cx.write_to_clipboard(ClipboardItem::new_string(text)));
+            }
+        })
+        .detach();
     }
 
     fn select(&self, mode: SelectMode, spot: Spot, right: bool, cx: &mut Context<Self>) {

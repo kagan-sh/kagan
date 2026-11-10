@@ -34,8 +34,8 @@ use serde_json::Value;
 
 use crate::{
     AgentTool, Environment, EnvironmentId, Event, IndexEntry, Listing, PendingInteraction, Plugin,
-    PluginCommand, PluginLog, PreviewOp, ProgramList, Project, ProjectId, Sidebar, Thread,
-    ThreadId,
+    PluginCommand, PluginId, PluginLog, PreviewOp, ProgramList, Project, ProjectId, Sidebar,
+    Thread, ThreadId,
 };
 
 pub use browser::{BrowserControl, BrowserOp, BrowserSnapshot, BrowserView};
@@ -56,7 +56,7 @@ pub use keymap::{
     ShortcutScope, ShortcutWhen, default_chord, expand_secondary,
 };
 pub use notify::NotifyOp;
-pub use plugin::PluginOp;
+pub use plugin::{OutdatedPlugin, PluginOp, UpdateTarget};
 pub use preference::PreferenceOp;
 pub use program::ProgramOp;
 pub use project::ProjectOp;
@@ -70,7 +70,7 @@ pub use terminal::{
 pub use theme::{Appearance, ThemeOp, ThemeSettings, valid_theme_choice, valid_theme_id};
 pub use thread::{
     Metadata, Order, Run, SEARCH_DEFAULT, SEARCH_LIMIT, SEARCH_TEXT_MAX, TEXT_MAX, ThreadOp,
-    WaitOutcome, branch_slug,
+    WaitOutcome, branch_slug, valid_branch,
 };
 pub use ui::{
     DropSide, UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,
@@ -135,7 +135,7 @@ pub enum Op {
     /// Keyboard shortcuts: built-in ones and plugin commands
     #[command(subcommand)]
     Keymap(KeymapOp),
-    /// Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, setup-guide, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+    /// Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
     #[command(subcommand)]
     Preference(PreferenceOp),
     /// Agent rules: the global rules, or one project's, that a thread's program is told
@@ -192,6 +192,18 @@ pub enum OpResult {
     },
     Files(Vec<PathBuf>),
     Plugins(Vec<Plugin>),
+    /// The git plugins behind their ref, and one line for each plugin that could not be checked
+    Outdated {
+        plugins: Vec<OutdatedPlugin>,
+        failed: Vec<String>,
+    },
+    /// The plugins `update --all` moved to a newer commit, and one line for each that failed
+    Updated {
+        updated: Vec<PluginId>,
+        failed: Vec<String>,
+        /// Plugins whose update adds powers, so the person must approve them one at a time
+        needs_approval: Vec<PluginId>,
+    },
     PluginLogs(Vec<PluginLog>),
     PluginCommands(Vec<PluginCommand>),
     Indexes(Vec<String>),

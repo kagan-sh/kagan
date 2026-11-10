@@ -1,5 +1,6 @@
 use gpui_kit::TestAppContext;
 use kg_domain::*;
+use serde_json::json;
 
 use crate::Workspace;
 
@@ -1348,4 +1349,29 @@ async fn a_teardown_script_gets_the_global_then_the_project_variables(cx: &mut T
         std::fs::read_to_string(&out).unwrap(),
         "global-value|project-same|project-value"
     );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_kagan_named_branch_takes_the_saved_prefix(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = repo_dir(&fixture);
+    empty_repo(&repo);
+    git_in(&repo, &["branch", "-M", "main"]);
+    op(
+        Op::Preference(PreferenceOp::Set {
+            key: "branch-prefix".into(),
+            value: json!("bb/"),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let OpResult::Thread(started) = op(worktree_run(&fixture, None, None), cx).await.unwrap()
+    else {
+        panic!("thread")
+    };
+    let folder = environment_of(&started.environment_id.clone().unwrap(), cx).await;
+    let branch = folder.branch.unwrap_or_default();
+    assert!(branch.starts_with("bb/"), "{branch}");
 }

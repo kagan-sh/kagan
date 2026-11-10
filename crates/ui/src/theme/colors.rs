@@ -157,12 +157,28 @@ pub(super) fn highlight(file: &ThemeFile, mode: ThemeMode) -> Arc<HighlightTheme
         )
 }
 
-pub(super) fn apply(file: &ThemeFile, mode: ThemeMode, cx: &mut App) {
-    let config = Rc::new(config(file, mode));
+/// The families the window draws with: the UI text, and the mono text (terminal, code and diffs).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Families {
+    pub(crate) ui: SharedString,
+    pub(crate) mono: SharedString,
+}
+
+impl Default for Families {
+    fn default() -> Self {
+        Self {
+            ui: SharedString::from("Inter"),
+            mono: SharedString::from("JetBrains Mono"),
+        }
+    }
+}
+
+pub(super) fn apply(file: &ThemeFile, mode: ThemeMode, families: &Families, cx: &mut App) {
+    let config = Rc::new(config(file, mode, families));
     Theme::update(cx, |theme| theme.apply_config(&config));
 }
 
-pub(super) fn config(file: &ThemeFile, mode: ThemeMode) -> ThemeConfig {
+pub(super) fn config(file: &ThemeFile, mode: ThemeMode, families: &Families) -> ThemeConfig {
     let p = palette(file, mode);
     let hex = |c: Color| Some(SharedString::from(c.hex()));
     let mut colors = ThemeConfigColors::default();
@@ -208,8 +224,8 @@ pub(super) fn config(file: &ThemeFile, mode: ThemeMode) -> ThemeConfig {
     config.mode = mode;
     config.font_size = Some(REM_BASE);
     config.mono_font_size = Some(f32::from(file.look.type_sizes.mono));
-    config.font_family = Some(SharedString::from("Inter"));
-    config.mono_font_family = Some(SharedString::from("JetBrains Mono"));
+    config.font_family = Some(families.ui.clone());
+    config.mono_font_family = Some(families.mono.clone());
     config.radius = Some(usize::from(file.look.radius.md));
     config.radius_lg = Some(usize::from(file.look.radius.lg));
     config.shadow = Some(false);

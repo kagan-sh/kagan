@@ -4,7 +4,15 @@ The window ships with three themes: `fjord` (the default), `ember`, and `grey`. 
 
 ## Change the theme
 
-Open Settings (Cmd+,) and choose Appearance. Click a theme card, then select System, Light, or Dark.
+Open Settings (Cmd+,) and choose Appearance. Click a theme card, then select System, Light, or Dark. Hover a card, or move the keyboard onto it, to preview that theme; moving away puts your theme back, and a click keeps the new one.
+
+## Density
+
+Appearance also has Density: Compact, Default, or Roomy. It scales the spacing and the row and control heights of the theme you use: Compact is 75% and Roomy is 125% of the theme's own values. Text sizes and corner radii do not change.
+
+```bash
+kg preference set density compact
+```
 
 ```bash
 kg theme get

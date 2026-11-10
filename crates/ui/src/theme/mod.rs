@@ -128,7 +128,7 @@ use catalog::read_user;
 #[cfg(test)]
 pub(crate) use catalog::set_look_for_test;
 pub(crate) use catalog::{
-    CatalogEntry, Notice, Source, ThemeState, copy_id, follow_plugins, init_in, new_theme,
+    CatalogEntry, Density, Notice, Source, ThemeState, copy_id, follow_plugins, init_in, new_theme,
     swatches, watch_system,
 };
 #[cfg(test)]
