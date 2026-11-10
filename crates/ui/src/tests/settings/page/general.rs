@@ -52,7 +52,7 @@ pub(in crate::tests) fn install_theme_plugin(data: &Path) {
 }
 
 #[gpui_kit::test]
-fn general_describes_what_integration_still_sets(cx: &mut TestAppContext) {
+fn general_agent_note_is_one_line(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
     click(cx, window, "settings-section-general");
