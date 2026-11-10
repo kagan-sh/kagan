@@ -162,7 +162,9 @@ impl Page {
                 .small()
                 .outline()
                 .label(label)
-                .dropdown_menu(move |menu, _, _| program_menu(menu, &page, &picked, &programs)),
+                .dropdown_menu(move |menu, _, _| {
+                    program_menu(menu, &page, picked.as_ref(), &programs)
+                }),
         );
         let mut column = v_flex().w_full().items_end().gap_2().child(choice);
         if let Some(stored) = current.filter(|stored| {
@@ -232,13 +234,13 @@ impl Page {
 fn program_menu(
     menu: PopupMenu,
     page: &WeakEntity<Page>,
-    current: &Option<String>,
+    current: Option<&String>,
     programs: &[Program],
 ) -> PopupMenu {
     let menu = programs
         .iter()
         .fold(menu.scrollable(true), |menu, program| {
-            let selected = current.as_deref() == Some(program.command.as_str());
+            let selected = current.is_some_and(|stored| stored == &program.command);
             let id = format!("project-program-{}", program.command);
             let label = program.label.clone();
             let pick = program.command.clone();
