@@ -54,7 +54,8 @@ impl RulesEditor {
         editor
     }
 
-    fn load(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    // Reads the file again, so a change made from the CLI shows when the page opens.
+    pub(super) fn load(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let read = Workspace::dispatch(
             Op::Instructions(InstructionsOp::Get {
                 project: self.project.clone(),
