@@ -1,14 +1,14 @@
 //! The page for one project: its environment variables, its default program, and the spot where
 //! its agent rules, which are the same editor the project menu opens. It lists the way Settings does.
 
-use crate::theme::{SpaceStep, TypeScale as _, space};
+use crate::theme::{SpaceStep, TypeScale as _, radius_md, space};
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
-    AppContext as _, Context, ElementId, Entity, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled as _, Task,
-    WeakEntity, Window, div, px,
+    AppContext as _, Context, ElementId, Entity, FocusHandle, InteractiveElement as _, IntoElement,
+    KeyBinding, ParentElement as _, Render, Role, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Task, WeakEntity, Window, actions, div, px,
 };
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, Program, ProgramOp, ProjectId, ProjectOp};
@@ -20,13 +20,25 @@ use crate::kagan::controls::control;
 use crate::kagan::rules::RulesEditor;
 use crate::kagan::screen::{Center, FocusReturn};
 use crate::kagan::variables::Variables;
+use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
+
+actions!(project_settings, [Close]);
+
+const CONTEXT: &str = "ProjectSettings";
+
+pub(crate) fn bindings() -> Vec<KeyBinding> {
+    vec![KeyBinding::new("escape", Close, Some(CONTEXT))]
+}
 
 pub(in crate::kagan) struct Page {
     project: ProjectId,
     name: SharedString,
     program: Option<String>,
     programs: Vec<Program>,
+    // The program list has come back, so an unknown stored program can be named as missing.
+    programs_loaded: bool,
+    focus: FocusHandle,
     variables: Entity<Variables>,
     rules: Entity<RulesEditor>,
     kagan: WeakEntity<Kagan>,
@@ -52,6 +64,8 @@ impl Page {
             name: SharedString::default(),
             program: None,
             programs: Vec::new(),
+            programs_loaded: false,
+            focus: cx.focus_handle(),
             variables,
             rules,
             kagan,
@@ -90,6 +104,7 @@ impl Page {
                         .into_iter()
                         .filter(Program::installed)
                         .collect();
+                    this.programs_loaded = true;
                 }
                 cx.notify();
             });
@@ -158,11 +173,33 @@ impl Page {
             Facts::button("First installed"),
             first,
         ));
+        let mut column = v_flex()
+            .w_full()
+            .items_end()
+            .gap_2()
+            .child(buttons.w_full().justify_end());
+        if let Some(stored) = current.filter(|stored| {
+            self.programs_loaded && !self.programs.iter().any(|p| &p.command == stored)
+        }) {
+            let text =
+                format!("{stored} is not installed, so the first installed program is used.");
+            column = column.child(
+                div()
+                    .id("project-program-missing")
+                    .type_small(cx)
+                    .text_color(cx.theme().muted_foreground)
+                    .ui_observe_as(Facts {
+                        role: Role::Label,
+                        ..Facts::button(text.clone())
+                    })
+                    .child(text),
+            );
+        }
         row(
             "project-program",
             "Program",
             "New threads in this project start with this program. Only installed programs are listed.",
-            buttons.into_any_element(),
+            column.into_any_element(),
         )
     }
 
@@ -209,12 +246,11 @@ impl Render for Page {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let groups = self.groups(cx);
-        let done = Button::new("button-project-settings-done")
-            .small()
-            .outline()
-            .label("Done")
-            .on_click(cx.listener(|this, _, window, cx| this.done(window, cx)));
+        let radius = px(radius_md(cx));
         v_flex()
+            .key_context(CONTEXT)
+            .track_focus(&self.focus)
+            .on_action(cx.listener(|this, _: &Close, window, cx| this.done(window, cx)))
             .size_full()
             .p(px(space(SpaceStep::Xl, cx)))
             .gap(px(space(SpaceStep::Xl, cx)))
@@ -233,11 +269,17 @@ impl Render for Page {
                                     .child(self.name.clone()),
                             ),
                     )
-                    .child(control(
-                        "project-settings-done",
-                        Facts::button("Done"),
-                        done,
-                    )),
+                    .child(
+                        div()
+                            .id("project-settings-close")
+                            .px(px(space(SpaceStep::Sm, cx)))
+                            .py(px(space(SpaceStep::Xs, cx)))
+                            .rounded(radius)
+                            .type_body(cx)
+                            .on_click(cx.listener(|this, _, window, cx| this.done(window, cx)))
+                            .child("Close")
+                            .ui_observe_as(Facts::button("Close")),
+                    ),
             )
             .children(self.note.clone().map(|note| {
                 div()
@@ -272,7 +314,9 @@ impl Kagan {
         }
         let kagan = cx.entity().downgrade();
         let page = cx.new(|cx| Page::new(project, kagan, window, cx));
+        let focus = page.read(cx).focus.clone();
         self.open_center(Center::Project(page), window, cx);
+        window.focus(&focus, cx);
         cx.notify();
     }
 
