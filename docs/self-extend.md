@@ -16,7 +16,7 @@ Every thread's program gets `KG_THREAD_ID`, `KG_PROJECT_ID`, `KG_ENVIRONMENT_ID`
 
 ## Guide
 
-`kg guide` prints the concepts (the `CONTEXT.md` terms) and the chapter list. `kg guide <chapter>` prints one chapter: `threads`, `projects`, `environments`, `plugins`, `skills`, `json`. The text ships in the binary, so it always matches the running version. Plugin CLI commands document themselves through `kg <name> --help`.
+`kg guide` prints the concepts (the `CONTEXT.md` terms) and the chapter list. `kg guide <chapter>` prints one chapter: `threads`, `projects`, `environments`, `plugins`, `skills`, `ui`, `customize`, `json`. The text ships in the binary, so it always matches the running version. Plugin CLI commands document themselves through `kg <name> --help`.
 
 ## Instructions
 
@@ -54,6 +54,7 @@ Short, and each points at `kg guide` chapters and the generated `.d.ts` files in
 - `kg-plugin-authoring`: manifest, job loop, HostModule areas, panels and spots, Workbench tokens, the dev loop below.
 - `kg-plugin-port`: map each surface onto one script and report what moved.
 - `kg-skill-creator`: writing and testing a skill.
+- `kg-customize`: where a theme, key, preference, agent rule, or skill folder lives. The facts are in `kg guide customize`.
 - `kg-ui`: drive the open window with `kg ui`. It cannot approve powers.
 - `kg-plugin-commands`: generated, not a file in the binary. One line per `kg` command of each running plugin, from its manifest usage. Present only when a plugin adds a command (decision 208).
 

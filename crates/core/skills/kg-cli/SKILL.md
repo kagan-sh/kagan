@@ -11,4 +11,4 @@ Leave `KG_DATA_DIR` unset, so `kg` reaches the open app. In a thread, `KG_SOCKET
 
 `kg status --json` returns `{"status":{"threadId","projectId","environmentId","cli","dataDir","warnings"}}`. `kg project list --json` returns `{"projects":[{"id","kind","name","path","gitRemoteUrl"}]}`. `kg program list --json` returns `{"programs":{"programs":[{"command","label","source","path","version"}],"default"}}`; pass a `command` to `kg thread run --program`.
 
-Plugin install and powers approval are kg-plugin-authoring. Driving the open window is kg-ui. Creating and operating a thread is kg-threads.
+Plugin install and powers approval are kg-plugin-authoring. Driving the open window is kg-ui. Creating and operating a thread is kg-threads. To change the look, keys, preferences, agent rules, or skill folders, read `kg guide customize`.

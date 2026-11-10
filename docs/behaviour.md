@@ -682,7 +682,7 @@ Finds a newer kagan on the GitHub releases page (decision 113). Installing is no
 
 ### `Guide`
 
-- **Shows**: the concepts, and one chapter when named [book:cli] [op/]. The text ships in the binary [docs:self-extend]. Chapters are threads, projects, environments, plugins, skills, ui, and json [op/] [book:cli].
+- **Shows**: the concepts, and one chapter when named [book:cli] [op/]. The text ships in the binary [docs:self-extend]. Chapters are threads, projects, environments, plugins, skills, ui, customize, and json [op/] [book:cli]. `customize` names where each look, key, preference, agent rule and skill folder lives; the bundled `kg-customize` skill points to it [decision 209].
 - **Refused when**: an unknown chapter — `invalid` [op/].
 
 ### `Open`

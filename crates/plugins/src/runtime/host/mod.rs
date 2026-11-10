@@ -304,7 +304,7 @@ fn dispatch(request: PluginRequest, cx: &mut App) -> Task<Result<OpResult>> {
                 .collect()
         }))),
         PluginRequest::Commands => Task::ready(Ok(OpResult::PluginCommands(
-            plugin_commands::running(&host.read(cx)),
+            plugin_commands::running(host.read(cx)),
         ))),
         PluginRequest::Tools { thread_id } => {
             cx.spawn(async move |cx| tools(&host, &thread_id, cx).await)
