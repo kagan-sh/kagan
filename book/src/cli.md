@@ -31,6 +31,7 @@ Commands:
   keymap       Keyboard shortcuts: built-in ones and plugin commands
   preference   Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
   ui           Native window for QA and agents
+  notify       System notifications
   browser      The Browser tab's page, driven by this thread
   diff         A thread environment's diff. Reads git and never writes the worktree
   preview      One file in the Preview tab, read-only
@@ -355,6 +356,7 @@ Commands:
   unarchive     Bring back an archived thread
   delete        Delete a thread and its history for good
   set-pinned    Pin or unpin a thread
+  notify        When this thread posts a system notification: default follows the global level, all, asks (only when it asks you), or muted
   rename        Rename a thread
   mark-read     Mark a thread read
   metadata      A plugin's metadata on a thread
@@ -855,6 +857,25 @@ Arguments:
 
   <PINNED>
           [possible values: true, false]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg thread notify`
+
+```text
+When this thread posts a system notification: default follows the global level, all, asks (only when it asks you), or muted
+
+Usage: kg thread notify <ID> <LEVEL>
+
+Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
+  <LEVEL>
+          [possible values: default, all, asks, muted]
 
 Options:
   -h, --help
@@ -2789,6 +2810,37 @@ Options:
       --window <WINDOW>
           [default: 0]
 
+  -h, --help
+          Print help
+```
+
+## `kg notify`
+
+```text
+System notifications
+
+Usage: kg notify [OPTIONS] <COMMAND>
+
+Commands:
+  test  Send one test system notification. It is sent even when notifications are off
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Print compact JSON; failures print the error envelope
+
+  -h, --help
+          Print help
+```
+
+## `kg notify test`
+
+```text
+Send one test system notification. It is sent even when notifications are off
+
+Usage: kg notify test
+
+Options:
   -h, --help
           Print help
 ```
