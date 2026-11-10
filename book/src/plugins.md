@@ -1,6 +1,6 @@
 # Plugins
 
-Plugins are how you extend the IDE. kagan ships with threads, a terminal, review, and the browser. It ships with no plugins.
+Plugins are how you extend the IDE. kagan ships with threads, a terminal, review, and the browser. It ships with no plugins installed. Until you add an index, Settings → Installed suggests five kagan-sh plugins [decision 217].
 
 A plugin can add a tool, a page, a command, an agent tool, a skill, a theme, or one status line. Nothing from a plugin runs until you approve it. An agent cannot approve a plugin.
 

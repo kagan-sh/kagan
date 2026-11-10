@@ -1,0 +1,39 @@
+{
+  "plugins": [
+    {
+      "id": "dev.kagan.kanban",
+      "name": "Kanban",
+      "description": "A ticket board over kagan threads.",
+      "source": "git:https://github.com/kagan-sh/kanban@v0.1.1",
+      "kagan": "0.1.0"
+    },
+    {
+      "id": "dev.kagan.canvas",
+      "name": "Canvas",
+      "description": "A shared drawing canvas beside a thread.",
+      "source": "git:https://github.com/kagan-sh/canvas@v0.1.2",
+      "kagan": "0.1.0"
+    },
+    {
+      "id": "dev.kagan.vscodium",
+      "name": "VSCodium",
+      "description": "An editor panel beside a thread.",
+      "source": "git:https://github.com/kagan-sh/vscodium@ae983566b70212d390b1a2a1e2ebdeeadaa65803",
+      "kagan": "0.1.0"
+    },
+    {
+      "id": "dev.kagan.browser-automation",
+      "name": "Browser Automation",
+      "description": "Local headless Chrome on one persistent profile.",
+      "source": "git:https://github.com/kagan-sh/browser-automation@9f5924c708b4b9ea4bd3b4577f733170480c77dc",
+      "kagan": "0.1.3"
+    },
+    {
+      "id": "dev.kagan.auto-name",
+      "name": "Auto Name",
+      "description": "Names a thread once, from its prompt and changes.",
+      "source": "git:https://github.com/kagan-sh/auto-name@f64e0014ac05b6acb2a97e6c0f35fa8c531ec50d",
+      "kagan": "0.1.0"
+    }
+  ]
+}

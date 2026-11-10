@@ -110,9 +110,12 @@ impl Kagan {
 
     pub(super) fn install_plugin(&mut self, cx: &mut Context<Self>) {
         let source = self.plugins.source.read(cx).value().trim().to_owned();
-        if source.is_empty() {
-            return;
+        if !source.is_empty() {
+            self.install_source(source, cx);
         }
+    }
+
+    pub(super) fn install_source(&mut self, source: String, cx: &mut Context<Self>) {
         let op = PluginOp::Install {
             source,
             plugin: None,
@@ -135,6 +138,7 @@ impl Kagan {
                     return;
                 }
                 this.plugins.form = false;
+                this.reconcile_setup_guide(cx);
                 let id = PluginHost::try_global(cx).and_then(|host| {
                     host.read(cx)
                         .status()

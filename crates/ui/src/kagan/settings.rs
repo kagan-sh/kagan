@@ -1,5 +1,6 @@
 use crate::theme::{SpaceStep, TypeScale as _, control_height, radius_md, space};
 
+mod command;
 mod indexes;
 mod installed;
 mod keyboard;
@@ -9,6 +10,7 @@ mod plugins;
 pub(super) mod project;
 mod row;
 mod slots;
+mod suggested;
 mod updates;
 
 use crate::ui_registry::Facts;
@@ -79,6 +81,9 @@ pub(super) struct Prefs {
     pub(super) notify: NotifyLevel,
     pub(super) plugin_status: bool,
     pub(super) update_check: bool,
+    pub(super) setup_guide: Option<bool>,
+    pub(super) agent_ready: Option<bool>,
+    pub(super) kg_check: Option<command::Check>,
     pub(super) loaded: bool,
 }
 
@@ -135,6 +140,9 @@ pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
         notify: NotifyLevel::default(),
         plugin_status: true,
         update_check: false,
+        setup_guide: None,
+        agent_ready: None,
+        kg_check: None,
         loaded: false,
     })
 }
@@ -271,8 +279,26 @@ impl Kagan {
             .update(cx, super::variables::Variables::reload);
         Self::load_layout(cx);
         self.load_prefs(cx);
+        self.load_kg_on_path(cx);
         self.load_slots(cx);
         self.load_terminal_size(cx);
+    }
+
+    // Looks for kg on the login PATH and beside kagan. Runs off the main thread, and gives up after a few seconds.
+    pub(super) fn load_kg_on_path(&self, cx: &mut Context<Self>) {
+        let prefs = self.prefs.clone();
+        let appimage = std::env::var_os("APPIMAGE").is_some();
+        cx.spawn(async move |_, cx| {
+            let check = cx
+                .background_executor()
+                .spawn(async move { command::probe(appimage) })
+                .await;
+            prefs.update(cx, |prefs, cx| {
+                prefs.kg_check = Some(check);
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     pub(super) fn load_prefs(&self, cx: &mut Context<Self>) {
@@ -281,6 +307,8 @@ impl Kagan {
         let plugin_status = super::layout::read::<bool>(kg_domain::prefs::PLUGIN_STATUS, cx);
         let update = super::layout::read::<bool>(kg_domain::prefs::UPDATE_CHECK, cx);
         let confirm = super::layout::read::<bool>(kg_domain::prefs::CONFIRM_ARCHIVE, cx);
+        let setup = super::layout::read::<bool>(kg_domain::prefs::SETUP_GUIDE, cx);
+        let kagan = cx.weak_entity();
         let prefs = self.prefs.clone();
         cx.spawn(async move |_, cx| {
             let on = agent.await.ok().flatten().unwrap_or(true);
@@ -288,15 +316,18 @@ impl Kagan {
             let status = plugin_status.await.ok().flatten().unwrap_or(true);
             let update_check = update.await.ok().flatten().unwrap_or(false);
             let confirm_archive = confirm.await.ok().flatten().unwrap_or(false);
+            let setup_guide = setup.await.ok().flatten();
             prefs.update(cx, |prefs, cx| {
                 prefs.confirm_archive = confirm_archive;
                 prefs.agent_integration = on;
                 prefs.notify = notifications;
                 prefs.plugin_status = status;
                 prefs.update_check = update_check;
+                prefs.setup_guide = setup_guide;
                 prefs.loaded = true;
                 cx.notify();
             });
+            _ = kagan.update(cx, Kagan::settle_setup_guide);
         })
         .detach();
     }

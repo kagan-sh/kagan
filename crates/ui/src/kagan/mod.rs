@@ -34,6 +34,7 @@ mod right;
 mod rules;
 mod screen;
 mod settings;
+mod setup_guide;
 mod shown;
 mod sidebar;
 mod skills;
@@ -186,6 +187,8 @@ pub(crate) struct Kagan {
     _appearance: Subscription,
     _theme_paint: Subscription,
     _theme_notice: Subscription,
+    setup_replay: bool,
+    agent_scan: Option<Task<()>>,
     asks: ask_form::AskState,
     toast: Option<Toast>,
     toast_epoch: u64,

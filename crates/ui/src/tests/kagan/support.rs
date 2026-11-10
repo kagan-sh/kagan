@@ -96,9 +96,26 @@ pub(crate) fn open(cx: &mut TestAppContext) -> (Entity<Kagan>, AnyWindowHandle, 
     (kagan, window, data)
 }
 
+/// A window on a data folder with no project, thread or setting yet: a fresh install.
+pub(crate) fn open_empty(
+    cx: &mut TestAppContext,
+) -> (Entity<Kagan>, AnyWindowHandle, tempfile::TempDir) {
+    let data = setup_with(cx, false);
+    let kagan = cx.update(|cx| crate::kagan::open(cx).unwrap());
+    cx.run_until_parked();
+    let window = cx.update(|cx| cx.windows()[0]);
+    (kagan, window, data)
+}
+
 pub(in crate::tests) fn setup(cx: &mut TestAppContext) -> tempfile::TempDir {
+    setup_with(cx, true)
+}
+
+pub(in crate::tests) fn setup_with(cx: &mut TestAppContext, seeded: bool) -> tempfile::TempDir {
     let data = tempfile::tempdir().unwrap();
-    seed(data.path());
+    if seeded {
+        seed(data.path());
+    }
     let opened = cx.update(|cx| {
         Workspace::open(
             data.path().into(),

@@ -7,6 +7,7 @@ pub const PLUGIN_STATUS: &str = "plugin-status";
 pub const UPDATE_CHECK: &str = "update-check";
 pub const TERMINAL_FONT_SIZE: &str = "terminal-font-size";
 pub const REVIEW_VIEWED: &str = "review-viewed";
+pub const SETUP_GUIDE: &str = "setup-guide";
 
 pub const TERMINAL_FONT_MIN: u8 = 9;
 pub const TERMINAL_FONT_MAX: u8 = 24;

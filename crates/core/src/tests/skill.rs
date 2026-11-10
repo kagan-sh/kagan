@@ -329,3 +329,35 @@ async fn open_asks_the_window_for_the_skills_page(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(asked.get(), 1);
 }
+
+#[gpui_kit::test]
+async fn a_new_skill_starts_from_the_template_it_names(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    op(
+        Op::Skill(SkillOp::New {
+            name: "review-changes".into(),
+            project: true,
+            template: kg_domain::SkillTemplate::ReviewPr,
+            project_id: Some(fixture.project.clone()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let OpResult::Skill { skill, body, .. } = op(
+        Op::Skill(SkillOp::Show {
+            name: "review-changes".into(),
+            project_id: Some(fixture.project.clone()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("skill")
+    };
+    assert!(
+        skill.description.starts_with("Review a pull request"),
+        "{skill:?}"
+    );
+    assert!(body.contains("gh pr diff"), "{body}");
+}

@@ -319,3 +319,61 @@ pub(in crate::tests) const TIDE: &str = r##"{
     "working": "#9bb5ff", "needs": "#e8cf80", "failed": "#ffa1ad", "idle": "#a4b2d6"
   }
 }"##;
+
+#[gpui_kit::test]
+fn with_no_index_the_shipped_plugins_are_suggested(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |_| {});
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
+    assert!(shows(cx, window, "suggested-install-dev.kagan.canvas"));
+    assert!(shows(cx, window, "suggested-install-dev.kagan.kanban"));
+}
+
+#[gpui_kit::test]
+fn an_installed_suggested_plugin_is_not_suggested_again(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
+        super::values::write_plugin(
+            data,
+            "canvas",
+            &json!({
+                "id": "dev.kagan.canvas",
+                "name": "Canvas",
+                "version": "1.0.0",
+                "kagan": ">=0.1.0",
+                "entry": "main.js",
+                "instructions": "A test canvas.",
+                "powers": {}
+            }),
+            "// @ts-check\nexport default class Plugin {}\n",
+        );
+    });
+    cx.run_until_parked();
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
+    assert!(!shows(cx, window, "suggested-install-dev.kagan.canvas"));
+    assert!(shows(cx, window, "suggested-install-dev.kagan.kanban"));
+}
+
+#[gpui_kit::test]
+fn adding_an_index_hides_every_suggestion(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open_with_plugins_then(cx, |_| {});
+    cx.run_until_parked();
+    let index = data.path().join("team");
+    std::fs::create_dir_all(index.join(".kagan")).unwrap();
+    std::fs::write(
+        index.join(".kagan/index.json"),
+        r#"{"schemaVersion":1,"name":"team","plugins":[]}"#,
+    )
+    .unwrap();
+    run_op(
+        cx,
+        Op::Plugin(PluginOp::Index {
+            op: kg_domain::IndexOp::Add {
+                location: index.display().to_string(),
+            },
+        }),
+    );
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
+    assert!(!shows(cx, window, "suggested-install-dev.kagan.kanban"));
+}

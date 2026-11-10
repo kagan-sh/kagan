@@ -39,7 +39,8 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
             agents(kagan, agent, notify, confirm_archive),
             Category::General,
         ),
-        within(general(agent, notify, confirm_archive), Category::General),
+        within(setup_guide_group(cx), Category::General),
+        within(super::command::group(kagan, cx), Category::General),
         within(environment(kagan), Category::General),
         within(appearance, Category::Appearance),
     ];
@@ -53,6 +54,9 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     let slots = Slot::ALL.map(|slot| super::slots::row(kagan, slot, cx));
     out.push(within(installed, Category::Installed));
     out.push(within(indexes::group(kagan, cx), Category::Installed));
+    if let Some(suggested) = super::suggested::group(cx) {
+        out.push(within(suggested, Category::Installed));
+    }
     out.push(within(
         group(
             "activity",
@@ -72,6 +76,28 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
         }
     }
     headed(out)
+}
+
+fn setup_guide_group(cx: &mut Context<Kagan>) -> Group {
+    group(
+        "setup-guide",
+        "Setup guide",
+        vec![row(
+            "setup-guide",
+            "Setup guide",
+            "Show the first steps again on the empty window.",
+            control(
+                "setup-guide-show",
+                Facts::button("Show setup guide"),
+                Button::new("setup-guide-show-button")
+                    .small()
+                    .outline()
+                    .label("Show setup guide")
+                    .on_click(cx.listener(|this, _, _, cx| this.set_setup_guide(true, cx))),
+            )
+            .into_any_element(),
+        )],
+    )
 }
 
 fn set_flag(key: &str, on: bool, cx: &mut App) {
