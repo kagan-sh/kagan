@@ -112,3 +112,19 @@ fn the_ask_before_archiving_switch_saves_the_preference(cx: &mut TestAppContext)
     click(cx, window, "confirm-archive");
     assert_eq!(saved(cx, "confirm-archive"), json!(false));
 }
+
+#[gpui_kit::test]
+fn enter_after_typing_opens_the_first_result_not_the_old_cursor(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-updates");
+    tab_to(cx, window, "settings-search");
+    cx.simulate_input(window, "a");
+    cx.run_until_parked();
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(
+        selected_of(cx, window, "settings-section-general"),
+        Some(true)
+    );
+}

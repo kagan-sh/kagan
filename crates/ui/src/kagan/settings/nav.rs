@@ -130,6 +130,13 @@ pub(super) fn entries(kagan: &Kagan, groups: &[Group], cx: &App) -> Vec<Entry> {
     out
 }
 
+pub(super) fn section_position(section: &Category, cx: &App) -> usize {
+    listed(cx)
+        .iter()
+        .position(|item| item.section == *section)
+        .unwrap_or(0)
+}
+
 impl Kagan {
     pub(super) fn select_section(
         &mut self,
@@ -137,10 +144,7 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.settings.cursor = listed(cx)
-            .iter()
-            .position(|item| item.section == section)
-            .unwrap_or(0);
+        self.settings.cursor = section_position(&section, cx);
         self.settings.section = section;
         self.settings
             .query

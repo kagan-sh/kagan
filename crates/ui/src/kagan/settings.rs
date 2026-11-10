@@ -11,7 +11,7 @@ mod slots;
 mod updates;
 
 use crate::ui_registry::Facts;
-use gpui_kit::component::input::InputState;
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{ActiveTheme as _, StyledExt as _};
 use gpui_kit::component::{h_flex, v_flex};
@@ -91,11 +91,24 @@ pub(super) struct SettingsState {
     section: Category,
     pub(super) cursor: usize,
     pub(super) query: Entity<InputState>,
+    _query_watch: Subscription,
     pub(super) list: FocusHandle,
 }
 
 impl SettingsState {
-    pub(super) fn new(window: &mut Window, cx: &mut App) -> Self {
+    pub(super) fn new(window: &mut Window, cx: &mut Context<Kagan>) -> Self {
+        let query = cx.new(|cx| InputState::new(window, cx).placeholder("Search settings"));
+        // A new query starts at the first result; an empty one puts the cursor back on the section.
+        let watch = cx.subscribe(&query, |this, query, event: &InputEvent, cx| {
+            if matches!(event, InputEvent::Change) {
+                this.settings.cursor = if query.read(cx).value().trim().is_empty() {
+                    nav::section_position(&this.settings.section, cx)
+                } else {
+                    0
+                };
+                cx.notify();
+            }
+        });
         Self {
             scroll: ScrollHandle::new(),
             approvals: 0,
@@ -103,7 +116,8 @@ impl SettingsState {
             keyboard: Recorder::default(),
             section: Category::default(),
             cursor: 0,
-            query: cx.new(|cx| InputState::new(window, cx).placeholder("Search settings")),
+            query,
+            _query_watch: watch,
             list: cx.focus_handle().tab_stop(true),
         }
     }
