@@ -16,7 +16,7 @@ Every thread's program gets `KG_THREAD_ID`, `KG_PROJECT_ID`, `KG_ENVIRONMENT_ID`
 
 ## Guide
 
-`kg guide` prints the concepts (the `CONTEXT.md` terms) and the chapter list. `kg guide <chapter>` prints one chapter: `threads`, `projects`, `environments`, `plugins`, `skills`, `ui`, `customize`, `json`. The text ships in the binary, so it always matches the running version. Plugin CLI commands document themselves through `kg <name> --help`.
+`kg guide` prints the concepts (the `CONTEXT.md` terms) and the chapter list. `kg guide <chapter>` prints one chapter: `threads`, `projects`, `environments`, `plugins`, `skills`, `ui`, `customize`, `json`. The text ships in the binary, so it always matches the running version. The generated `kg-plugin-commands` skill lists each plugin command with its manifest `usage` (decision 208). `kg <name> <command> --help` passes `--help` to the plugin, which may answer it.
 
 ## Instructions
 

@@ -1,6 +1,6 @@
 ---
 name: kg-plugin-authoring
-description: Build, make, fix, check, install, and test a kagan plugin with a panel, a command, an agent tool, or a skill. Use when the person asks to build, make, or fix a plugin, or to add a panel, command, tool or skill to kagan. The person approves its powers.
+description: Build, check, install, and test a kagan plugin with a panel, a command, an agent tool, or a skill. Use when the person asks to build, make, or fix a plugin, or to add a panel, command, tool or skill to kagan. The person approves its powers.
 ---
 
 The running app is the contract. `kg plugin types <path>` rewrites `kagan.d.ts` and `gpui-kit.d.ts` from it. Run that again after upgrading kagan, and before you call a host function or a component you have not used. Read `references/check.md` for what `kg plugin check` refuses, and what it does not run.
@@ -15,8 +15,7 @@ Build a plugin in this order. Each step names the command to run.
 
 4. **Use `KgButton` for buttons,** imported from `gpui-component`. A plain `Button` cannot be clicked through `kg ui`, and `kg plugin check` warns about it. Give every control a stable id. Fields, web pages, and drag and drop are in `references/ui-controls.md`.
 
-
-5. **Check it.** `kg plugin check <path>` reads the manifest, the entry, and each contribution the same way install does, and reports a refused contribution by name. It also refuses a missing host export and a field constructor the component schema rejects. Fix every error before install. `kg plugin types <path>` writes `kagan.d.ts` for this version.
+5. **Check it.** `kg plugin check <path>` reads the manifest, the entry, and each contribution the same way install does, and reports a refused contribution by name. It also refuses a missing host export and a field constructor the component schema rejects. Fix every error before install.
 
 6. **Install, and wait for the person.** `kg plugin install <path>` (or `git:<url>@<ref>`) blocks until the person approves the plugin's powers in the app. A declined install fails the command. Do not approve it yourself, with `kg ui` or the operating system.
 
