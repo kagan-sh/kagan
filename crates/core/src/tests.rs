@@ -31,6 +31,7 @@ mod terminal;
 mod thread;
 mod turn;
 mod update;
+mod variables;
 mod workspace;
 mod worktree;
 
@@ -83,6 +84,7 @@ impl Fixture {
                 path: dunce::canonicalize(dir.path()).unwrap(),
                 git_remote_url: None,
                 sort: 0,
+                program: None,
             })
             .unwrap();
         drop(store);

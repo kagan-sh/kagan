@@ -207,6 +207,40 @@ A project is a named body of work, usually one repository, with one folder on th
 - **Changes**: moves that project before `--before`, or to the end of the standard list when `--before` is omitted [book:cli] [decision 132]. Dragging a project header in the sidebar does the same [docs:look].
 - **Refused when**: a missing id — `not-found` [op/]. Personal, or `--before` naming Personal — `invalid` [op/] [decision 132].
 
+### `SetProgram`
+
+- **Allowed when**: the id is a live project [op/]. A program, when given, splits as a command line [op/].
+- **Changes**: sets the program a new thread in that project starts with, or clears it when no program is given [decision 221]. The program is used only while it is installed; otherwise the first installed program is the default [decision 221].
+- **Refused when**: a missing id — `not-found` [op/]. A program that does not split, such as one with an unfinished quote — `invalid` [op/].
+
+## Program
+
+### `List`, `Discover`
+
+- **Allowed when**: always. With `--project`, the project's program is read as the first recent program, so it is the default when it is installed [decision 221].
+- **Shows**: the known programs, the shell, and the recent programs, with the default marked [book:cli].
+- **Refused when**: `--project` names no live project — `not-found` [op/].
+
+## Env
+
+An environment variable is a name and a value that every program kagan starts gets: the global ones, and the ones set for one project, which win [decision 220]. A program started before a change keeps what it had. Setup and teardown scripts (`.kagan/setup`, `.kagan/teardown`) get the same variables, global then project [decision 220].
+
+### `List`
+
+- **Allowed when**: `--project` names a live project [op/].
+- **Shows**: the names only, for the global scope or that project [decision 220]. A value is never returned.
+
+### `Set`
+
+- **Allowed when**: the name is a shell name that does not start with `KG_` and is not `PATH`, in any case. The value is one line, not empty, and at most 1024 bytes. `--project` names a live project [op/] [decision 220].
+- **Changes**: stores the value under that name, replacing one that was there [decision 220]. The value comes from stdin, or from a prompt that does not show it, never from the command line [book:cli].
+- **Refused when**: a name or value that breaks the rules above — `invalid`, and the message never repeats the value [decision 220]. A request that names a thread (kagan's own terminals do) — `invalid`, which points to Settings [decision 220]. A missing project — `not-found` [op/].
+
+### `Remove`
+
+- **Changes**: forgets that name in that scope [decision 220]. A request that names a thread is refused, as for `Set` [decision 220]. A values file that cannot be read is moved aside, and the result is a warning [decision 220].
+- **Refused when**: the name is not set in that scope — `not-found` [op/].
+
 ## Environment
 
 An environment is the folder a thread works in, plus a status (`creating`, `provisioning`, `ready`, `error`, `destroyed`) [CONTEXT]. The providers are project, worktree, and personal [decision 2] [CONTEXT]. A project checkout is unmanaged and is never removed [CONTEXT] [decision 27]. A worktree is managed: kagan removes it a short grace after the last unarchived thread using it is archived, and it can still be reused while it is retiring [CONTEXT] [decision 26]. A personal environment is kept through archive and restart; only Delete removes it, after a person approves [decision 27].
@@ -601,7 +635,7 @@ Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integrat
 
 ### `Set`
 
-- **Changes**: stores the value when the shape matches [person 2026-10-08]. `confirm-archive` is a boolean [person 2026-10-08], and so are `agent-integration` and `plugin-status` [decision 157]. `notify` is one of `all`, `asks` or `off`, and any other value is refused [decision 212]. `agent-integration` set to `false` drops kagan's tools from claude (--mcp-config, --plugin-dir, --append-system-prompt-file, --disallowed-tools, and --session-id or --resume, so Start again does not resume the conversation), codex (--disable multi_agent, --disable multi_agent_v2, -c mcp_servers.kagan.*, and resume <id>), cursor-agent and agent (--plugin-dir, the workspace rule, and --new-session-id or --resume), and pi (--skill and --append-system-prompt). Every program still gets the KG_ variables and PATH with kg's folder first. `notify` sets which events post a system notification for a thread that is not on screen: `all` (a turn ended, a question or approval waits, or a program failed or exited), `asks` (only a question or approval), or `off` [decision 212]. An unset `notify` counts as `all`. A thread's own level replaces it [decision 213]. `plugin-status` set to `false` hides every plugin item in the activity strip; an unset one counts as on, and a plugin can still be turned off in Installed [decision 157]. `setup-guide` is a boolean; `false` hides the setup guide on the empty window, and an unset one counts as shown [decision 218]. `update-check` is a boolean; an unset one counts as off, and on runs the automatic update check at launch and then daily [decision 113]. `terminal-font-size` is an integer from 9 to 24. `<window>.right-sidebar` is a boolean that says whether the right sidebar is open; an open window reads it when it opens, so a change applies the next time the window opens [decision 48]. `<window>.review-wrap` is a boolean that wraps long lines in the review. `<window>.left-width` and `<window>.right-width` are numbers of pixels. `review-viewed` is a map from a reviewed file's path to the revision marked as viewed.
+- **Changes**: stores the value when the shape matches [person 2026-10-08]. `confirm-archive` is a boolean [person 2026-10-08], and so are `agent-integration` and `plugin-status` [decision 157]. `notify` is one of `all`, `asks` or `off`, and any other value is refused [decision 212]. `agent-integration` set to `false` drops kagan's tools from claude (--mcp-config, --plugin-dir, --append-system-prompt-file, --disallowed-tools, and --session-id or --resume, so Start again does not resume the conversation), codex (--disable multi_agent, --disable multi_agent_v2, -c mcp_servers.kagan.*, and resume <id>), cursor-agent and agent (--plugin-dir, the workspace rule, and --new-session-id or --resume), and pi (--skill and --append-system-prompt). Every program still gets the KG_ variables and PATH with kg's folder first, and the environment variables set under `## Env` [decision 220]. `notify` sets which events post a system notification for a thread that is not on screen: `all` (a turn ended, a question or approval waits, or a program failed or exited), `asks` (only a question or approval), or `off` [decision 212]. An unset `notify` counts as `all`. A thread's own level replaces it [decision 213]. `plugin-status` set to `false` hides every plugin item in the activity strip; an unset one counts as on, and a plugin can still be turned off in Installed [decision 157]. `setup-guide` is a boolean; `false` hides the setup guide on the empty window, and an unset one counts as shown [decision 218]. `update-check` is a boolean; an unset one counts as off, and on runs the automatic update check at launch and then daily [decision 113]. `terminal-font-size` is an integer from 9 to 24. `<window>.right-sidebar` is a boolean that says whether the right sidebar is open; an open window reads it when it opens, so a change applies the next time the window opens [decision 48]. `<window>.review-wrap` is a boolean that wraps long lines in the review. `<window>.left-width` and `<window>.right-width` are numbers of pixels. `review-viewed` is a map from a reviewed file's path to the revision marked as viewed.
 - **Refused when**: any other key — `invalid`, message `unknown preference <key>` [person 2026-10-08] [op/]. A wrong shape — `invalid` [person 2026-10-08] [op/].
 
 ## Agent rules
@@ -665,6 +699,12 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 - **Allowed when**: always.
 - **Changes**: `Open` shows Settings with the section it last showed, General on the first open. `Plugins` shows Settings with Installed selected, and Installed is where plugins are managed [decision 207]. Neither takes a section name; search finds any row [decision 207].
 - **Shows**: the settings list on the left and the chosen section on the right [decision 207].
+
+### `SettingsOp::Project`
+
+- **Allowed when**: the id is a live project [op/] [decision 221].
+- **Changes**: shows that project's page, with its environment variables, its default program, and its agent rules, opening the window if it is closed [decision 221]. Escape or Close leaves the page [decision 221]. The sidebar's "Project settings…" menu item sends this op.
+- **Refused when**: a missing id — `not-found` [op/].
 
 ### `Hide`, `HideOthers`, `ShowAll`
 

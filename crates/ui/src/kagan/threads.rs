@@ -148,7 +148,9 @@ impl Kagan {
             .update(cx, |sidebar, _| sidebar.choose(Some(project.clone())));
         self.start.reset();
         self.remember_worktree_root(cx);
-        self.picker.update(cx, |picker, cx| picker.load(window, cx));
+        self.picker.update(cx, |picker, cx| {
+            picker.load(Some(project.clone()), window, cx);
+        });
         self.picker
             .update(cx, |picker, cx| picker.focus(window, cx));
         self.tell_host(window, cx);

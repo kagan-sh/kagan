@@ -28,7 +28,7 @@ pub use id::{
 pub use notify::{NotifyLevel, NotifyReason, ThreadNotify};
 pub use op::{
     Appearance, BranchList, BrowserControl, BrowserOp, BrowserSnapshot, BrowserView, CommandGroup,
-    ConfigOp, DiagnosticsOp, DiffOp, DiffQuery, DiffScope, DropSide, EnvironmentOp,
+    ConfigOp, DiagnosticsOp, DiffOp, DiffQuery, DiffScope, DropSide, EnvOp, EnvironmentOp,
     EnvironmentSpec, ExtraTerminal, FOLDER_IN_USE, GuideChapter, INSTRUCTIONS_MAX, IndexOp,
     InstructionsOp, KeyPlatform, Keymap, KeymapAction, KeymapOp, Metadata, NotifyOp, Op, OpError,
     OpResult, Order, PinnedSetup, PluginOp, PreferenceOp, ProgramOp, ProjectBranch, ProjectOp, Run,

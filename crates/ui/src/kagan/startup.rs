@@ -219,6 +219,7 @@ fn listen(
                 | WorkspaceEvent::Settings
                 | WorkspaceEvent::SettingsPlugins
                 | WorkspaceEvent::Skills
+                | WorkspaceEvent::ProjectSettings(_)
                 | WorkspaceEvent::NewPlugin
                 | WorkspaceEvent::Window(_)
                 | WorkspaceEvent::Notice(..)

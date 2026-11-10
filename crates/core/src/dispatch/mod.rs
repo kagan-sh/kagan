@@ -6,8 +6,8 @@ pub(crate) mod ui;
 
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{
-    EnvironmentOp, KeymapOp, NotifyOp, Op, OpError, OpResult, PreferenceOp, ProgramOp, ProjectOp,
-    SettingsOp, Sidebar, TerminalOp, ThemeOp, ThreadOp, order_sidebar_projects,
+    EnvOp, EnvironmentOp, KeymapOp, NotifyOp, Op, OpError, OpResult, PreferenceOp, ProgramOp,
+    ProjectOp, SettingsOp, Sidebar, TerminalOp, ThemeOp, ThreadOp, order_sidebar_projects,
 };
 
 use crate::host::database::{Database, Result};
@@ -51,6 +51,14 @@ pub(crate) async fn execute(
         Op::Settings(SettingsOp::Plugins) => {
             announce(this, crate::WorkspaceEvent::SettingsPlugins, cx)
         }
+        Op::Settings(SettingsOp::Project { id }) => {
+            let lookup = id.clone();
+            database
+                .call(move |store| store.project(&lookup))
+                .await?
+                .ok_or_else(|| missing("project", &id))?;
+            announce(this, crate::WorkspaceEvent::ProjectSettings(id), cx)
+        }
         Op::Window(op) => announce(this, crate::WorkspaceEvent::Window(op), cx),
         Op::Sidebar => database.call(read_sidebar).await,
         Op::Project(op) => project_op(this, &database, op, requester, cx).await,
@@ -73,10 +81,13 @@ pub(crate) async fn execute(
         Op::Environment(EnvironmentOp::Setup { project_id, rev }) => {
             crate::host::git::setup(&database, project_id, rev, cx).await
         }
-        Op::Program(ProgramOp::List) => crate::host::program::list(this, &database, true, cx).await,
-        Op::Program(ProgramOp::Discover) => {
-            crate::host::program::list(this, &database, false, cx).await
+        Op::Program(ProgramOp::List { project_id }) => {
+            crate::host::program::list(this, &database, true, project_id, cx).await
         }
+        Op::Program(ProgramOp::Discover { project_id }) => {
+            crate::host::program::list(this, &database, false, project_id, cx).await
+        }
+        Op::Env(op) => crate::host::variables::run(this, op, cx).await,
         Op::Environment(EnvironmentOp::SetBase { id, base }) => {
             crate::host::git::set_base(this, &database, id, base, cx).await
         }
@@ -141,6 +152,18 @@ async fn project_op(
             Ok(OpResult::Project(project))
         }
         ProjectOp::Remove { id } => remove_project(this, id, requester, cx).await,
+        ProjectOp::SetProgram { id, program } => {
+            let lookup = id.clone();
+            let project = database
+                .call(move |store| {
+                    store.set_project_program(&lookup, program.as_deref())?;
+                    store.project(&lookup)
+                })
+                .await?
+                .ok_or_else(|| missing("project", &id))?;
+            Workspace::refresh(this, cx).await?;
+            Ok(OpResult::Project(project))
+        }
         ProjectOp::Reorder { id, before } => {
             let result = database
                 .call(move |store| crate::project::reorder(store, &id, before.as_ref()))
@@ -169,7 +192,8 @@ fn announce(
 /// answers. `UiOp::Snapshot` is serialized because a window job never submits a request.
 pub(crate) fn serialized(op: &Op) -> bool {
     match op {
-        Op::Status { .. }
+        Op::Env(EnvOp::List { .. })
+        | Op::Status { .. }
         | Op::Guide { .. }
         | Op::Skill(_)
         | Op::Open
@@ -178,7 +202,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Window(_)
         | Op::Sidebar
         | Op::Project(ProjectOp::List | ProjectOp::Get { .. } | ProjectOp::Remove { .. })
-        | Op::Program(ProgramOp::List | ProgramOp::Discover)
+        | Op::Program(ProgramOp::List { .. } | ProgramOp::Discover { .. })
         | Op::Environment(
             EnvironmentOp::Get { .. }
             | EnvironmentOp::Branches { .. }
@@ -194,7 +218,10 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Diagnostics(_)
         | Op::Browser(_)
         | Op::Update(_) => false,
-        Op::Project(ProjectOp::Add { .. } | ProjectOp::Reorder { .. })
+        Op::Project(
+            ProjectOp::Add { .. } | ProjectOp::Reorder { .. } | ProjectOp::SetProgram { .. },
+        )
+        | Op::Env(EnvOp::Set { .. } | EnvOp::Remove { .. })
         | Op::Environment(
             EnvironmentOp::Restore { .. }
             | EnvironmentOp::SetBase { .. }

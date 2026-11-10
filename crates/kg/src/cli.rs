@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use kg_domain::{
-    BrowserOp, BrowserSnapshot, ConfigOp, InstructionsOp, Op, OpError, OpResult, PluginOp,
+    BrowserOp, BrowserSnapshot, ConfigOp, EnvOp, InstructionsOp, Op, OpError, OpResult, PluginOp,
     PreviewKind, TEXT_MAX, ThreadOp, UiSnapshot, is_git_source,
 };
 
@@ -286,15 +286,50 @@ pub(crate) fn take_value_with(
     op: Op,
     read: impl FnOnce(&str) -> Result<String, OpError>,
 ) -> Result<Op, OpError> {
-    let Op::Plugin(PluginOp::Config {
-        id,
-        op: ConfigOp::Set { key, value: None },
-        thread_id,
-    }) = op
-    else {
-        return Ok(op);
-    };
-    let text = read(&key)?;
+    // A name or a thread the op refuses is refused before anything is read.
+    if matches!(op, Op::Env(EnvOp::Set { value: None, .. })) {
+        kg_domain::check(&op).map_err(OpError::Invalid)?;
+    }
+    match op {
+        Op::Plugin(PluginOp::Config {
+            id,
+            op: ConfigOp::Set { key, value: None },
+            thread_id,
+        }) => {
+            let value = read_line(&key, read)?;
+            Ok(Op::Plugin(PluginOp::Config {
+                id,
+                op: ConfigOp::Set {
+                    key,
+                    value: Some(value.into()),
+                },
+                thread_id,
+            }))
+        }
+        Op::Env(EnvOp::Set {
+            name,
+            project_id,
+            value: None,
+            thread_id,
+        }) => {
+            let value = read_line(&name, read)?;
+            Ok(Op::Env(EnvOp::Set {
+                name,
+                project_id,
+                value: Some(value),
+                thread_id,
+            }))
+        }
+        op => Ok(op),
+    }
+}
+
+// The first line of what `read` gives, without its line ending. An empty line is no value.
+fn read_line(
+    key: &str,
+    read: impl FnOnce(&str) -> Result<String, OpError>,
+) -> Result<String, OpError> {
+    let text = read(key)?;
     let line = text.strip_suffix('\n').unwrap_or(&text);
     let line = line.strip_suffix('\r').unwrap_or(line);
     if line.is_empty() {
@@ -302,14 +337,7 @@ pub(crate) fn take_value_with(
             "no value for {key}: type it at the prompt, or pipe it on stdin"
         )));
     }
-    Ok(Op::Plugin(PluginOp::Config {
-        id,
-        op: ConfigOp::Set {
-            key,
-            value: Some(line.into()),
-        },
-        thread_id,
-    }))
+    Ok(line.into())
 }
 
 fn read_file(path: &Path, noun: &str) -> Result<Vec<u8>, OpError> {

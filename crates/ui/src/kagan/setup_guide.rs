@@ -88,7 +88,7 @@ impl Kagan {
         if self.agent_scan.is_some() {
             return;
         }
-        let listed = Workspace::dispatch(Op::Program(ProgramOp::Discover), cx);
+        let listed = Workspace::dispatch(Op::Program(ProgramOp::Discover { project_id: None }), cx);
         self.agent_scan = Some(cx.spawn(async move |this, cx| {
             let agent_ready = match listed.await {
                 Ok(OpResult::Programs(list)) => Some(list.agent().is_some()),

@@ -11,7 +11,7 @@ use gpui_kit::{
     ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _,
     WeakEntity, div, px, relative,
 };
-use kg_domain::{Project, ProjectId, ProjectKind, ThreadId};
+use kg_domain::{Op, Project, ProjectId, ProjectKind, SettingsOp, ThreadId};
 
 use super::rows::icon_command;
 use crate::kagan::{ArchiveThread, ThreadActions};
@@ -215,38 +215,59 @@ pub(super) fn project_menu(
     project: ProjectId,
     view: WeakEntity<Sidebar>,
 ) -> PopupMenu {
+    let settings = {
+        let project = project.clone();
+        PopupMenuItem::element(|_, _| {
+            div()
+                .id("project-settings")
+                .ui_observe_as(Facts {
+                    role: Role::MenuItem,
+                    ..Facts::button("Project settings…")
+                })
+                .child("Project settings…")
+        })
+        .on_click(move |_, _, cx| {
+            crate::kagan::dispatch::logged(
+                Op::Settings(SettingsOp::Project {
+                    id: project.clone(),
+                }),
+                cx,
+            );
+        })
+    };
     let rules_view = view.clone();
     let rules_project = project.clone();
-    menu.item(
-        PopupMenuItem::element(|_, _| {
-            div()
-                .id("project-agent-rules")
-                .ui_observe_as(Facts {
-                    role: Role::MenuItem,
-                    ..Facts::button("Agent rules…")
-                })
-                .child("Agent rules…")
-        })
-        .on_click(move |_, _, cx| {
-            _ = rules_view.update(cx, |_, cx| {
-                cx.emit(Event::AgentRules(rules_project.clone()));
-            });
-        }),
-    )
-    .item(
-        PopupMenuItem::element(|_, _| {
-            div()
-                .id("project-remove")
-                .ui_observe_as(Facts {
-                    role: Role::MenuItem,
-                    ..Facts::button("Remove project…")
-                })
-                .child("Remove project…")
-        })
-        .on_click(move |_, _, cx| {
-            _ = view.update(cx, |_, cx| cx.emit(Event::RemoveProject(project.clone())));
-        }),
-    )
+    menu.item(settings)
+        .item(
+            PopupMenuItem::element(|_, _| {
+                div()
+                    .id("project-agent-rules")
+                    .ui_observe_as(Facts {
+                        role: Role::MenuItem,
+                        ..Facts::button("Agent rules…")
+                    })
+                    .child("Agent rules…")
+            })
+            .on_click(move |_, _, cx| {
+                _ = rules_view.update(cx, |_, cx| {
+                    cx.emit(Event::AgentRules(rules_project.clone()));
+                });
+            }),
+        )
+        .item(
+            PopupMenuItem::element(|_, _| {
+                div()
+                    .id("project-remove")
+                    .ui_observe_as(Facts {
+                        role: Role::MenuItem,
+                        ..Facts::button("Remove project…")
+                    })
+                    .child("Remove project…")
+            })
+            .on_click(move |_, _, cx| {
+                _ = view.update(cx, |_, cx| cx.emit(Event::RemoveProject(project.clone())));
+            }),
+        )
 }
 
 pub(super) fn row_marks(

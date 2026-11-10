@@ -12,9 +12,11 @@ open: `kg open`.
 
 thread: `kg thread get`, `kg thread list`, `kg thread run`, `kg thread stop`, `kg thread input`, `kg thread resize`, `kg thread screen`, `kg thread scroll`, `kg thread select`, `kg thread copy`, `kg thread report`, `kg thread paste`, `kg thread send`, `kg thread terminal new`, `kg thread terminal list`, `kg thread terminal close`, `kg thread details`, `kg thread links`, `kg thread archive`, `kg thread unarchive`, `kg thread delete`, `kg thread set-pinned`, `kg thread notify`, `kg thread rename`, `kg thread mark-read`, `kg thread metadata`, `kg thread set-metadata`, `kg thread events`, `kg thread wait-event`, `kg thread wait`, `kg thread ask`, `kg thread start-again`, `kg thread tools`, `kg thread call-tool`, `kg thread interactions`, `kg thread search`.
 
-project: `kg project list`, `kg project get`, `kg project add`, `kg project remove`, `kg project reorder`.
+project: `kg project list`, `kg project get`, `kg project add`, `kg project remove`, `kg project reorder`, `kg project set-program`.
 
-program: `kg program list`.
+program: `kg program list`, with `--project` for a project's default.
+
+env: `kg env list`, `kg env set`, `kg env remove`. A variable is set for every program kagan starts, or for one project with `--project`; a value comes from stdin, and `kg` never prints one.
 
 environment: `kg environment get`, `kg environment restore`, `kg environment branches`, `kg environment setup`, `kg environment set-base`, `kg environment remove`.
 
@@ -26,7 +28,7 @@ section: `kg section create`, `kg section rename`, `kg section delete`, `kg sect
 
 theme: `kg theme get`, `kg theme set`, `kg theme new`, `kg theme folder`.
 
-settings: `kg settings open`, `kg settings plugins`.
+settings: `kg settings open`, `kg settings plugins`, `kg settings project`.
 
 window: `kg window about`, `kg window hide`, `kg window hide-others`, `kg window show-all`, `kg window quit`, `kg window minimize`, `kg window zoom`, `kg window close`, `kg window next-thread`, `kg window previous-thread`, `kg window thread`, `kg window next-thread-needing-you`, `kg window toggle-review-wrap`, `kg window toggle-activity-log`, `kg window command-list`, `kg window search-threads`, `kg window next-terminal`, `kg window previous-terminal`, `kg window open-local-link`.
 

@@ -5,7 +5,7 @@ use super::{event::append_deleted, not_found};
 use crate::column::Text;
 use crate::{Error, Result};
 
-const PROJECT_COLUMNS: &str = "id, kind, name, path, git_remote_url, sort";
+const PROJECT_COLUMNS: &str = "id, kind, name, path, git_remote_url, sort, program";
 
 impl super::Store {
     pub fn put_project(&self, project: &Project) -> Result<()> {
@@ -18,6 +18,7 @@ impl super::Store {
                 ":path": Text(&project.path),
                 ":git_remote_url": project.git_remote_url,
                 ":sort": project.sort,
+                ":program": project.program,
             },
         )?;
         Ok(())
@@ -56,6 +57,17 @@ impl super::Store {
             .query_map([], project_row)?
             .collect::<Result<_, _>>()?;
         Ok(projects)
+    }
+
+    pub fn set_project_program(&self, id: &ProjectId, program: Option<&str>) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE projects SET program = ?1 WHERE id = ?2",
+            params![program, Text(id)],
+        )?;
+        if changed == 0 {
+            return Err(not_found("project", id));
+        }
+        Ok(())
     }
 
     pub fn reorder_project(&self, id: &ProjectId, before: Option<&ProjectId>) -> Result<()> {
@@ -104,5 +116,6 @@ fn project_row(row: &Row) -> rusqlite::Result<Project> {
         path: row.get::<_, Text<_>>("path")?.0,
         git_remote_url: row.get("git_remote_url")?,
         sort: row.get("sort")?,
+        program: row.get("program")?,
     })
 }

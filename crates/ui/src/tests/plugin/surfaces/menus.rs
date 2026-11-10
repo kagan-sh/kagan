@@ -87,12 +87,12 @@ fn the_project_menu_opens_under_its_button(cx: &mut TestAppContext) {
     focus_row(cx, window, &format!("project-{}", project.id.0));
     click(cx, window, &button);
     // The project menu is gpui-kit's dropdown, so its first item stands in for the menu.
-    wait_until(cx, |cx| shows(cx, window, "project-remove"));
+    wait_until(cx, |cx| shows(cx, window, "project-settings"));
     let (bx, by) = (origin_x(cx, window, &button), origin_y(cx, window, &button));
     let bh = height_of(cx, window, &button);
     let (item_x, item_y) = (
-        origin_x(cx, window, "project-remove"),
-        origin_y(cx, window, "project-remove"),
+        origin_x(cx, window, "project-settings"),
+        origin_y(cx, window, "project-settings"),
     );
     assert!(
         (item_y - (by + bh)).abs() < 40.,

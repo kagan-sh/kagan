@@ -1,10 +1,13 @@
 use crate::ThreadId;
 
 use super::browser::browser_check;
+use super::env::{shell_name, variable_name, variable_value};
 use super::{
-    DiffOp, EnvironmentOp, Op, PluginOp, PreviewOp, SEARCH_LIMIT, SEARCH_TEXT_MAX, SectionOp,
-    SurfaceOp, TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThreadOp, WindowOp,
+    DiffOp, EnvOp, EnvironmentOp, Op, PluginOp, PreviewOp, ProjectOp, SEARCH_LIMIT,
+    SEARCH_TEXT_MAX, SectionOp, SurfaceOp, TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX, TerminalOp,
+    ThreadOp, WindowOp,
 };
+use crate::split_program;
 
 /// Rejects an op a client must not send.
 ///
@@ -31,6 +34,13 @@ pub fn check(op: &Op) -> Result<(), String> {
                 _ => Ok(()),
             }),
         Op::Environment(op) => environment_thread(op),
+        Op::Env(op) => env_check(op),
+        Op::Project(ProjectOp::SetProgram {
+            program: Some(program),
+            ..
+        }) => split_program(program)
+            .map(|_| ())
+            .map_err(|error| error.to_string()),
         Op::Plugin(op) => plain_opt(plugin_thread(op)),
         Op::Browser(op) => plain(op.thread()).and_then(|()| browser_check(op)),
         Op::Guide { .. }
@@ -181,6 +191,28 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
         | ThreadOp::Tools { id, .. }
         | ThreadOp::CallTool { id, .. }
         | ThreadOp::Interactions { id, .. } => vec![id],
+    }
+}
+
+// A thread's own terminal sends its thread id, so a program kagan started cannot change what
+// later programs get. The check keys off that id; a program that drops it is not stopped here.
+fn env_check(op: &EnvOp) -> Result<(), String> {
+    match op {
+        EnvOp::List { .. } => Ok(()),
+        EnvOp::Set {
+            thread_id: Some(_), ..
+        }
+        | EnvOp::Remove {
+            thread_id: Some(_), ..
+        } => Err(
+            "a thread cannot change environment variables; set them in Settings → General or on the project's page"
+                .into(),
+        ),
+        EnvOp::Set { name, value, .. } => {
+            variable_name(name)?;
+            value.as_deref().map_or(Ok(()), variable_value)
+        }
+        EnvOp::Remove { name, .. } => shell_name(name),
     }
 }
 

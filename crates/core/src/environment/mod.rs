@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use gpui_kit::{AsyncApp, WeakEntity};
@@ -108,10 +109,12 @@ pub(crate) async fn prepare(
             (workspace.database.clone(), workspace.data_dir.clone())
         })
         .map_err(closed)?;
+    // The setup and teardown scripts get the same variables as a program in this project.
+    let variables = crate::host::variables::for_project(&data_dir, &project.id)?;
     if provider == Provider::Worktree
         && let Some(existing) = reusable_setup(&database, &project.id).await?
     {
-        return retry_setup(this, &database, existing, cx).await;
+        return retry_setup(this, &database, existing, &variables, cx).await;
     }
     let environment_id = EnvironmentId(id("env"));
     let branch = (provider == Provider::Worktree).then(|| branch.unwrap_or_else(|| id("kg")));
@@ -142,7 +145,7 @@ pub(crate) async fn prepare(
     let pending = environment.clone();
     match cx
         .background_executor()
-        .spawn(async move { provision(&project_path, pending) })
+        .spawn(async move { provision(&project_path, pending, &variables) })
         .await
     {
         Ok(done) => Ok(Prepared::Managed(done)),
@@ -298,15 +301,17 @@ async fn retry_setup(
     this: &WeakEntity<Workspace>,
     database: &Database,
     existing: Environment,
+    variables: &[(OsString, OsString)],
     cx: &mut AsyncApp,
 ) -> Result<Prepared> {
+    let variables = variables.to_vec();
     let path = existing.path.clone();
     let branch = existing.branch.clone().unwrap_or_default();
     let project_id = existing.project_id.clone();
     let leftover = existing.clone();
     match cx
         .background_executor()
-        .spawn(async move { script::become_ready(existing) })
+        .spawn(async move { script::become_ready(existing, &variables) })
         .await
     {
         script::SetupEnd::Ready(done) => Ok(Prepared::Managed(done)),
@@ -400,6 +405,7 @@ pub(crate) async fn commit(
 fn provision(
     project: &Path,
     mut environment: Environment,
+    variables: &[(OsString, OsString)],
 ) -> std::result::Result<Provisioned, ProvisionMiss> {
     match environment.provider {
         Provider::Project => {}
@@ -462,7 +468,7 @@ fn provision(
                 abandon_worktree(project, &environment.path, &branch);
                 return Err(error.into());
             }
-            return settle_setup(project, environment);
+            return settle_setup(project, environment, variables);
         }
     }
     make_ready(&mut environment)?;
@@ -484,10 +490,11 @@ fn make_ready(environment: &mut Environment) -> std::io::Result<()> {
 fn settle_setup(
     project: &Path,
     environment: Environment,
+    variables: &[(OsString, OsString)],
 ) -> std::result::Result<Provisioned, ProvisionMiss> {
     let path = environment.path.clone();
     let branch = environment.branch.clone().unwrap_or_default();
-    match script::become_ready(environment) {
+    match script::become_ready(environment, variables) {
         script::SetupEnd::Ready(done) => Ok(done),
         script::SetupEnd::Failed(kept) => Err(ProvisionMiss::Keep(kept)),
         script::SetupEnd::Mismatch(error) => {

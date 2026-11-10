@@ -12,6 +12,10 @@ _Avoid_: Repo, workspace (as a synonym), project source, host
 The single built-in project for work tied to no repository.
 _Avoid_: Scratch, default project
 
+**Environment variable**:
+A name and value that every program kagan starts gets, set globally or for one project. Its value is never shown again.
+_Avoid_: Env, secret, setting
+
 **Environment**:
 The folder a thread works in, plus its state (`creating`, `provisioning`, `ready`, `error`, `destroyed`). Several threads can share one.
 _Avoid_: Workspace, sandbox, checkout (as a synonym)

@@ -76,7 +76,8 @@ pub(crate) async fn restore(
                     )?;
                 }
                 Provider::Project | Provider::Personal => {
-                    return match provision(&project.path, environment) {
+                    // Project and personal folders run no setup script, so they need no variables.
+                    return match provision(&project.path, environment, &[]) {
                         Ok(done) => Ok(done.environment),
                         Err(error) => Err(error.into_error()),
                     };

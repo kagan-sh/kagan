@@ -234,16 +234,22 @@ pub(super) async fn variables(
             (workspace.cli.clone(), workspace.socket.clone())
         })
         .map_err(closed)?;
+    let data_dir = this
+        .update(cx, |workspace, _| workspace.data_dir.clone())
+        .map_err(closed)?;
+    // The person's variables come first, so kagan's own names are set after them.
+    let mut env = crate::host::variables::for_project(&data_dir, &record.project_id)?;
     // The first call waits for the login shell, so it runs off the window's thread.
     let path = cx.background_spawn(async { kg_process::user_path() }).await;
-    Ok(environment(
+    env.extend(environment(
         record.id.0.as_str(),
         record.project_id.0.as_str(),
         record.environment_id.as_ref().map(|id| id.0.as_str()),
         &cli,
         socket.as_deref(),
         path.as_ref(),
-    ))
+    ));
+    Ok(env)
 }
 
 pub(crate) async fn integrate(

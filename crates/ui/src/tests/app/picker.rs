@@ -77,7 +77,8 @@ fn command(cx: &mut TestAppContext, kagan: &Entity<Kagan>) -> Result<String, Str
 
 #[cfg(unix)]
 fn programs(cx: &mut TestAppContext) -> Vec<kg_domain::Program> {
-    let listed = cx.update(|cx| Workspace::dispatch(Op::Program(ProgramOp::List), cx));
+    let listed =
+        cx.update(|cx| Workspace::dispatch(Op::Program(ProgramOp::List { project_id: None }), cx));
     let OpResult::Programs(list) = cx.foreground_executor().block_test(listed).unwrap() else {
         panic!("programs");
     };
@@ -86,7 +87,8 @@ fn programs(cx: &mut TestAppContext) -> Vec<kg_domain::Program> {
 
 #[cfg(unix)]
 fn default_program(cx: &mut TestAppContext) -> Option<String> {
-    let listed = cx.update(|cx| Workspace::dispatch(Op::Program(ProgramOp::List), cx));
+    let listed =
+        cx.update(|cx| Workspace::dispatch(Op::Program(ProgramOp::List { project_id: None }), cx));
     let OpResult::Programs(list) = cx.foreground_executor().block_test(listed).unwrap() else {
         panic!("programs");
     };

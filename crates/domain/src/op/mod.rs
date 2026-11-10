@@ -5,6 +5,7 @@ mod check;
 mod config;
 mod diagnostics;
 mod diff;
+mod env;
 mod environment;
 mod guide;
 mod index;
@@ -42,6 +43,7 @@ pub use check::check;
 pub use config::ConfigOp;
 pub use diagnostics::DiagnosticsOp;
 pub use diff::{DiffOp, DiffQuery, DiffScope};
+pub use env::EnvOp;
 pub use environment::{
     BranchList, EnvironmentOp, EnvironmentSpec, FOLDER_IN_USE, PinnedSetup, ProjectBranch,
     SetupFile,
@@ -107,6 +109,9 @@ pub enum Op {
     /// Environments
     #[command(subcommand)]
     Environment(EnvironmentOp),
+    /// Environment variables every program kagan starts gets, global or per project
+    #[command(subcommand)]
+    Env(EnvOp),
     /// Plugins
     #[command(subcommand)]
     Plugin(PluginOp),
@@ -231,6 +236,8 @@ pub enum OpResult {
     Project(Project),
     Projects(Vec<Project>),
     Programs(ProgramList),
+    /// Names of environment variables; values are never returned
+    Variables(Vec<String>),
     Environment(Environment),
     Branches(BranchList),
     Setup(Option<PinnedSetup>),

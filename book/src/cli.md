@@ -21,6 +21,7 @@ Commands:
   project       Projects
   program       Programs a new thread can run, as the new-thread picker lists them
   environment   Environments
+  env           Environment variables every program kagan starts gets, global or per project
   plugin        Plugins
   sidebar       Projects, sections and threads as the sidebar shows them
   section       Named groups threads are filed under
@@ -1163,12 +1164,13 @@ Projects
 Usage: kg project [OPTIONS] <COMMAND>
 
 Commands:
-  list     List projects
-  get      Show a project
-  add      Add a project for a folder
-  remove   Remove a project and its threads
-  reorder  Move a project in the sidebar
-  help     Print this message or the help of the given subcommand(s)
+  list         List projects
+  get          Show a project
+  add          Add a project for a folder
+  remove       Remove a project and its threads
+  set-program  Set the program a new thread in a project starts with; omit the program to clear it
+  reorder      Move a project in the sidebar
+  help         Print this message or the help of the given subcommand(s)
 
 Options:
       --json
@@ -1238,6 +1240,25 @@ Options:
           Print help
 ```
 
+## `kg project set-program`
+
+```text
+Set the program a new thread in a project starts with; omit the program to clear it
+
+Usage: kg project set-program <ID> [PROGRAM]
+
+Arguments:
+  <ID>
+          
+
+  [PROGRAM]
+          The command line, as `kg program list` shows it
+
+Options:
+  -h, --help
+          Print help
+```
+
 ## `kg project reorder`
 
 ```text
@@ -1265,7 +1286,7 @@ Programs a new thread can run, as the new-thread picker lists them
 Usage: kg program [OPTIONS] <COMMAND>
 
 Commands:
-  list  Programs found on the PATH, the shell, and the recent threads; the first installed one is the default
+  list  Programs found on the PATH, the shell, and the recent threads. The default is the project's program when it is installed, else the first installed one
   help  Print this message or the help of the given subcommand(s)
 
 Options:
@@ -1279,11 +1300,14 @@ Options:
 ## `kg program list`
 
 ```text
-Programs found on the PATH, the shell, and the recent threads; the first installed one is the default
+Programs found on the PATH, the shell, and the recent threads. The default is the project's program when it is installed, else the first installed one
 
-Usage: kg program list
+Usage: kg program list [OPTIONS]
 
 Options:
+      --project <PROJECT_ID>
+          
+
   -h, --help
           Print help
 ```
@@ -1410,6 +1434,80 @@ Arguments:
           [env: KG_ENVIRONMENT_ID=]
 
 Options:
+  -h, --help
+          Print help
+```
+
+## `kg env`
+
+```text
+Environment variables every program kagan starts gets, global or per project
+
+Usage: kg env [OPTIONS] <COMMAND>
+
+Commands:
+  list    Names of the variables every program gets, or of a project's with --project. Values are never shown
+  set     Set a variable. The value comes from stdin, or from a prompt that does not show it
+  remove  Remove a variable
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Print compact JSON; failures print the error envelope
+
+  -h, --help
+          Print help
+```
+
+## `kg env list`
+
+```text
+Names of the variables every program gets, or of a project's with --project. Values are never shown
+
+Usage: kg env list [OPTIONS]
+
+Options:
+      --project <PROJECT_ID>
+          
+
+  -h, --help
+          Print help
+```
+
+## `kg env set`
+
+```text
+Set a variable. The value comes from stdin, or from a prompt that does not show it
+
+Usage: kg env set [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          
+
+Options:
+      --project <PROJECT_ID>
+          
+
+  -h, --help
+          Print help
+```
+
+## `kg env remove`
+
+```text
+Remove a variable
+
+Usage: kg env remove [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          
+
+Options:
+      --project <PROJECT_ID>
+          
+
   -h, --help
           Print help
 ```
@@ -2121,6 +2219,7 @@ Usage: kg settings [OPTIONS] <COMMAND>
 Commands:
   open     Show the settings page, opening the window if it is closed
   plugins  Show the plugin management section
+  project  Show a project's page: its environment variables, default program, and agent rules
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -2149,6 +2248,22 @@ Options:
 Show the plugin management section
 
 Usage: kg settings plugins
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg settings project`
+
+```text
+Show a project's page: its environment variables, default program, and agent rules
+
+Usage: kg settings project <ID>
+
+Arguments:
+  <ID>
+          
 
 Options:
   -h, --help

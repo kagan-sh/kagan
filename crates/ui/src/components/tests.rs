@@ -252,6 +252,7 @@ fn seed_thread(dir: &std::path::Path) {
         path: dir.to_path_buf(),
         git_remote_url: None,
         sort: 0,
+        program: None,
     };
     store.put_project(&project).unwrap();
     store

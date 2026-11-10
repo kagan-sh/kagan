@@ -114,6 +114,9 @@ pub struct Project {
     /// Rank among standard projects; Personal stays last regardless.
     #[serde(default)]
     pub sort: i64,
+    /// The command line a new thread here starts with, when it is installed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program: Option<String>,
 }
 
 pub fn order_sidebar_projects(projects: &mut [Project]) {

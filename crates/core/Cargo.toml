@@ -24,6 +24,7 @@ semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 
@@ -44,4 +45,3 @@ proptest.workspace = true
 minisign = "=0.10.0"
 gpui-kit = { workspace = true, features = ["test-support"] }
 rusqlite.workspace = true
-tempfile.workspace = true

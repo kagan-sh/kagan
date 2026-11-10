@@ -22,6 +22,12 @@ pub enum ProjectOp {
         /// Project to remove
         id: ProjectId,
     },
+    /// Set the program a new thread in a project starts with; omit the program to clear it
+    SetProgram {
+        id: ProjectId,
+        /// The command line, as `kg program list` shows it
+        program: Option<String>,
+    },
     /// Move a project in the sidebar
     Reorder {
         id: ProjectId,

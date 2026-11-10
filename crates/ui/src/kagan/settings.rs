@@ -7,6 +7,7 @@ mod keyboard;
 mod nav;
 mod pages;
 mod plugins;
+pub(super) mod project;
 mod row;
 mod slots;
 mod suggested;
@@ -30,6 +31,7 @@ use kg_plugins::PluginHost;
 use super::question;
 use super::rules::RulesEditor;
 use super::surface::mount_error;
+use super::variables::Variables;
 use super::{Kagan, OpenSettings};
 use crate::theme::ThemeState;
 use crate::ui_observe::UiObserveExt as _;
@@ -95,6 +97,7 @@ pub(super) struct SettingsState {
     pub(super) query: Entity<InputState>,
     _query_watch: Subscription,
     pub(super) list: FocusHandle,
+    pub(super) variables: Entity<Variables>,
     pub(super) rules: Entity<RulesEditor>,
 }
 
@@ -112,8 +115,10 @@ impl SettingsState {
                 cx.notify();
             }
         });
+        let variables = cx.new(|cx| Variables::new(None, window, cx));
         let rules = cx.new(|cx| RulesEditor::new(None, window, cx));
         Self {
+            variables,
             scroll: ScrollHandle::new(),
             approvals: 0,
             drafts: Drafts::default(),
@@ -269,6 +274,9 @@ impl Kagan {
     }
 
     pub(super) fn load_settings(&mut self, cx: &mut Context<Self>) {
+        self.settings
+            .variables
+            .update(cx, super::variables::Variables::reload);
         Self::load_layout(cx);
         self.load_prefs(cx);
         self.load_kg_on_path(cx);

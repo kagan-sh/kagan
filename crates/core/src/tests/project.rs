@@ -199,6 +199,7 @@ async fn a_project_in_a_personal_folder_keeps_it_when_its_thread_is_deleted(
                     path: linked,
                     git_remote_url: None,
                     sort: 0,
+                    program: None,
                 })
                 .unwrap();
         })

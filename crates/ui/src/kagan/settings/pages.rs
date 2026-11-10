@@ -41,6 +41,7 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
         ),
         within(setup_guide_group(cx), Category::General),
         within(super::command::group(kagan, cx), Category::General),
+        within(environment(kagan), Category::General),
         within(appearance, Category::Appearance),
     ];
     out.extend(
@@ -246,6 +247,19 @@ fn agents(kagan: &Kagan, agent: bool, notify: NotifyLevel, confirm_archive: bool
     rules.wide = true;
     group.rows.push(rules);
     group
+}
+
+fn environment(kagan: &Kagan) -> Group {
+    group(
+        "environment",
+        "Environment variables",
+        vec![row(
+            "environment-variables",
+            "Variables",
+            "Set once for every program kagan starts. A value is hidden after you set it.",
+            kagan.settings.variables.clone().into_any_element(),
+        )],
+    )
 }
 
 fn plugin_status_row(on: bool) -> Row {

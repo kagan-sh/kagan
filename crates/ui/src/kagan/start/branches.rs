@@ -393,7 +393,10 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.picker.update(cx, |picker, cx| picker.load(window, cx));
+        self.picker.update(cx, |picker, cx| {
+            let project = picker.project();
+            picker.load(project, window, cx);
+        });
     }
 }
 

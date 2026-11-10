@@ -57,6 +57,7 @@ pub(crate) fn add_project(store: &kg_store::Store, path: &std::path::Path) -> Re
         .map(|url| without_credentials(url.trim())),
         path,
         sort,
+        program: None,
     };
     if store.removal_pending(&project.path).map_err(closed)? {
         return Err(OpError::Invalid("that folder is being removed".into()));
@@ -192,12 +193,19 @@ pub(crate) async fn remove_project(
             .extend(worktrees.iter().map(|environment| environment.id.clone()));
     })
     .map_err(closed)?;
-    let failures = remove_worktrees(this, &project.path, worktrees, cx).await?;
+    let mut failures = remove_worktrees(this, &project.path, worktrees, cx).await?;
     let at = crate::workspace::time(this, cx)?;
     let lookup = id.clone();
     let events = database
         .call(move |store| store.delete_project(&lookup, at))
         .await?;
+    let data_dir = this
+        .update(cx, |workspace, _| workspace.data_dir.clone())
+        .map_err(closed)?;
+    // The project is already gone, so a values file that cannot be read is a warning, not a failure.
+    if let Err(error) = crate::host::variables::forget_project(&data_dir, &id) {
+        failures.push(error.to_string());
+    }
     this.update(cx, |workspace, cx| {
         crate::thread::archive::forget_deleted(workspace, events, cx);
     })

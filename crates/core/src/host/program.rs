@@ -7,7 +7,7 @@ use gpui_kit::{AsyncApp, WeakEntity};
 use crate::Workspace;
 use kg_domain::{
     KNOWN_PROGRAMS, LISTED_WHEN_MISSING, OpError, OpResult, Program, ProgramList, ProgramSource,
-    Visibility, split_program,
+    ProjectId, Visibility, split_program,
 };
 use kg_process::{find_program, pathext, user_path};
 
@@ -22,6 +22,7 @@ pub(crate) async fn list(
     this: &WeakEntity<Workspace>,
     database: &Database,
     include_versions: bool,
+    project_id: Option<ProjectId>,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     let environment = program_environment_of(this, cx);
@@ -33,12 +34,25 @@ pub(crate) async fn list(
             Path::new(&environment.shell).display()
         )));
     }
+    let project_program = match project_id {
+        Some(id) => {
+            let lookup = id.clone();
+            let project = database
+                .call(move |store| store.project(&lookup))
+                .await?
+                .ok_or_else(|| crate::workspace::missing("project", &id))?;
+            project.program
+        }
+        None => None,
+    };
     let recent = database
         .call(|store| store.all_threads())
         .await?
         .into_iter()
         .filter(|thread| thread.visibility == Visibility::Visible && !thread.provider.is_empty())
         .map(|thread| thread.provider);
+    // The project's program goes first, so it is the default when it is installed.
+    let recent = project_program.iter().cloned().chain(recent);
     let recent: Vec<String> = recent.fold(Vec::new(), |mut distinct, command| {
         if !distinct.contains(&command) && distinct.len() < RECENT_LIMIT {
             distinct.push(command);

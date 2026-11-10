@@ -36,7 +36,7 @@ kagan runs each known agent on your `PATH` with `--version`, to show its version
 
 ## Programs in threads
 
-A program runs with your user access and your environment variables. Those variables can include API keys. Run only programs you trust.
+A program runs with your user access and your environment variables. Those variables can include API keys. Run only programs you trust. Kagan also gives each program the variables you set in Settings or in a project's page. Their values are stored in `environment.json` in the data folder, readable only by you.
 
 The program also gets `kg`. With `kg` it can control threads and the window. It cannot answer an approval. Only you can approve a plugin install or more plugin powers. Only you can approve a request to delete a thread.
 

@@ -187,6 +187,7 @@ fn personal_folders_skips_a_folder_a_project_sits_in() {
             path: "/code/kagan/personal/one/repo".into(),
             git_remote_url: None,
             sort: 1,
+            program: None,
         })
         .unwrap();
     let mut owner = thread("thr_1", 1);
