@@ -178,7 +178,7 @@ fn start_with_program(
     cx.update_window(window, |_, window, cx| {
         let picker = kagan.read(cx).picker_entity();
         picker.update(cx, |picker, cx| {
-            picker.use_custom(program.into(), "", window, cx)
+            picker.use_custom(program, "", window, cx);
         });
     })
     .unwrap();
@@ -189,7 +189,7 @@ fn start_with_program(
 fn a_forked_thread_gets_the_prompt_typed_in(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
     fork_to_start(cx, &kagan, window, data.path());
-    start_with_program(cx, &kagan, window, &shell());
+    start_with_program(cx, &kagan, window, shell());
     wait_until(cx, |cx| grid_text(cx, &kagan).contains("Make a new skill"));
 }
 

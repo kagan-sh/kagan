@@ -60,7 +60,7 @@ pub(in crate::kagan) fn rail(
         .items_center()
         .gap(px(6.))
         .child(threads_home(shows, cx))
-        .child(skills_row(shows.skills, skills_focus, cx))
+        .child(skills_row(shows.skills, &skills_focus, cx))
         .children(tools)
         .children(pages)
         .child(manage_row(manage_focus, cx))
@@ -179,13 +179,13 @@ pub(super) fn rail_tool(
         .into_any_element()
 }
 
-fn skills_row(active: bool, focus: FocusHandle, cx: &mut Context<Sidebar>) -> impl IntoElement {
+fn skills_row(active: bool, focus: &FocusHandle, cx: &mut Context<Sidebar>) -> impl IntoElement {
     let click_focus = focus.clone();
     div()
         .id("skills-rail")
         .flex_shrink_0()
         .key_context("SidebarRow")
-        .track_focus(&focus)
+        .track_focus(focus)
         .ui_observe_as(Facts {
             focus: Some(focus.clone()),
             selected: Some(active),
