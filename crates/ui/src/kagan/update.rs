@@ -289,3 +289,7 @@ fn install(cx: &mut App) {
     })
     .detach();
 }
+
+#[cfg(test)]
+#[path = "update_test.rs"]
+mod tests;

@@ -20,8 +20,26 @@ exclude_re = [
     # The Windows and macOS clipboard write. CI's mutants run on Linux, which compiles the other write_png.
     'clipboard\.rs:25:5: replace write_png -> Result<HostValue, HostError> with Ok\(Default::default\(\)\)',
     # The production stub is compiled only outside tests; the test build has its own hold.
-    'host/mod\.rs:\d+:\d+: replace hold -> bool with true',
+    'runtime/host/mod\.rs:\d+:\d+: replace hold -> bool with true',
     # The keychain module is compiled out of every test build, and it talks to the OS keychain.
     'keychain\.rs:\d+:\d+: replace use_keychain with \(\)',
     'keychain\.rs:\d+:\d+: replace <impl keyring_core::api::CredentialStoreApi for Keychain>::vendor',
+    # The macOS and Windows screen capture. CI's mutants run on Linux, which does not compile them.
+    'ui/src/ui_driver\.rs:298:9: replace macos::run',
+    'ui/src/ui_driver\.rs:355:9: replace windows::capture',
+    'ui/src/ui_driver\.rs:\d+:\d+: .* in windows::capture$',
+    # Painting pixels. A test can only see the grid, not the glyphs drawn from it.
+    'ui/src/terminal\.rs:568:5: replace paint_glyphs',
+    'ui/src/terminal\.rs:580:36: replace \+ with - in paint_glyphs',
+    'ui/src/terminal\.rs:580:64: replace \* with / in paint_glyphs',
+    # Loading the font files into the app. Its effect is pixels on screen.
+    'ui/src/theme/mod\.rs:96:5: replace load_fonts',
+    # The macOS-only website data store branch of `place`. Linux does not compile it.
+    'ui/src/components/webview/mod\.rs:228:12: delete ! in place',
+    'ui/src/components/webview/mod\.rs:231:43: replace < with (<=|==|>) in place',
+    # These need a live WebView, which needs a display, so CI's runner cannot run them.
+    'ui/src/components/webview/pages\.rs:76:5: replace sync_pages',
+    'ui/src/web_page\.rs:244:5: replace open_windows',
+    'ui/src/web_page\.rs:275:5: replace restrain',
+    'ui/src/web_page\.rs:98:9: replace WebPage::eval',
 ]
