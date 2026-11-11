@@ -1,5 +1,5 @@
 use std::{
-    io::{self, BufRead, BufReader, Write},
+    io::{self, BufRead, BufReader, Read, Write},
     process::{Command, Stdio},
     sync::{Arc, mpsc},
     thread,
@@ -373,6 +373,39 @@ pub(crate) fn serve(
     });
 }
 
+// One request is one JSON line. A longer one is refused and its connection closed, so a client
+// cannot make the app hold an unbounded line.
+const LINE_MAX: u64 = 16 << 20;
+
+enum Request {
+    Line(String),
+    TooLong,
+}
+
+fn read_request(reader: &mut impl BufRead) -> io::Result<Option<Request>> {
+    let mut line = Vec::new();
+    if reader
+        .by_ref()
+        .take(LINE_MAX + 1)
+        .read_until(b'\n', &mut line)?
+        == 0
+    {
+        return Ok(None);
+    }
+    if line.len() as u64 > LINE_MAX && !line.ends_with(b"\n") {
+        return Ok(Some(Request::TooLong));
+    }
+    if line.ends_with(b"\n") {
+        line.pop();
+        if line.ends_with(b"\r") {
+            line.pop();
+        }
+    }
+    String::from_utf8(line)
+        .map(|line| Some(Request::Line(line)))
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+}
+
 // A reader thread sees the client leave while an op still waits for a person.
 fn answer(
     stream: Stream,
@@ -385,20 +418,28 @@ fn answer(
     let (present, gone) = async_channel::bounded::<()>(1);
     thread::spawn(move || {
         let _present = present;
-        for line in BufReader::new(&*receive).lines() {
-            if lines.send(line).is_err() {
+        let mut reader = BufReader::new(&*receive);
+        while let Some(request) = read_request(&mut reader).transpose() {
+            let stop = !matches!(request, Ok(Request::Line(_)));
+            if lines.send(request).is_err() || stop {
                 return;
             }
         }
     });
-    for line in incoming {
-        let reply = match serde_json::from_str::<Op>(&line?) {
-            Ok(op) => handle(op, &gone, &mut |question| {
-                let mut frame = serde_json::json!({ "waiting": question }).to_string();
-                frame.push('\n');
-                _ = send.write_all(frame.as_bytes());
-            }),
-            Err(error) => Err(OpError::Invalid(error.to_string())),
+    for request in incoming {
+        let reply = match request? {
+            Request::Line(line) => match serde_json::from_str::<Op>(&line) {
+                Ok(op) => handle(op, &gone, &mut |question| {
+                    let mut frame = serde_json::json!({ "waiting": question }).to_string();
+                    frame.push('\n');
+                    _ = send.write_all(frame.as_bytes());
+                }),
+                Err(error) => Err(OpError::Invalid(error.to_string())),
+            },
+            Request::TooLong => Err(OpError::Invalid(format!(
+                "the request is over {} MiB",
+                LINE_MAX >> 20
+            ))),
         };
         let mut out = match reply {
             Ok(result) => serde_json::to_vec(&result),

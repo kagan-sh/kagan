@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::thread::JoinHandle;
@@ -25,7 +25,7 @@ use ending::Ending;
 pub use exit::Exit;
 pub use finished::Finished;
 use shared::lock;
-use stream::{Outgoing, io_error, is_unsafe_control, paste_text, pty_size};
+use stream::{Outgoing, io_error, is_unsafe_control, paste_text, pty_size, reserve};
 #[cfg(unix)]
 use stream::{dup_fd, set_nonblocking};
 use stream::{thread_read, thread_write};
@@ -41,6 +41,8 @@ pub struct Launch {
 pub struct Terminal {
     master: Option<Box<dyn MasterPty + Send>>,
     input: Sender<Outgoing>,
+    /// Person or agent input the writer has not yet handed to the pty; see `stream::INPUT_MAX`.
+    queued_input: Arc<AtomicUsize>,
     child: Mutex<Option<Box<dyn Child + Send + Sync>>>,
     reader: Option<JoinHandle<()>>,
     writer: Option<JoinHandle<()>>,
@@ -127,6 +129,7 @@ impl Terminal {
                 replies: Some(input.clone()),
             },
             input,
+            queued_input: Arc::new(AtomicUsize::new(0)),
             child: Mutex::new(Some(child)),
             ended,
             write_stop,
@@ -161,30 +164,36 @@ impl Terminal {
     ///
     /// # Errors
     ///
-    /// The program has already been reaped.
+    /// The program has already been reaped, or it is not reading and the input queue is full.
     pub fn write(&self, bytes: Vec<u8>) -> io::Result<()> {
         if bytes.is_empty() {
             return Ok(());
         }
+        let charge = reserve(&self.queued_input, bytes.len())?;
         self.view.edit(Edit::Bottom);
-        self.send(bytes)
+        self.send(bytes, charge)
     }
 
     /// Bytes a mouse report sends. Unlike typing, a report leaves a scrolled view where it is.
     ///
     /// # Errors
     ///
-    /// The program has already been reaped.
+    /// The program has already been reaped, or it is not reading and the input queue is full.
     pub fn report(&self, bytes: Vec<u8>) -> io::Result<()> {
-        self.send(bytes)
-    }
-
-    fn send(&self, bytes: Vec<u8>) -> io::Result<()> {
         if bytes.is_empty() {
             return Ok(());
         }
+        let charge = reserve(&self.queued_input, bytes.len())?;
+        self.send(bytes, charge)
+    }
+
+    fn send(&self, bytes: Vec<u8>, charge: stream::Charge) -> io::Result<()> {
         self.input
-            .send(Outgoing::Bytes(bytes))
+            .send(Outgoing::Input {
+                bytes,
+                done: None,
+                charge,
+            })
             .map_err(|_| io::Error::other("terminal is closed"))
     }
 
@@ -219,7 +228,8 @@ impl Terminal {
     ///
     /// # Errors
     ///
-    /// The program has ended, the terminal is closed, or nothing non-control remains after the filter.
+    /// The program has ended, the terminal is closed, nothing non-control remains after the filter,
+    /// or it is not reading and the input queue is full.
     pub fn submit(&self, text: &str) -> io::Result<(String, mpsc::Receiver<io::Result<()>>)> {
         if self.exited() {
             return Err(io::Error::other("the program has ended"));
@@ -231,10 +241,15 @@ impl Terminal {
         let bracketed = lock(&self.view.shared.screen).bracketed_paste();
         let mut bytes = paste_text(&typed, bracketed).into_bytes();
         bytes.push(b'\r');
+        let charge = reserve(&self.queued_input, bytes.len())?;
         self.view.edit(Edit::Bottom);
         let (done, written) = mpsc::channel();
         self.input
-            .send(Outgoing::Checked { bytes, done })
+            .send(Outgoing::Input {
+                bytes,
+                done: Some(done),
+                charge,
+            })
             .map_err(|_| io::Error::other("terminal is closed"))?;
         Ok((typed, written))
     }

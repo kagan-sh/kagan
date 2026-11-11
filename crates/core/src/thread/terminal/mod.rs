@@ -68,7 +68,7 @@ pub(crate) async fn start(
     match spawned {
         Ok(terminal) => {
             this.update(cx, |workspace, cx| {
-                workspace.run_mut(&record.id).shown = Some(Shown::Running(terminal));
+                workspace.run_mut(&record.id).shown = Some(Shown::Running(Box::new(terminal)));
                 follow_terminals(workspace, cx);
             })
             .map_err(closed)?;
@@ -197,9 +197,9 @@ pub(crate) async fn submit(
     }
     let (typed, written) = this
         .update(cx, |workspace, _| match workspace.shown(id) {
-            Some(Shown::Running(terminal)) => terminal
-                .submit(text)
-                .map_err(|error| OpError::Invalid(error.to_string())),
+            Some(Shown::Running(terminal)) => {
+                terminal.submit(text).map_err(|error| refused(&error))
+            }
             Some(Shown::Ended(_)) => Err(OpError::Invalid("the program has ended".into())),
             None => Err(missing("thread", id)),
         })
@@ -300,7 +300,7 @@ pub(crate) fn run(
                 .ok_or_else(|| missing("thread", &id))
                 .map(|shown| act(shown.running(), shown.view(), op))
         }?
-        .map_err(|error| OpError::Invalid(error.to_string()));
+        .map_err(|error| refused(&error));
         if moves_view {
             cx.emit(WorkspaceEvent::Screen(id.clone(), number));
         }
@@ -359,7 +359,7 @@ impl Run {
 
 /// A thread's terminal: the program while it runs, or the screen it left when it ended.
 pub(crate) enum Shown {
-    Running(Terminal),
+    Running(Box<Terminal>),
     Ended(Finished),
 }
 
@@ -376,6 +376,15 @@ impl Shown {
             Self::Running(terminal) => Some(terminal),
             Self::Ended(_) => None,
         }
+    }
+}
+
+// `full` is not `invalid`: a client can tell a program that is not reading from a bad request.
+fn refused(error: &std::io::Error) -> OpError {
+    if error.kind() == std::io::ErrorKind::QuotaExceeded {
+        OpError::Full(error.to_string())
+    } else {
+        OpError::Invalid(error.to_string())
     }
 }
 
