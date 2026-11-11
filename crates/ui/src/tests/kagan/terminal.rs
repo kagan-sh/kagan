@@ -604,12 +604,6 @@ fn a_plain_click_with_copy_on_leaves_the_clipboard_alone(cx: &mut TestAppContext
     cx.simulate_input(window, &split_command("pick", "ed"));
     cx.simulate_keystrokes(window, "enter");
     wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
-    let set = Op::Preference(kg_domain::PreferenceOp::Set {
-        key: kg_domain::prefs::TERMINAL_COPY_ON_SELECT.into(),
-        value: serde_json::json!(true),
-    });
-    let task = cx.update(|cx| Workspace::dispatch(set, cx));
-    cx.foreground_executor().block_test(task).unwrap();
     cx.update(|cx| cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("before".into())));
 
     let (row, _) = shown_row(cx, &kagan, "picked");
@@ -631,12 +625,6 @@ fn a_double_click_with_copy_on_copies_the_word(cx: &mut TestAppContext) {
     cx.simulate_input(window, &split_command("pick", "ed"));
     cx.simulate_keystrokes(window, "enter");
     wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
-    let set = Op::Preference(kg_domain::PreferenceOp::Set {
-        key: kg_domain::prefs::TERMINAL_COPY_ON_SELECT.into(),
-        value: serde_json::json!(true),
-    });
-    let task = cx.update(|cx| Workspace::dispatch(set, cx));
-    cx.foreground_executor().block_test(task).unwrap();
     cx.update(|cx| cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("before".into())));
     let (row, _) = shown_row(cx, &kagan, "picked");
     let at = cell_point(cx, window, &kagan, row, 2);
