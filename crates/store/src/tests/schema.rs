@@ -304,3 +304,39 @@ fn an_old_notify_switch_becomes_a_level_and_threads_default() {
     );
     assert_eq!(migrated(None), (None, "default".to_owned()));
 }
+
+#[test]
+fn a_main_line_version_three_database_reaches_the_latest_schema() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("kagan.sqlite3");
+    let mut conn = rusqlite::Connection::open(&path).unwrap();
+    crate::migrate(&mut conn, crate::store::MIGRATIONS[..3].iter().copied()).unwrap();
+    conn.execute(
+        "INSERT INTO projects (id, kind, name, path, git_remote_url) VALUES ('prj_1', 'standard', 'kagan', '/code/kagan', NULL)",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO threads (id, project_id, title, provider, status, visibility, pinned, latest_attention_at, created_at, updated_at) VALUES ('thr_1', 'prj_1', 't', 'claude-code', 'idle', 'visible', 0, 1, 1, 1)",
+        [],
+    )
+    .unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+    assert_eq!(
+        store.schema_version().unwrap(),
+        i64::try_from(crate::store::MIGRATIONS.len()).unwrap()
+    );
+    assert!(store.thread(&id("thr_1")).unwrap().is_some());
+    assert_eq!(
+        store
+            .project(&ProjectId("prj_1".into()))
+            .unwrap()
+            .unwrap()
+            .sort,
+        0
+    );
+    store.put_thread(&thread("thr_2", 2)).unwrap();
+    assert!(store.thread(&id("thr_2")).unwrap().is_some());
+}
