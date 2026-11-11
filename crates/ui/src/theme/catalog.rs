@@ -5,6 +5,7 @@ use gpui_kit::SharedString;
 use gpui_kit::component::ThemeMode;
 use gpui_kit::{
     App, AppContext as _, Context, Entity, EventEmitter, Global, Hsla, Subscription, Task, Window,
+    px,
 };
 use kg_domain::{
     Appearance, Look, Op, OpError, OpResult, Palette, PreferenceOp, Space, ThemeFile, ThemeOp,
@@ -37,7 +38,10 @@ pub(crate) struct ThemeState {
     pub(crate) catalog: Vec<CatalogEntry>,
     pub(crate) settings: ThemeSettings,
     pub(crate) density: Density,
+    /// Families that can set Latin text: symbol and emoji faces are left out.
     pub(crate) installed_fonts: Vec<String>,
+    /// The text families whose letters all share one width.
+    pub(crate) monospace_fonts: Vec<String>,
     font_prefs: FontPrefs,
     // The card's id and theme while a card previews; the saved theme is `applied`.
     preview: Option<(String, ThemeFile)>,
@@ -169,6 +173,7 @@ impl ThemeState {
             builtins: builtins(),
             density: Density::default(),
             installed_fonts: Vec::new(),
+            monospace_fonts: Vec::new(),
             font_prefs: FontPrefs::default(),
             preview: None,
             focus_preview: false,
@@ -191,13 +196,35 @@ impl ThemeState {
         };
         let text = cx.text_system().clone();
         state.fonts_load = cx.spawn(async move |this, cx| {
-            let all = cx
-                .background_spawn(async move { text.all_font_names() })
+            let faces = cx
+                .background_spawn(async move {
+                    text.all_font_names()
+                        .into_iter()
+                        .filter(|name| !name.starts_with('.'))
+                        .filter_map(|name| {
+                            let id = text.resolve_font(&gpui_kit::font(name.clone()));
+                            let kind = face_kind(|ch| {
+                                text.advance(id, px(16.), ch)
+                                    .ok()
+                                    .map(|size| size.width.as_f32())
+                            })?;
+                            Some((name, kind))
+                        })
+                        .collect::<Vec<_>>()
+                })
                 .await;
             _ = this.update(cx, |this, cx| {
                 // A list a test put in place is kept; the platform's list fills an empty one.
                 if this.installed_fonts.is_empty() {
-                    this.installed_fonts = sorted_families(all);
+                    this.installed_fonts =
+                        sorted_families(faces.iter().map(|(name, _)| name.clone()).collect());
+                    this.monospace_fonts = sorted_families(
+                        faces
+                            .iter()
+                            .filter(|(_, monospace)| *monospace)
+                            .map(|(name, _)| name.clone())
+                            .collect(),
+                    );
                     this.paint(cx);
                 }
             });
@@ -207,6 +234,13 @@ impl ThemeState {
 
     // A font the person picked wins over the theme's, when the system has it; otherwise the default.
     fn families(&self) -> Families {
+        let pick_mono = |chosen: &str, fallback: &str| {
+            if self.monospace_fonts.iter().any(|font| font == chosen) {
+                SharedString::from(chosen.to_owned())
+            } else {
+                SharedString::from(fallback.to_owned())
+            }
+        };
         let pick = |chosen: &str, fallback: &str| {
             if self.installed_fonts.iter().any(|font| font == chosen) {
                 SharedString::from(chosen.to_owned())
@@ -217,7 +251,7 @@ impl ThemeState {
         let default = Families::default();
         Families {
             ui: pick(&self.font_prefs.ui, &default.ui),
-            mono: pick(&self.font_prefs.terminal, &default.mono),
+            mono: pick_mono(&self.font_prefs.terminal, &default.mono),
         }
     }
 
@@ -358,6 +392,7 @@ impl ThemeState {
 
     #[cfg(test)]
     pub(crate) fn set_installed_fonts_for_test(&mut self, fonts: Vec<String>) {
+        self.monospace_fonts = fonts.clone();
         self.installed_fonts = fonts;
     }
 
@@ -444,6 +479,19 @@ fn text_of(result: Result<OpResult, OpError>) -> String {
 
 // The families the system has, without the hidden system faces (their names start with a dot).
 // Read off the main thread: the platform walks every font, which takes tens of milliseconds.
+/// What a face can show, from its glyph advances: `None` when it lacks a Latin letter (a symbol,
+/// braille or emoji face), otherwise whether its letters share one width.
+fn face_kind(advance: impl Fn(char) -> Option<f32>) -> Option<bool> {
+    for ch in "aeinostAE".chars() {
+        advance(ch)?;
+    }
+    let widths = "ilmwW"
+        .chars()
+        .map(&advance)
+        .collect::<Option<Vec<f32>>>()?;
+    Some(widths.iter().all(|width| (width - widths[0]).abs() < 0.5))
+}
+
 fn sorted_families(all: Vec<String>) -> Vec<String> {
     let mut names: Vec<String> = all
         .into_iter()
@@ -565,4 +613,34 @@ pub(super) fn read_user(dir: &Path) -> Vec<CatalogEntry> {
     }
     user.sort_by(|a, b| a.id.cmp(&b.id));
     user
+}
+
+#[cfg(test)]
+mod face_kind_tests {
+    use super::face_kind;
+
+    fn letters(width: impl Fn(char) -> f32 + 'static) -> impl Fn(char) -> Option<f32> {
+        move |ch| Some(width(ch))
+    }
+
+    #[test]
+    fn a_face_without_latin_letters_is_not_a_text_face() {
+        let braille = |ch: char| {
+            if ch.is_ascii_alphabetic() {
+                None
+            } else {
+                Some(8.0)
+            }
+        };
+        assert_eq!(face_kind(braille), None);
+    }
+
+    #[test]
+    fn equal_letter_widths_are_monospace_and_mixed_ones_are_not() {
+        assert_eq!(face_kind(letters(|_| 9.0)), Some(true));
+        assert_eq!(
+            face_kind(letters(|ch| if ch == 'i' { 3.0 } else { 9.0 })),
+            Some(false)
+        );
+    }
 }
