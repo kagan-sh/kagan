@@ -10,10 +10,13 @@ use kg_core::Workspace;
 use kg_domain::{PluginId, Project, ProjectId, ProjectKind, Thread, ThreadId};
 
 mod brand_menu;
+mod menu;
+mod options;
 mod order;
 
 use super::shown::{ThreadPick, thread_menu};
 use super::surface::OpenSurface;
+use options::ListOptions;
 use order::Place;
 
 use crate::theme::Tone;
@@ -80,6 +83,7 @@ pub(super) enum Event {
 pub(super) struct Shows {
     pub(super) thread: Option<ThreadId>,
     pub(super) page: Option<(PluginId, String)>,
+    pub(super) project: Option<ProjectId>,
     pub(super) tool: Option<PluginId>,
     pub(super) archived: bool,
     pub(super) skills: bool,
@@ -111,6 +115,9 @@ pub(super) struct Sidebar {
     row_order: Vec<String>,
     row_focus: BTreeMap<String, FocusHandle>,
     row_menu: Option<(Entity<PopupMenu>, Subscription, ThreadId)>,
+    options: ListOptions,
+    list_focus: FocusHandle,
+    list_menu: Option<(Entity<PopupMenu>, Subscription)>,
     brand_focus: FocusHandle,
     brand_menu: Option<(Entity<PopupMenu>, Subscription)>,
     drag: Option<ProjectId>,
@@ -135,6 +142,9 @@ impl Sidebar {
             row_order: Vec::new(),
             row_focus: BTreeMap::new(),
             row_menu: None,
+            options: ListOptions::default(),
+            list_focus: cx.focus_handle().tab_stop(true),
+            list_menu: None,
             brand_focus: cx.focus_handle().tab_stop(true),
             brand_menu: None,
             drag: None,
@@ -197,6 +207,20 @@ impl Sidebar {
     fn add_row(&mut self, id: String, focus: FocusHandle) {
         self.row_order.push(id.clone());
         self.row_focus.insert(id, focus);
+    }
+
+    pub(super) fn apply_options(
+        &mut self,
+        order: Option<&str>,
+        hide_empty_projects: bool,
+        unread_first: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let next = ListOptions::from_saved(order, hide_empty_projects, unread_first);
+        if self.options != next {
+            self.options = next;
+            cx.notify();
+        }
     }
 
     fn toggle_project(&mut self, project: ProjectId, cx: &mut Context<Self>) {
@@ -420,5 +444,7 @@ use list::{sidebar_rows, thread_scroll_index};
 
 pub(super) use list::list;
 pub(super) use rail::{archived_footer, rail};
+#[cfg(test)]
+mod options_test;
 #[cfg(test)]
 mod tests;
