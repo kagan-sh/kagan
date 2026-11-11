@@ -119,7 +119,7 @@ pub(super) fn menu_items(menu: PopupMenu, cx: &App) -> PopupMenu {
                 menu
             } else {
                 menu.item(item("update-later", "Install when kagan quits", |_, cx| {
-                    later(cx)
+                    later(cx);
                 }))
             };
             menu.item(item(
