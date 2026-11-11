@@ -43,4 +43,14 @@ exclude_re = [
     'ui/src/web_page\.rs:\d+:\d+: replace open_windows',
     'ui/src/web_page\.rs:\d+:\d+: replace restrain',
     'ui/src/web_page\.rs:\d+:\d+: replace WebPage::eval',
+    # The first line's gap is 1 char for index 0 (`index >= 0`). The first line is at most 200 chars, so the 2000-char cap is never crossed there.
+    'environment/script\.rs:\d+:\d+: replace > with >= in shown_text',
+    # The grace is 10 s. `>` and `>=` differ only at the millisecond the grace ends, and the sweep runs on a timer, so no test can land on it.
+    'environment/maintenance\.rs:\d+:\d+: replace > with >= in sweep',
+    # Deletes WebKit data folders of plugins no longer installed. Needs a live WebKit data store, like the web_page rows above.
+    'plugins/src/runtime/web_store\.rs:\d+:\d+: replace retry_orphan_stores',
+    # Pid::from_raw(0) is None, so `sid >= 0` gives the same None as `sid > 0`.
+    'process/src/tree\.rs:\d+:\d+: replace > with >= in sid_of',
+    # str::is_char_boundary(len) is always true, so `start <= len` stops where `start < len` does.
+    'terminal/src/terminal/view\.rs:\d+:\d+: replace < with <= in newest',
 ]
