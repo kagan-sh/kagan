@@ -1,7 +1,7 @@
 # Product Rust line ceilings. A count may grow up to its ceiling, never past it.
-# This branch: main is 80936 lines, and the merged count is 81416 (+480). The ceiling is that count.
+# This branch: main is 80936 lines, and the merged count is 81383 (+447). The ceiling is that count.
 target 35000
-ceiling 81416
+ceiling 81383
 allow_expect 8
 crates/core/src/thread/agent/files.rs 754
 crates/ui/src/theme/catalog.rs 646
