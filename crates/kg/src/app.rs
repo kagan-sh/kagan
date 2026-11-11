@@ -1,4 +1,6 @@
 use std::ffi::OsString;
+use std::fs::{File, OpenOptions, TryLockError};
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
@@ -65,7 +67,41 @@ pub(crate) fn data_dir_of(
     Ok(Path::new(&home).join(".kagan"))
 }
 
+/// Holds a data folder for one app. A second app on the same folder would run the same threads
+/// again and write the same database, so it is refused. The lock ends when the app exits.
+pub(crate) fn lock_data_dir(data_dir: &Path) -> Result<File> {
+    std::fs::create_dir_all(data_dir)
+        .with_context(|| format!("cannot create {}", data_dir.display()))?;
+    let path = data_dir.join("kagan.lock");
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+        .with_context(|| format!("cannot open {}", path.display()))?;
+    match file.try_lock() {
+        Ok(()) => {}
+        Err(TryLockError::WouldBlock) => {
+            let owner = std::fs::read_to_string(&path)
+                .ok()
+                .map(|text| text.trim().to_owned())
+                .filter(|text| !text.is_empty());
+            anyhow::bail!(
+                "this data folder is in use by pid {}",
+                owner.as_deref().unwrap_or("of another kagan app")
+            );
+        }
+        Err(TryLockError::Error(error)) => return Err(error.into()),
+    }
+    file.set_len(0)?;
+    writeln!(file, "{}", std::process::id())?;
+    Ok(file)
+}
+
 pub(crate) fn run(presentation: kg_ui::Presentation) -> Result<()> {
+    let data_dir = data_dir_from_env()?;
+    let _data_folder = lock_data_dir(&data_dir)?;
     let location = socket::location()?;
     let Some(listener) = socket::open(&location).context("cannot open the kg socket")? else {
         anyhow::bail!(
@@ -83,7 +119,6 @@ pub(crate) fn run(presentation: kg_ui::Presentation) -> Result<()> {
             .recv_blocking()
             .map_err(|_| OpError::Failed("kagan dropped the request".into()))?
     });
-    let data_dir = data_dir_from_env()?;
     let cli = std::env::current_exe()?;
     kg_process::warm_user_path();
     let components = component_catalog()?;
