@@ -45,26 +45,20 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 fn migrate<'a>(
     conn: &mut rusqlite::Connection,
-    statements: impl IntoIterator<Item = &'a str>,
+    migrations: impl IntoIterator<Item = store::Migration<'a>>,
 ) -> Result<()> {
     let tx = conn.transaction()?;
     let applied: usize = tx.pragma_query_value(None, "user_version", |row| row.get(0))?;
     let mut version = applied;
-    for sql in statements.into_iter().skip(applied) {
-        if sql == store::MIGRATIONS[3] && has_column(&tx, "projects", "sort")?
-            || sql == store::MIGRATIONS[4] && has_column(&tx, "pending_interactions", "fields")?
-        {
-            version += 1;
-            continue;
-        }
-        if sql == store::REPAIR_THREAD_COLUMNS {
-            for column in ["model", "reasoning_level"] {
-                if has_column(&tx, "threads", column)? {
-                    tx.execute_batch(&format!("ALTER TABLE threads DROP COLUMN {column}"))?;
+    for migration in migrations.into_iter().skip(applied) {
+        match migration {
+            store::Migration::Sql(sql) => tx.execute_batch(sql)?,
+            store::Migration::Guarded { sql, table, column } => {
+                if !has_column(&tx, table, column)? {
+                    tx.execute_batch(sql)?;
                 }
             }
-        } else {
-            tx.execute_batch(sql)?;
+            store::Migration::Step(step) => step(&tx)?,
         }
         version += 1;
     }
