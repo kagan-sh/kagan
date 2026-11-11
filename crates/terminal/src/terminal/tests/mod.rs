@@ -157,6 +157,8 @@ impl Terminal {
     }
 }
 
+#[cfg(windows)]
+mod containment;
 mod finish;
 mod frames;
 mod input;

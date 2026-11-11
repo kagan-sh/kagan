@@ -8,10 +8,14 @@ use kg_domain::{
 };
 use serde_json::json;
 
-use crate::kagan::{Kagan, replace_read, review_read};
+#[cfg(unix)]
+use crate::kagan::review_read;
+use crate::kagan::{Kagan, replace_read};
+#[cfg(unix)]
+use crate::tests::kagan::repo_thread;
 use crate::tests::kagan::{
-    chord, click, label, open_with_plugins_then, pending, plugin_log, present, repo_thread,
-    run_shell, shows, wait_until,
+    chord, click, label, open_with_plugins_then, pending, plugin_log, present, run_shell, shows,
+    wait_until,
 };
 
 const SWAP: &str = "dev.test.swap";
@@ -43,6 +47,7 @@ const COVERS: &str = r#"return div()
         cx.stop_propagation();
       }));"#;
 
+#[cfg(unix)]
 const DIFF_COVERS: &str = r#"return div()
       .relative()
       .size_full()
@@ -88,6 +93,7 @@ const DIFF: &str = r#"return div()
       .child(new KgButton("swap-comment-elsewhere").label("Elsewhere").on_click(() => this.comment("nope.txt", "elsewhere")))
       .child(new KgButton("swap-comment-long").label("Long").on_click(() => this.comment(this.path, "x".repeat(5000))));"#;
 
+#[cfg(unix)]
 const DIFF_GRABS: &str = r#"return div()
       .track_focus(this.focus)
       .on_key_down((_event, cx) => cx.stop_propagation())
@@ -605,6 +611,7 @@ fn a_plugin_reads_changes_only_of_listed_threads(cx: &mut TestAppContext) {
     assert!(stderr.contains("is not in kagan's thread list"), "{stderr}");
 }
 
+#[cfg(unix)]
 fn install_example(data: &Path, name: &str) {
     let from = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/plugins")
@@ -655,6 +662,7 @@ fn the_bundled_examples_fill_both_slots(cx: &mut TestAppContext) {
     assert!(filled(cx, &kagan, Slot::Threads));
 }
 
+#[cfg(unix)]
 fn opened_with(
     cx: &mut TestAppContext,
     entry: String,

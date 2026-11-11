@@ -202,6 +202,7 @@ export class Cover extends View {
 }
 "##;
 
+#[cfg(unix)]
 pub(in crate::tests) const THROWING_OVERLAY: &str = r#"import { View } from "gpui-kit";
 export default class Plugin extends View {
   render() { return ""; }

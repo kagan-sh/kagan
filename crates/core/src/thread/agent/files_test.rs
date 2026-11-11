@@ -1,7 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use super::{claude_settings, exclude_cursor_rule, git_exclude, hide_from_git, link_root};
+#[cfg(unix)]
+use super::link_root;
+use super::{claude_settings, exclude_cursor_rule, git_exclude, hide_from_git};
 
+#[cfg(unix)]
 fn skill(dir: &Path, name: &str) -> PathBuf {
     let path = dir.join(name);
     std::fs::create_dir_all(&path).unwrap();

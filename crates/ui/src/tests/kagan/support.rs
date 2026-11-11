@@ -323,6 +323,7 @@ pub(in crate::tests) fn wait_until(
 
 // The shell prints in real time, which the test clock cannot speed up, so this wait gets no short
 // limit. The 120 s limit only stops a test that can never pass from hanging.
+#[cfg(unix)]
 pub(in crate::tests) fn wait_for_shell(
     cx: &mut TestAppContext,
     mut done: impl FnMut(&mut TestAppContext) -> bool,

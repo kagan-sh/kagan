@@ -1,19 +1,30 @@
+#[cfg(unix)]
 use std::cell::RefCell;
+#[cfg(unix)]
 use std::rc::Rc;
 
-use crate::kagan::commands::{found as commands_found, state as commands_state};
+#[cfg(unix)]
+use crate::kagan::commands::found as commands_found;
+use crate::kagan::commands::state as commands_state;
 use crate::kagan::{Kagan, screen_read};
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, TestAppContext, px, size};
 use kg_core::Workspace;
-use kg_domain::{KeymapOp, Op, OpResult, Plugin, PluginId, ThreadId, ThreadOp, UiOp, WindowOp};
+#[cfg(unix)]
+use kg_domain::UiOp;
+use kg_domain::{KeymapOp, Op, OpResult, WindowOp};
+#[cfg(unix)]
+use kg_domain::{Plugin, PluginId, ThreadId, ThreadOp};
 
 use crate::tests::kagan::{
-    chord, click, grid_text, install_navigator, label, open, open_with_plugins_then, plugin_log,
-    press, press_key, release, run_shell, shown, shows, thread_record, value_of, wait_until,
+    chord, click, install_navigator, label, open, open_with_plugins_then, press_key, shows,
+    value_of, wait_until,
 };
+#[cfg(unix)]
+use crate::tests::kagan::{grid_text, plugin_log, press, release, run_shell, shown, thread_record};
 use crate::tests::plugin::panels::disabled_of;
 
+#[cfg(unix)]
 fn install_header(data: &std::path::Path) {
     install_header_plugin(
         data,
@@ -39,6 +50,7 @@ fn install_header(data: &std::path::Path) {
     );
 }
 
+#[cfg(unix)]
 fn install_header_plugin(
     data: &std::path::Path,
     id: &str,
@@ -116,10 +128,12 @@ export default class Plugin extends View {
         .unwrap();
 }
 
+#[cfg(unix)]
 fn header_id(plugin: &str, command: &str) -> ElementId {
     crate::kagan::header::id_for(&PluginId(plugin.into()), command)
 }
 
+#[cfg(unix)]
 fn header_name(plugin: &str, command: &str) -> String {
     match crate::kagan::header::id_for(&PluginId(plugin.into()), command) {
         ElementId::Name(name) => name.to_string(),
@@ -127,10 +141,12 @@ fn header_name(plugin: &str, command: &str) -> String {
     }
 }
 
+#[cfg(unix)]
 fn name_from_snapshot(debug: &str) -> Option<&str> {
     debug.strip_prefix("Name(\"")?.strip_suffix("\")")
 }
 
+#[cfg(unix)]
 fn shows_id(cx: &mut TestAppContext, window: AnyWindowHandle, id: &ElementId) -> bool {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, id).is_some_and(|element| element.visible)
@@ -138,6 +154,7 @@ fn shows_id(cx: &mut TestAppContext, window: AnyWindowHandle, id: &ElementId) ->
     .unwrap()
 }
 
+#[cfg(unix)]
 fn click_id(cx: &mut TestAppContext, window: AnyWindowHandle, id: &ElementId) {
     cx.update_window(window, |_, window, cx| {
         crate::ui_dispatch::click(window, id, cx).unwrap_or_else(|error| panic!("{id}: {error}"));
@@ -146,6 +163,7 @@ fn click_id(cx: &mut TestAppContext, window: AnyWindowHandle, id: &ElementId) {
     cx.run_until_parked();
 }
 
+#[cfg(unix)]
 fn hint_of_id(cx: &mut TestAppContext, window: AnyWindowHandle, id: &ElementId) -> Option<String> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, id)
@@ -154,6 +172,7 @@ fn hint_of_id(cx: &mut TestAppContext, window: AnyWindowHandle, id: &ElementId) 
     .unwrap()
 }
 
+#[cfg(unix)]
 fn bounds_of(
     cx: &mut TestAppContext,
     window: AnyWindowHandle,
@@ -207,6 +226,7 @@ fn keys(chord: &str) -> String {
         .join(" ")
 }
 
+#[cfg(unix)]
 fn terminal_focused(
     cx: &mut TestAppContext,
     window: AnyWindowHandle,
@@ -218,6 +238,7 @@ fn terminal_focused(
     .unwrap()
 }
 
+#[cfg(unix)]
 fn rename(cx: &mut TestAppContext, id: &ThreadId, title: &str) {
     dispatch(
         cx,
@@ -228,6 +249,7 @@ fn rename(cx: &mut TestAppContext, id: &ThreadId, title: &str) {
     );
 }
 
+#[cfg(unix)]
 fn type_line(cx: &mut TestAppContext, id: &ThreadId, text: &str) {
     dispatch(
         cx,
@@ -685,6 +707,7 @@ fn hyphen_joined_header_ids_stay_distinct(cx: &mut TestAppContext) {
     });
 }
 
+#[cfg(unix)]
 fn menu_id(plugin: &str, command: &str) -> ElementId {
     crate::kagan::header::menu_id_for(&PluginId(plugin.into()), command)
 }

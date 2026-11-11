@@ -1,17 +1,25 @@
 use super::chord;
 use crate::kagan::screen_read;
 
+#[cfg(unix)]
 use gpui_kit::Modifiers;
-use gpui_kit::{AppContext as _, ClipboardItem, Entity, TestAppContext, px, size};
+use gpui_kit::{AppContext as _, ClipboardItem, TestAppContext};
+#[cfg(unix)]
+use gpui_kit::{Entity, px, size};
 use kg_core::Workspace;
-use kg_domain::{KeyPlatform, Keymap, KeymapOp, Op, ProjectId, ThreadId, ThreadOp, ThreadStatus};
+use kg_domain::{KeyPlatform, Keymap, KeymapOp, Op, ProjectId};
+#[cfg(unix)]
+use kg_domain::{ThreadId, ThreadOp, ThreadStatus};
 
-use crate::kagan::{ArchiveThread, Kagan, StopThread, chord_for};
+#[cfg(unix)]
+use crate::kagan::Kagan;
+use crate::kagan::{ArchiveThread, StopThread, chord_for};
 
+#[cfg(unix)]
 use super::{
-    cell_point, click, grid_text, host_dimensions, open, press, release, run_program, run_shell,
-    selection, shown_row, shows, thread_record, thread_status, wait_until,
+    cell_point, host_dimensions, press, release, run_program, selection, shown_row, thread_status,
 };
+use super::{click, grid_text, open, run_shell, shows, thread_record, wait_until};
 
 #[test]
 fn off_macos_the_default_chord_stays_off_the_program_keys() {

@@ -2,7 +2,9 @@
 use super::fake_program;
 use super::{Fixture, op};
 use gpui_kit::TestAppContext;
-use kg_domain::{Op, OpError, OpResult, Program, ProgramOp, ProgramSource, ProjectOp};
+#[cfg(unix)]
+use kg_domain::ProjectOp;
+use kg_domain::{Op, OpError, OpResult, Program, ProgramOp, ProgramSource};
 
 const CAREFUL: &str = "claude --model claude-opus-5-5 --effort high";
 

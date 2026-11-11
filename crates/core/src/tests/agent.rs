@@ -1,14 +1,19 @@
+#[cfg(unix)]
 use std::path::{Path, PathBuf};
 
 use gpui_kit::TestAppContext;
 use kg_domain::*;
+#[cfg(unix)]
 use serde_json::json;
 
+#[cfg(unix)]
 use crate::Workspace;
 
-use super::{Fixture, events, op, screen_with, started, thread, type_in, wait_for_status};
+use super::{Fixture, op};
 #[cfg(unix)]
 use super::{claude_line, fake_agent, install_plugin, ran};
+#[cfg(unix)]
+use super::{events, screen_with, started, thread, type_in, wait_for_status};
 
 #[cfg(unix)]
 #[gpui_kit::test]
