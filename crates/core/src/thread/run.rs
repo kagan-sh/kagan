@@ -3,11 +3,12 @@ use std::path::{Path, PathBuf};
 
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{EventKind, NoticeSeverity, OpError, OpResult, Run, ThreadId, ThreadStatus};
-use kg_process::{find_program, pathext};
+use kg_process::pathext;
 
 use super::clean_title;
 use crate::Workspace;
 use crate::host::database::Result;
+use crate::host::program::locate;
 use crate::workspace::{Request, RunOutcome, closed, id, missing, time};
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -32,12 +33,14 @@ pub(crate) struct ResolvedProgram {
 pub(crate) fn resolve_program(
     line: &str,
     environment: Option<&crate::host::program::ProgramEnvironment>,
+    home: Option<&Path>,
 ) -> std::result::Result<ResolvedProgram, ResolveError> {
     let (name, args) = kg_domain::split_program(line).map_err(ResolveError::Line)?;
-    let found = find_program(
+    let found = locate(
         Path::new(&name),
         crate::host::program::search_path(environment).as_deref(),
         pathext().as_deref(),
+        home,
     )
     .ok_or(ResolveError::NotFound(name))?;
     Ok(ResolvedProgram {
@@ -105,7 +108,8 @@ pub(crate) async fn prepare(
     cx: &mut AsyncApp,
 ) -> Result<PreparedRun> {
     let environment = crate::host::program::program_environment_of(this, cx);
-    resolve_program(&run.program, environment.as_ref())
+    let home = crate::host::program::program_home_of(this, cx);
+    resolve_program(&run.program, environment.as_ref(), home.as_deref())
         .map_err(|error| OpError::Invalid(error.to_string()))?;
     let program = run.program.clone();
     let project_id = run.project_id.clone();

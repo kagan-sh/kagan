@@ -14,7 +14,7 @@ fn a_program_environment_names_its_path_and_shell() {
         (
             Some(OsString::from("/work/bin")),
             None,
-            Some(OsString::from("/bin/zsh"))
+            Some(OsString::from("/bin/zsh")),
         )
     );
 }
