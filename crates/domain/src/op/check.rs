@@ -5,7 +5,7 @@ use super::env::{shell_name, variable_name, variable_value};
 use super::{
     DiffOp, EnvOp, EnvironmentOp, Op, PluginOp, PreviewOp, ProjectOp, SEARCH_LIMIT,
     SEARCH_TEXT_MAX, SectionOp, SurfaceOp, TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX, TerminalOp,
-    ThreadOp, WindowOp,
+    ThreadOp, TurnOp, WindowOp,
 };
 use crate::split_program;
 
@@ -170,6 +170,7 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
         | ThreadOp::Paste { id, .. }
         | ThreadOp::Send { id, .. }
         | ThreadOp::Report { id, .. }
+        | ThreadOp::Turn(TurnOp::Start { id } | TurnOp::End { id })
         | ThreadOp::Terminal(
             TerminalOp::New { id } | TerminalOp::List { id } | TerminalOp::Close { id, .. },
         )

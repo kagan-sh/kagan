@@ -624,10 +624,11 @@ async fn a_busy_thread_that_goes_plain_is_done(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let dir = fixture.dir.path().join("titles");
     std::fs::create_dir_all(&dir).unwrap();
-    // A busy title, then the plain title claude shows once it has answered.
+    // A busy title, then the plain title codex shows once it has answered. codex has no turn hook,
+    // so its spinner decides the turn; claude's hook would own it instead.
     let program = script(
         &dir,
-        "claude",
+        "codex",
         "printf '\\033]2;\\342\\227\\220 work\\007'; sleep 1; printf '\\033]2;\\342\\234\\263 work\\007'; sleep 30",
     );
     let (id, _reap) = started(&fixture, &program, cx).await;
@@ -715,4 +716,80 @@ async fn answering_the_same_question_twice_is_not_found(cx: &mut TestAppContext)
         .await
         .unwrap_err();
     assert!(matches!(error, OpError::NotFound(_)), "{error}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_claude_hook_opens_and_closes_the_turn_while_the_title_stays_quiet(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let run = fixture.dir.path().join("hook-turn");
+    let line = format!(
+        "{} --person-arg",
+        super::fake_agent(&run, "claude").display()
+    );
+    let (id, _reap) = started(&fixture, &line, cx).await;
+    super::ran(&run);
+    op(
+        Op::Thread(ThreadOp::Turn(TurnOp::Start { id: id.clone() })),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert!(busy_of(&fixture, &id, cx));
+    assert_eq!(
+        kinds_of(&id, cx)
+            .await
+            .iter()
+            .filter(|kind| **kind == EventKind::TurnStarted)
+            .count(),
+        1
+    );
+    op(
+        Op::Thread(ThreadOp::Turn(TurnOp::Start { id: id.clone() })),
+        cx,
+    )
+    .await
+    .unwrap();
+    op(
+        Op::Thread(ThreadOp::Turn(TurnOp::End { id: id.clone() })),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert!(!busy_of(&fixture, &id, cx));
+    let kinds = kinds_of(&id, cx).await;
+    assert_eq!(
+        kinds
+            .iter()
+            .filter(|kind| **kind == EventKind::TurnStarted)
+            .count(),
+        1,
+        "a second start while open is one turn: {kinds:?}"
+    );
+    assert!(
+        kinds
+            .iter()
+            .any(|kind| matches!(kind, EventKind::TurnEnded { .. })),
+        "{kinds:?}"
+    );
+    op(
+        Op::Thread(ThreadOp::Turn(TurnOp::End { id: id.clone() })),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        kinds_of(&id, cx)
+            .await
+            .iter()
+            .filter(|kind| matches!(kind, EventKind::TurnEnded { .. }))
+            .count(),
+        1,
+        "a late end is harmless"
+    );
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
 }

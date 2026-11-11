@@ -24,6 +24,7 @@ pub(crate) use exit::{exited, request_stop, start_again};
 pub(crate) use screen::follow_terminals;
 #[cfg(test)]
 pub(crate) use screen::remember;
+pub(crate) use turn::hook as turn_hook;
 
 #[cfg(test)]
 pub(super) use turn::{Spin, busy, follow};
@@ -99,6 +100,10 @@ async fn spawn(
     let program = resolve_program(&record.provider, environment.as_ref())
         .map_err(|error| OpError::Invalid(error.to_string()))?;
     let integration = agent::integrate(this, record, &program, &folder, start, cx).await?;
+    this.update(cx, |workspace, cx| {
+        turn::begin_run(workspace, &record.id, integration.hooks, cx);
+    })
+    .map_err(closed)?;
     let args = integration.args.into_iter().chain(program.args).collect();
     let mut env = integration.env;
     if let Some(locale) = cx.background_spawn(async { utf8_locale() }).await {
@@ -228,6 +233,8 @@ pub(crate) async fn send(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     let typed = submit(this, &id, text, cx).await?;
+    this.update(cx, |workspace, cx| turn::note_submit(workspace, &id, cx))
+        .map_err(closed)?;
     Workspace::events(
         this,
         id,
@@ -271,7 +278,12 @@ pub(crate) fn run(
         if number.is_none() {
             let now = cx.background_executor().now();
             match &op {
-                ThreadOp::Input { text, .. } => super::notify::typed(workspace, &id, text, now),
+                ThreadOp::Input { text, .. } => {
+                    super::notify::typed(workspace, &id, text, now);
+                    if text.ends_with('\r') {
+                        turn::note_submit(workspace, &id, cx);
+                    }
+                }
                 ThreadOp::Paste { .. } => super::notify::typed(workspace, &id, "", now),
                 _ => {}
             }

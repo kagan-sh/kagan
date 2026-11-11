@@ -51,17 +51,18 @@ fn a_plain_title_waits_only_after_one_second(cx: &mut gpui_kit::TestAppContext) 
     let now = std::time::Instant::now();
     cx.update(|cx| {
         assert!(matches!(
-            super::follow(&thread, Some("\u{2819} work"), now, cx),
+            super::follow(&thread, Some("\u{2819} work"), false, now, cx),
             Some(super::Spin::Opened)
         ));
-        assert!(thread.read(cx).turn_open);
-        assert_eq!(super::follow(&thread, Some("work"), now, cx), None);
+        assert!(thread.read(cx).turn.open());
+        assert_eq!(super::follow(&thread, Some("work"), false, now, cx), None);
         assert!(thread.read(cx).busy(), "the title just went plain");
-        assert!(thread.read(cx).turn_open);
+        assert!(thread.read(cx).turn.open());
         assert_eq!(
             super::follow(
                 &thread,
                 Some("work"),
+                false,
                 now + std::time::Duration::from_millis(999),
                 cx,
             ),
@@ -72,13 +73,14 @@ fn a_plain_title_waits_only_after_one_second(cx: &mut gpui_kit::TestAppContext) 
             super::follow(
                 &thread,
                 Some("work"),
+                false,
                 now + std::time::Duration::from_secs(1),
                 cx,
             ),
             Some(super::Spin::Closed)
         );
         assert!(!thread.read(cx).busy());
-        assert!(!thread.read(cx).turn_open);
+        assert!(!thread.read(cx).turn.open());
     });
 }
 
@@ -88,16 +90,16 @@ fn a_spinner_after_stop_clears_busy_does_not_open_another_turn(cx: &mut gpui_kit
     let now = std::time::Instant::now();
     cx.update(|cx| {
         assert!(matches!(
-            super::follow(&thread, Some("\u{2819} work"), now, cx),
+            super::follow(&thread, Some("\u{2819} work"), false, now, cx),
             Some(super::Spin::Opened)
         ));
         thread.update(cx, |thread, _| thread.busy = false);
         assert!(matches!(
-            super::follow(&thread, Some("\u{2819} work"), now, cx),
+            super::follow(&thread, Some("\u{2819} work"), false, now, cx),
             Some(super::Spin::Resumed)
         ));
         assert!(thread.read(cx).busy());
-        assert!(thread.read(cx).turn_open);
+        assert!(thread.read(cx).turn.open());
     });
 }
 

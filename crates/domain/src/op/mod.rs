@@ -70,7 +70,7 @@ pub use terminal::{
 pub use theme::{Appearance, ThemeOp, ThemeSettings, valid_theme_choice, valid_theme_id};
 pub use thread::{
     Metadata, Order, Run, SEARCH_DEFAULT, SEARCH_LIMIT, SEARCH_TEXT_MAX, TEXT_MAX, ThreadOp,
-    WaitOutcome, branch_slug, valid_branch,
+    TurnOp, WaitOutcome, branch_slug, valid_branch,
 };
 pub use ui::{
     DropSide, UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,

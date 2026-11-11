@@ -56,7 +56,7 @@ pub(crate) async fn stop(
             thread.record.id.clone(),
             thread.running(),
             thread.record.status == ThreadStatus::Starting,
-            thread.turn_open,
+            thread.turn.open(),
         )
     });
     settle(this, thread, cx).await?;
@@ -106,7 +106,9 @@ async fn close_open_turn(
             workspace.runs.get(id).and_then(|run| run.stopping) == Some(super::StopReason::Quit)
         })
         .map_err(closed)?;
-    thread.update(cx, |thread, _| thread.turn_open = false);
+    thread.update(cx, |thread, _| {
+        thread.turn.apply(crate::thread::turn_state::Signal::Ended)
+    });
     if quit {
         return Ok(());
     }

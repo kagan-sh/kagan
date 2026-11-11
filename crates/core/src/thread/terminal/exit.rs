@@ -13,6 +13,7 @@ use super::screen::keep_screen;
 use super::turn::done;
 use super::{Shown, start};
 use crate::thread::halt::status;
+use crate::thread::turn_state::Signal;
 
 /// Why a program was asked to stop. Quit still records `stopped` and `idle`, and skips `turn.ended`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -94,13 +95,11 @@ pub(crate) async fn exited(
         return Ok(OpResult::Done);
     };
     let (current, turn_open) =
-        thread.read_with(cx, |thread, _| (thread.record.status, thread.turn_open));
+        thread.read_with(cx, |thread, _| (thread.record.status, thread.turn.open()));
     if !matches!(current, ThreadStatus::Active | ThreadStatus::Stopping) {
         return Ok(OpResult::Done);
     }
-    if turn_open {
-        thread.update(cx, |thread, _| thread.turn_open = false);
-    }
+    thread.update(cx, |thread, _| thread.turn.apply(Signal::Ended));
     crate::thread::halt::settle(this, &thread, cx).await?;
     this.update(cx, |workspace, cx| keep_screen(workspace, &id, cx))
         .map_err(closed)?;

@@ -102,8 +102,10 @@ fn assert_claude_args(args: &[String], files: &Path, agent: &Path) {
     assert_eq!(args[5], files.join("note.txt").display().to_string());
     assert_eq!(args[6], "--disallowed-tools");
     assert_eq!(args[7], "Task,Agent");
-    assert_eq!(args[8], "--session-id");
-    assert_eq!(args[10], "--person-arg");
+    assert_eq!(args[8], "--settings");
+    assert!(args[9].ends_with("settings.json"), "{}", args[9]);
+    assert_eq!(args[10], "--session-id");
+    assert_eq!(args[12], "--person-arg");
 }
 
 #[cfg(unix)]
@@ -1203,5 +1205,54 @@ async fn a_plugin_persona_and_its_tools_reach_the_thread(cx: &mut TestAppContext
             .count(),
         1,
         "{names:?}"
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_claude_launch_gets_a_settings_file_with_its_turn_hooks(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let run = fixture.dir.path().join("hooked");
+    let (id, _reap) = started(&fixture, &claude_line(&run), cx).await;
+    let (args, _env) = ran(&run);
+    let at = args
+        .iter()
+        .position(|arg| arg == "--settings")
+        .expect("--settings");
+    let settings: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&args[at + 1]).unwrap()).unwrap();
+    assert!(args[at + 1].ends_with(&format!("threads/{}/settings.json", id.0)));
+    let command = |event: &str| {
+        settings["hooks"][event][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned()
+    };
+    assert!(command("UserPromptSubmit").ends_with("thread turn start"));
+    assert!(command("Stop").ends_with("thread turn end"));
+    assert!(command("StopFailure").ends_with("thread turn end"));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_claude_line_with_its_own_settings_gets_no_turn_hooks(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let run = fixture.dir.path().join("own-settings");
+    let line = format!(
+        "{} --settings person.json",
+        fake_agent(&run, "claude").display()
+    );
+    let (_id, _reap) = started(&fixture, &line, cx).await;
+    let (args, _env) = ran(&run);
+    assert!(
+        args.windows(2)
+            .any(|pair| pair == ["--settings", "person.json"]),
+        "{args:?}"
+    );
+    assert!(
+        !args
+            .iter()
+            .any(|arg| arg.ends_with("settings.json") && arg != "person.json"),
+        "{args:?}"
     );
 }
