@@ -172,7 +172,8 @@ pub(crate) fn discover(
     ProgramList { programs, default }
 }
 
-fn label_of(name: &str) -> String {
+/// The short name a person knows a program by: its known label, else its file name.
+pub(crate) fn label_of(name: &str) -> String {
     let base = Path::new(name)
         .file_stem()
         .map_or_else(|| name.into(), |file| file.to_string_lossy().into_owned());

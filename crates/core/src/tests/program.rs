@@ -471,3 +471,31 @@ fn a_version_is_read_from_a_program_in_its_documented_folder() {
         .and_then(|p| p.version.clone());
     assert_eq!(version.as_deref(), Some("opencode 1.4.2"));
 }
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_thread_without_a_title_is_named_by_its_program_not_its_path(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let path = fixture.dir.path().join("codex");
+    fake_program(fixture.dir.path(), "codex", "true");
+    let line = format!("{} --fast", path.display());
+    let OpResult::Thread(started) = op(
+        Op::Thread(kg_domain::ThreadOp::Run(kg_domain::Run {
+            project_id: fixture.project.clone(),
+            program: line,
+            title: None,
+            environment: kg_domain::EnvironmentSpec::ProjectDefault,
+            visibility: None,
+            parent_thread_id: None,
+            quiet: true,
+            lifecycle_owner_thread_id: None,
+            metadata: None,
+        })),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("thread")
+    };
+    assert_eq!(started.title, "Codex");
+}
