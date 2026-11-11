@@ -710,7 +710,7 @@ async fn input_to_an_ended_program_is_refused(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 async fn input_past_the_queue_budget_is_refused_as_full(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
-    let OpResult::Thread(started) = op(fixture.run("/bin/sh -c \"sleep 30\""), cx)
+    let OpResult::Thread(started) = op(fixture.run("/bin/sh -c \"stty raw -echo; sleep 30\""), cx)
         .await
         .unwrap()
     else {
@@ -740,6 +740,29 @@ async fn input_past_the_queue_budget_is_refused_as_full(cx: &mut TestAppContext)
     .await
     .unwrap_err();
     assert!(matches!(refused, OpError::Full(_)), "{refused}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn input_over_the_text_cap_is_invalid_even_to_an_idle_program(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Thread(started) = op(fixture.run("/bin/sh -c \"stty raw -echo; sleep 30\""), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("thread")
+    };
+    let refused = op(
+        Op::Thread(ThreadOp::Input {
+            id: started.id,
+            text: "a".repeat(5 << 20),
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(refused, OpError::Invalid(_)), "{refused}");
 }
 
 #[cfg(unix)]

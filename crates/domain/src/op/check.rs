@@ -18,8 +18,8 @@ use crate::{saved_name, split_program};
 /// Returns an error when a thread id is not a plain identifier (at most 128 ASCII letters,
 /// digits, `_`, or `-`), when a surface id is empty or holds a control character, when a search
 /// is empty, longer than [`SEARCH_TEXT_MAX`], or names a limit outside [`SEARCH_LIMIT`], when a
-/// resize is outside [`TERMINAL_COLS`] and [`TERMINAL_ROWS`], or when a window index is outside
-/// 1 to 9.
+/// resize is outside [`TERMINAL_COLS`] and [`TERMINAL_ROWS`], when input or a report is longer
+/// than [`TEXT_MAX`], or when a window index is outside 1 to 9.
 pub fn check(op: &Op) -> Result<(), String> {
     match op {
         Op::Window(WindowOp::Thread { index }) if !(1..=9).contains(index) => {
@@ -33,6 +33,8 @@ pub fn check(op: &Op) -> Result<(), String> {
             .and_then(|()| search(op))
             .and_then(|()| match op {
                 ThreadOp::Paste { text, file, .. } => carried_text(text.as_ref(), file.as_ref()),
+                ThreadOp::Input { text, .. } if text.len() > TEXT_MAX => Err(over_cap()),
+                ThreadOp::Report { bytes, .. } if bytes.len() > TEXT_MAX => Err(over_cap()),
                 _ => Ok(()),
             }),
         Op::Environment(op) => environment_thread(op),
@@ -126,11 +128,13 @@ pub(super) fn carried_text<P>(text: Option<&String>, file: Option<&P>) -> Result
         (Some(_), Some(_)) => Err("pass the text or --file, not both".into()),
         (None, None) => Err("pass the text or --file".into()),
         (None, Some(_)) => Err("send the text, not a path".into()),
-        (Some(text), None) if text.len() > TEXT_MAX => {
-            Err(format!("text is over {} MiB", TEXT_MAX >> 20))
-        }
+        (Some(text), None) if text.len() > TEXT_MAX => Err(over_cap()),
         (Some(_), None) => Ok(()),
     }
+}
+
+fn over_cap() -> String {
+    format!("text is over {} MiB", TEXT_MAX >> 20)
 }
 
 fn search(op: &ThreadOp) -> Result<(), String> {

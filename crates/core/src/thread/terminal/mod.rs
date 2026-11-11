@@ -379,7 +379,7 @@ impl Shown {
     }
 }
 
-// A full input queue is its own refusal, so a client can tell "the program is not reading" from a bad request.
+// `full` is not `invalid`: a client can tell a program that is not reading from a bad request.
 fn refused(error: &std::io::Error) -> OpError {
     if error.kind() == std::io::ErrorKind::QuotaExceeded {
         OpError::Full(error.to_string())

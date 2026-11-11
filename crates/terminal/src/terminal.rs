@@ -41,7 +41,7 @@ pub struct Launch {
 pub struct Terminal {
     master: Option<Box<dyn MasterPty + Send>>,
     input: Sender<Outgoing>,
-    /// Bytes of person or agent input waiting for the program; see `stream::INPUT_MAX`.
+    /// Person or agent input the writer has not yet handed to the pty; see `stream::INPUT_MAX`.
     queued_input: Arc<AtomicUsize>,
     child: Mutex<Option<Box<dyn Child + Send + Sync>>>,
     reader: Option<JoinHandle<()>>,

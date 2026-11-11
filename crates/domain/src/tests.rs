@@ -1133,6 +1133,29 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
 }
 
 #[test]
+fn input_and_report_stop_at_the_text_cap() {
+    let id = ThreadId("thread".into());
+    let input = |text: String| {
+        crate::check(&Op::Thread(ThreadOp::Input {
+            id: id.clone(),
+            text,
+            terminal: None,
+        }))
+    };
+    let report = |bytes: usize| {
+        crate::check(&Op::Thread(ThreadOp::Report {
+            id: id.clone(),
+            terminal: None,
+            bytes: vec![0; bytes],
+        }))
+    };
+    assert_eq!(input("x".repeat(crate::TEXT_MAX)), Ok(()));
+    assert!(input("x".repeat(crate::TEXT_MAX + 1)).is_err());
+    assert_eq!(report(crate::TEXT_MAX), Ok(()));
+    assert!(report(crate::TEXT_MAX + 1).is_err());
+}
+
+#[test]
 fn a_setup_revision_may_not_start_with_a_dash() {
     let setup = |rev: &str| {
         crate::check(&Op::Environment(crate::EnvironmentOp::Setup {

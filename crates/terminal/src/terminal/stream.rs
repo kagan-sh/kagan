@@ -14,13 +14,13 @@ use super::shared::Shared;
 use super::shared::lock;
 use crate::screen::MIN_COLS;
 
-/// Most input the program may still have to read. A write past it is refused until the program reads.
+/// Most input the writer may hold for the program's pty. A write past it is refused until the writer hands bytes over.
 pub(super) const INPUT_MAX: usize = 4 << 20;
 
 pub(super) enum Outgoing {
     /// The program's own query answers and the writer's wake-up. Never refused.
     Reply(Vec<u8>),
-    /// Input from a person or an agent, counted against `INPUT_MAX` until it is written.
+    /// Input from a person or an agent, counted against `INPUT_MAX` until the writer hands it to the pty.
     Input {
         bytes: Vec<u8>,
         done: Option<Sender<io::Result<()>>>,
