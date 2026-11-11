@@ -49,7 +49,7 @@ impl List {
             body: field("Text to send", window, cx),
             program: field("Program", window, cx),
             minutes: field("Minutes", window, cx),
-            at: field("Once in (minutes)", window, cx),
+            at: field("In minutes", window, cx),
             fallback: None,
             note: None,
             load: None,
@@ -210,6 +210,38 @@ fn when(automation: &Automation) -> String {
     }
 }
 
+// What the row says the automation sends and to which program, before the person opens it.
+fn detail(automation: &Automation) -> String {
+    let text = automation
+        .body
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let text: String = text.chars().take(60).collect();
+    format!("{} · {text}", automation.program)
+}
+
+// When the next run is due, counted from now: one time automations have no next run once started.
+fn next_run(automation: &Automation) -> String {
+    if automation.paused {
+        return "Paused".into();
+    }
+    let Some(next) = automation.next_at else {
+        return "Done".into();
+    };
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)
+        });
+    let minutes = next.0.saturating_sub(now).max(0) / 60_000;
+    match minutes {
+        0 => "Due now".into(),
+        1 => "Next in 1 min".into(),
+        minutes => format!("Next in {minutes} min"),
+    }
+}
+
 fn runs(automation: &Automation) -> String {
     if automation.failing {
         let failed = format!("{FAILED_RUNS_LIMIT} runs failed in a row");
@@ -254,7 +286,16 @@ fn row(automation: &Automation, cx: &mut Context<List>) -> gpui_kit::AnyElement 
                 .min_w_0()
                 .type_small(cx)
                 .ui_observe_as(labeled(automation.name.clone()))
-                .child(automation.name.clone()),
+                .child(
+                    v_flex().min_w_0().child(automation.name.clone()).child(
+                        div()
+                            .text_color(muted)
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .whitespace_nowrap()
+                            .child(detail(automation)),
+                    ),
+                ),
         )
         .child(
             div()
@@ -271,6 +312,12 @@ fn row(automation: &Automation, cx: &mut Context<List>) -> gpui_kit::AnyElement 
                 .text_color(muted)
                 .ui_observe_as(labeled(started.clone()))
                 .child(started),
+        )
+        .child(
+            div()
+                .type_small(cx)
+                .text_color(muted)
+                .child(next_run(automation)),
         )
         .children(last.map(|last| {
             control(
@@ -368,3 +415,7 @@ impl Render for List {
             }))
     }
 }
+
+#[cfg(test)]
+#[path = "automations_test.rs"]
+mod tests;

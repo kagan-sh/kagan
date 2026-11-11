@@ -212,7 +212,7 @@ An automation is a named text, a program line, and a time, that starts a thread 
 ### `List`
 
 - **Allowed when**: always [book:cli]. One project when a project is set.
-- **Shows**: each automation, and the thread each run started, oldest first. An interval that has not run yet has no thread [decision 236]. The window shows the run count and opens the last run; it does not list every run's title. An automation whose last three runs in a row ended in an error says so on its row: `3 runs failed in a row`, or `Paused: 3 runs failed in a row` once it has paused [decision 243].
+- **Shows**: each automation, and the thread each run started, oldest first. An interval that has not run yet has no thread [decision 236]. The window's row shows the program, the start of the text, when the next run is due or that it is paused or done, the run count, and opens the last run; it does not list every run's title. An automation whose last three runs in a row ended in an error says so on its row: `3 runs failed in a row`, or `Paused: 3 runs failed in a row` once it has paused [decision 243].
 
 ### Due run (no operation)
 
