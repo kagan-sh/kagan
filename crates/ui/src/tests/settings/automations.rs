@@ -66,7 +66,7 @@ fn the_project_page_counts_the_runs_an_automation_started(cx: &mut TestAppContex
                 project_id: ProjectId("prj_kagan".into()),
                 program: program().into(),
                 minutes: None,
-                at: Some(Timestamp(1)),
+                at: Some(Timestamp(now_ms() + 1_000)),
             }),
             cx,
         )
