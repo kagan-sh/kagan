@@ -13,11 +13,21 @@ type Request = (Op, kg_core::Requester, Sender<Result<OpResult, OpError>>);
 struct Opened;
 impl gpui_kit::Global for Opened {}
 
+/// Offscreen windows need no display, so they run on the headless platform on every OS.
+fn desktop(presentation: kg_ui::Presentation) -> gpui_kit::Application {
+    match presentation {
+        kg_ui::Presentation::Offscreen => {
+            gpui_kit::Application::with_platform(gpui_kit::platform::current_platform(true))
+        }
+        kg_ui::Presentation::Window => windowed(),
+    }
+}
+
 // WebKitGTK embeds only in an X11 window. When `DISPLAY` is set, including XWayland, the
 // window uses X11 so the browser can sit in it. With no X11 display the window stays on
 // Wayland or headless, and opening a page says that it needs X11.
 #[cfg(target_os = "linux")]
-fn desktop() -> gpui_kit::Application {
+fn windowed() -> gpui_kit::Application {
     let display = std::env::var_os("DISPLAY").is_some_and(|value| !value.is_empty());
     let modes = if display {
         gpui_kit::WindowingModes::X11 | gpui_kit::WindowingModes::HEADLESS
@@ -28,7 +38,7 @@ fn desktop() -> gpui_kit::Application {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn desktop() -> gpui_kit::Application {
+fn windowed() -> gpui_kit::Application {
     gpui_kit::application()
 }
 
@@ -55,7 +65,7 @@ pub(crate) fn data_dir_of(
     Ok(Path::new(&home).join(".kagan"))
 }
 
-pub(crate) fn run() -> Result<()> {
+pub(crate) fn run(presentation: kg_ui::Presentation) -> Result<()> {
     let location = socket::location()?;
     let Some(listener) = socket::open(&location).context("cannot open the kg socket")? else {
         return Ok(());
@@ -74,7 +84,7 @@ pub(crate) fn run() -> Result<()> {
     let cli = std::env::current_exe()?;
     kg_process::warm_user_path();
     let components = component_catalog()?;
-    let app = desktop()
+    let app = desktop(presentation)
         .with_assets(kg_ui::Assets)
         .with_quit_mode(QuitMode::Explicit);
     app.on_reopen(|cx| {
@@ -87,6 +97,7 @@ pub(crate) fn run() -> Result<()> {
         }
     });
     app.run(move |cx| {
+        kg_ui::set_presentation(cx, presentation);
         #[cfg(target_os = "macos")]
         crate::icon::install();
         let open = kg_core::Workspace::open(data_dir, cli, Some(location), cx);
@@ -156,7 +167,8 @@ fn open_plugin_window(
 ) -> gpui_shell::anyhow::Result<gpui_shell::gpui::AnyWindowHandle> {
     use gpui_shell::gpui::AppContext as _;
 
-    let handle = cx.open_window(kg_ui::prepare_window(options), |window, cx| {
+    let options = kg_ui::prepare_window(options, cx);
+    let handle = cx.open_window(options, |window, cx| {
         let inner = build(window, cx);
         cx.new(|cx| gpui_kit::component::Root::new(inner, window, cx))
     })?;

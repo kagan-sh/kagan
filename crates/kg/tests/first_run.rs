@@ -18,7 +18,7 @@ fn documented_first_run_commands_run() {
     let _ = std::fs::remove_file(&socket);
     let log = dir.path().join("server.log");
     let home = data.parent().unwrap();
-    let mut server = Server::start(home, Some(&data), &socket, &log);
+    let mut server = Server::start(home, Some(&data), &socket, &log, "--headless");
     server.wait_until_listening();
 
     for command in first_run_commands() {
@@ -62,6 +62,63 @@ fn documented_first_run_commands_run() {
 }
 
 #[cfg(unix)]
+#[cfg(unix)]
+#[test]
+fn offscreen_app_answers_ui_commands_and_captures_its_window() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    let socket = PathBuf::from(format!("/tmp/kg-offscreen-{}.sock", std::process::id()));
+    let _ = std::fs::remove_file(&socket);
+    let log = dir.path().join("server.log");
+    let home = data.parent().unwrap();
+    let mut server = Server::start(home, Some(&data), &socket, &log, "--offscreen");
+    server.wait_until_listening();
+    let open = kg(&["open".into()], home, Some(&data), &socket);
+    assert!(
+        open.status.success(),
+        "{}",
+        server.failure("kg open failed")
+    );
+
+    let snapshot = kg(
+        &["ui".into(), "snapshot".into(), "--json".into()],
+        home,
+        Some(&data),
+        &socket,
+    );
+    let text = String::from_utf8_lossy(&snapshot.stdout);
+    assert!(
+        snapshot.status.success() && text.contains("sidebar-new-thread"),
+        "{}",
+        server.failure(&text)
+    );
+
+    if cfg!(target_os = "macos") {
+        let image = dir.path().join("offscreen.png");
+        let shot = kg(
+            &[
+                "ui".into(),
+                "screenshot".into(),
+                image.display().to_string(),
+                "--json".into(),
+            ],
+            home,
+            Some(&data),
+            &socket,
+        );
+        assert!(
+            shot.status.success(),
+            "{}",
+            server.failure(&String::from_utf8_lossy(&shot.stdout))
+        );
+        // A blank frame compresses to a few kilobytes; the start screen is far larger.
+        let size = std::fs::metadata(&image)
+            .expect("the screenshot was written")
+            .len();
+        assert!(size > 20_000, "the capture is only {size} bytes");
+    }
+}
+
 #[test]
 fn the_app_keeps_its_data_in_home_kagan_without_kg_data_dir() {
     let home = tempfile::tempdir().unwrap();
@@ -70,7 +127,7 @@ fn the_app_keeps_its_data_in_home_kagan_without_kg_data_dir() {
     let log = home.path().join("server.log");
     let status = ["kg".to_owned(), "status".into(), "--json".into()];
 
-    let mut server = Server::start(home.path(), None, &socket, &log);
+    let mut server = Server::start(home.path(), None, &socket, &log, "--headless");
     server.wait_until_listening();
     let output = kg(&status, home.path(), None, &socket);
     assert!(
@@ -155,10 +212,10 @@ struct Server {
 
 #[cfg(unix)]
 impl Server {
-    fn start(home: &Path, data: Option<&Path>, socket: &Path, log: &Path) -> Self {
+    fn start(home: &Path, data: Option<&Path>, socket: &Path, log: &Path, mode: &str) -> Self {
         let err = File::create(log).unwrap();
         let mut command = Command::new(env!("CARGO_BIN_EXE_kg"));
-        command.arg("--headless");
+        command.arg(mode);
         environment(&mut command, home, data, socket);
         command
             .stdin(Stdio::null())

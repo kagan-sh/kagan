@@ -29,10 +29,12 @@ pub(crate) fn open(cx: &mut App) -> gpui_kit::Result<Entity<Kagan>> {
 }
 
 pub(crate) fn show(cx: &mut App) -> gpui_kit::Result<()> {
-    cx.activate(true);
+    crate::presentation::activate(cx);
     if let Some(open) = cx.try_global::<OpenWindow>().map(|open| open.handle)
         && cx
-            .update_window(open, |_, window, _| window.activate_window())
+            .update_window(open, |_, window, cx| {
+                crate::presentation::activate_window(window, cx)
+            })
             .is_ok()
     {
         return Ok(());
@@ -93,7 +95,7 @@ pub(crate) fn show_preview(thread: Option<ThreadId>, path: String, cx: &mut App)
     if front(cx).is_none() {
         return;
     }
-    cx.activate(true);
+    crate::presentation::activate(cx);
     with_front(cx, |kagan, window, cx| {
         if let Some(id) = thread.as_ref()
             && kagan.shown_thread(cx).as_ref() != Some(id)
@@ -142,20 +144,23 @@ pub(super) fn release_window(this: &mut Kagan, cx: &mut App) {
 }
 
 pub(crate) fn window_options(cx: &mut App) -> WindowOptions {
-    crate::prepare_window(WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(gpui_kit::Bounds::centered(
-            None,
-            size(px(1120.), px(720.)),
-            cx,
-        ))),
-        titlebar: Some(gpui_kit::TitlebarOptions {
-            title: Some(TITLE.into()),
-            ..TitleBar::title_bar_options()
-        }),
-        window_min_size: Some(size(
-            px(layout::CENTER_MIN + layout::RAIL_WIDTH),
-            px(MIN_HEIGHT),
-        )),
-        ..TitleBar::window_options()
-    })
+    crate::prepare_window(
+        WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(gpui_kit::Bounds::centered(
+                None,
+                size(px(1120.), px(720.)),
+                cx,
+            ))),
+            titlebar: Some(gpui_kit::TitlebarOptions {
+                title: Some(TITLE.into()),
+                ..TitleBar::title_bar_options()
+            }),
+            window_min_size: Some(size(
+                px(layout::CENTER_MIN + layout::RAIL_WIDTH),
+                px(MIN_HEIGHT),
+            )),
+            ..TitleBar::window_options()
+        },
+        cx,
+    )
 }

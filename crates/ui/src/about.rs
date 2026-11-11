@@ -43,7 +43,9 @@ impl Global for Shown {}
 pub(crate) fn show(cx: &mut App) {
     if let Some(&Shown(handle)) = cx.try_global::<Shown>()
         && cx
-            .update_window(handle, |_, window, _| window.activate_window())
+            .update_window(handle, |_, window, cx| {
+                crate::presentation::activate_window(window, cx)
+            })
             .is_ok()
     {
         return;
@@ -57,21 +59,24 @@ pub(crate) fn show(cx: &mut App) {
 }
 
 fn options(cx: &mut App) -> WindowOptions {
-    crate::prepare_window(WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
-            None,
-            size(px(360.), px(336.)),
-            cx,
-        ))),
-        titlebar: Some(TitlebarOptions {
-            title: Some("About kagan".into()),
-            appears_transparent: cfg!(target_os = "macos"),
-            traffic_light_position: Some(point(px(9.), px(9.))),
-        }),
-        is_resizable: false,
-        is_minimizable: false,
-        ..WindowOptions::default()
-    })
+    crate::prepare_window(
+        WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                None,
+                size(px(360.), px(336.)),
+                cx,
+            ))),
+            titlebar: Some(TitlebarOptions {
+                title: Some("About kagan".into()),
+                appears_transparent: cfg!(target_os = "macos"),
+                traffic_light_position: Some(point(px(9.), px(9.))),
+            }),
+            is_resizable: false,
+            is_minimizable: false,
+            ..WindowOptions::default()
+        },
+        cx,
+    )
 }
 
 pub(crate) fn version(commit: Option<&str>) -> String {

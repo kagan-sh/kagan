@@ -6,6 +6,7 @@ mod components;
 mod failed;
 mod kagan;
 mod plugins;
+mod presentation;
 mod synthetic;
 mod terminal;
 #[cfg(test)]
@@ -21,6 +22,7 @@ mod web_page;
 use gpui_kit::App;
 
 pub use brand::{Assets, prepare_window};
+pub use presentation::{Presentation, set_presentation};
 
 /// Sets up the Workbench theme. Call once, after `kg_core::Workspace::open`
 /// and `gpui_kit::init`, before the first [`open_window`].

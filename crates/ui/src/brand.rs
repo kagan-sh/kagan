@@ -85,7 +85,12 @@ fn brand_bytes(path: &str) -> Option<&'static [u8]> {
 // and has no window-icon call. A `.desktop` file would supply that icon,
 // and a packaged `.app` or `.desktop` entry is a follow-up.
 #[must_use]
-pub fn prepare_window(options: gpui_kit::WindowOptions) -> gpui_kit::WindowOptions {
+pub fn prepare_window(
+    options: gpui_kit::WindowOptions,
+    cx: &gpui_kit::App,
+) -> gpui_kit::WindowOptions {
+    let mut options = options;
+    crate::presentation::apply(&mut options, cx);
     #[cfg(target_os = "linux")]
     {
         let mut options = options;

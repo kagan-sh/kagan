@@ -679,7 +679,7 @@ dependencies = [
  "log",
  "num-rational",
  "num-traits",
- "pastey",
+ "pastey 0.1.1",
  "rayon",
  "thiserror 2.0.21",
  "v_frame",
@@ -763,6 +763,17 @@ name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
+
+[[package]]
+name = "bench_metrics"
+version = "0.1.0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
+dependencies = [
+ "anyhow",
+ "criterion",
+ "libc",
+ "perf-event2",
+]
 
 [[package]]
 name = "bincode"
@@ -1400,6 +1411,16 @@ dependencies = [
  "serde",
  "termcolor",
  "unicode-width",
+]
+
+[[package]]
+name = "collections"
+version = "0.1.0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
+dependencies = [
+ "gpui_util",
+ "indexmap",
+ "rustc-hash 2.1.3",
 ]
 
 [[package]]
@@ -2136,6 +2157,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustc_version",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "derive_refineable"
+version = "0.1.0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
+dependencies = [
+ "proc-macro2",
+ "quote",
  "syn 2.0.119",
 ]
 
@@ -3383,6 +3414,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "glow"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "263218b0ba2b0715c3370fb04674f5f8aa331594b521c94ff0a8e4a8472d1386"
+dependencies = [
+ "js-sys",
+ "slotmap",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "glutin_wgl_sys"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3419,7 +3462,7 @@ dependencies = [
 [[package]]
 name = "gpui-base"
 version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=52e47a4f28ae5b3530eddc2a8e0af0d58437ae02#52e47a4f28ae5b3530eddc2a8e0af0d58437ae02"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=ccd9a616b15b057766ec861e8d4c3684029fcd06#ccd9a616b15b057766ec861e8d4c3684029fcd06"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -3460,7 +3503,7 @@ dependencies = [
 [[package]]
 name = "gpui-component"
 version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=52e47a4f28ae5b3530eddc2a8e0af0d58437ae02#52e47a4f28ae5b3530eddc2a8e0af0d58437ae02"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=ccd9a616b15b057766ec861e8d4c3684029fcd06#ccd9a616b15b057766ec861e8d4c3684029fcd06"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3543,7 +3586,7 @@ dependencies = [
 [[package]]
 name = "gpui-component-macros"
 version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=52e47a4f28ae5b3530eddc2a8e0af0d58437ae02#52e47a4f28ae5b3530eddc2a8e0af0d58437ae02"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=ccd9a616b15b057766ec861e8d4c3684029fcd06#ccd9a616b15b057766ec861e8d4c3684029fcd06"
 dependencies = [
  "proc-macro-crate 3.5.0",
  "proc-macro2",
@@ -3554,16 +3597,17 @@ dependencies = [
 [[package]]
 name = "gpui-fast"
 version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8c3a7e25e5a4789656da980b0316857acbdb72347b5d890d7d0c549bb9fee72"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
 dependencies = [
  "accesskit",
  "anyhow",
  "async-channel",
  "async-task",
  "backtrace",
+ "bench_metrics",
  "bitflags 2.13.2",
  "chrono",
+ "collections",
  "derive_more 2.1.1",
  "embed-resource",
  "etagere",
@@ -3571,16 +3615,11 @@ dependencies = [
  "futures-concurrency",
  "getrandom 0.3.4",
  "gpui-fast-macros",
- "gpui-pre-bench-metrics",
- "gpui-pre-collections",
- "gpui-pre-http-client",
- "gpui-pre-refineable",
- "gpui-pre-scheduler",
- "gpui-pre-shared-string",
- "gpui-pre-sum-tree",
- "gpui-pre-util",
+ "gpui_shared_string",
+ "gpui_util",
  "hdrhistogram",
  "heapless",
+ "http_client",
  "icu_segmenter",
  "image",
  "inventory",
@@ -3600,8 +3639,10 @@ dependencies = [
  "proptest",
  "rand 0.9.5",
  "raw-window-handle",
+ "refineable",
  "regex",
  "resvg 0.46.0",
+ "scheduler",
  "schemars",
  "seahash",
  "serde",
@@ -3610,6 +3651,7 @@ dependencies = [
  "smallvec",
  "spin 0.10.1",
  "strum",
+ "sum_tree",
  "taffy",
  "thiserror 2.0.21",
  "ttf-parser",
@@ -3620,19 +3662,19 @@ dependencies = [
  "waker-fn",
  "web-time",
  "windows 0.62.2",
- "zed-scap",
+ "zed-scap 0.0.8-zed (git+https://github.com/zed-industries/scap?rev=4afea48c3b002197176fb19cd0f9b180dd36eaac)",
 ]
 
 [[package]]
 name = "gpui-fast-apple"
 version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d1934376409ef93257473cfd1cba16bbc825a3a3afc437410de73208cfd8364"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
 dependencies = [
  "anyhow",
  "async-task",
  "block2 0.6.2",
  "cbindgen",
+ "collections",
  "core-foundation 0.10.1",
  "core-foundation-sys",
  "core-graphics 0.24.0",
@@ -3641,8 +3683,7 @@ dependencies = [
  "etagere",
  "futures",
  "gpui-fast",
- "gpui-pre-collections",
- "gpui-pre-util",
+ "gpui_util",
  "image",
  "libc",
  "log",
@@ -3660,14 +3701,13 @@ dependencies = [
  "pathfinder_geometry",
  "smallvec",
  "thiserror 2.0.21",
- "zed-font-kit",
+ "zed-font-kit 0.14.1-zed (git+https://github.com/zed-industries/font-kit?rev=94b0f28166665e8fd2f53ff6d268a14955c82269)",
 ]
 
 [[package]]
 name = "gpui-fast-linux"
 version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0409042721bd50ed8c538e13cb13f6d92f5adeade2e2a284a41d32c704c2eef1"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -3677,13 +3717,13 @@ dependencies = [
  "bytemuck",
  "calloop",
  "calloop-wayland-source",
+ "collections",
  "filedescriptor",
  "futures",
  "gpui-fast",
  "gpui-fast-wgpu",
- "gpui-pre-collections",
- "gpui-pre-http-client",
- "gpui-pre-util",
+ "gpui_util",
+ "http_client",
  "libc",
  "log",
  "notify-rust",
@@ -3704,20 +3744,20 @@ dependencies = [
  "wayland-protocols-wlr",
  "x11rb",
  "xkbcommon",
- "zed-scap",
- "zed-xim",
+ "zed-scap 0.0.8-zed (git+https://github.com/zed-industries/scap?rev=4afea48c3b002197176fb19cd0f9b180dd36eaac)",
+ "zed-xim 0.4.0-zed (git+https://github.com/zed-industries/xim-rs.git?rev=16f35a2c881b815a2b6cdfd6687988e84f8447d8)",
 ]
 
 [[package]]
 name = "gpui-fast-macos"
 version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "192b5731d190f840ad7868d1bb8c1c1fe70007a747cc8d2f60700699ca4318e0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
 dependencies = [
  "accesskit",
  "accesskit_macos",
  "anyhow",
  "block2 0.6.2",
+ "collections",
  "core-foundation 0.10.1",
  "core-foundation-sys",
  "core-graphics 0.24.0",
@@ -3727,9 +3767,7 @@ dependencies = [
  "futures",
  "gpui-fast",
  "gpui-fast-apple",
- "gpui-pre-collections",
- "gpui-pre-scheduler",
- "gpui-pre-util",
+ "gpui_util",
  "image",
  "itertools 0.14.0",
  "log",
@@ -3743,6 +3781,7 @@ dependencies = [
  "objc2-user-notifications",
  "parking_lot",
  "raw-window-handle",
+ "scheduler",
  "semver",
  "smallvec",
  "strum",
@@ -3752,8 +3791,7 @@ dependencies = [
 [[package]]
 name = "gpui-fast-macros"
 version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "269fc24ab55f85d5fb90ce812b3e6adcf5ad0bdccc79a08aa9ddd88a3a477494"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3764,8 +3802,7 @@ dependencies = [
 [[package]]
 name = "gpui-fast-platform"
 version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df86a665111fb86fe149c6d72660777d17bcf2af9133079459faf7bda0b3f756"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -3774,15 +3811,14 @@ dependencies = [
  "gpui-fast-macos",
  "gpui-fast-web",
  "gpui-fast-wgpu",
- "gpui-fast-windows",
- "gpui-pre-ios",
+ "gpui_ios",
+ "gpui_windows",
 ]
 
 [[package]]
 name = "gpui-fast-web"
 version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f01164798296dafad1d7608e2385f28145d36ae180cfef4d5d5ac737d323815a"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -3790,12 +3826,12 @@ dependencies = [
  "futures",
  "gpui-fast",
  "gpui-fast-wgpu",
- "gpui-pre-http-client",
- "gpui-pre-scheduler",
+ "http_client",
  "js-sys",
  "log",
  "parking_lot",
  "raw-window-handle",
+ "scheduler",
  "smallvec",
  "unicode-properties",
  "unicode-script",
@@ -3803,7 +3839,7 @@ dependencies = [
  "uuid",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm_thread",
+ "wasm_thread 0.3.3 (git+https://github.com/zed-industries/wasm_thread?rev=0cf96c7708dfb97ccf3da50347e25edcf75d6937)",
  "web-sys",
  "web-time",
 ]
@@ -3811,16 +3847,15 @@ dependencies = [
 [[package]]
 name = "gpui-fast-wgpu"
 version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cfa13d90b546bec059b6e1c08969b45236d64beb89a96cc6bc54d0df19466ce"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
 dependencies = [
  "anyhow",
  "bytemuck",
+ "collections",
  "cosmic-text",
  "etagere",
  "gpui-fast",
- "gpui-pre-collections",
- "gpui-pre-util",
+ "gpui_util",
  "image",
  "itertools 0.14.0",
  "log",
@@ -3832,43 +3867,14 @@ dependencies = [
  "unicode-bidi",
  "unicode-segmentation",
  "web-sys",
- "wgpu",
- "zed-font-kit",
-]
-
-[[package]]
-name = "gpui-fast-windows"
-version = "0.1.14"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=9501036ad80c5e32477d825283d856582ca6c5df#9501036ad80c5e32477d825283d856582ca6c5df"
-dependencies = [
- "accesskit",
- "accesskit_windows",
- "anyhow",
- "dunce",
- "etagere",
- "futures",
- "gpui-fast",
- "gpui-pre-collections",
- "gpui-pre-scheduler",
- "gpui-pre-util",
- "image",
- "itertools 0.14.0",
- "log",
- "parking_lot",
- "rand 0.9.5",
- "raw-window-handle",
- "smallvec",
- "uuid",
- "windows 0.62.2",
- "windows-core 0.62.2",
- "windows-numerics 0.3.1",
- "windows-registry 0.6.1",
+ "wgpu 30.0.0",
+ "zed-font-kit 0.14.1-zed (git+https://github.com/zed-industries/font-kit?rev=94b0f28166665e8fd2f53ff6d268a14955c82269)",
 ]
 
 [[package]]
 name = "gpui-fps"
 version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=52e47a4f28ae5b3530eddc2a8e0af0d58437ae02#52e47a4f28ae5b3530eddc2a8e0af0d58437ae02"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=ccd9a616b15b057766ec861e8d4c3684029fcd06#ccd9a616b15b057766ec861e8d4c3684029fcd06"
 dependencies = [
  "core-graphics 0.24.0",
  "gpui-fast",
@@ -3886,7 +3892,7 @@ dependencies = [
 [[package]]
 name = "gpui-kit"
 version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=52e47a4f28ae5b3530eddc2a8e0af0d58437ae02#52e47a4f28ae5b3530eddc2a8e0af0d58437ae02"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=ccd9a616b15b057766ec861e8d4c3684029fcd06#ccd9a616b15b057766ec861e8d4c3684029fcd06"
 dependencies = [
  "gpui-base",
  "gpui-component",
@@ -3903,7 +3909,7 @@ dependencies = [
 [[package]]
 name = "gpui-kit-assets"
 version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=52e47a4f28ae5b3530eddc2a8e0af0d58437ae02#52e47a4f28ae5b3530eddc2a8e0af0d58437ae02"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=ccd9a616b15b057766ec861e8d4c3684029fcd06#ccd9a616b15b057766ec861e8d4c3684029fcd06"
 dependencies = [
  "anyhow",
  "gpui-fast",
@@ -3984,7 +3990,7 @@ dependencies = [
  "waker-fn",
  "web-time",
  "windows 0.62.2",
- "zed-scap",
+ "zed-scap 0.0.8-zed (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4024,7 +4030,7 @@ dependencies = [
  "pathfinder_geometry",
  "smallvec",
  "thiserror 2.0.21",
- "zed-font-kit",
+ "zed-font-kit 0.14.1-zed (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4143,8 +4149,8 @@ dependencies = [
  "wayland-protocols-wlr",
  "x11rb",
  "xkbcommon",
- "zed-scap",
- "zed-xim",
+ "zed-scap 0.0.8-zed (registry+https://github.com/rust-lang/crates.io-index)",
+ "zed-xim 0.4.0-zed (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4291,7 +4297,7 @@ dependencies = [
  "futures",
  "parking_lot",
  "rand 0.9.5",
- "wasm_thread",
+ "wasm_thread 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "web-time",
 ]
 
@@ -4354,7 +4360,7 @@ dependencies = [
  "uuid",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm_thread",
+ "wasm_thread 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "web-sys",
  "web-time",
 ]
@@ -4383,8 +4389,8 @@ dependencies = [
  "unicode-bidi",
  "unicode-segmentation",
  "web-sys",
- "wgpu",
- "zed-font-kit",
+ "wgpu 30.0.1",
+ "zed-font-kit 0.14.1-zed (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4436,7 +4442,7 @@ checksum = "85701631a9bbecf47e6d19f145e85e57767e7c50f7192d5b1bf65b5ef43cb373"
 [[package]]
 name = "gpui-shell"
 version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=52e47a4f28ae5b3530eddc2a8e0af0d58437ae02#52e47a4f28ae5b3530eddc2a8e0af0d58437ae02"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=ccd9a616b15b057766ec861e8d4c3684029fcd06#ccd9a616b15b057766ec861e8d4c3684029fcd06"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -4478,7 +4484,7 @@ dependencies = [
 [[package]]
 name = "gpui-webview"
 version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=52e47a4f28ae5b3530eddc2a8e0af0d58437ae02#52e47a4f28ae5b3530eddc2a8e0af0d58437ae02"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=ccd9a616b15b057766ec861e8d4c3684029fcd06#ccd9a616b15b057766ec861e8d4c3684029fcd06"
 dependencies = [
  "anyhow",
  "gdkx11",
@@ -4492,6 +4498,76 @@ dependencies = [
  "windows 0.61.3",
  "windows 0.62.2",
  "x11",
+]
+
+[[package]]
+name = "gpui_ios"
+version = "0.1.0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
+dependencies = [
+ "anyhow",
+ "block2 0.6.2",
+ "futures",
+ "gpui-fast",
+ "gpui-fast-apple",
+ "log",
+ "objc2 0.6.5",
+ "objc2-core-foundation",
+ "objc2-foundation 0.3.2",
+ "objc2-quartz-core 0.3.2",
+ "objc2-ui-kit",
+ "parking_lot",
+ "raw-window-handle",
+ "uuid",
+]
+
+[[package]]
+name = "gpui_shared_string"
+version = "0.1.0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
+dependencies = [
+ "schemars",
+ "serde",
+ "smol_str",
+]
+
+[[package]]
+name = "gpui_util"
+version = "0.1.0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
+dependencies = [
+ "anyhow",
+ "log",
+ "which",
+]
+
+[[package]]
+name = "gpui_windows"
+version = "0.1.0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
+dependencies = [
+ "accesskit",
+ "accesskit_windows",
+ "anyhow",
+ "collections",
+ "dunce",
+ "etagere",
+ "futures",
+ "gpui-fast",
+ "gpui_util",
+ "image",
+ "itertools 0.14.0",
+ "log",
+ "parking_lot",
+ "rand 0.9.5",
+ "raw-window-handle",
+ "scheduler",
+ "smallvec",
+ "uuid",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
+ "windows-numerics 0.3.1",
+ "windows-registry 0.6.1",
 ]
 
 [[package]]
@@ -4831,6 +4907,24 @@ dependencies = [
  "http",
  "http-body",
  "pin-project-lite",
+]
+
+[[package]]
+name = "http_client"
+version = "0.1.0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "futures",
+ "http",
+ "http-body",
+ "log",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "url",
 ]
 
 [[package]]
@@ -6014,6 +6108,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dae608c151f68243f2b000364e1f7b186d9c29845f7d2d85bd31b9ad77ad552b"
 
 [[package]]
+name = "macro_rules_attribute"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3ae8f6d608c795738406608304d30a2dfbdc8e58e44f7ba43236da5208ded3c"
+dependencies = [
+ "macro_rules_attribute-proc_macro",
+ "pastey 0.2.3",
+]
+
+[[package]]
+name = "macro_rules_attribute-proc_macro"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc04a4c58212d57930a24bf47d3fa87485264a3a054e9c10e042eb373573ad3c"
+
+[[package]]
 name = "malloc_buf"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6270,6 +6380,31 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "naga"
+version = "30.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=cddb2f5d80dc0009b2ef6767635140cacf90a007#cddb2f5d80dc0009b2ef6767635140cacf90a007"
+dependencies = [
+ "arrayvec",
+ "bit-set 0.11.1",
+ "bitflags 2.13.2",
+ "cfg-if",
+ "cfg_aliases 0.2.2",
+ "codespan-reporting",
+ "half",
+ "hashbrown 0.17.1",
+ "indexmap",
+ "libm",
+ "log",
+ "naga-types 30.0.0",
+ "num-traits",
+ "once_cell",
+ "rustc-hash 1.1.0",
+ "spirv",
+ "thiserror 2.0.21",
+ "unicode-ident",
+]
+
+[[package]]
+name = "naga"
 version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a616d2fb8c89516ac2723a581f69d6c18576046bed761bd6b305e5618e6ae130"
@@ -6285,13 +6420,24 @@ dependencies = [
  "indexmap",
  "libm",
  "log",
- "naga-types",
+ "naga-types 30.0.1",
  "num-traits",
  "once_cell",
  "rustc-hash 1.1.0",
  "spirv",
  "thiserror 2.0.21",
  "unicode-ident",
+]
+
+[[package]]
+name = "naga-types"
+version = "30.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=cddb2f5d80dc0009b2ef6767635140cacf90a007#cddb2f5d80dc0009b2ef6767635140cacf90a007"
+dependencies = [
+ "hashbrown 0.17.1",
+ "indexmap",
+ "rustc-hash 1.1.0",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -7228,6 +7374,12 @@ name = "pastey"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35fb2e5f958ec131621fdd531e9fc186ed768cbe395337403ae56c17a74c68ec"
+
+[[package]]
+name = "pastey"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4"
 
 [[package]]
 name = "pathfinder_geometry"
@@ -8530,6 +8682,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "refineable"
+version = "0.1.0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
+dependencies = [
+ "derive_refineable",
+]
+
+[[package]]
 name = "regalloc2"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9012,6 +9172,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9cb23c424d8ee841bb4d813677ca237e2a610067d594fec130f87d6093495ab5"
 dependencies = [
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "scheduler"
+version = "0.1.0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
+dependencies = [
+ "async-task",
+ "backtrace",
+ "chrono",
+ "flume 0.12.0",
+ "futures",
+ "parking_lot",
+ "rand 0.9.5",
+ "wasm_thread 0.3.3 (git+https://github.com/zed-industries/wasm_thread?rev=0cf96c7708dfb97ccf3da50347e25edcf75d6937)",
+ "web-time",
 ]
 
 [[package]]
@@ -9809,6 +9985,17 @@ name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
+
+[[package]]
+name = "sum_tree"
+version = "0.1.0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
+dependencies = [
+ "heapless",
+ "rayon",
+ "tracing",
+ "ztracing",
+]
 
 [[package]]
 name = "svg_fmt"
@@ -11349,6 +11536,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm_thread"
+version = "0.3.3"
+source = "git+https://github.com/zed-industries/wasm_thread?rev=0cf96c7708dfb97ccf3da50347e25edcf75d6937#0cf96c7708dfb97ccf3da50347e25edcf75d6937"
+dependencies = [
+ "futures",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "wayland-backend"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11573,6 +11771,34 @@ checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 
 [[package]]
 name = "wgpu"
+version = "30.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=cddb2f5d80dc0009b2ef6767635140cacf90a007#cddb2f5d80dc0009b2ef6767635140cacf90a007"
+dependencies = [
+ "arrayvec",
+ "bitflags 2.13.2",
+ "bytemuck",
+ "cfg-if",
+ "cfg_aliases 0.2.2",
+ "document-features",
+ "hashbrown 0.17.1",
+ "js-sys",
+ "log",
+ "naga 30.0.0",
+ "profiling",
+ "raw-window-handle",
+ "smallvec",
+ "static_assertions",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "wgpu-core 30.0.0",
+ "wgpu-hal 30.0.0",
+ "wgpu-sync",
+ "wgpu-types 30.0.0",
+]
+
+[[package]]
+name = "wgpu"
 version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "527ccdf43dd5b2e8676eed9984ce00e2bbb0a1b85b70c1969dcb6cd2eb55ab9e"
@@ -11586,7 +11812,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "js-sys",
  "log",
- "naga",
+ "naga 30.0.1",
  "parking_lot",
  "portable-atomic",
  "profiling",
@@ -11596,9 +11822,44 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "wgpu-core",
- "wgpu-hal",
- "wgpu-types",
+ "wgpu-core 30.0.1",
+ "wgpu-hal 30.0.1",
+ "wgpu-types 30.0.1",
+]
+
+[[package]]
+name = "wgpu-core"
+version = "30.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=cddb2f5d80dc0009b2ef6767635140cacf90a007#cddb2f5d80dc0009b2ef6767635140cacf90a007"
+dependencies = [
+ "arrayvec",
+ "bit-set 0.11.1",
+ "bit-vec 0.10.1",
+ "bitflags 2.13.2",
+ "bytemuck",
+ "cfg_aliases 0.2.2",
+ "document-features",
+ "hashbrown 0.17.1",
+ "indexmap",
+ "log",
+ "naga 30.0.0",
+ "naga-types 30.0.0",
+ "num-traits",
+ "profiling",
+ "raw-window-handle",
+ "rustc-hash 1.1.0",
+ "scopeguard",
+ "smallvec",
+ "thiserror 2.0.21",
+ "wgpu-core-deps-apple 30.0.0",
+ "wgpu-core-deps-emscripten 30.0.0",
+ "wgpu-core-deps-linux-android-bsd",
+ "wgpu-core-deps-wasm 30.0.0",
+ "wgpu-core-deps-windows",
+ "wgpu-hal 30.0.0",
+ "wgpu-naga-bridge 30.0.0",
+ "wgpu-sync",
+ "wgpu-types 30.0.0",
 ]
 
 [[package]]
@@ -11617,8 +11878,8 @@ dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
  "log",
- "naga",
- "naga-types",
+ "naga 30.0.1",
+ "naga-types 30.0.1",
  "once_cell",
  "parking_lot",
  "portable-atomic",
@@ -11627,13 +11888,21 @@ dependencies = [
  "rustc-hash 1.1.0",
  "smallvec",
  "thiserror 2.0.21",
- "wgpu-core-deps-apple",
- "wgpu-core-deps-emscripten",
- "wgpu-core-deps-wasm",
+ "wgpu-core-deps-apple 30.0.1",
+ "wgpu-core-deps-emscripten 30.0.1",
+ "wgpu-core-deps-wasm 30.0.1",
  "wgpu-core-deps-windows-linux-android",
- "wgpu-hal",
- "wgpu-naga-bridge",
- "wgpu-types",
+ "wgpu-hal 30.0.1",
+ "wgpu-naga-bridge 30.0.1",
+ "wgpu-types 30.0.1",
+]
+
+[[package]]
+name = "wgpu-core-deps-apple"
+version = "30.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=cddb2f5d80dc0009b2ef6767635140cacf90a007#cddb2f5d80dc0009b2ef6767635140cacf90a007"
+dependencies = [
+ "wgpu-hal 30.0.0",
 ]
 
 [[package]]
@@ -11642,7 +11911,15 @@ version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "061f3d319a40d39d00b1ecc2c33b89fe21d4e6fe01859df3500a3a8ecccd6b68"
 dependencies = [
- "wgpu-hal",
+ "wgpu-hal 30.0.1",
+]
+
+[[package]]
+name = "wgpu-core-deps-emscripten"
+version = "30.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=cddb2f5d80dc0009b2ef6767635140cacf90a007#cddb2f5d80dc0009b2ef6767635140cacf90a007"
+dependencies = [
+ "wgpu-hal 30.0.0",
 ]
 
 [[package]]
@@ -11651,7 +11928,23 @@ version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d98b86cf4abf524a902dd35f18ca6a3f08fc2ae9847c8f10b48e30491b1f0b86"
 dependencies = [
- "wgpu-hal",
+ "wgpu-hal 30.0.1",
+]
+
+[[package]]
+name = "wgpu-core-deps-linux-android-bsd"
+version = "30.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=cddb2f5d80dc0009b2ef6767635140cacf90a007#cddb2f5d80dc0009b2ef6767635140cacf90a007"
+dependencies = [
+ "wgpu-hal 30.0.0",
+]
+
+[[package]]
+name = "wgpu-core-deps-wasm"
+version = "30.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=cddb2f5d80dc0009b2ef6767635140cacf90a007#cddb2f5d80dc0009b2ef6767635140cacf90a007"
+dependencies = [
+ "wgpu-hal 30.0.0",
 ]
 
 [[package]]
@@ -11660,7 +11953,15 @@ version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d260ca2ca8adc654f513a869bf3cac0b47f5b8d3f87803d6942015f8de597aae"
 dependencies = [
- "wgpu-hal",
+ "wgpu-hal 30.0.1",
+]
+
+[[package]]
+name = "wgpu-core-deps-windows"
+version = "30.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=cddb2f5d80dc0009b2ef6767635140cacf90a007#cddb2f5d80dc0009b2ef6767635140cacf90a007"
+dependencies = [
+ "wgpu-hal 30.0.0",
 ]
 
 [[package]]
@@ -11669,7 +11970,59 @@ version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7586165fd5f6d881cb9ce4bb71f40d6caab2c0f1837e3fc1d9788a197fb6004f"
 dependencies = [
- "wgpu-hal",
+ "wgpu-hal 30.0.1",
+]
+
+[[package]]
+name = "wgpu-hal"
+version = "30.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=cddb2f5d80dc0009b2ef6767635140cacf90a007#cddb2f5d80dc0009b2ef6767635140cacf90a007"
+dependencies = [
+ "android_system_properties",
+ "arrayvec",
+ "ash",
+ "bit-set 0.11.1",
+ "bitflags 2.13.2",
+ "block2 0.6.2",
+ "bytemuck",
+ "cfg-if",
+ "cfg_aliases 0.2.2",
+ "glow 0.18.0",
+ "glutin_wgl_sys",
+ "gpu-allocator",
+ "hashbrown 0.17.1",
+ "js-sys",
+ "khronos-egl",
+ "libc",
+ "libloading",
+ "log",
+ "naga 30.0.0",
+ "naga-types 30.0.0",
+ "ndk-sys",
+ "objc2 0.6.5",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation 0.3.2",
+ "objc2-metal 0.3.2",
+ "objc2-quartz-core 0.3.2",
+ "ordered-float",
+ "profiling",
+ "range-alloc",
+ "raw-window-handle",
+ "raw-window-metal",
+ "renderdoc-sys",
+ "smallvec",
+ "static_assertions",
+ "thiserror 2.0.21",
+ "wasm-bindgen",
+ "wayland-sys",
+ "web-sys",
+ "wgpu-naga-bridge 30.0.0",
+ "wgpu-sync",
+ "wgpu-types 30.0.0",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
+ "windows-result 0.4.1",
 ]
 
 [[package]]
@@ -11687,7 +12040,7 @@ dependencies = [
  "bytemuck",
  "cfg-if",
  "cfg_aliases 0.2.2",
- "glow",
+ "glow 0.17.0",
  "glutin_wgl_sys",
  "gpu-allocator",
  "hashbrown 0.17.1",
@@ -11696,8 +12049,8 @@ dependencies = [
  "libc",
  "libloading",
  "log",
- "naga",
- "naga-types",
+ "naga 30.0.1",
+ "naga-types 30.0.1",
  "ndk-sys",
  "objc2 0.6.5",
  "objc2-core-foundation",
@@ -11721,11 +12074,20 @@ dependencies = [
  "wasm-bindgen",
  "wayland-sys",
  "web-sys",
- "wgpu-naga-bridge",
- "wgpu-types",
+ "wgpu-naga-bridge 30.0.1",
+ "wgpu-types 30.0.1",
  "windows 0.62.2",
  "windows-core 0.62.2",
  "windows-result 0.4.1",
+]
+
+[[package]]
+name = "wgpu-naga-bridge"
+version = "30.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=cddb2f5d80dc0009b2ef6767635140cacf90a007#cddb2f5d80dc0009b2ef6767635140cacf90a007"
+dependencies = [
+ "naga 30.0.0",
+ "wgpu-types 30.0.0",
 ]
 
 [[package]]
@@ -11734,8 +12096,37 @@ version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2f62e73117bb7a62bfd9c5a5841438a823f6566c6442a808ee269d2d055c081"
 dependencies = [
- "naga",
- "wgpu-types",
+ "naga 30.0.1",
+ "wgpu-types 30.0.1",
+]
+
+[[package]]
+name = "wgpu-sync"
+version = "30.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=cddb2f5d80dc0009b2ef6767635140cacf90a007#cddb2f5d80dc0009b2ef6767635140cacf90a007"
+dependencies = [
+ "cfg-if",
+ "lock_api",
+ "once_cell",
+ "parking_lot",
+ "portable-atomic",
+ "portable-atomic-util",
+]
+
+[[package]]
+name = "wgpu-types"
+version = "30.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=cddb2f5d80dc0009b2ef6767635140cacf90a007#cddb2f5d80dc0009b2ef6767635140cacf90a007"
+dependencies = [
+ "bitflags 2.13.2",
+ "bytemuck",
+ "js-sys",
+ "log",
+ "macro_rules_attribute",
+ "naga-types 30.0.0",
+ "raw-window-handle",
+ "static_assertions",
+ "web-sys",
 ]
 
 [[package]]
@@ -11748,7 +12139,7 @@ dependencies = [
  "bytemuck",
  "js-sys",
  "log",
- "naga-types",
+ "naga-types 30.0.1",
  "raw-window-handle",
  "static_assertions",
  "web-sys",
@@ -12647,6 +13038,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "xim-ctext"
+version = "0.3.0"
+source = "git+https://github.com/zed-industries/xim-rs.git?rev=16f35a2c881b815a2b6cdfd6687988e84f8447d8#16f35a2c881b815a2b6cdfd6687988e84f8447d8"
+dependencies = [
+ "encoding_rs",
+]
+
+[[package]]
+name = "xim-parser"
+version = "0.2.1"
+source = "git+https://github.com/zed-industries/xim-rs.git?rev=16f35a2c881b815a2b6cdfd6687988e84f8447d8#16f35a2c881b815a2b6cdfd6687988e84f8447d8"
+dependencies = [
+ "bitflags 2.13.2",
+]
+
+[[package]]
 name = "xim-parser"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12937,10 +13344,55 @@ dependencies = [
 ]
 
 [[package]]
+name = "zed-font-kit"
+version = "0.14.1-zed"
+source = "git+https://github.com/zed-industries/font-kit?rev=94b0f28166665e8fd2f53ff6d268a14955c82269#94b0f28166665e8fd2f53ff6d268a14955c82269"
+dependencies = [
+ "bitflags 2.13.2",
+ "byteorder",
+ "core-foundation 0.10.1",
+ "core-graphics 0.24.0",
+ "core-text",
+ "dirs 6.0.0",
+ "dwrote",
+ "float-ord",
+ "freetype-sys",
+ "lazy_static",
+ "libc",
+ "log",
+ "pathfinder_geometry",
+ "pathfinder_simd",
+ "walkdir",
+ "winapi",
+ "yeslogic-fontconfig-sys",
+]
+
+[[package]]
 name = "zed-scap"
 version = "0.0.8-zed"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6b338d705ae33a43ca00287c11129303a7a0aa57b101b72a1c08c863f698ac8"
+dependencies = [
+ "anyhow",
+ "cocoa",
+ "core-graphics-helmer-fork",
+ "log",
+ "objc",
+ "rand 0.8.8",
+ "screencapturekit",
+ "screencapturekit-sys",
+ "sysinfo 0.31.4",
+ "tao-core-video-sys",
+ "windows 0.61.3",
+ "windows-capture",
+ "x11",
+ "xcb",
+]
+
+[[package]]
+name = "zed-scap"
+version = "0.0.8-zed"
+source = "git+https://github.com/zed-industries/scap?rev=4afea48c3b002197176fb19cd0f9b180dd36eaac#4afea48c3b002197176fb19cd0f9b180dd36eaac"
 dependencies = [
  "anyhow",
  "cocoa",
@@ -12968,8 +13420,21 @@ dependencies = [
  "hashbrown 0.14.5",
  "log",
  "x11rb",
- "xim-ctext",
- "xim-parser",
+ "xim-ctext 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xim-parser 0.2.2",
+]
+
+[[package]]
+name = "zed-xim"
+version = "0.4.0-zed"
+source = "git+https://github.com/zed-industries/xim-rs.git?rev=16f35a2c881b815a2b6cdfd6687988e84f8447d8#16f35a2c881b815a2b6cdfd6687988e84f8447d8"
+dependencies = [
+ "ahash",
+ "hashbrown 0.14.5",
+ "log",
+ "x11rb",
+ "xim-ctext 0.3.0 (git+https://github.com/zed-industries/xim-rs.git?rev=16f35a2c881b815a2b6cdfd6687988e84f8447d8)",
+ "xim-parser 0.2.1",
 ]
 
 [[package]]
@@ -13100,6 +13565,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ztracing"
+version = "0.1.0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
+dependencies = [
+ "tracing",
+ "ztracing_macro",
+]
+
+[[package]]
+name = "ztracing_macro"
+version = "0.1.0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=8e7c66d4d5739f9b97986bc75b86b8880414ecbe#8e7c66d4d5739f9b97986bc75b86b8880414ecbe"
+
+[[package]]
 name = "zune-core"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13179,3 +13658,8 @@ dependencies = [
  "syn 3.0.10",
  "winnow 1.0.5",
 ]
+
+[[patch.unused]]
+name = "gpui-fast-windows"
+version = "0.1.14"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=9501036ad80c5e32477d825283d856582ca6c5df#9501036ad80c5e32477d825283d856582ca6c5df"
