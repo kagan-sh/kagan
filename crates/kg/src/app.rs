@@ -115,12 +115,12 @@ pub(crate) fn run(presentation: kg_ui::Presentation) -> Result<()> {
     let (requests, incoming) = async_channel::unbounded::<Request>();
     socket::serve(listener, move |op, gone, waiting| {
         let (reply, replied) = async_channel::bounded(1);
-        let (notices, noticed) = async_channel::unbounded();
-        let requester = kg_core::Requester::new(gone.clone()).waiting_on(notices);
+        let (questions, asked) = async_channel::unbounded();
+        let requester = kg_core::Requester::new(gone.clone()).waiting_on(questions);
         requests
             .send_blocking((op, requester, reply))
             .map_err(|_| OpError::Failed("kagan is quitting".into()))?;
-        wait_for_reply(&noticed, &replied, waiting)
+        wait_for_reply(&asked, &replied, waiting)
     });
     let cli = std::env::current_exe()?;
     kg_process::warm_user_path();
@@ -188,14 +188,14 @@ pub(crate) fn run(presentation: kg_ui::Presentation) -> Result<()> {
 
 // Passes each question the op puts to the person to `waiting`, until the op replies.
 fn wait_for_reply(
-    noticed: &Receiver<String>,
+    asked: &Receiver<String>,
     replied: &Receiver<Result<OpResult, OpError>>,
     waiting: &mut dyn FnMut(&str),
 ) -> Result<OpResult, OpError> {
     let dropped = || OpError::Failed("kagan dropped the request".into());
     block_on(async {
         loop {
-            match select(pin!(noticed.recv()), pin!(replied.recv())).await {
+            match select(pin!(asked.recv()), pin!(replied.recv())).await {
                 Either::Left((Ok(question), _)) => waiting(&question),
                 Either::Left((Err(_), _)) => break,
                 Either::Right((reply, _)) => return reply.unwrap_or_else(|_| Err(dropped())),

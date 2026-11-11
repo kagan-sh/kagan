@@ -1,8 +1,3 @@
-#![expect(
-    clippy::print_stdout,
-    reason = "the CLI writes command output and results to stdout"
-)]
-
 mod app;
 mod cli;
 #[cfg(target_os = "macos")]
