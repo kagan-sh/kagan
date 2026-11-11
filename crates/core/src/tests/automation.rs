@@ -4,7 +4,7 @@ use gpui_kit::{Task, TestAppContext};
 use kg_domain::*;
 
 use super::{Fixture, events, op, program};
-use crate::Workspace;
+use crate::{Requester, Workspace};
 
 fn add(project: &ProjectId, minutes: Option<u16>, at: Option<Timestamp>) -> Op {
     Op::Automation(AutomationOp::Add {
@@ -339,4 +339,33 @@ async fn deleting_an_automation_waits_for_the_person(cx: &mut TestAppContext) {
     approve(cx).await;
     deleting.await.unwrap();
     assert!(automations(cx).await.is_empty());
+}
+
+#[gpui_kit::test]
+async fn a_person_question_is_reported_to_the_requester_by_title(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Automation(saved) = op(add(&fixture.project, Some(1), None), cx).await.unwrap()
+    else {
+        panic!("add")
+    };
+    let (gone_sender, gone) = async_channel::bounded::<()>(1);
+    let (questions, asked) = async_channel::unbounded();
+    let requester = Requester::new(gone).waiting_on(questions);
+    let deleting = cx.update(|cx| {
+        Workspace::dispatch_for(
+            Op::Automation(AutomationOp::Delete {
+                id: saved.id.clone(),
+            }),
+            Some(requester),
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        asked.try_recv().unwrap(),
+        "Delete the automation “Morning”?"
+    );
+    approve(cx).await;
+    deleting.await.unwrap();
+    drop(gone_sender);
 }

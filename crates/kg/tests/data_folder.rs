@@ -123,3 +123,44 @@ fn a_client_that_cannot_start_the_app_names_the_folder_holder() {
     assert!(!output.status.success(), "{stderr}");
     assert!(stderr.contains(&format!("in use by pid {pid}")), "{stderr}");
 }
+
+fn wait_for_app(data: &Path, socket: &Path) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let answered = kg(data, socket)
+            .env("KG_NO_START", "1")
+            .args(["project", "list"])
+            .status()
+            .unwrap()
+            .success();
+        if answered {
+            return;
+        }
+        assert!(Instant::now() < deadline, "the app never answered");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[test]
+fn a_reader_that_leaves_early_does_not_crash_kg() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_app, data) = first_app(dir.path());
+    let socket = dir.path().join("first.sock");
+    wait_for_app(&data, &socket);
+
+    // The reply is larger than a pipe buffer, so the write meets a closed reader.
+    let body = "q".repeat(150_000);
+    let mut child = kg(&data, &socket)
+        .env("KG_NO_START", "1")
+        .args(["saved-prompt", "add", "big", &body])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    drop(child.stdout.take());
+    let output = child.wait_with_output().unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_ne!(output.status.code(), Some(101), "{stderr}");
+    assert!(!stderr.contains("panicked"), "{stderr}");
+}
