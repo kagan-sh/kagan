@@ -3,11 +3,10 @@
 
 use crate::theme::{SpaceStep, TypeScale as _, radius_md, space};
 
-use gpui_kit::component::button::Button;
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::menu::PopupMenu;
+use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::{
-    AppContext as _, Context, ElementId, Entity, FocusHandle, InteractiveElement as _, IntoElement,
+    AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement,
     KeyBinding, ParentElement as _, Render, Role, SharedString, StatefulInteractiveElement as _,
     Styled as _, Task, WeakEntity, Window, actions, div, px,
 };
@@ -17,7 +16,7 @@ use kg_domain::{Op, OpResult, Program, ProgramOp, ProjectId, ProjectOp};
 use super::group_block;
 use super::row::{Group, Row, group, row};
 use crate::kagan::Kagan;
-use crate::kagan::controls::control;
+use crate::kagan::controls::{choice_item, choice_trigger};
 use crate::kagan::rules::RulesEditor;
 use crate::kagan::screen::{Center, FocusReturn};
 use crate::kagan::variables::Variables;
@@ -155,17 +154,9 @@ impl Page {
         let page = cx.entity().downgrade();
         let current = self.program.clone();
         let (picked, programs) = (current.clone(), self.programs.clone());
-        let choice = control(
-            "project-program-choice",
-            Facts::button(label.clone()),
-            Button::new("button-project-program-choice")
-                .small()
-                .outline()
-                .label(label)
-                .dropdown_menu(move |menu, _, _| {
-                    program_menu(menu, &page, picked.as_ref(), &programs)
-                }),
-        );
+        let choice = choice_trigger("project-program-choice", label, move |menu, _, _| {
+            program_menu(menu, &page, picked.as_ref(), &programs)
+        });
         let mut column = v_flex().w_full().items_end().gap_2().child(choice);
         if let Some(stored) = current.filter(|stored| {
             self.programs_loaded && !self.programs.iter().any(|p| &p.command == stored)
@@ -241,41 +232,24 @@ fn program_menu(
         .iter()
         .fold(menu.scrollable(true), |menu, program| {
             let selected = current.is_some_and(|stored| stored == &program.command);
-            let id = format!("project-program-{}", program.command);
-            let label = program.label.clone();
+            let item = choice_item(
+                format!("project-program-menu-{}", program.command),
+                program.label.clone(),
+                selected,
+            );
             let pick = program.command.clone();
             let page = page.clone();
-            menu.item(
-                PopupMenuItem::element(move |_, _| {
-                    div()
-                        .id(ElementId::Name(id.clone().into()))
-                        .ui_observe_as(Facts {
-                            role: Role::MenuItem,
-                            selected: Some(selected),
-                            ..Facts::button(label.clone())
-                        })
-                        .child(label.clone())
-                })
-                .checked(selected)
-                .on_click(move |_, _, cx| {
-                    _ = page.update(cx, |page, cx| page.pick(Some(pick.clone()), cx));
-                }),
-            )
+            menu.item(item.on_click(move |_, _, cx| {
+                _ = page.update(cx, |page, cx| page.pick(Some(pick.clone()), cx));
+            }))
         });
-    let selected = current.is_none();
     let page = page.clone();
     menu.item(
-        PopupMenuItem::element(move |_, _| {
-            div()
-                .id("project-program-first")
-                .ui_observe_as(Facts {
-                    role: Role::MenuItem,
-                    selected: Some(selected),
-                    ..Facts::button("First installed")
-                })
-                .child("First installed")
-        })
-        .checked(selected)
+        choice_item(
+            "project-program-menu-first".to_owned(),
+            "First installed".to_owned(),
+            current.is_none(),
+        )
         .on_click(move |_, _, cx| {
             _ = page.update(cx, |page, cx| page.pick(None, cx));
         }),

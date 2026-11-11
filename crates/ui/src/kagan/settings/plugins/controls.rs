@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 
 use super::{Change, Secret, save_value};
 use crate::kagan::Kagan;
-use crate::kagan::controls::control;
+use crate::kagan::controls::{choice_item, choice_trigger, control};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 use gpui_kit::Role;
@@ -310,24 +310,18 @@ pub(super) fn select_control(
     value: &Value,
 ) -> AnyElement {
     let current = value.as_str().unwrap_or_default().to_owned();
-    let shown = options
-        .iter()
-        .find(|option| *option == &current)
-        .cloned()
-        .unwrap_or_else(|| current.clone());
+    let shown = match options.iter().find(|option| *option == &current) {
+        Some(option) => option.clone(),
+        None if current.is_empty() => "Not chosen".to_owned(),
+        None => current.clone(),
+    };
     let options = options.to_vec();
     let (plugin, setting_key, scope) = (id.clone(), key.to_owned(), scope.to_owned());
     let weak = weak.clone();
-    control(
-        format!("setting-select-{scope}"),
-        Facts::button(shown.clone()),
-        Button::new(ElementId::Name(
-            format!("button-setting-select-{scope}").into(),
-        ))
-        .small()
-        .outline()
-        .label(shown)
-        .dropdown_menu(move |menu, _, _| {
+    choice_trigger(
+        &format!("setting-select-{scope}"),
+        shown,
+        move |menu, _, _| {
             select_menu(
                 menu,
                 &weak,
@@ -337,9 +331,8 @@ pub(super) fn select_control(
                 &current,
                 &options,
             )
-        }),
+        },
     )
-    .into_any_element()
 }
 
 fn select_menu(
@@ -352,9 +345,11 @@ fn select_menu(
     options: &[String],
 ) -> PopupMenu {
     options.iter().fold(menu.scrollable(true), |menu, option| {
-        let selected = option == current;
-        let item_id = format!("option-{scope}/{option}");
-        let label = option.clone();
+        let item = choice_item(
+            format!("option-{scope}/{option}"),
+            option.clone(),
+            option == current,
+        );
         let (weak, scope, plugin, key, pick) = (
             weak.clone(),
             scope.to_owned(),
@@ -362,29 +357,16 @@ fn select_menu(
             key.to_owned(),
             option.clone(),
         );
-        menu.item(
-            PopupMenuItem::element(move |_, _| {
-                div()
-                    .id(ElementId::Name(item_id.clone().into()))
-                    .ui_observe_as(Facts {
-                        role: Role::MenuItem,
-                        selected: Some(selected),
-                        ..Facts::button(label.clone())
-                    })
-                    .child(label.clone())
-            })
-            .checked(selected)
-            .on_click(move |_, _, cx| {
-                save_value(
-                    &weak,
-                    scope.clone(),
-                    plugin.clone(),
-                    key.clone(),
-                    Change::Set(json!(pick.clone())),
-                    cx,
-                );
-            }),
-        )
+        menu.item(item.on_click(move |_, _, cx| {
+            save_value(
+                &weak,
+                scope.clone(),
+                plugin.clone(),
+                key.clone(),
+                Change::Set(json!(pick.clone())),
+                cx,
+            );
+        }))
     })
 }
 

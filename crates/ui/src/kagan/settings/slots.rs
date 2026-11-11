@@ -1,17 +1,11 @@
-use gpui_kit::component::Sizable as _;
-use gpui_kit::component::button::Button;
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::{
-    App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Role, div,
-};
+use gpui_kit::App;
+use gpui_kit::component::menu::PopupMenu;
 use kg_domain::{Op, PluginId, PluginOp, Slot, SlotChoice};
 use kg_plugins::PluginHost;
 
 use super::Kagan;
 use super::row::{Row, save};
-use crate::kagan::controls::control;
-use crate::ui_observe::UiObserveExt as _;
-use crate::ui_registry::Facts;
+use crate::kagan::controls::{choice_item, choice_trigger};
 
 pub(super) fn row(kagan: &Kagan, slot: Slot, cx: &App) -> Row {
     let chosen = kagan
@@ -47,16 +41,9 @@ pub(super) fn row(kagan: &Kagan, slot: Slot, cx: &App) -> Row {
         .iter()
         .find(|(choice, _)| choice == &chosen)
         .map_or_else(|| chosen.to_string(), |(_, name)| name.clone());
-    let id = format!("slot-{}", slot.id());
-    let control = control(
-        id.clone(),
-        Facts::button(shown.clone()),
-        Button::new(ElementId::Name(format!("button-{id}").into()))
-            .small()
-            .outline()
-            .label(shown)
-            .dropdown_menu(move |menu, _, _| slot_menu(menu, slot, &chosen, &choices)),
-    );
+    let control = choice_trigger(&format!("slot-{}", slot.id()), shown, move |menu, _, _| {
+        slot_menu(menu, slot, &chosen, &choices)
+    });
     let (title, note) = match slot {
         Slot::Threads => (
             "Sidebar",
@@ -67,12 +54,7 @@ pub(super) fn row(kagan: &Kagan, slot: Slot, cx: &App) -> Row {
             "A plugin can draw the changes of a review. Kagan’s footer still sends and discards.",
         ),
     };
-    super::row::row(
-        &format!("slot-{}", slot.id()),
-        title,
-        note,
-        control.into_any_element(),
-    )
+    super::row::row(&format!("slot-{}", slot.id()), title, note, control)
 }
 
 fn slot_menu(
@@ -84,38 +66,25 @@ fn slot_menu(
     choices
         .iter()
         .fold(menu.scrollable(true), |menu, (choice, label)| {
-            let selected = choice == chosen;
-            let item_id = format!("slot-{}-{choice}", slot.id());
-            let name = label.clone();
+            let item = choice_item(
+                format!("slot-{}-{choice}", slot.id()),
+                label.clone(),
+                choice == chosen,
+            );
             let pick = choice.clone();
-            menu.item(
-                PopupMenuItem::element(move |_, _| {
-                    div()
-                        .id(ElementId::Name(item_id.clone().into()))
-                        .ui_observe_as(Facts {
-                            role: Role::MenuItem,
-                            selected: Some(selected),
-                            ..Facts::button(name.clone())
-                        })
-                        .child(name.clone())
-                })
-                .checked(selected)
-                .on_click(move |_, _, cx| {
-                    // Letting a plugin draw kagan's parts is a person's choice, as in decision 105.
-                    if matches!(pick, SlotChoice::Plugin(_))
-                        && crate::synthetic::refuse_for_person()
-                    {
-                        return;
-                    }
-                    save(
-                        Op::Plugin(PluginOp::Use {
-                            slot,
-                            id: pick.clone(),
-                            thread_id: None,
-                        }),
-                        cx,
-                    );
-                }),
-            )
+            menu.item(item.on_click(move |_, _, cx| {
+                // Letting a plugin draw kagan's parts is a person's choice, as in decision 105.
+                if matches!(pick, SlotChoice::Plugin(_)) && crate::synthetic::refuse_for_person() {
+                    return;
+                }
+                save(
+                    Op::Plugin(PluginOp::Use {
+                        slot,
+                        id: pick.clone(),
+                        thread_id: None,
+                    }),
+                    cx,
+                );
+            }))
         })
 }

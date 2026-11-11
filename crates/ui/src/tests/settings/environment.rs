@@ -120,15 +120,21 @@ fn a_stored_program_that_is_not_installed_is_named_on_the_page(cx: &mut TestAppC
         "gone-tool --fast"
     );
     assert!(
-        !present(cx, window, "project-program-first"),
+        !present(cx, window, "project-program-menu-first"),
         "the choices stay in the menu until it opens"
     );
     click(cx, window, "project-program-choice");
-    wait_until(cx, |cx| present(cx, window, "project-program-first"));
+    wait_until(cx, |cx| present(cx, window, "project-program-menu-first"));
     assert_eq!(
-        selected_of(cx, window, "project-program-first"),
+        selected_of(cx, window, "project-program-menu-first"),
         Some(false),
         "First installed clears the stored program, so it is not the current choice"
+    );
+    click(cx, window, "project-program-menu-first");
+    wait_until(cx, |cx| !present(cx, window, "project-program-missing"));
+    assert_eq!(
+        label(cx, window, "project-program-choice"),
+        "First installed"
     );
 }
 
@@ -142,23 +148,29 @@ fn the_program_menu_shows_the_choice_and_first_installed_clears_it(cx: &mut Test
         label(cx, window, "project-program-choice"),
         "First installed"
     );
-    assert!(!present(cx, window, "project-program-codex"));
+    assert!(!present(cx, window, "project-program-menu-codex"));
     click(cx, window, "project-program-choice");
-    wait_until(cx, |cx| shows(cx, window, "project-program-codex"));
-    assert!(shows(cx, window, "project-program-gemini"));
+    wait_until(cx, |cx| shows(cx, window, "project-program-menu-codex"));
+    assert!(shows(cx, window, "project-program-menu-gemini"));
     assert_eq!(
-        role_of(cx, window, "project-program-codex"),
+        role_of(cx, window, "project-program-menu-codex"),
         Some(Role::MenuItem)
     );
-    assert_eq!(selected_of(cx, window, "project-program-first"), Some(true));
-    click(cx, window, "project-program-codex");
+    assert_eq!(
+        selected_of(cx, window, "project-program-menu-first"),
+        Some(true)
+    );
+    click(cx, window, "project-program-menu-codex");
     wait_until(cx, |cx| stored_program(cx).as_deref() == Some("codex"));
     assert_eq!(label(cx, window, "project-program-choice"), "Codex");
-    assert!(!present(cx, window, "project-program-codex"));
+    assert!(!present(cx, window, "project-program-menu-codex"));
     click(cx, window, "project-program-choice");
-    wait_until(cx, |cx| shows(cx, window, "project-program-first"));
-    assert_eq!(selected_of(cx, window, "project-program-codex"), Some(true));
-    click(cx, window, "project-program-first");
+    wait_until(cx, |cx| shows(cx, window, "project-program-menu-first"));
+    assert_eq!(
+        selected_of(cx, window, "project-program-menu-codex"),
+        Some(true)
+    );
+    click(cx, window, "project-program-menu-first");
     wait_until(cx, |cx| stored_program(cx).is_none());
     assert_eq!(
         label(cx, window, "project-program-choice"),

@@ -28,7 +28,7 @@ fn an_enabled_plugin_says_what_it_added_without_a_side(cx: &mut TestAppContext) 
     click(cx, window, "settings-gear");
     click(cx, window, "settings-section-installed");
     let note = aria_label(cx, window, &format!("setting-row-{PREFS}-note")).unwrap_or_default();
-    assert_eq!(note, "Adds 7 settings.");
+    assert_eq!(note, "Adds 8 settings.");
     assert!(!note.starts_with("On"), "{note}");
     assert!(!note.contains("right") && !note.contains("left"), "{note}");
 }
