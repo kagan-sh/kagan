@@ -1,16 +1,13 @@
-use gpui_kit::component::button::Button;
-use gpui_kit::component::{ActiveTheme as _, Sizable as _, WindowExt as _, h_flex};
-use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::component::WindowExt as _;
+use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::{
-    AnyElement, App, ClipboardItem, Context, Global, InteractiveElement as _, IntoElement,
-    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
-    actions,
+    App, ClipboardItem, ElementId, Global, InteractiveElement as _, ParentElement as _, Role,
+    Window, actions, div,
 };
 use kg_core::{Updater, Workspace};
 use kg_domain::{InstallKind, Op, OpResult, UpdateOp, UpdateState};
 
-use super::{Kagan, Toast};
-use crate::theme::TypeScale as _;
+use super::Toast;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -47,8 +44,7 @@ const COPY: &str = "Copy command";
 const RESTART: &str = "Restart and install…";
 const NOTES: &str = "Release notes";
 
-// What the main update action is for this install: the activity strip's Update button and the
-// notice both use it, so they can't disagree.
+// What this install's update menu adds to the notes: the copy command, or the restart.
 #[derive(Clone, Copy)]
 enum Primary {
     Copy,
@@ -70,24 +66,6 @@ impl Primary {
             Self::Copy => COPY,
             Self::Restart => RESTART,
             Self::Notes => NOTES,
-        }
-    }
-}
-
-pub(super) fn primary_label(cx: &App) -> &'static str {
-    Primary::of(Updater::global(cx).read(cx).kind()).label()
-}
-
-pub(super) fn primary(window: &mut Window, cx: &mut App) {
-    match Primary::of(Updater::global(cx).read(cx).kind()) {
-        Primary::Copy => copy_brew(cx),
-        Primary::Restart => ask(window, cx),
-        Primary::Notes => {
-            let notes = match Updater::global(cx).read(cx).state() {
-                UpdateState::Available { notes, .. } => notes.clone(),
-                _ => return,
-            };
-            cx.open_url(&notes);
         }
     }
 }
@@ -120,100 +98,69 @@ pub(super) fn hidden(cx: &App) -> Option<String> {
     cx.try_global::<Hidden>().map(|hidden| hidden.0.clone())
 }
 
-pub(super) fn notice(cx: &mut Context<Kagan>) -> Option<AnyElement> {
-    let hidden = hidden(cx);
-    let updater = Updater::global(cx);
-    let updater = updater.read(cx);
-    let text = match updater.state() {
-        UpdateState::Available { version, .. } if hidden.as_deref() != Some(version.as_str()) => {
-            match updater.kind() {
-                InstallKind::Homebrew => format!("kagan {version} is available. Run {BREW}."),
-                _ => format!("kagan {version} is available."),
-            }
-        }
-        state => progress_sentence(state)?,
-    };
-    Some(
-        h_flex()
-            .id("update-notice")
-            .aria_label(text.clone())
-            .ui_container()
-            .flex_wrap()
-            .gap_2()
-            .px_4()
-            .py_2()
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .type_body(cx)
-            .child(text)
-            .child(actions(cx))
-            .when(
-                matches!(updater.state(), UpdateState::Available { .. }),
-                |row| {
-                    row.child(button("update-hide", "Not now", |_, cx| {
-                        if let Some(version) = available(cx) {
-                            cx.set_global(Hidden(version));
-                            cx.refresh_windows();
-                        }
-                    }))
-                },
-            )
-            .into_any_element(),
-    )
-}
-
-fn actions(cx: &App) -> AnyElement {
+// The update actions, as the activity strip's Update menu offers them. Available and Ready
+// both offer the notes and this install's install action.
+pub(super) fn menu_items(menu: PopupMenu, cx: &App) -> PopupMenu {
     let updater = Updater::global(cx).read(cx);
-    let notes = match updater.state() {
-        UpdateState::Available { notes, .. } | UpdateState::Ready { notes, .. } => notes.clone(),
-        _ => return h_flex().into_any_element(),
+    let (notes, at_quit, available) = match updater.state() {
+        UpdateState::Available { notes, .. } => (notes.clone(), false, true),
+        UpdateState::Ready { notes, at_quit, .. } => (notes.clone(), *at_quit, false),
+        _ => return menu,
     };
-    let ready = matches!(updater.state(), UpdateState::Ready { at_quit: true, .. });
-    h_flex()
-        .flex_wrap()
-        .gap_1()
-        .child(button("update-notes", NOTES, move |_, cx| {
-            cx.open_url(&notes);
-        }))
-        .map(|row| match updater.kind() {
-            InstallKind::Homebrew => row.child(button("update-copy", COPY, |_, cx| {
-                copy_brew(cx);
-            })),
-            kind if kind.replaces_itself() => row
-                .when(!ready, |row| {
-                    row.child(button(
-                        "update-later",
-                        "Install when kagan quits",
-                        |_, cx| {
-                            later(cx);
-                        },
-                    ))
-                })
-                .child(button("update-install", RESTART, |window, cx| {
+    let menu = menu.item(item("update-notes", NOTES, move |_, cx| {
+        cx.open_url(&notes);
+    }));
+    let menu = match Primary::of(updater.kind()) {
+        Primary::Copy => menu.item(item("update-copy", Primary::Copy.label(), |_, cx| {
+            copy_brew(cx);
+        })),
+        Primary::Restart => {
+            let menu = if at_quit {
+                menu
+            } else {
+                menu.item(item("update-later", "Install when kagan quits", |_, cx| {
+                    later(cx);
+                }))
+            };
+            menu.item(item(
+                "update-install",
+                Primary::Restart.label(),
+                |window, cx| {
                     ask(window, cx);
-                })),
-            _ => row,
-        })
-        .into_any_element()
+                },
+            ))
+        }
+        Primary::Notes => menu,
+    };
+    if !available {
+        return menu;
+    }
+    menu.item(item("update-hide", "Not now", |_, cx| {
+        if let Some(version) = available_version(cx) {
+            cx.set_global(Hidden(version));
+            cx.refresh_windows();
+        }
+    }))
 }
 
-fn button(
+fn item(
     id: &'static str,
     label: &'static str,
     on_click: impl Fn(&mut Window, &mut App) + 'static,
-) -> impl IntoElement {
-    super::controls::control(
-        id,
-        Facts::button(label),
-        Button::new(SharedString::from(format!("{id}-button")))
-            .small()
-            .outline()
-            .label(label)
-            .on_click(move |_, window, cx| on_click(window, cx)),
-    )
+) -> PopupMenuItem {
+    PopupMenuItem::element(move |_, _| {
+        div()
+            .id(ElementId::Name(id.into()))
+            .ui_observe_as(Facts {
+                role: Role::MenuItem,
+                ..Facts::button(label)
+            })
+            .child(label)
+    })
+    .on_click(move |_, window, cx| on_click(window, cx))
 }
 
-fn available(cx: &App) -> Option<String> {
+fn available_version(cx: &App) -> Option<String> {
     match Updater::global(cx).read(cx).state() {
         UpdateState::Available { version, .. } => Some(version.clone()),
         _ => None,

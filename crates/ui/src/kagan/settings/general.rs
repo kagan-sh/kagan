@@ -1,7 +1,10 @@
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Input;
-use gpui_kit::component::{Sizable as _, h_flex};
-use gpui_kit::{App, Context, ElementId, IntoElement, ParentElement as _, Role, Styled as _, px};
+use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
+    App, Context, ElementId, IntoElement, ParentElement as _, Role, Styled as _, div, px,
+};
 use kg_domain::{NotifyLevel, Op, PreferenceOp};
 use serde_json::json;
 
@@ -9,6 +12,7 @@ use super::Kagan;
 use super::pages::set_flag;
 use super::row::{Group, Row, group, row, save, switch};
 use crate::kagan::controls::control;
+use crate::theme::radius_md;
 use crate::ui_registry::Facts;
 
 pub(super) fn setup_guide_group(cx: &mut Context<Kagan>) -> Group {
@@ -36,26 +40,35 @@ pub(super) fn setup_guide_group(cx: &mut Context<Kagan>) -> Group {
 pub(super) fn branch_group(kagan: &Kagan, cx: &App) -> Group {
     let input = kagan.settings.branch_prefix.clone();
     let text = input.read(cx).value().trim().to_owned();
-    let note = if kg_domain::prefs::valid_branch_prefix(&text) {
-        "Goes in front of the branch names kagan makes. It must end in / or -, such as bb/. Empty adds nothing."
+    let valid = kg_domain::prefs::valid_branch_prefix(&text);
+    let danger = cx.theme().danger;
+    let note = if valid {
+        "Goes in front of the branch names kagan makes. It must end in / or -, such as bb/. Empty adds nothing.".to_owned()
     } else {
-        "Not a valid branch start. It must end in / or -, such as bb/ or feat-."
+        format!(
+            "Not a valid branch start. {}",
+            kg_domain::prefs::BRANCH_PREFIX_RULE
+        )
     };
     let field = control(
         "branch-prefix",
         Facts::input("Branch prefix", &input, cx),
         Input::new(&input).small().w(px(220.)),
     );
-    group(
-        "branches",
-        "Branches",
-        vec![row(
-            "branch-prefix",
-            "Branch prefix",
-            note,
-            field.into_any_element(),
-        )],
-    )
+    let field = div()
+        .rounded(px(radius_md(cx)))
+        .when(!valid, |frame| frame.border_1().border_color(danger))
+        .child(field.into_any_element());
+    let mut prefix = row(
+        "branch-prefix",
+        "Branch prefix",
+        &note,
+        field.into_any_element(),
+    );
+    if !valid {
+        prefix.note_content = Some(div().text_color(danger).child(note).into_any_element());
+    }
+    group("branches", "Branches", vec![prefix])
 }
 
 pub(super) fn general(agent: bool, notify: NotifyLevel, confirm_archive: bool) -> Group {

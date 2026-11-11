@@ -35,6 +35,9 @@ pub const RIGHT_SIDEBAR: &str = "right-sidebar";
 pub const RIGHT_WIDTH: &str = "right-width";
 pub const REVIEW_WRAP: &str = "review-wrap";
 
+/// The rule a branch prefix follows. Settings and the `kg` error both say it.
+pub const BRANCH_PREFIX_RULE: &str = "It must end in / or -, such as bb/ or feat-.";
+
 /// Whether `text` can start the branch names kagan makes: empty, or a git branch fragment such as `bb/`.
 #[must_use]
 pub fn valid_branch_prefix(text: &str) -> bool {

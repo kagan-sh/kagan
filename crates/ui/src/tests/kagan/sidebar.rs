@@ -125,3 +125,21 @@ fn a_second_action_does_not_cancel_the_first_follow_up(cx: &mut TestAppContext) 
     cx.dispatch_action(window, ToggleSidebar);
     wait_until(cx, |cx| thread_record(cx, &id).pinned);
 }
+
+#[gpui_kit::test]
+fn an_archived_thread_that_stays_open_says_it_is_archived_not_an_error(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    wait_until(cx, |cx| shows(cx, window, "changes-not-git"));
+    let archive = cx.update(|cx| {
+        Workspace::dispatch(
+            kg_domain::Op::Thread(kg_domain::ThreadOp::Archive { id: id.clone() }),
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(archive).unwrap();
+    wait_until(cx, |cx| thread_record(cx, &id).archived_at.is_some());
+    wait_until(cx, |cx| shows(cx, window, "changes-archived"));
+    assert!(!shows(cx, window, "changes-error"));
+}

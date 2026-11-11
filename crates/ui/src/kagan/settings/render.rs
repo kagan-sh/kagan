@@ -9,6 +9,7 @@ use gpui_kit::{
 use super::row;
 use crate::theme::{SpaceStep, space};
 use crate::ui_observe::UiObserveExt as _;
+use crate::ui_registry::Facts;
 use gpui_kit::component::StyledExt as _;
 use gpui_kit::prelude::FluentBuilder as _;
 
@@ -138,13 +139,23 @@ pub(super) fn row_element(
                 .child(row.control)
                 .into_any_element()
         });
+    let marked = row.marked;
     let item = div()
         .id(row.id)
-        .ui_container()
+        .ui_observe_as(Facts {
+            role: gpui_kit::Role::Group,
+            name: row.title.clone(),
+            value: None,
+            disabled: false,
+            selected: marked.then_some(true),
+            focus: None,
+            hint: None,
+        })
         .aria_label(row.title)
         .px(px(space(SpaceStep::Lg, cx)))
         .py(px(space(SpaceStep::Md, cx)))
         .when(!last, |item| item.border_b_1().border_color(line))
+        .when(marked, |item| item.bg(cx.theme().secondary))
         .child(body)
         .into_any_element();
     match alias {

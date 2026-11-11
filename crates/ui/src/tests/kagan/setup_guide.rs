@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::kagan::Kagan;
 use crate::tests::kagan::{
     add_project, click, open, open_empty, open_with_plugins_then, setup_with, shell, shows,
-    wait_until,
+    value_of, wait_until,
 };
 use crate::tests::settings::page::install_plugins;
 
@@ -136,4 +136,14 @@ fn general_settings_has_the_command_line_row(cx: &mut TestAppContext) {
     .unwrap();
     cx.run_until_parked();
     assert!(shows(cx, window, "setting-row-kg-command"));
+}
+
+#[gpui_kit::test]
+fn hiding_the_guide_says_where_to_bring_it_back(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_empty(cx);
+    click(cx, window, "setup-guide-dismiss");
+    wait_until(cx, |cx| {
+        value_of(cx, window, "toast-message")
+            .is_some_and(|message| message.contains("Settings, under General"))
+    });
 }

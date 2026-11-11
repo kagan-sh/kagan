@@ -41,7 +41,8 @@ fn ui_click(cx: &mut TestAppContext, name: &str) -> Result<OpResult, OpError> {
 }
 
 fn notice(cx: &mut TestAppContext, window: AnyWindowHandle) -> Vec<&'static str> {
-    [
+    open_menu(cx, window);
+    let items = [
         "update-notes",
         "update-later",
         "update-install",
@@ -50,7 +51,15 @@ fn notice(cx: &mut TestAppContext, window: AnyWindowHandle) -> Vec<&'static str>
     ]
     .into_iter()
     .filter(|name| shows(cx, window, name))
-    .collect()
+    .collect();
+    cx.simulate_keystrokes(window, "escape");
+    cx.run_until_parked();
+    items
+}
+
+fn open_menu(cx: &mut TestAppContext, window: AnyWindowHandle) {
+    click(cx, window, "activity-update");
+    cx.run_until_parked();
 }
 
 #[gpui_kit::test]
@@ -62,7 +71,7 @@ fn each_install_kind_offers_its_own_way_to_update(cx: &mut TestAppContext) {
     let image = data.path().join("kagan.AppImage");
 
     offer(cx, Target::find("macos", &exe, None, None, &[]));
-    assert!(shows(cx, window, "update-notice"));
+    assert!(shows(cx, window, "activity-update"));
     assert_eq!(
         notice(cx, window),
         [
@@ -97,8 +106,9 @@ fn each_install_kind_offers_its_own_way_to_update(cx: &mut TestAppContext) {
     );
     assert_eq!(notice(cx, window), ["update-notes", "update-hide"]);
 
+    open_menu(cx, window);
     click(cx, window, "update-hide");
-    assert!(!shows(cx, window, "update-notice"));
+    assert!(!shows(cx, window, "activity-update"));
 }
 
 #[gpui_kit::test]
@@ -109,6 +119,7 @@ fn kg_ui_cannot_install_an_update(cx: &mut TestAppContext) {
         Target::find("macos", &bundle(data.path()), None, None, &[]),
     );
     for name in ["update-install", "update-later"] {
+        open_menu(cx, window);
         let clicked = ui_click(cx, name);
         assert!(
             matches!(clicked, Err(OpError::Invalid(ref message)) if message == UI_PERSON_ONLY),
@@ -120,7 +131,7 @@ fn kg_ui_cannot_install_an_update(cx: &mut TestAppContext) {
             UpdateState::Available { .. }
         ));
     }
-    assert!(shows(cx, window, "update-notice"));
+    assert!(shows(cx, window, "activity-update"));
 }
 
 #[gpui_kit::test]
@@ -153,6 +164,7 @@ fn kg_ui_cannot_confirm_an_install_a_person_asked_for(cx: &mut TestAppContext) {
         cx,
         Target::find("macos", &bundle(data.path()), None, None, &[]),
     );
+    open_menu(cx, window);
     let at = cx
         .update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &ElementId::Name("update-install".into()))
@@ -183,4 +195,69 @@ fn kg_ui_cannot_confirm_an_install_a_person_asked_for(cx: &mut TestAppContext) {
         cx.update(|cx| Updater::global(cx).read(cx).state().clone()),
         UpdateState::Available { .. }
     ));
+}
+
+fn rect(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> (f32, f32, f32, f32) {
+    cx.update_window(window, |_, window, _| {
+        let bounds = crate::ui_registry::find(window, &ElementId::Name(name.into()))
+            .expect("an element on screen")
+            .bounds;
+        (
+            bounds.origin.x.as_f32(),
+            bounds.origin.y.as_f32(),
+            bounds.size.width.as_f32(),
+            bounds.size.height.as_f32(),
+        )
+    })
+    .unwrap()
+}
+
+#[gpui_kit::test]
+fn an_update_does_not_add_a_banner_to_the_page_or_move_it(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    click(cx, window, "settings-gear");
+    cx.run_until_parked();
+    let close = rect(cx, window, "settings-close");
+    let title = rect(cx, window, "settings-title");
+    offer(
+        cx,
+        Target::find("macos", &bundle(data.path()), None, None, &[]),
+    );
+    assert!(
+        !shows(cx, window, "update-notice"),
+        "the page has no banner; the strip carries the update"
+    );
+    assert_eq!(rect(cx, window, "settings-close"), close);
+    assert_eq!(rect(cx, window, "settings-title"), title);
+    let strip = rect(cx, window, "activity-strip");
+    let button = rect(cx, window, "activity-update");
+    assert!(
+        button.0 >= strip.0 && button.1 >= strip.1 && button.1 + button.3 <= strip.1 + strip.3,
+        "the update button sits inside the strip"
+    );
+}
+
+#[gpui_kit::test]
+fn a_ready_install_keeps_the_menu_so_restart_can_still_be_chosen(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let target = Target::find("macos", &bundle(data.path()), None, None, &[]);
+    cx.update(|cx| {
+        Updater::global(cx).update(cx, |updater, cx| {
+            updater.use_state(
+                UpdateState::Ready {
+                    version: "99.0.0".into(),
+                    notes: "https://github.com/kagan-sh/kagan/releases/tag/v99.0.0".into(),
+                    at_quit: true,
+                },
+                target,
+                cx,
+            );
+        });
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        notice(cx, window),
+        ["update-notes", "update-install"],
+        "a ready install still offers its notes and its restart"
+    );
 }
