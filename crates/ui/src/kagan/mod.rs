@@ -64,7 +64,7 @@ pub(crate) use keys::bind;
 pub(crate) use keys::install_keys;
 pub(crate) use surface::Commit as SurfaceCommit;
 pub(crate) use surface::paint_then_settle;
-mod window;
+pub(crate) mod window;
 
 pub(crate) use window::shows;
 pub(crate) use window::{
