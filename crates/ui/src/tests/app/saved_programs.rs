@@ -44,6 +44,22 @@ fn pinned(cx: &mut TestAppContext, name: &str) -> bool {
         .any(|program| program.label == name && program.pinned)
 }
 
+// Deleting a saved program asks the person first, so the test answers the question.
+fn approve_delete(cx: &mut TestAppContext) {
+    let id = cx
+        .read(|cx| {
+            Workspace::global(cx)
+                .read(cx)
+                .approvals()
+                .next()
+                .map(|a| a.id.clone())
+        })
+        .expect("the delete is waiting for the person");
+    let answer = cx.update(|cx| Workspace::answer_standalone(id, "approve".into(), cx));
+    cx.foreground_executor().block_test(answer).unwrap();
+    cx.run_until_parked();
+}
+
 fn row_id(name: &str) -> String {
     format!("program-saved-{name}")
 }
@@ -117,6 +133,7 @@ fn two_names_sharing_a_line_each_pin_rename_and_delete_their_own_row(cx: &mut Te
     });
 
     click(cx, window, "program-delete-saved-Zulu");
+    approve_delete(cx);
     wait_until(cx, |cx| {
         saved(cx).iter().all(|program| program.label != "Zulu")
     });
@@ -221,6 +238,7 @@ fn the_delete_chord_deletes_the_selected_saved_program(cx: &mut TestAppContext) 
     start_in_plain_folder(cx, window, data.path());
     search(cx, window, "Zulu");
     cx.simulate_keystrokes(window, &chord("DeleteSavedProgram"));
+    approve_delete(cx);
     wait_until(cx, |cx| saved(cx).is_empty());
 }
 

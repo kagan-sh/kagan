@@ -21,7 +21,7 @@ pub enum ProgramOp {
     Save { name: String, line: String },
     /// Give a saved program another name
     Rename { name: String, to: String },
-    /// Delete a saved program. The project and threads that used its line keep the line
+    /// Delete a saved program after the person approves it in kagan. The project and threads that used its line keep the line
     Remove { name: String },
     /// Pin or unpin a saved program. Pinned ones are listed first among the saved programs
     Pin {

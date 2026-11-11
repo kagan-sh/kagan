@@ -95,7 +95,7 @@ pub(crate) async fn execute(
             crate::host::saved_program::rename(database, name, to).await
         }
         Op::Program(ProgramOp::Remove { name }) => {
-            crate::host::saved_program::remove(database, name).await
+            crate::host::saved_program::remove(database, requester, name, cx).await
         }
         Op::Program(ProgramOp::Pin { name, pinned }) => {
             crate::host::saved_program::pin(database, name, pinned).await
@@ -205,15 +205,12 @@ fn announce(
 fn saved_program_change(op: &ProgramOp) -> bool {
     matches!(
         op,
-        ProgramOp::Save { .. }
-            | ProgramOp::Rename { .. }
-            | ProgramOp::Remove { .. }
-            | ProgramOp::Pin { .. }
+        ProgramOp::Save { .. } | ProgramOp::Rename { .. } | ProgramOp::Pin { .. }
     )
 }
 
 /// `Workspace::handle` awaits it before the loop reads the next envelope. An op that asks
-/// (`ProjectOp::Remove`, `ThreadOp::Delete`, `AutomationOp::Delete`, and the plugin ops that approve powers or a
+/// (`ProjectOp::Remove`, `ThreadOp::Delete`, `AutomationOp::Delete`, `ProgramOp::Remove`, and the plugin ops that approve powers or a
 /// removal) is detached, and a detached handler submits its request only after the person
 /// answers. `UiOp::Snapshot` is serialized because a window job never submits a request.
 pub(crate) fn serialized(op: &Op) -> bool {

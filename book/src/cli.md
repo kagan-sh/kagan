@@ -1457,7 +1457,7 @@ Commands:
   list    Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed one
   save    Save a program line under a name. A name already saved takes the new line and keeps its pin
   rename  Give a saved program another name
-  remove  Delete a saved program. The project and threads that used its line keep the line
+  remove  Delete a saved program after the person approves it in kagan. The project and threads that used its line keep the line
   pin     Pin or unpin a saved program. Pinned ones are listed first among the saved programs
   help    Print this message or the help of the given subcommand(s)
 
@@ -1525,7 +1525,7 @@ Options:
 ## `kg program remove`
 
 ```text
-Delete a saved program. The project and threads that used its line keep the line
+Delete a saved program after the person approves it in kagan. The project and threads that used its line keep the line
 
 Usage: kg program remove <NAME>
 

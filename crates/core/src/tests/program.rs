@@ -499,3 +499,56 @@ async fn a_thread_without_a_title_is_named_by_its_program_not_its_path(cx: &mut 
     };
     assert_eq!(started.title, "Codex");
 }
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn removing_a_saved_program_waits_for_the_person(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    op(
+        Op::Program(ProgramOp::Save {
+            name: "Zed".into(),
+            line: "tool --zed".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let removal = cx.update(|cx| {
+        crate::Workspace::dispatch(Op::Program(ProgramOp::Remove { name: "Zed".into() }), cx)
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        saved_names(cx).await,
+        ["Zed"],
+        "nothing is removed before the person answers"
+    );
+    let approval = cx.read(|cx| {
+        crate::Workspace::global(cx)
+            .read(cx)
+            .approvals()
+            .next()
+            .unwrap()
+            .id
+            .clone()
+    });
+    cx.update(|cx| crate::Workspace::answer_standalone(approval, "approve".into(), cx))
+        .await
+        .unwrap();
+    removal.await.unwrap();
+    assert!(saved_names(cx).await.is_empty());
+}
+
+#[cfg(unix)]
+async fn saved_names(cx: &mut TestAppContext) -> Vec<String> {
+    let OpResult::Programs(list) = op(Op::Program(ProgramOp::List { project_id: None }), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("programs")
+    };
+    list.programs
+        .into_iter()
+        .filter(|program| program.source == kg_domain::ProgramSource::Saved)
+        .map(|program| program.label)
+        .collect()
+}

@@ -119,14 +119,17 @@ async fn a_rename_onto_another_saved_name_is_refused(cx: &mut TestAppContext) {
 async fn remove_deletes_the_name_and_a_missing_name_is_not_found(cx: &mut TestAppContext) {
     let _fixture = Fixture::new(cx).await;
     op(save("Alpha", CAREFUL), cx).await.unwrap();
-    op(
-        Op::Program(ProgramOp::Remove {
-            name: "Alpha".into(),
-        }),
-        cx,
-    )
-    .await
-    .unwrap();
+    let removal = cx.update(|cx| {
+        crate::Workspace::dispatch(
+            Op::Program(ProgramOp::Remove {
+                name: "Alpha".into(),
+            }),
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    approve_removal(cx).await;
+    removal.await.unwrap();
     assert!(saved_list(cx).await.is_empty());
     let missing = op(
         Op::Program(ProgramOp::Remove {
@@ -137,6 +140,21 @@ async fn remove_deletes_the_name_and_a_missing_name_is_not_found(cx: &mut TestAp
     .await
     .unwrap_err();
     assert!(matches!(missing, OpError::NotFound(_)), "{missing}");
+}
+
+async fn approve_removal(cx: &mut TestAppContext) {
+    let approval = cx.read(|cx| {
+        crate::Workspace::global(cx)
+            .read(cx)
+            .approvals()
+            .next()
+            .unwrap()
+            .id
+            .clone()
+    });
+    cx.update(|cx| crate::Workspace::answer_standalone(approval, "approve".into(), cx))
+        .await
+        .unwrap();
 }
 
 #[gpui_kit::test]
