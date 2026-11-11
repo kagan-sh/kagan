@@ -5,8 +5,10 @@ use serde_json::json;
 
 use crate::Workspace;
 
+#[cfg(unix)]
+use super::git_in;
 use super::{
-    Fixture, commit_file, empty_repo, environment_of, git_in, op, pending_delete, pid_of, program,
+    Fixture, commit_file, empty_repo, environment_of, op, pending_delete, pid_of, program,
     repo_dir, started_personal,
 };
 #[cfg(unix)]

@@ -1733,6 +1733,7 @@ struct GitTrack {
     cwd: std::path::PathBuf,
 }
 
+#[cfg(unix)]
 impl GitTrack {
     #[cfg(unix)]
     fn install(cwd: &Path) -> (std::path::PathBuf, Self) {
@@ -1782,6 +1783,7 @@ fn which_git() -> std::path::PathBuf {
     std::path::PathBuf::from(String::from_utf8(output.stdout).unwrap().trim())
 }
 
+#[cfg(unix)]
 impl Drop for GitTrack {
     fn drop(&mut self) {
         crate::host::git::set_program(&self.cwd, "git", None);
