@@ -3,6 +3,7 @@ use crate::ThreadId;
 use super::automation::valid;
 use super::browser::browser_check;
 use super::env::{shell_name, variable_name, variable_value};
+use super::instructions::InstructionsOp;
 use super::saved_prompt::TITLE_MAX;
 use super::{
     DiffOp, EnvOp, EnvironmentOp, Op, PluginOp, PreviewOp, ProgramOp, ProjectOp, SEARCH_LIMIT,
@@ -60,6 +61,7 @@ pub fn check(op: &Op) -> Result<(), String> {
         }
         Op::Plugin(op) => plain_opt(plugin_thread(op)),
         Op::Browser(op) => plain(op.thread()).and_then(|()| browser_check(op)),
+        Op::Instructions(op) => instructions(op),
         Op::Guide { .. }
         | Op::Skill(_)
         | Op::Open
@@ -68,7 +70,6 @@ pub fn check(op: &Op) -> Result<(), String> {
         | Op::Theme(_)
         | Op::Keymap(_)
         | Op::Preference(_)
-        | Op::Instructions(_)
         | Op::Settings(_)
         | Op::Window(_)
         | Op::Sidebar
@@ -101,6 +102,22 @@ pub fn check(op: &Op) -> Result<(), String> {
                 printable(path).ok_or_else(|| "preview path must be a plain path".into())
             }),
         },
+    }
+}
+
+// Rules are text for a program to read, so a control character other than a line break (LF or
+// CRLF, as Windows editors save it) or a tab has no place in them.
+fn instructions(op: &InstructionsOp) -> Result<(), String> {
+    match op {
+        InstructionsOp::Set {
+            text: Some(text), ..
+        } if text
+            .chars()
+            .any(|c| c.is_control() && !matches!(c, '\n' | '\r' | '\t')) =>
+        {
+            Err("the rules cannot hold a control character other than a line break or tab".into())
+        }
+        _ => Ok(()),
     }
 }
 
@@ -251,7 +268,9 @@ fn env_check(op: &EnvOp) -> Result<(), String> {
 
 fn saved_prompt(op: &SavedPromptOp) -> Result<(), String> {
     match op {
-        SavedPromptOp::Add { title, body } => prompt_title(title).and_then(|()| prompt_body(body)),
+        SavedPromptOp::Add { title, body, .. } => {
+            prompt_title(title).and_then(|()| body.as_deref().map_or(Ok(()), prompt_body))
+        }
         SavedPromptOp::Search { text } if text.chars().count() > SEARCH_TEXT_MAX => Err(format!(
             "search text is longer than {SEARCH_TEXT_MAX} characters"
         )),

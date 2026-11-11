@@ -70,9 +70,10 @@ pub enum UiOp {
         #[arg(long, default_value_t = 0)]
         window: u32,
     },
-    /// Scroll an element by dy pixels
+    /// Scroll an element by dy pixels: a negative dy scrolls down, a positive dy scrolls up
     Scroll {
         element_id: String,
+        #[arg(allow_negative_numbers = true)]
         dy: f32,
         #[arg(long)]
         within: Option<String>,

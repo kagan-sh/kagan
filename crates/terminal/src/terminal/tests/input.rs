@@ -200,7 +200,7 @@ fn ends_with_cursor_report(bytes: &[u8]) -> bool {
 // The program sits in raw mode and reads nothing until `go` exists, so the queue fills and stays full.
 #[cfg(unix)]
 #[test]
-fn a_full_input_queue_refuses_input_until_the_program_reads_it() {
+fn a_full_input_queue_refuses_input_until_the_writer_drains_it() {
     const BUDGET: usize = 4 << 20;
     let dir = tempfile::tempdir().unwrap();
     let go = dir.path().join("go");

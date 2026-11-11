@@ -201,7 +201,7 @@ pub(crate) async fn submit(
                 terminal.submit(text).map_err(|error| refused(&error))
             }
             Some(Shown::Ended(_)) => Err(OpError::Invalid("the program has ended".into())),
-            None => Err(missing("terminal", id)),
+            None => Err(missing("thread", id)),
         })
         .map_err(closed)??;
     // A blocking recv would pin a background worker and starve Stop and the DB.
@@ -297,7 +297,7 @@ pub(crate) fn run(
         } else {
             workspace
                 .shown(&id)
-                .ok_or_else(|| missing("terminal", &id))
+                .ok_or_else(|| missing("thread", &id))
                 .map(|shown| act(shown.running(), shown.view(), op))
         }?
         .map_err(|error| refused(&error));

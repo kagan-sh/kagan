@@ -1,8 +1,9 @@
 use crate::{
     AgentTool, Attachment, ConfigOp, DiffNote, DiffScope, DiffSide, EnvironmentSpec, Event,
-    EventKind, InteractionOption, Op, OpError, OpResult, PendingInteraction, PendingInteractionId,
-    PluginId, PluginOp, ProjectBranch, Thread, ThreadId, ThreadOp, ThreadStatus, Timestamp,
-    TurnOutcome, UpdateState, Visibility, WaitOutcome, branch_slug, format_notes, invalid_json,
+    EventKind, InstructionsOp, InteractionOption, Op, OpError, OpResult, PendingInteraction,
+    PendingInteractionId, PluginId, PluginOp, ProjectBranch, Thread, ThreadId, ThreadOp,
+    ThreadStatus, Timestamp, TurnOutcome, UpdateState, Visibility, WaitOutcome, branch_slug,
+    format_notes, invalid_json,
 };
 use serde_json::{Value, json};
 
@@ -1594,6 +1595,40 @@ fn terminal_ops_keep_their_exact_json() {
 }
 
 #[test]
+fn rules_refuse_a_control_character_but_keep_line_breaks_and_tabs() {
+    let set = |text: &str| {
+        crate::check(&Op::Instructions(InstructionsOp::Set {
+            text: Some(text.into()),
+            file: None,
+            project: None,
+            expected: None,
+        }))
+    };
+    assert_eq!(set("first line\n\tindented"), Ok(()));
+    assert_eq!(set("first line\r\nsecond line"), Ok(()));
+    assert!(set("a\0b").is_err());
+}
+
+#[test]
+fn an_automation_name_with_a_control_character_says_so() {
+    let add = |name: &str| {
+        crate::check(&Op::Automation(crate::AutomationOp::Add {
+            name: name.into(),
+            body: "text".into(),
+            project_id: crate::ProjectId("prj_1".into()),
+            program: "claude".into(),
+            minutes: Some(5),
+            at: None,
+        }))
+    };
+    assert_eq!(add("nightly"), Ok(()));
+    assert_eq!(
+        add("night\tly"),
+        Err("an automation name cannot hold a control or bidi character".into())
+    );
+}
+
+#[test]
 fn bidi_overrides_are_refused_in_names_like_control_characters() {
     use crate::{AutomationOp, ProjectId, SavedPromptOp, SectionId, SectionOp};
     for mark in ['\u{202A}', '\u{202E}', '\u{2066}', '\u{2069}'] {
@@ -1603,7 +1638,8 @@ fn bidi_overrides_are_refused_in_names_like_control_characters() {
         assert!(
             crate::check(&Op::SavedPrompt(SavedPromptOp::Add {
                 title: reversed.clone(),
-                body: "body".into(),
+                body: Some("body".into()),
+                file: None,
             }))
             .is_err(),
             "{mark:?}"

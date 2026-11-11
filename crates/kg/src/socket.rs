@@ -112,6 +112,15 @@ pub(crate) fn location_in(dir: &std::path::Path) -> io::Result<std::ffi::OsStrin
 pub(crate) fn name(location: &std::ffi::OsStr) -> io::Result<Name<'static>> {
     use interprocess::local_socket::{GenericFilePath, ToFsName};
 
+    if location.len() > SOCKET_PATH_MAX {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "the socket path is {} bytes and the limit is {SOCKET_PATH_MAX}; set KG_SOCKET to a shorter path",
+                location.len()
+            ),
+        ));
+    }
     std::path::Path::new(location)
         .to_path_buf()
         .to_fs_name::<GenericFilePath>()

@@ -523,6 +523,19 @@ fn a_turn_hook_never_starts_an_app_and_never_fails() {
     assert!(started.elapsed() < std::time::Duration::from_secs(1));
 }
 
+#[cfg(unix)]
+#[test]
+fn a_socket_path_over_the_limit_says_to_set_a_shorter_one() {
+    let long = std::path::PathBuf::from(format!("/tmp/{}/kg.sock", "a".repeat(200)));
+    let error = socket::name(long.as_os_str()).expect_err("the path is too long");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(
+        error
+            .to_string()
+            .contains("set KG_SOCKET to a shorter path")
+    );
+}
+
 #[test]
 fn a_request_line_over_the_cap_is_refused_and_the_connection_closes() {
     use std::io::{BufRead as _, BufReader, Write as _};

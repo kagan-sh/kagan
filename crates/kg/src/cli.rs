@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use kg_domain::{
     BrowserOp, BrowserSnapshot, ConfigOp, EnvOp, InstructionsOp, Op, OpError, OpResult, PluginOp,
-    PreviewKind, TEXT_MAX, ThreadOp, UiSnapshot, is_git_source,
+    PreviewKind, SavedPromptOp, TEXT_MAX, ThreadOp, UiSnapshot, is_git_source,
 };
 
 use crate::out;
@@ -159,11 +159,8 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
                 exit_with(*exit_code);
                 return Ok(());
             }
-            OpResult::Text(text) | OpResult::Logs { text, .. } => {
-                use std::io::Write as _;
-                std::io::stdout().lock().write_all(text.as_bytes())?;
-                return Ok(());
-            }
+            OpResult::Text(text) => return print_text(text),
+            OpResult::Logs { text, .. } => return print_logs(text),
             OpResult::Wait(outcome) => {
                 out::line(outcome)?;
                 return Ok(());
@@ -248,6 +245,34 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
     Ok(())
 }
 
+// Logs arrive in chunks while following, so they are written as they are, with no newline added.
+fn print_logs(text: &str) -> Result<(), OpError> {
+    use std::io::Write as _;
+    std::io::stdout().write_all(text.as_bytes())?;
+    Ok(())
+}
+
+fn print_text(text: &str) -> Result<(), OpError> {
+    use std::io::IsTerminal as _;
+    let terminal = std::io::stdout().is_terminal();
+    write_text(&mut std::io::stdout().lock(), text, terminal)?;
+    Ok(())
+}
+
+// In a terminal, text ends with a newline so the shell prompt starts on its own line. A pipe or
+// a file gets the text exactly as the command made it.
+pub(crate) fn write_text(
+    out: &mut impl std::io::Write,
+    text: &str,
+    terminal: bool,
+) -> std::io::Result<()> {
+    out.write_all(text.as_bytes())?;
+    if terminal && !text.ends_with('\n') {
+        out.write_all(b"\n")?;
+    }
+    Ok(())
+}
+
 /// Reads the `--file` of a paste or a browser fill (`-` is stdin) and sends its text, so a
 /// password stays out of argv and the process list.
 pub(crate) fn take_file_text(mut op: Op, stdin: impl std::io::Read) -> Result<Op, OpError> {
@@ -257,6 +282,7 @@ pub(crate) fn take_file_text(mut op: Op, stdin: impl std::io::Read) -> Result<Op
         }
         Op::Browser(BrowserOp::Fill { text, file, .. }) => (text, file.take(), "text"),
         Op::Instructions(InstructionsOp::Set { text, file, .. }) => (text, file.take(), "rules"),
+        Op::SavedPrompt(SavedPromptOp::Add { body, file, .. }) => (body, file.take(), "prompt"),
         _ => return Ok(op),
     };
     let Some(path) = path else {

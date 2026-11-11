@@ -224,3 +224,23 @@ async fn a_saved_line_is_stored_trimmed_so_it_matches_a_recent_one(cx: &mut Test
     assert_eq!(saved.len(), 1);
     assert_eq!(saved[0].command, "claude");
 }
+
+#[gpui_kit::test]
+async fn a_rename_onto_a_taken_name_says_so(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    op(save("alpha", "/bin/echo a"), cx).await.unwrap();
+    op(save("beta", "/bin/echo b"), cx).await.unwrap();
+    let error = op(
+        Op::Program(ProgramOp::Rename {
+            name: "alpha".into(),
+            to: "beta".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "a saved program named beta already exists"
+    );
+}
