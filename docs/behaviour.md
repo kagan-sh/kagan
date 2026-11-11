@@ -804,7 +804,7 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 ### `SettingsOp::Project`
 
 - **Allowed when**: the id is a live project [op/] [decision 221].
-- **Changes**: shows that project's page, with its environment variables, its default program, its agent rules, and its automations, opening the window if it is closed [decision 221] [decision 236]. Escape or Close leaves the page [decision 221]. The sidebar's "Project settings…" menu item sends this op. The automations list shows each one and the thread each run started, and can add, pause, resume, and delete [decision 236].
+- **Changes**: shows that project's page, with its environment variables, its default program, its agent rules, and its automations, opening the window if it is closed [decision 221] [decision 236]. Escape or Close leaves the page [decision 221]. The sidebar's "Project settings…" menu item sends this op. `section automations` also scrolls the page to its Automations section, and the project menu's "Automations…" item sends it that way [decision 251]. The automations list shows each one and the thread each run started, and can add, pause, resume, and delete [decision 236].
 - **Refused when**: a missing id — `not-found` [op/].
 
 ### `Hide`, `HideOthers`, `ShowAll`

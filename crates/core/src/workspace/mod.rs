@@ -169,7 +169,7 @@ pub enum WorkspaceEvent {
     Open,
     Skills,
     Settings,
-    ProjectSettings(kg_domain::ProjectId),
+    ProjectSettings(kg_domain::ProjectId, Option<kg_domain::ProjectSection>),
     SettingsPlugins,
     NewPlugin,
     Window(kg_domain::WindowOp),

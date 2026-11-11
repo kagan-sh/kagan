@@ -8,7 +8,7 @@ use gpui_kit::{
     Action, AnyWindowHandle, App, AppContext as _, Context, Entity, Global, WeakEntity, Window,
     WindowBounds, WindowOptions, px, size,
 };
-use kg_domain::{Op, ProjectId, ThreadId, WindowOp};
+use kg_domain::{Op, ProjectId, ProjectSection, ThreadId, WindowOp};
 use kg_plugins::HostUi;
 
 struct OpenWindow {
@@ -73,10 +73,17 @@ pub(crate) fn show_skills(cx: &mut App) -> gpui_kit::Result<()> {
     Ok(())
 }
 
-pub(crate) fn show_project_settings(project: ProjectId, cx: &mut App) -> gpui_kit::Result<()> {
+pub(crate) fn show_project_settings(
+    project: ProjectId,
+    section: Option<ProjectSection>,
+    cx: &mut App,
+) -> gpui_kit::Result<()> {
     show(cx)?;
     with_front(cx, move |kagan, window, cx| {
-        kagan.open_project_page(project, window, cx);
+        let page = kagan.open_project_page(project, window, cx);
+        if let Some(section) = section {
+            page.update(cx, |page, _| page.reveal(section));
+        }
     });
     Ok(())
 }

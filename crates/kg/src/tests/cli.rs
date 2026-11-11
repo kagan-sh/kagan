@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use kg_domain::{
     AutomationId, AutomationOp, ConfigOp, DiffOp, DiffQuery, DiffScope, EnvironmentSpec, Metadata,
-    Op, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, SavedPromptId, SavedPromptOp,
-    SectionId, SectionOp, SkillOp, TerminalOp, ThreadId, ThreadOp,
+    Op, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, ProjectSection, SavedPromptId,
+    SavedPromptOp, SectionId, SectionOp, SettingsOp, SkillOp, TerminalOp, ThreadId, ThreadOp,
 };
 use serde_json::{Value, json};
 
@@ -975,6 +975,17 @@ fn cli_saved_prompt_edit_takes_the_id_then_the_title_and_text() {
             id: SavedPromptId("svp_1".into()),
             title: "Plans".into(),
             body: "new text".into(),
+        })
+    );
+}
+
+#[test]
+fn cli_settings_project_can_open_its_automations() {
+    assert_eq!(
+        parse(&["settings", "project", "prj_1", "--section", "automations"]),
+        Op::Settings(SettingsOp::Project {
+            id: ProjectId("prj_1".into()),
+            section: Some(ProjectSection::Automations),
         })
     );
 }

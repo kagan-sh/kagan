@@ -1,8 +1,8 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use gpui_kit::TestAppContext;
+use gpui_kit::{AppContext as _, TestAppContext, px};
 use kg_core::Workspace;
-use kg_domain::{AutomationOp, Op, OpResult, ProjectId, ProjectOp, SettingsOp, Timestamp};
+use kg_domain::{AutomationOp, Op, OpResult, ProjectId, ProjectOp, ProjectSection, SettingsOp};
 
 use crate::tests::kagan::{click, label, open, present, value_of, wait_until};
 
@@ -30,6 +30,7 @@ fn open_project_page(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Settings(SettingsOp::Project {
                 id: ProjectId("prj_kagan".into()),
+                section: None,
             }),
             cx,
         )
@@ -150,4 +151,40 @@ fn an_empty_program_uses_the_project_default(cx: &mut TestAppContext) {
     click(cx, window, "automation-add");
     wait_until(cx, |cx| !rows(cx).is_empty());
     assert_eq!(rows(cx).remove(0).program, program());
+}
+
+// The project menu's Automations item opens the page with its automations in view.
+#[gpui_kit::test]
+fn the_automations_item_opens_the_project_page_at_its_automations(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    cx.run_until_parked();
+    cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Settings(SettingsOp::Project {
+                id: ProjectId("prj_kagan".into()),
+                section: Some(ProjectSection::Automations),
+            }),
+            cx,
+        )
+    })
+    .detach();
+    cx.run_until_parked();
+    cx.run_until_parked();
+    assert!(
+        in_view(cx, window, "automation-add"),
+        "the add form is scrolled into view"
+    );
+}
+
+fn in_view(cx: &mut TestAppContext, window: gpui_kit::AnyWindowHandle, name: &str) -> bool {
+    cx.update_window(window, |_, window, _| {
+        let viewport = window.viewport_size();
+        crate::ui_registry::find(window, &gpui_kit::ElementId::Name(name.to_owned().into()))
+            .is_some_and(|element| {
+                element.visible
+                    && element.bounds.top() >= px(0.)
+                    && element.bounds.bottom() <= viewport.height
+            })
+    })
+    .unwrap()
 }

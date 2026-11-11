@@ -65,7 +65,7 @@ pub use program::ProgramOp;
 pub use project::ProjectOp;
 pub use saved_prompt::SavedPromptOp;
 pub use section::SectionOp;
-pub use settings::SettingsOp;
+pub use settings::{ProjectSection, SettingsOp};
 pub use skill::{Skill, SkillOp, SkillSource, SkillTemplate};
 pub use surface::{Slot, SlotChoice, SlotChoiceError, SurfaceItem, SurfaceOp, SurfacePlacement};
 pub use terminal::{

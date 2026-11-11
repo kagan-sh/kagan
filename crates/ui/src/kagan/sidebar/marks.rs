@@ -11,7 +11,7 @@ use gpui_kit::{
     ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _,
     WeakEntity, div, px, relative,
 };
-use kg_domain::{Op, Project, ProjectId, ProjectKind, SettingsOp, ThreadId};
+use kg_domain::{Op, Project, ProjectId, ProjectKind, ProjectSection, SettingsOp, ThreadId};
 
 use super::rows::icon_command;
 use crate::kagan::{ArchiveThread, ThreadActions};
@@ -210,34 +210,50 @@ pub(super) fn thread_controls(
     Some(controls.into_any_element())
 }
 
+// An item that opens the project's page, at `section` when one is given.
+fn project_page_item(
+    project: &ProjectId,
+    id: &'static str,
+    label: &'static str,
+    section: Option<ProjectSection>,
+) -> PopupMenuItem {
+    let project = project.clone();
+    PopupMenuItem::element(move |_, _| {
+        div()
+            .id(id)
+            .ui_observe_as(Facts {
+                role: Role::MenuItem,
+                ..Facts::button(label)
+            })
+            .child(label)
+    })
+    .on_click(move |_, _, cx| {
+        crate::kagan::dispatch::logged(
+            Op::Settings(SettingsOp::Project {
+                id: project.clone(),
+                section,
+            }),
+            cx,
+        );
+    })
+}
+
 pub(super) fn project_menu(
     menu: PopupMenu,
     project: ProjectId,
     view: WeakEntity<Sidebar>,
 ) -> PopupMenu {
-    let settings = {
-        let project = project.clone();
-        PopupMenuItem::element(|_, _| {
-            div()
-                .id("project-settings")
-                .ui_observe_as(Facts {
-                    role: Role::MenuItem,
-                    ..Facts::button("Project settings…")
-                })
-                .child("Project settings…")
-        })
-        .on_click(move |_, _, cx| {
-            crate::kagan::dispatch::logged(
-                Op::Settings(SettingsOp::Project {
-                    id: project.clone(),
-                }),
-                cx,
-            );
-        })
-    };
+    let settings = project_page_item(&project, "project-settings", "Project settings…", None);
+    let automations = project_page_item(
+        &project,
+        "project-automations-menu",
+        "Automations…",
+        Some(ProjectSection::Automations),
+    );
     let rules_view = view.clone();
     let rules_project = project.clone();
     menu.item(settings)
+        .item(automations)
         .item(
             PopupMenuItem::element(|_, _| {
                 div()
