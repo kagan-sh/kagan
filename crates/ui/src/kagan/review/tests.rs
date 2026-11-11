@@ -32,6 +32,7 @@ pub(crate) fn review_horizontal_limit(kagan: &Kagan) -> Option<f32> {
         .map(|review| review.scroll.max_offset().x.as_f32())
 }
 
+#[cfg(unix)]
 pub(crate) fn review_horizontal_offset(kagan: &Kagan) -> Option<f32> {
     kagan
         .screen

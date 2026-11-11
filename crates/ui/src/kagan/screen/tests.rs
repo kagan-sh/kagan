@@ -43,11 +43,13 @@ pub(crate) fn terminal_grid(kagan: &Kagan, cx: &App) -> Option<kg_core::Grid> {
     }
 }
 
+#[cfg(unix)]
 pub(crate) fn tab_numbers(kagan: &Kagan) -> Vec<u32> {
     kagan.tabs.numbers().collect()
 }
 
 /// The extra terminal the right sidebar shows, if it shows one.
+#[cfg(unix)]
 pub(crate) fn shown_tab(kagan: &Kagan, cx: &App) -> Option<u32> {
     match right::selected_tab(kagan, cx) {
         Some(right::Tab::Terminal(number)) => Some(number),
@@ -55,18 +57,22 @@ pub(crate) fn shown_tab(kagan: &Kagan, cx: &App) -> Option<u32> {
     }
 }
 
+#[cfg(unix)]
 pub(crate) fn tab_grid(kagan: &Kagan, number: u32, cx: &App) -> Option<kg_core::Grid> {
     Some(kagan.tabs.view(number)?.read(cx).grid().clone())
 }
 
+#[cfg(unix)]
 pub(crate) fn browser_drawn(kagan: &Kagan, cx: &App) -> bool {
     kagan.browser_drawn(cx)
 }
 
+#[cfg(unix)]
 pub(crate) fn browser_address(kagan: &Kagan, cx: &App) -> String {
     kagan.browser.address(cx)
 }
 
+#[cfg(unix)]
 pub(crate) fn tab_focused(kagan: &Kagan, number: u32, window: &Window, cx: &App) -> bool {
     kagan
         .tabs

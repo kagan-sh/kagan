@@ -1,4 +1,5 @@
 use std::path::Path;
+#[cfg(unix)]
 use std::time::Duration;
 
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, TestAppContext};
@@ -6,13 +7,17 @@ use gpui_kit::{
     InputEvent as _, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, point,
 };
 use kg_core::Workspace;
-use kg_domain::{EnvironmentStatus, Op, ThreadStatus};
+use kg_domain::Op;
+#[cfg(unix)]
+use kg_domain::{EnvironmentStatus, ThreadStatus};
 
+#[cfg(unix)]
 use crate::kagan::{ArchiveThread, StopThread};
 
+use super::{add_project, approvals_waiting, click, open, send, shows, wait_until};
+#[cfg(unix)]
 use super::{
-    add_project, approvals_waiting, click, commit_setup, committed_repo, environment_of, label,
-    open, send, set_program, shell, shown, shows, thread_record, wait_until,
+    commit_setup, committed_repo, environment_of, label, set_program, shell, shown, thread_record,
 };
 
 #[cfg(unix)]
@@ -66,6 +71,7 @@ fn a_blocked_removal_is_shown_and_can_be_tried_again(cx: &mut TestAppContext) {
     assert!(!shows(cx, window, &removal));
 }
 
+#[cfg(unix)]
 pub(in crate::tests) fn worktree_dirs(data: &Path) -> Vec<std::path::PathBuf> {
     let Ok(read) = std::fs::read_dir(data.join("worktrees")) else {
         return Vec::new();
@@ -81,6 +87,7 @@ pub(in crate::tests) fn worktree_dirs(data: &Path) -> Vec<std::path::PathBuf> {
     paths
 }
 
+#[cfg(unix)]
 pub(in crate::tests) fn only_worktree(data: &Path) -> std::path::PathBuf {
     let paths = worktree_dirs(data);
     assert_eq!(paths.len(), 1, "{paths:?}");

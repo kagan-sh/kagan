@@ -1,5 +1,7 @@
+#[cfg(unix)]
 use crate::kagan::screen_read;
 use std::path::Path;
+#[cfg(unix)]
 use std::time::Duration;
 
 use gpui_kit::Modifiers;
@@ -12,10 +14,11 @@ use kg_plugins::PluginHost;
 use crate::kagan::Kagan;
 
 use super::{
-    PAGE, PAGE_FRAME, cell_point, click, drag_to, grid_text, open_with_plugins,
-    open_with_plugins_then, plugin_log, present, press, release, run_shell, selection, shown_row,
-    shows, split_command, wait_until,
+    PAGE, PAGE_FRAME, cell_point, drag_to, grid_text, open_with_plugins, press, release, selection,
+    shown_row, shows, split_command, wait_until,
 };
+#[cfg(unix)]
+use super::{click, open_with_plugins_then, plugin_log, present, run_shell};
 
 #[gpui_kit::test]
 fn reloading_a_plugin_mounts_its_panel_again(cx: &mut TestAppContext) {
@@ -120,6 +123,7 @@ export class Cover extends View {{
     )
 }
 
+#[cfg(unix)]
 pub(in crate::tests) fn grid_focus_and_selection_survive(
     cx: &mut TestAppContext,
     kagan: &Entity<Kagan>,

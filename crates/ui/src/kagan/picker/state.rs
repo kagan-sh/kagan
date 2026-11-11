@@ -273,6 +273,7 @@ impl Picker {
     }
 
     #[cfg(test)]
+    #[cfg(unix)]
     pub(crate) fn focus_list(&self, window: &mut Window, cx: &mut Context<Self>) {
         self.list.update(cx, |list, cx| list.focus(window, cx));
     }

@@ -6,9 +6,10 @@ use std::time::{Duration, Instant};
 use gpui_kit::{AnyWindowHandle, TestAppContext};
 use kg_domain::{InteractionOption, Op, OpResult, Plugin, PluginId, PluginOp, ThreadOp};
 
+#[cfg(unix)]
+use super::run_program;
 use super::{
-    click, click_within, label, open, pending, run_op, run_program, run_shell, shows, value_of,
-    wait_until,
+    click, click_within, label, open, pending, run_op, run_shell, shows, value_of, wait_until,
 };
 
 #[cfg(unix)]

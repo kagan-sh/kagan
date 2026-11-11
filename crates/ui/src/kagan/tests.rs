@@ -7,6 +7,7 @@ pub(crate) use super::layout::tests as layout_read;
 pub(crate) use super::replace::tests as replace_read;
 pub(crate) use super::review::tests as review_read;
 pub(crate) use super::screen::tests as screen_read;
+#[cfg(unix)]
 pub(crate) use super::tabs::{
     CloseTerminal, NewTerminal, NextTerminal, OpenLocalLink, PreviousTerminal,
 };
