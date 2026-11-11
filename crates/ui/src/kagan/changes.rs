@@ -343,9 +343,8 @@ impl Kagan {
         let archived = self.changes.thread.as_ref().is_some_and(|id| {
             Workspace::global(cx)
                 .read(cx)
-                .thread_records(cx)
-                .iter()
-                .any(|thread| thread.id == *id && thread.archived_at.is_some())
+                .thread(id)
+                .is_some_and(|thread| thread.read(cx).record().archived_at.is_some())
         });
         if archived {
             return line(
