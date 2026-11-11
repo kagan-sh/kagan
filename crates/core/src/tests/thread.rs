@@ -1368,3 +1368,23 @@ async fn a_rename_for_a_requester_locks_the_title_after_one(cx: &mut TestAppCont
         "the title is kept; rename it in the window"
     );
 }
+
+#[gpui_kit::test]
+async fn a_rename_drops_bidi_marks_from_the_title(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Thread(started) = op(fixture.run(program()), cx).await.unwrap() else {
+        panic!()
+    };
+    let OpResult::Thread(renamed) = op(
+        Op::Thread(ThreadOp::Rename {
+            id: started.id.clone(),
+            title: "Notes\u{202E}evil\u{2069}".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("rename")
+    };
+    assert_eq!(renamed.title, "Notesevil");
+}

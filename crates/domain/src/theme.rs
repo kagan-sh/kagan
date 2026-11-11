@@ -324,7 +324,7 @@ impl ThemeFile {
         if file.name.trim().is_empty() {
             return Err(ThemeFileError::BlankName);
         }
-        if file.name.chars().count() > MAX_NAME || file.name.chars().any(char::is_control) {
+        if file.name.chars().count() > MAX_NAME || file.name.chars().any(crate::unsafe_char) {
             return Err(ThemeFileError::BadName);
         }
         check_look(&file.look)?;

@@ -13,6 +13,7 @@ fn saved(minutes: Option<u16>, at: Option<Timestamp>) -> Automation {
         at,
         paused: false,
         next_at: Some(Timestamp(5)),
+        last_error: None,
         threads: Vec::new(),
     }
 }
@@ -63,4 +64,34 @@ fn only_unpaused_automations_that_are_due_are_loaded() {
     let rows = store.due_automations(Timestamp(10)).unwrap();
     let ids: Vec<_> = rows.into_iter().map(|row| row.id).collect();
     assert_eq!(ids, vec![due.id]);
+}
+
+#[test]
+fn a_failed_start_is_kept_until_a_run_starts() {
+    let store = store();
+    let automation = saved(Some(15), None);
+    store.insert_automation(&automation).unwrap();
+    store
+        .postpone_automation(&automation.id, Timestamp(9), "no such program")
+        .unwrap();
+    let failed = store.automation(&automation.id).unwrap().unwrap();
+    assert_eq!(failed.last_error.as_deref(), Some("no such program"));
+    assert_eq!(failed.next_at, Some(Timestamp(9)));
+
+    store
+        .record_automation_run(
+            &automation.id,
+            &ThreadId("thr_1".into()),
+            Timestamp(10),
+            Some(Timestamp(20)),
+        )
+        .unwrap();
+    assert!(
+        store
+            .automation(&automation.id)
+            .unwrap()
+            .unwrap()
+            .last_error
+            .is_none()
+    );
 }
