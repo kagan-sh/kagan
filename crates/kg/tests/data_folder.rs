@@ -41,8 +41,13 @@ fn owner_pid(data: &Path, first: &mut Child) -> u32 {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if let Ok(text) = std::fs::read_to_string(data.join("kagan.pid"))
-            && let Ok(pid) = text.trim().parse()
+            && let Ok(pid) = text.trim().parse::<u32>()
         {
+            assert_eq!(
+                pid,
+                first.id(),
+                "the folder must name the app that holds it"
+            );
             return pid;
         }
         assert!(

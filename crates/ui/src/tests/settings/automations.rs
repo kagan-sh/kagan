@@ -171,9 +171,11 @@ fn a_failed_start_reaches_the_open_project_page_without_a_reopen(cx: &mut TestAp
     open_project_page(cx);
     let row = rows(cx).remove(0);
     let threads = format!("automation-threads-{}", row.id);
-    cx.executor().advance_clock(Duration::from_mins(2));
+    cx.executor().advance_clock(Duration::from_secs(61));
     cx.run_until_parked();
-    wait_until(cx, |cx| {
-        label(cx, window, &threads).starts_with("Last start failed")
-    });
+    assert!(
+        label(cx, window, &threads).starts_with("Last start failed"),
+        "{}",
+        label(cx, window, &threads)
+    );
 }
