@@ -1,3 +1,4 @@
+#[cfg(unix)]
 use std::path::Path;
 #[cfg(unix)]
 use std::time::Duration;

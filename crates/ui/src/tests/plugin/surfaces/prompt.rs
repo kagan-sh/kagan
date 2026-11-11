@@ -1,8 +1,10 @@
+#[cfg(unix)]
 use std::path::Path;
 
 use gpui_kit::TestAppContext;
 #[cfg(unix)]
 use gpui_kit::{AppContext as _, ElementId};
+#[cfg(unix)]
 use kg_core::Workspace;
 #[cfg(unix)]
 use kg_domain::{Op, PluginOp, ThreadId};

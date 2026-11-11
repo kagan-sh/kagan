@@ -12,7 +12,9 @@ use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, TestAppConte
 use kg_core::Workspace;
 #[cfg(unix)]
 use kg_domain::UiOp;
-use kg_domain::{KeymapOp, Op, OpResult, Plugin, PluginId, ThreadId, ThreadOp, WindowOp};
+use kg_domain::{KeymapOp, Op, OpResult, WindowOp};
+#[cfg(unix)]
+use kg_domain::{Plugin, PluginId, ThreadId, ThreadOp};
 
 use crate::tests::kagan::{
     chord, click, install_navigator, label, open, open_with_plugins_then, press_key, shows,

@@ -4,19 +4,22 @@ use std::path::Path;
 #[cfg(unix)]
 use std::time::Duration;
 
+#[cfg(unix)]
+use gpui_kit::Entity;
+#[cfg(unix)]
 use gpui_kit::Modifiers;
-use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, TestAppContext, px, size};
+use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, TestAppContext, px, size};
 use kg_core::Workspace;
 use kg_domain::{Op, OpError, OpResult, Plugin, PluginId, PluginOp};
 
 use kg_plugins::PluginHost;
 
+#[cfg(unix)]
 use crate::kagan::Kagan;
 
-use super::{
-    PAGE, PAGE_FRAME, cell_point, drag_to, grid_text, open_with_plugins, press, release, selection,
-    shown_row, shows, split_command, wait_until,
-};
+use super::{PAGE, PAGE_FRAME, open_with_plugins, shows, wait_until};
+#[cfg(unix)]
+use super::{cell_point, drag_to, grid_text, press, release, selection, shown_row, split_command};
 #[cfg(unix)]
 use super::{click, open_with_plugins_then, plugin_log, present, run_shell};
 

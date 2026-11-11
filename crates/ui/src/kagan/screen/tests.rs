@@ -1,7 +1,9 @@
 use gpui_kit::{App, Entity, Window};
 use kg_domain::ProjectId;
 
-use crate::kagan::{Kagan, Shown, right};
+#[cfg(unix)]
+use crate::kagan::right;
+use crate::kagan::{Kagan, Shown};
 use crate::terminal::TerminalView;
 
 pub(crate) fn start_project(kagan: &Kagan) -> Option<ProjectId> {

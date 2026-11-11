@@ -27,6 +27,7 @@ pub(crate) mod saved;
 mod search;
 
 #[cfg(test)]
+#[cfg(unix)]
 pub(crate) use search::found;
 
 actions!(
