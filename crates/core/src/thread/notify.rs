@@ -121,6 +121,24 @@ fn sentence(report: &Report) -> String {
     }
 }
 
+// The line is typed into a parent's program, so only plain words of a title get through: letters,
+// digits, spaces and `-_.`, then at most 40 characters. The id always follows, for `kg thread`.
+const TITLE_WORDS_MAX: usize = 40;
+
+fn named(child: &ThreadId, title: &str) -> String {
+    let plain: String = title
+        .chars()
+        .filter(|ch| ch.is_alphanumeric() || matches!(ch, ' ' | '-' | '_' | '.'))
+        .collect();
+    let words = plain.split_whitespace().collect::<Vec<_>>().join(" ");
+    let short: String = words.chars().take(TITLE_WORDS_MAX).collect();
+    if short.is_empty() {
+        child.to_string()
+    } else {
+        format!("{short} ({child})")
+    }
+}
+
 fn tell(workspace: &mut Workspace, child: &ThreadId, what: &str, cx: &mut Context<Workspace>) {
     let Some(record) = workspace
         .threads
@@ -137,7 +155,10 @@ fn tell(workspace: &mut Workspace, child: &ThreadId, what: &str, cx: &mut Contex
     let Some(parent) = parent else {
         return;
     };
-    let line = format!("[kagan] child {child} {what}. Read it: kg thread screen {child}");
+    let line = format!(
+        "[kagan] child {} {what}. Read it: kg thread screen {child}",
+        named(child, &record.title)
+    );
     let Some(run) = workspace
         .runs
         .get_mut(&parent)
