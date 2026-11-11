@@ -58,41 +58,7 @@ pub(super) fn group(kagan: &Kagan, cx: &mut Context<Kagan>) -> Group {
             div().into_any_element(),
         ));
     }
-    let add = button(
-        "plugin-index-add",
-        "Add",
-        false,
-        cx.listener(|this, _, _, cx| this.add_index(cx)),
-    );
-    let add = field(
-        "plugin-index",
-        "Index address",
-        &kagan.plugins.index,
-        add,
-        cx,
-    )
-    .key_context("PluginIndex")
-    .on_action(cx.listener(|this, _: &AddIndex, _, cx| this.add_index(cx)));
-    let add_row = row(
-        "index-add",
-        "Add an index",
-        "A git address with a ref, git:<url>@<ref>, or a folder or file on this computer. Private repositories use your own git sign-in.",
-        add.into_any_element(),
-    );
-    rows.push(Row {
-        wide: true,
-        note_content: kagan.plugins.index_error.as_ref().map(|error| {
-            div()
-                .id("plugin-index-error")
-                .ui_container()
-                .aria_label(error.clone())
-                .type_small(cx)
-                .text_color(cx.theme().danger)
-                .child(error.clone())
-                .into_any_element()
-        }),
-        ..add_row
-    });
+    rows.push(add_row(kagan, cx));
     if !locations.is_empty() {
         let search = button(
             "plugin-search-run",
@@ -256,5 +222,43 @@ impl Kagan {
             },
             cx,
         );
+    }
+}
+
+fn add_row(kagan: &Kagan, cx: &mut Context<Kagan>) -> Row {
+    let add = button(
+        "plugin-index-add",
+        "Add",
+        false,
+        cx.listener(|this, _, _, cx| this.add_index(cx)),
+    );
+    let add = field(
+        "plugin-index",
+        "Index address",
+        &kagan.plugins.index,
+        add,
+        cx,
+    )
+    .key_context("PluginIndex")
+    .on_action(cx.listener(|this, _: &AddIndex, _, cx| this.add_index(cx)));
+    let add_row = row(
+        "index-add",
+        "Add an index",
+        "A git address with a ref, git:<url>@<ref>, or a folder or file on this computer. Private repositories use your own git sign-in.",
+        add.into_any_element(),
+    );
+    Row {
+        wide: true,
+        note_content: kagan.plugins.index_error.as_ref().map(|error| {
+            div()
+                .id("plugin-index-error")
+                .ui_container()
+                .aria_label(error.clone())
+                .type_small(cx)
+                .text_color(cx.theme().danger)
+                .child(error.clone())
+                .into_any_element()
+        }),
+        ..add_row
     }
 }
