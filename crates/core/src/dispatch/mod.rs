@@ -256,6 +256,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
             | ThreadOp::MarkRead { .. }
             | ThreadOp::SetMetadata { .. }
             | ThreadOp::StartAgain { .. }
+            | ThreadOp::Turn(_)
             | ThreadOp::Terminal(TerminalOp::New { .. } | TerminalOp::Close { .. }) => true,
             ThreadOp::Run(_)
             | ThreadOp::Input { .. }

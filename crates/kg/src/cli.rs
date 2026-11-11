@@ -11,6 +11,10 @@ use kg_domain::{
 use crate::socket::Client;
 
 pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
+    if let Op::Thread(ThreadOp::Turn(_)) = &op {
+        turn_hook(&op);
+        return Ok(());
+    }
     let op = take_value(take_file_text(op, std::io::stdin().lock())?)?;
     let next = match &op {
         Op::Plugin(PluginOp::New { name, dir }) => {
@@ -530,4 +534,14 @@ pub(crate) fn paths(mut op: Op) -> Result<Op, OpError> {
         _ => {}
     }
     Ok(op)
+}
+
+// An agent's hook calls this on every turn. It sends to a running app and otherwise does nothing:
+// it never starts an app, and it never fails the agent's turn.
+fn turn_hook(op: &Op) {
+    if let Ok(location) = crate::socket::location()
+        && let Ok(mut client) = Client::open(&location)
+    {
+        let _ = client.call(op);
+    }
 }

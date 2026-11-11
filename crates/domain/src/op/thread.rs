@@ -14,6 +14,23 @@ use super::environment::environment_spec;
 use super::json;
 use super::terminal::{SelectMode, TerminalOp};
 
+/// A turn boundary that an agent's hook reports. `start` runs when the person sends a prompt; `end`
+/// runs when the agent finishes its reply.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Subcommand)]
+#[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
+pub enum TurnOp {
+    /// The person sent a prompt
+    Start {
+        #[arg(env = "KG_THREAD_ID")]
+        id: ThreadId,
+    },
+    /// The agent finished its reply
+    End {
+        #[arg(env = "KG_THREAD_ID")]
+        id: ThreadId,
+    },
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
 #[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum ThreadOp {
@@ -154,6 +171,9 @@ pub enum ThreadOp {
     /// Extra terminals: login shells in the thread's folder
     #[command(subcommand)]
     Terminal(TerminalOp),
+    /// Record that an agent turn started or ended; an agent's own hook calls this
+    #[command(subcommand, hide = true)]
+    Turn(TurnOp),
     /// The thread's folder, program, branch, base branch and last commits, read from git without fetching
     Details {
         #[arg(env = "KG_THREAD_ID")]

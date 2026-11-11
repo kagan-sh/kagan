@@ -261,7 +261,8 @@ async fn a_quit_while_a_plain_title_settles_does_not_end_the_turn(cx: &mut TestA
                 .thread(&id)
                 .unwrap()
                 .read(cx)
-                .plain_since
+                .turn
+                .plain_since()
                 .is_some()
         });
         if pending {
@@ -272,7 +273,7 @@ async fn a_quit_while_a_plain_title_settles_does_not_end_the_turn(cx: &mut TestA
     assert!(
         cx.read(|cx| {
             let thread = fixture.workspace.read(cx).thread(&id).unwrap();
-            thread.read(cx).busy() && thread.read(cx).plain_since.is_some()
+            thread.read(cx).busy() && thread.read(cx).turn.plain_since().is_some()
         }),
         "the plain title never started its quiet wait"
     );
@@ -495,7 +496,8 @@ async fn a_spinner_returns_waiting_only_after_the_quiet(cx: &mut TestAppContext)
                 .thread(&id)
                 .unwrap()
                 .read(cx)
-                .plain_since
+                .turn
+                .plain_since()
                 .is_some()
         });
         if plain {
@@ -624,10 +626,11 @@ async fn a_busy_thread_that_goes_plain_is_done(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let dir = fixture.dir.path().join("titles");
     std::fs::create_dir_all(&dir).unwrap();
-    // A busy title, then the plain title claude shows once it has answered.
+    // A busy title, then the plain title codex shows once it has answered. codex has no turn hook,
+    // so its spinner decides the turn; claude's hook would own it instead.
     let program = script(
         &dir,
-        "claude",
+        "codex",
         "printf '\\033]2;\\342\\227\\220 work\\007'; sleep 1; printf '\\033]2;\\342\\234\\263 work\\007'; sleep 30",
     );
     let (id, _reap) = started(&fixture, &program, cx).await;
@@ -715,4 +718,188 @@ async fn answering_the_same_question_twice_is_not_found(cx: &mut TestAppContext)
         .await
         .unwrap_err();
     assert!(matches!(error, OpError::NotFound(_)), "{error}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_claude_hook_opens_and_closes_the_turn_while_the_title_stays_quiet(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let run = fixture.dir.path().join("hook-turn");
+    let line = format!(
+        "{} --person-arg",
+        super::fake_agent(&run, "claude").display()
+    );
+    let (id, _reap) = started(&fixture, &line, cx).await;
+    super::ran(&run);
+    op(
+        Op::Thread(ThreadOp::Turn(TurnOp::Start { id: id.clone() })),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert!(busy_of(&fixture, &id, cx));
+    assert_eq!(
+        kinds_of(&id, cx)
+            .await
+            .iter()
+            .filter(|kind| **kind == EventKind::TurnStarted)
+            .count(),
+        1
+    );
+    op(
+        Op::Thread(ThreadOp::Turn(TurnOp::Start { id: id.clone() })),
+        cx,
+    )
+    .await
+    .unwrap();
+    op(
+        Op::Thread(ThreadOp::Turn(TurnOp::End { id: id.clone() })),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert!(!busy_of(&fixture, &id, cx));
+    let kinds = kinds_of(&id, cx).await;
+    assert_eq!(
+        kinds
+            .iter()
+            .filter(|kind| **kind == EventKind::TurnStarted)
+            .count(),
+        1,
+        "a second start while open is one turn: {kinds:?}"
+    );
+    assert!(
+        kinds
+            .iter()
+            .any(|kind| matches!(kind, EventKind::TurnEnded { .. })),
+        "{kinds:?}"
+    );
+    op(
+        Op::Thread(ThreadOp::Turn(TurnOp::End { id: id.clone() })),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        kinds_of(&id, cx)
+            .await
+            .iter()
+            .filter(|kind| matches!(kind, EventKind::TurnEnded { .. }))
+            .count(),
+        1,
+        "a late end is harmless"
+    );
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+}
+
+#[cfg(unix)]
+async fn run_clock(
+    cx: &mut TestAppContext,
+    id: &ThreadId,
+    steps: u32,
+    stop: impl Fn(&[EventKind]) -> bool,
+) -> Vec<EventKind> {
+    for _ in 0..steps {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(50));
+        cx.run_until_parked();
+        let kinds = kinds_of(id, cx).await;
+        if stop(&kinds) {
+            return kinds;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    kinds_of(id, cx).await
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_quiet_agent_that_only_repaints_the_same_screen_ends_its_turn(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let dir = fixture.dir.path().join("repaint");
+    std::fs::create_dir_all(&dir).unwrap();
+    // codex answers the line, then repaints the same screen every second with no new text.
+    let program = script(
+        &dir,
+        "codex",
+        "read line; while true; do printf '\\033[H\\033[2Jready\\n'; sleep 1; done",
+    );
+    let (id, _reap) = started(&fixture, &program, cx).await;
+    op(
+        Op::Thread(ThreadOp::Input {
+            id: id.clone(),
+            text: "hi\r".into(),
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let opened = run_clock(cx, &id, 400, |kinds| turn_counts(kinds).0 == 1).await;
+    assert_eq!(turn_counts(&opened).0, 1, "{opened:?}");
+    let ended = run_clock(cx, &id, 600, |kinds| turn_counts(kinds).1 == 1).await;
+    assert_eq!(
+        turn_counts(&ended).1,
+        1,
+        "identical repaints kept the turn open: {ended:?}"
+    );
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_quiet_agent_turn_ends_after_its_output_stops(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let dir = fixture.dir.path().join("quiet");
+    std::fs::create_dir_all(&dir).unwrap();
+    let program = script(&dir, "codex", "read line; echo answer; sleep 60");
+    let (id, _reap) = started(&fixture, &program, cx).await;
+    op(
+        Op::Thread(ThreadOp::Input {
+            id: id.clone(),
+            text: "hi\r".into(),
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let opened = run_clock(cx, &id, 400, |kinds| turn_counts(kinds).0 == 1).await;
+    assert_eq!(turn_counts(&opened).0, 1, "{opened:?}");
+    let ended = run_clock(cx, &id, 600, |kinds| turn_counts(kinds).1 == 1).await;
+    assert_eq!(turn_counts(&ended).1, 1, "{ended:?}");
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_shell_that_takes_a_line_opens_no_turn(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let dir = fixture.dir.path().join("shell-line");
+    std::fs::create_dir_all(&dir).unwrap();
+    let program = script(&dir, "shell", "read line; echo got; sleep 60");
+    let (id, _reap) = started(&fixture, &program, cx).await;
+    op(
+        Op::Thread(ThreadOp::Input {
+            id: id.clone(),
+            text: "hi\r".into(),
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let kinds = run_clock(cx, &id, 200, |_| false).await;
+    assert_eq!(turn_counts(&kinds), (0, 0), "{kinds:?}");
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
 }
