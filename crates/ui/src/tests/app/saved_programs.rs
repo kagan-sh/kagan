@@ -250,7 +250,9 @@ fn enter_in_the_rename_box_renames_once_and_leaves_no_error(cx: &mut TestAppCont
     search(cx, window, "second");
     click(cx, window, "program-rename-saved-Second");
     wait_until(cx, |cx| shows(cx, window, "custom-name"));
-    cx.simulate_keystrokes(window, "cmd-a");
+    for _ in 0.."Second".len() {
+        cx.simulate_keystrokes(window, "backspace");
+    }
     cx.simulate_input(window, "Third");
     cx.simulate_keystrokes(window, "enter enter");
     wait_until(cx, |cx| {

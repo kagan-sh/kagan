@@ -472,10 +472,15 @@ fn an_archived_program_is_not_the_default(cx: &mut TestAppContext) {
     });
     cx.foreground_executor().block_test(reopened).unwrap();
     cx.run_until_parked();
-    // The reopened app finds its own PATH, so only the archived program's absence is checked.
-    let default = default_program(cx);
-    assert!(default.is_some(), "an installed agent is still the default");
-    assert_ne!(default, Some(bin.join("gemini").display().to_string()));
+    // The reopened workspace has no fixture PATH yet: give it the same one as before.
+    let shell = bin.join("fixture-shell");
+    cx.update(|cx| {
+        Workspace::global(cx).update(cx, |workspace, _| {
+            workspace.use_program_environment(&bin, &shell);
+        });
+    });
+    cx.run_until_parked();
+    assert_eq!(default_program(cx), Some("codex".to_owned()));
 }
 
 #[gpui_kit::test]

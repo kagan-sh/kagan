@@ -237,7 +237,9 @@ fn edit_opens_the_form_with_the_prompt_and_saves_the_change(cx: &mut TestAppCont
     );
     assert!(has_value(cx, window, "remember this"));
     click(cx, window, "saved-prompt-title");
-    cx.simulate_keystrokes(window, "cmd-a");
+    for _ in 0.."Notes".len() {
+        cx.simulate_keystrokes(window, "backspace");
+    }
     cx.simulate_input(window, "Plans");
     click(cx, window, "saved-prompt-save");
     cx.run_until_parked();
