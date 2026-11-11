@@ -4,7 +4,7 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::InteractiveElementExt as _;
 use gpui_kit::component::scroll::Scrollbar;
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{IconName, v_flex};
+use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -17,6 +17,7 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 use super::marks::{parent_suffixes, row_glyph};
+use super::options;
 use super::rail::footer;
 use super::rows::{project_line, row_line};
 use super::{Kind, Row, Shows, Sidebar};
@@ -63,24 +64,36 @@ pub(in crate::kagan) fn list(
                         .pt(px(space(SpaceStep::Md, cx)))
                         .px(px(space(SpaceStep::Md, cx)))
                         .child(
-                            div()
-                                .id("sidebar-new-thread")
-                                .ui_observe_as(Facts::button("New thread"))
-                                .h(px(row_height(cx)))
-                                .px(px(space(SpaceStep::Sm, cx)))
-                                .gap(px(space(SpaceStep::Sm, cx)))
-                                .flex()
+                            h_flex()
+                                .w_full()
                                 .items_center()
-                                .rounded(cx.theme().radius)
-                                .hover(|line| line.bg(cx.theme().list_hover))
-                                .tooltip(move |window, cx| {
-                                    Tooltip::new(tooltip.clone()).build(window, cx)
-                                })
-                                .child(row_glyph(IconName::Plus, cx))
-                                .child("New thread")
-                                .on_click(|_, window, cx| {
-                                    window.dispatch_action(Box::new(crate::kagan::NewThread), cx);
-                                }),
+                                .gap(px(space(SpaceStep::Sm, cx)))
+                                .child(
+                                    div()
+                                        .id("sidebar-new-thread")
+                                        .flex_1()
+                                        .min_w_0()
+                                        .ui_observe_as(Facts::button("New thread"))
+                                        .h(px(row_height(cx)))
+                                        .px(px(space(SpaceStep::Sm, cx)))
+                                        .gap(px(space(SpaceStep::Sm, cx)))
+                                        .flex()
+                                        .items_center()
+                                        .rounded(cx.theme().radius)
+                                        .hover(|line| line.bg(cx.theme().list_hover))
+                                        .tooltip(move |window, cx| {
+                                            Tooltip::new(tooltip.clone()).build(window, cx)
+                                        })
+                                        .child(row_glyph(IconName::Plus, cx))
+                                        .child("New thread")
+                                        .on_click(|_, window, cx| {
+                                            window.dispatch_action(
+                                                Box::new(crate::kagan::NewThread),
+                                                cx,
+                                            );
+                                        }),
+                                )
+                                .child(super::menu::button(sidebar, cx)),
                         )
                         .child(threads.unwrap_or_else(|| {
                             scroll_port(
@@ -192,6 +205,16 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Ro
     };
     let mut rows = Vec::new();
     for project in &listing.projects {
+        let mut threads: Vec<&Thread> = listing
+            .threads
+            .iter()
+            .filter(|thread| thread.archived_at.is_none() && thread.project_id == project.id)
+            .collect();
+        let kept =
+            sidebar.chosen() == Some(&project.id) || shows.project.as_ref() == Some(&project.id);
+        if threads.is_empty() && sidebar.options.hide_empty_projects && !kept {
+            continue;
+        }
         let open = !sidebar.closed.contains(&project.id);
         let suffix = suffixes.get(&project.id).cloned();
         let label = match &suffix {
@@ -214,12 +237,7 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Ro
         if !open {
             continue;
         }
-        let mut threads: Vec<&Thread> = listing
-            .threads
-            .iter()
-            .filter(|thread| thread.archived_at.is_none() && thread.project_id == project.id)
-            .collect();
-        threads.sort_by_key(|thread| !thread.pinned);
+        options::sort_threads(&mut threads, sidebar.options);
         let ids: BTreeSet<_> = threads.iter().map(|thread| &thread.id).collect();
         let mut children: BTreeMap<&ThreadId, Vec<&Thread>> = BTreeMap::new();
         for &thread in &threads {
