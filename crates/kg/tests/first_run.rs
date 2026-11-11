@@ -106,29 +106,27 @@ fn offscreen_app_answers_ui_commands_and_captures_its_window() {
         ))
     );
 
-    {
-        let image = dir.path().join("offscreen.png");
-        let shot = kg(
-            &[
-                "kg".into(),
-                "ui".into(),
-                "screenshot".into(),
-                image.display().to_string(),
-                "--json".into(),
-            ],
-            home,
-            Some(&data),
-            &socket,
-        );
-        assert!(
-            shot.status.success(),
-            "{}",
-            server.failure(&String::from_utf8_lossy(&shot.stdout))
-        );
-        // A blank or nearly blank frame has a handful of colours; the start screen has hundreds.
-        let colours = distinct_colours(&image);
-        assert!(colours >= 64, "the capture has only {colours} colours");
-    }
+    let image = dir.path().join("offscreen.png");
+    let shot = kg(
+        &[
+            "kg".into(),
+            "ui".into(),
+            "screenshot".into(),
+            image.display().to_string(),
+            "--json".into(),
+        ],
+        home,
+        Some(&data),
+        &socket,
+    );
+    assert!(
+        shot.status.success(),
+        "{}",
+        server.failure(&String::from_utf8_lossy(&shot.stdout))
+    );
+    // A blank or nearly blank frame has a handful of colours; the start screen has hundreds.
+    let colours = distinct_colours(&image);
+    assert!(colours >= 64, "the capture has only {colours} colours");
 }
 
 #[test]
@@ -194,6 +192,7 @@ fn first_run_commands() -> Vec<Vec<String>> {
 }
 
 /// Decodes a PNG and counts its distinct colours.
+#[cfg(target_os = "macos")]
 fn distinct_colours(path: &Path) -> usize {
     let image = image::open(path).expect("the capture is a PNG").to_rgba8();
     image
