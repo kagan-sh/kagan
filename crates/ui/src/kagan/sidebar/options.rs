@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use kg_domain::{ProjectId, SectionId, Thread, newest_first};
+use kg_domain::{Thread, newest_first};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub(super) enum ThreadOrder {
@@ -13,7 +13,6 @@ pub(super) enum ThreadOrder {
 pub(super) struct ListOptions {
     pub(super) order: ThreadOrder,
     pub(super) hide_empty_projects: bool,
-    pub(super) hide_empty_sections: bool,
     pub(super) unread_first: bool,
 }
 
@@ -21,7 +20,6 @@ impl ListOptions {
     pub(super) fn from_saved(
         order: Option<&str>,
         hide_empty_projects: bool,
-        hide_empty_sections: bool,
         unread_first: bool,
     ) -> Self {
         let order = if order == Some(kg_domain::prefs::SIDEBAR_ORDER_ATTENTION) {
@@ -32,7 +30,6 @@ impl ListOptions {
         Self {
             order,
             hide_empty_projects,
-            hide_empty_sections,
             unread_first,
         }
     }
@@ -65,11 +62,4 @@ fn attention_first(left: &Thread, right: &Thread) -> Ordering {
         .latest_attention_at
         .cmp(&left.latest_attention_at)
         .then_with(|| right.id.cmp(&left.id))
-}
-
-pub(super) fn section_row_id(project: Option<&ProjectId>, section: &SectionId) -> String {
-    match project {
-        Some(project) => format!("section-{project}-{section}"),
-        None => format!("section-{section}"),
-    }
 }

@@ -22,7 +22,6 @@ pub const SIDEBAR_ORDER_CURRENT: &str = "current";
 pub const SIDEBAR_ORDER_ATTENTION: &str = "attention";
 pub const SIDEBAR_ORDERS: [&str; 2] = [SIDEBAR_ORDER_CURRENT, SIDEBAR_ORDER_ATTENTION];
 pub const SIDEBAR_HIDE_EMPTY_PROJECTS: &str = "sidebar-hide-empty-projects";
-pub const SIDEBAR_HIDE_EMPTY_SECTIONS: &str = "sidebar-hide-empty-sections";
 pub const SIDEBAR_UNREAD_FIRST: &str = "sidebar-unread-first";
 
 pub const TERMINAL_FONT_MIN: u8 = 9;

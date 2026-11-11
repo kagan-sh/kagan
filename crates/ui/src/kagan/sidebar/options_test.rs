@@ -59,8 +59,8 @@ fn attention_order_is_newest_attention_first_and_pinned_stays_first() {
 
 #[test]
 fn unread_comes_after_pinned_and_before_the_rest() {
-    let pinned_read = thread("pinned-read", 1, 1, true, true);
-    let pinned_unread = thread("pinned-unread", 2, 4, true, false);
+    let pinned_read = thread("pinned-read", 2, 2, true, true);
+    let pinned_unread = thread("pinned-unread", 1, 4, true, false);
     let unread = thread("unread", 3, 3, false, false);
     let read = thread("read", 9, 9, false, true);
     let mut threads = vec![&read, &unread, &pinned_read, &pinned_unread];
@@ -71,7 +71,7 @@ fn unread_comes_after_pinned_and_before_the_rest() {
     sort_threads(&mut threads, options);
     assert_eq!(
         ids(&threads),
-        ["pinned-unread", "pinned-read", "unread", "read"]
+        ["pinned-read", "pinned-unread", "unread", "read"]
     );
 }
 

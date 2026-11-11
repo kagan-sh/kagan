@@ -78,13 +78,6 @@ fn sidebar_list_options_have_a_fixed_shape() {
     assert!(preference_value(prefs::SIDEBAR_ORDER, &serde_json::json!("attention")).is_ok());
     assert!(preference_value(prefs::SIDEBAR_ORDER, &serde_json::json!("newest")).is_err());
     assert!(preference_value(prefs::SIDEBAR_HIDE_EMPTY_PROJECTS, &serde_json::json!(true)).is_ok());
-    assert!(
-        preference_value(
-            prefs::SIDEBAR_HIDE_EMPTY_SECTIONS,
-            &serde_json::json!("yes")
-        )
-        .is_err()
-    );
     assert!(preference_value(prefs::SIDEBAR_UNREAD_FIRST, &serde_json::json!(false)).is_ok());
 }
 

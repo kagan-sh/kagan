@@ -80,7 +80,6 @@ const PREFERENCES: &[(&str, Kind)] = &[
     (prefs::SETUP_GUIDE, Kind::Flag),
     (prefs::SIDEBAR_ORDER, Kind::SidebarOrder),
     (prefs::SIDEBAR_HIDE_EMPTY_PROJECTS, Kind::Flag),
-    (prefs::SIDEBAR_HIDE_EMPTY_SECTIONS, Kind::Flag),
     (prefs::SIDEBAR_UNREAD_FIRST, Kind::Flag),
     (prefs::TERMINAL_FONT_SIZE, Kind::FontSize),
     (prefs::BRANCH_PREFIX, Kind::BranchPrefix),

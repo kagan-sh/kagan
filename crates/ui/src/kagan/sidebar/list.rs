@@ -10,7 +10,7 @@ use gpui_kit::{
     AnyElement, App, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
-use kg_domain::{ProjectId, Section, SectionId, Thread, ThreadId};
+use kg_domain::{ProjectId, Thread, ThreadId};
 
 use crate::theme::{SpaceStep, row_height, space};
 use crate::ui_observe::UiObserveExt as _;
@@ -31,7 +31,6 @@ pub(in crate::kagan) fn list(
     cx: &mut Context<Sidebar>,
 ) -> AnyElement {
     sidebar.row_order.clear();
-    sidebar.line_order.clear();
     let rows = sidebar_rows(sidebar, shows, cx);
     sidebar.reveal_selected(&rows);
     let thread_scroll = sidebar.thread_scroll.clone();
@@ -123,53 +122,18 @@ pub(in crate::kagan) fn list(
         .into_any_element()
 }
 
-pub(super) enum Line {
-    Row(Row),
-    Section { id: String, name: SharedString },
-}
-
 fn thread_lines(
-    rows: &[Line],
+    rows: &[Row],
     sidebar: &mut Sidebar,
     window: &mut Window,
     cx: &mut Context<Sidebar>,
 ) -> Vec<AnyElement> {
     rows.iter()
-        .map(|line| match line {
-            Line::Row(row) => match &row.kind {
-                Kind::Project { id, open, .. } => project_line(row, sidebar, id, *open, window, cx),
-                Kind::Thread { .. } => row_line(row, sidebar, true, window, cx).into_any_element(),
-            },
-            Line::Section { id, name } => {
-                sidebar.add_line(id.clone());
-                section_line(id, name, cx)
-            }
+        .map(|row| match &row.kind {
+            Kind::Project { id, open, .. } => project_line(row, sidebar, id, *open, window, cx),
+            Kind::Thread { .. } => row_line(row, sidebar, true, window, cx).into_any_element(),
         })
         .collect()
-}
-
-fn section_line(id: &str, name: &SharedString, cx: &App) -> AnyElement {
-    use gpui_kit::Role;
-    use gpui_kit::component::ActiveTheme as _;
-
-    use crate::theme::TypeScale as _;
-
-    div()
-        .id(gpui_kit::ElementId::Name(id.to_owned().into()))
-        .w_full()
-        .px(px(space(SpaceStep::Sm, cx)))
-        .pt(px(space(SpaceStep::Sm, cx)))
-        .pb(px(space(SpaceStep::Xs, cx)))
-        .flex()
-        .items_center()
-        .type_caption(cx)
-        .text_color(cx.theme().muted_foreground)
-        .ui_observe_as(crate::ui_registry::Facts {
-            role: Role::Label,
-            ..crate::ui_registry::Facts::button(name.clone())
-        })
-        .child(name.clone())
-        .into_any_element()
 }
 
 fn scroll_port(
@@ -224,17 +188,20 @@ struct Scope<'a> {
     sidebar: &'a Sidebar,
     cx: &'a App,
     shown: Option<ThreadId>,
-    project: ProjectId,
-    sections: &'a [Section],
 }
 
-pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Line> {
+pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Row> {
     let listing = &sidebar.listing;
     let suffixes = parent_suffixes(&listing.projects);
     let on_screen = if shows.page.is_some() || shows.archived {
         None
     } else {
         shows.thread.clone()
+    };
+    let scope = Scope {
+        sidebar,
+        cx,
+        shown: on_screen,
     };
     let mut rows = Vec::new();
     for project in &listing.projects {
@@ -243,7 +210,8 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Li
             .iter()
             .filter(|thread| thread.archived_at.is_none() && thread.project_id == project.id)
             .collect();
-        if threads.is_empty() && sidebar.options.hide_empty_projects {
+        let chosen = sidebar.chosen() == Some(&project.id);
+        if threads.is_empty() && sidebar.options.hide_empty_projects && !chosen {
             continue;
         }
         let open = !sidebar.closed.contains(&project.id);
@@ -252,7 +220,7 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Li
             Some(suffix) => format!("{} · {suffix}", project.name),
             None => project.name.clone(),
         };
-        rows.push(Line::Row(Row {
+        rows.push(Row {
             kind: Kind::Project {
                 id: project.id.clone(),
                 name: project.name.clone().into(),
@@ -264,7 +232,7 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Li
             detail: suffix.map(SharedString::from),
             selected: project_selected(sidebar, shows, &project.id),
             open: false,
-        }));
+        });
         if !open {
             continue;
         }
@@ -276,14 +244,6 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Li
                 children.entry(parent).or_default().push(thread);
             }
         }
-        let scope = Scope {
-            sidebar,
-            cx,
-            shown: on_screen.clone(),
-            project: project.id.clone(),
-            sections: &listing.sections,
-        };
-        let mut seen = BTreeSet::new();
         let mut visited = BTreeSet::new();
         for thread in &threads {
             if thread
@@ -291,68 +251,32 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Li
                 .as_ref()
                 .is_none_or(|parent| !ids.contains(parent))
             {
-                append_thread(
-                    &mut rows,
-                    thread,
-                    &children,
-                    &mut visited,
-                    &mut seen,
-                    0,
-                    &scope,
-                );
+                append_thread(&mut rows, thread, &children, &mut visited, 0, &scope);
             }
         }
         for thread in &threads {
             if !visited.contains(&thread.id) {
-                append_thread(
-                    &mut rows,
-                    thread,
-                    &children,
-                    &mut visited,
-                    &mut seen,
-                    0,
-                    &scope,
-                );
-            }
-        }
-    }
-    if !sidebar.options.hide_empty_sections {
-        for section in &listing.sections {
-            if !section_has_thread(&listing.threads, &section.id) {
-                rows.push(Line::Section {
-                    id: options::section_row_id(None, &section.id),
-                    name: section.name.clone().into(),
-                });
+                append_thread(&mut rows, thread, &children, &mut visited, 0, &scope);
             }
         }
     }
     rows
 }
 
-fn section_has_thread(threads: &[Thread], section: &SectionId) -> bool {
-    threads
-        .iter()
-        .any(|thread| thread.archived_at.is_none() && thread.section_id.as_ref() == Some(section))
-}
-
 fn append_thread(
-    rows: &mut Vec<Line>,
+    rows: &mut Vec<Row>,
     thread: &Thread,
     children_of: &BTreeMap<&ThreadId, Vec<&Thread>>,
     visited: &mut BTreeSet<ThreadId>,
-    seen: &mut BTreeSet<SectionId>,
     depth: u16,
     scope: &Scope,
 ) {
     if !visited.insert(thread.id.clone()) {
         return;
     }
-    if let Some(header) = section_header(thread, seen, scope) {
-        rows.push(header);
-    }
     let children = children_of.contains_key(&thread.id);
     let expanded = !scope.sidebar.closed_threads.contains(&thread.id);
-    rows.push(Line::Row(Row {
+    rows.push(Row {
         kind: Kind::Thread {
             id: thread.id.clone(),
             tone: crate::kagan::attention::global(scope.cx)
@@ -368,26 +292,14 @@ fn append_thread(
         detail: None,
         selected: scope.shown.as_ref() == Some(&thread.id),
         open: false,
-    }));
+    });
     for &child in children_of.get(&thread.id).into_iter().flatten() {
         if expanded {
-            append_thread(rows, child, children_of, visited, seen, depth + 1, scope);
+            append_thread(rows, child, children_of, visited, depth + 1, scope);
         } else {
             mark_descendants(child, children_of, visited);
         }
     }
-}
-
-fn section_header(thread: &Thread, seen: &mut BTreeSet<SectionId>, scope: &Scope) -> Option<Line> {
-    let id = thread.section_id.as_ref()?;
-    if !seen.insert(id.clone()) {
-        return None;
-    }
-    let section = scope.sections.iter().find(|section| &section.id == id)?;
-    Some(Line::Section {
-        id: options::section_row_id(Some(&scope.project), &section.id),
-        name: section.name.clone().into(),
-    })
 }
 
 fn mark_descendants(

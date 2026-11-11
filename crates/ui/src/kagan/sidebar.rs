@@ -112,12 +112,10 @@ pub(super) struct Sidebar {
     return_tool: Option<String>,
     // Row ids in draw order. Arrow keys follow this list, so it matches the rows on screen.
     row_order: Vec<String>,
-    // Every drawn line, including a section name, so scrolling uses the same index as the children.
-    line_order: Vec<String>,
     row_focus: BTreeMap<String, FocusHandle>,
     row_menu: Option<(Entity<PopupMenu>, Subscription, ThreadId)>,
     options: ListOptions,
-    options_load: u64,
+    list_focus: FocusHandle,
     list_menu: Option<(Entity<PopupMenu>, Subscription)>,
     brand_focus: FocusHandle,
     brand_menu: Option<(Entity<PopupMenu>, Subscription)>,
@@ -141,11 +139,10 @@ impl Sidebar {
             scroll_thread: None,
             return_tool: None,
             row_order: Vec::new(),
-            line_order: Vec::new(),
             row_focus: BTreeMap::new(),
             row_menu: None,
             options: ListOptions::default(),
-            options_load: 0,
+            list_focus: cx.focus_handle().tab_stop(true),
             list_menu: None,
             brand_focus: cx.focus_handle().tab_stop(true),
             brand_menu: None,
@@ -207,46 +204,22 @@ impl Sidebar {
     }
 
     fn add_row(&mut self, id: String, focus: FocusHandle) {
-        self.line_order.push(id.clone());
         self.row_order.push(id.clone());
         self.row_focus.insert(id, focus);
     }
 
-    fn add_line(&mut self, id: String) {
-        self.line_order.push(id);
-    }
-
-    pub(super) fn load_options(&mut self, cx: &mut Context<Self>) {
-        self.options_load = self.options_load.wrapping_add(1);
-        let token = self.options_load;
-        let order = crate::kagan::layout::read::<String>(kg_domain::prefs::SIDEBAR_ORDER, cx);
-        let projects =
-            crate::kagan::layout::read::<bool>(kg_domain::prefs::SIDEBAR_HIDE_EMPTY_PROJECTS, cx);
-        let sections =
-            crate::kagan::layout::read::<bool>(kg_domain::prefs::SIDEBAR_HIDE_EMPTY_SECTIONS, cx);
-        let unread = crate::kagan::layout::read::<bool>(kg_domain::prefs::SIDEBAR_UNREAD_FIRST, cx);
-        cx.spawn(async move |this, cx| {
-            let order = order.await.ok().flatten();
-            let hide_empty_projects = projects.await.ok().flatten().unwrap_or(false);
-            let hide_empty_sections = sections.await.ok().flatten().unwrap_or(false);
-            let unread_first = unread.await.ok().flatten().unwrap_or(false);
-            let next = ListOptions::from_saved(
-                order.as_deref(),
-                hide_empty_projects,
-                hide_empty_sections,
-                unread_first,
-            );
-            _ = this.update(cx, |sidebar, cx| {
-                if sidebar.options_load != token {
-                    return;
-                }
-                if sidebar.options != next {
-                    sidebar.options = next;
-                    cx.notify();
-                }
-            });
-        })
-        .detach();
+    pub(super) fn apply_options(
+        &mut self,
+        order: Option<&str>,
+        hide_empty_projects: bool,
+        unread_first: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let next = ListOptions::from_saved(order, hide_empty_projects, unread_first);
+        if self.options != next {
+            self.options = next;
+            cx.notify();
+        }
     }
 
     fn toggle_project(&mut self, project: ProjectId, cx: &mut Context<Self>) {
@@ -394,36 +367,27 @@ impl Sidebar {
     pub(super) fn thread_ids(&self, shows: &Shows, cx: &App) -> Vec<ThreadId> {
         sidebar_rows(self, shows, cx)
             .into_iter()
-            .filter_map(|line| match line {
-                list::Line::Row(row) => match row.kind {
-                    Kind::Thread { id, .. } => Some(id),
-                    Kind::Project { .. } => None,
-                },
-                list::Line::Section { .. } => None,
+            .filter_map(|row| match row.kind {
+                Kind::Thread { id, .. } => Some(id),
+                Kind::Project { .. } => None,
             })
             .collect()
     }
 
     fn scroll_row(&mut self, id: &str) {
-        if let Some(index) = thread_scroll_index(&self.line_order, id) {
+        if let Some(index) = thread_scroll_index(&self.row_order, id) {
             self.thread_scroll.scroll_to_item(index);
         }
     }
 
-    fn reveal_selected(&mut self, lines: &[list::Line]) {
-        let Some(index) = lines.iter().position(|line| {
-            matches!(
-                line,
-                list::Line::Row(row) if row.selected && matches!(row.kind, Kind::Thread { .. })
-            )
-        }) else {
+    fn reveal_selected(&mut self, rows: &[Row]) {
+        let Some(index) = rows
+            .iter()
+            .position(|row| row.selected && matches!(row.kind, Kind::Thread { .. }))
+        else {
             return;
         };
-        let list::Line::Row(Row {
-            kind: Kind::Thread { id, .. },
-            ..
-        }) = &lines[index]
-        else {
+        let Kind::Thread { id, .. } = &rows[index].kind else {
             return;
         };
         let id = format!("{THREAD_ROW}{id}");

@@ -14,8 +14,8 @@ use gpui_kit::{
 use kg_domain::{Op, PreferenceOp};
 use serde_json::{Value, json};
 
-use super::Sidebar;
 use super::options::ThreadOrder;
+use super::{ActivateRow, EnterRow, Sidebar};
 
 impl Sidebar {
     fn open_list_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -28,7 +28,10 @@ impl Sidebar {
                 "sidebar-order-current",
                 "Current order",
                 options.order == ThreadOrder::Current,
-                set(kg_domain::prefs::SIDEBAR_ORDER, json!("current")),
+                set(
+                    kg_domain::prefs::SIDEBAR_ORDER,
+                    json!(kg_domain::prefs::SIDEBAR_ORDER_CURRENT),
+                ),
             ))
             .item(choice(
                 "sidebar-order-attention",
@@ -50,15 +53,6 @@ impl Sidebar {
                 ),
             ))
             .item(choice(
-                "sidebar-hide-empty-sections",
-                "Hide empty sections",
-                options.hide_empty_sections,
-                set(
-                    kg_domain::prefs::SIDEBAR_HIDE_EMPTY_SECTIONS,
-                    json!(!options.hide_empty_sections),
-                ),
-            ))
-            .item(choice(
                 "sidebar-unread-first",
                 "Unread first",
                 options.unread_first,
@@ -68,8 +62,12 @@ impl Sidebar {
                 ),
             ))
         });
-        let dismiss = cx.subscribe_in(&menu, window, |this, _, _: &DismissEvent, _, cx| {
+        let dismiss = cx.subscribe_in(&menu, window, |this, menu, _: &DismissEvent, window, cx| {
             this.list_menu = None;
+            let kept = menu.read(cx).focus_handle(cx).contains_focused(window, cx);
+            if kept || window.focused(cx).is_none() {
+                window.focus(&this.list_focus, cx);
+            }
             cx.notify();
         });
         menu.read(cx).focus_handle(cx).focus(window, cx);
@@ -104,15 +102,25 @@ fn choice(id: &'static str, label: &'static str, on: bool, op: Op) -> PopupMenuI
 }
 
 pub(super) fn button(sidebar: &Sidebar, cx: &mut Context<Sidebar>) -> impl IntoElement {
+    let focus = sidebar.list_focus.clone();
     let menu = sidebar.list_menu.as_ref().map(|(menu, _)| menu.clone());
     div()
         .id("sidebar-list-options")
         .relative()
         .flex_shrink_0()
+        .key_context("SidebarRow")
+        .track_focus(&focus)
         .ui_observe_as(Facts {
+            focus: Some(focus.clone()),
             selected: Some(menu.is_some()),
             ..Facts::button("List options")
         })
+        .on_action(cx.listener(|this, _: &ActivateRow, window, cx| {
+            this.open_list_menu(window, cx);
+        }))
+        .on_action(cx.listener(|this, _: &EnterRow, window, cx| {
+            this.open_list_menu(window, cx);
+        }))
         .child(
             Button::new("sidebar-list-options-button")
                 .small()

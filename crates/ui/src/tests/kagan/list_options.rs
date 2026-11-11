@@ -7,6 +7,8 @@ use kg_domain::{
 };
 use serde_json::json;
 
+use crate::tests::sidebar::layout::focus_row;
+
 use super::{
     click, open, row_top, run_op, run_shell, selected_of, set_preference, shows, thread_record,
     wait_until,
@@ -55,12 +57,26 @@ fn ask(cx: &mut TestAppContext, id: &ThreadId) {
 }
 
 #[gpui_kit::test]
-fn the_list_menu_hides_an_empty_project_and_an_empty_section(cx: &mut TestAppContext) {
+fn the_list_menu_hides_an_empty_project(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
-    let thread = run_shell(cx);
+    run_shell(cx);
     assert!(shows(cx, window, "project-personal"));
     assert!(shows(cx, window, "project-prj_kagan"));
 
+    click(cx, window, "sidebar-list-options");
+    assert_eq!(
+        selected_of(cx, window, "sidebar-hide-empty-projects"),
+        Some(false)
+    );
+    click(cx, window, "sidebar-hide-empty-projects");
+    wait_until(cx, |cx| !shows(cx, window, "project-personal"));
+    assert!(shows(cx, window, "project-prj_kagan"));
+}
+
+#[gpui_kit::test]
+fn a_section_name_is_not_drawn_in_the_list(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let thread = run_shell(cx);
     run_op(
         cx,
         Op::Section(SectionOp::Create {
@@ -79,33 +95,38 @@ fn the_list_menu_hides_an_empty_project_and_an_empty_section(cx: &mut TestAppCon
             .id
             .clone()
     });
-    let empty = format!("section-{section}");
-    wait_until(cx, |cx| shows(cx, window, &empty));
-
-    click(cx, window, "sidebar-list-options");
-    assert_eq!(
-        selected_of(cx, window, "sidebar-hide-empty-projects"),
-        Some(false)
-    );
-    click(cx, window, "sidebar-hide-empty-projects");
-    wait_until(cx, |cx| !shows(cx, window, "project-personal"));
-    assert!(shows(cx, window, "project-prj_kagan"));
-
-    click(cx, window, "sidebar-list-options");
-    click(cx, window, "sidebar-hide-empty-sections");
-    wait_until(cx, |cx| !shows(cx, window, &empty));
-
     run_op(
         cx,
         Op::Section(SectionOp::File {
-            thread_id: thread,
+            thread_id: thread.clone(),
             section_id: Some(section.clone()),
         }),
     );
+    wait_until(cx, |cx| thread_record(cx, &thread).section_id.is_some());
     cx.run_until_parked();
-    let filed = format!("section-{}-{section}", ProjectId("prj_kagan".into()));
-    wait_until(cx, |cx| shows(cx, window, &filed));
-    assert!(!shows(cx, window, &empty));
+    let header = format!("section-{}-{section}", ProjectId("prj_kagan".into()));
+    assert!(!shows(cx, window, &header));
+}
+
+#[gpui_kit::test]
+fn the_chosen_project_stays_when_empty_projects_are_hidden(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "project-prj_kagan");
+    cx.run_until_parked();
+
+    click(cx, window, "sidebar-list-options");
+    click(cx, window, "sidebar-hide-empty-projects");
+    wait_until(cx, |cx| !shows(cx, window, "project-personal"));
+    assert!(shows(cx, window, "project-prj_kagan"));
+}
+
+#[gpui_kit::test]
+fn the_list_options_menu_opens_from_the_keyboard(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    focus_row(cx, window, "sidebar-list-options");
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(selected_of(cx, window, "sidebar-order-current"), Some(true));
 }
 
 #[gpui_kit::test]
