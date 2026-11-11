@@ -303,6 +303,7 @@ fn plugin_thread(op: &PluginOp) -> Option<&ThreadId> {
         | PluginOp::Index { .. }
         | PluginOp::Search { .. }
         | PluginOp::Enable { .. }
-        | PluginOp::Disable { .. } => None,
+        | PluginOp::Disable { .. }
+        | PluginOp::Rail { .. } => None,
     }
 }

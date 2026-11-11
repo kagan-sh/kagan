@@ -87,3 +87,12 @@ fn review_wrap_is_a_window_boolean() {
     assert!(preference_value("main.review-wrap", &serde_json::json!(true)).is_ok());
     assert!(preference_value("main.review-wrap", &serde_json::json!("true")).is_err());
 }
+
+#[test]
+fn rail_hidden_is_a_list_of_plugin_ids() {
+    use kg_domain::prefs;
+    assert!(preference_value(prefs::RAIL_HIDDEN, &serde_json::json!(["dev.test.alpha"])).is_ok());
+    assert!(preference_value(prefs::RAIL_HIDDEN, &serde_json::json!([])).is_ok());
+    assert!(preference_value(prefs::RAIL_HIDDEN, &serde_json::json!("dev.test.alpha")).is_err());
+    assert!(preference_value(prefs::RAIL_HIDDEN, &serde_json::json!(["not an id"])).is_err());
+}

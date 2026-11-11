@@ -22,6 +22,7 @@ mod approve;
 mod config;
 mod develop;
 mod install;
+mod rail;
 
 pub(crate) fn approved(record: &Plugin) -> Result<Grant> {
     serde_json::from_value(record.approved.clone()).map_err(|error| {
@@ -116,6 +117,7 @@ pub(crate) async fn run(
         PluginOp::Search { text } => crate::index::search(host, text, cx).await,
         PluginOp::Enable { id } => enable(host, id, cx).await,
         PluginOp::Disable { id } => disable(host, id, cx).await,
+        PluginOp::Rail { id, action } => rail::rail(host, id, action, cx).await,
         PluginOp::Config { id, op, thread_id } => {
             config(host, &id, op, thread_id, requester, cx).await
         }

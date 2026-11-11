@@ -385,6 +385,7 @@ impl Kagan {
         let hide_empty =
             super::layout::read::<bool>(kg_domain::prefs::SIDEBAR_HIDE_EMPTY_PROJECTS, cx);
         let unread = super::layout::read::<bool>(kg_domain::prefs::SIDEBAR_UNREAD_FIRST, cx);
+        let hidden_rail = super::layout::read::<Vec<PluginId>>(kg_domain::prefs::RAIL_HIDDEN, cx);
         let sidebar = self.sidebar.clone();
         let kagan = cx.weak_entity();
         let prefs = self.prefs.clone();
@@ -392,8 +393,10 @@ impl Kagan {
             let list_order = list_order.await.ok().flatten();
             let hide_empty_projects = hide_empty.await.ok().flatten().unwrap_or(false);
             let unread_first = unread.await.ok().flatten().unwrap_or(false);
+            let hidden_rail = hidden_rail.await.ok().flatten().unwrap_or_default();
             sidebar.update(cx, |sidebar, cx| {
                 sidebar.apply_options(list_order.as_deref(), hide_empty_projects, unread_first, cx);
+                sidebar.apply_hidden_rail(hidden_rail, cx);
             });
             let branch_prefix = branch.await.ok().flatten().unwrap_or_default();
             let ui_name = ui_name.await.ok().flatten().unwrap_or_default();

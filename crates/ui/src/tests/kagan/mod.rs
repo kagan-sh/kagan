@@ -46,7 +46,7 @@ pub(in crate::tests) use plugins::{
     PAGE, PAGE_FRAME, add_project, committed_repo, host, init_repo, install_page, open_lines,
     open_with_plugins, open_with_plugins_then, repo_thread, run_hidden_shell,
 };
-pub(in crate::tests) use remove::{only_worktree, worktree_dirs};
+pub(in crate::tests) use remove::{only_worktree, right_click, worktree_dirs};
 pub(in crate::tests) use review::two_changes;
 pub(in crate::tests) use setup::{commit_setup, disabled};
 pub(in crate::tests) use start::press_key;

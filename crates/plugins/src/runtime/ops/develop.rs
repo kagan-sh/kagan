@@ -186,6 +186,11 @@ pub(in crate::runtime::ops) async fn remove(
         .await;
     crate::web_store::clear_removed_stores(&data, &cleared.removed);
     let mut warnings = cleared.warnings;
+    if let Err(error) = super::rail::forget(&id, cx).await {
+        warnings.push(format!(
+            "the plugin is removed, but its rail setting was not cleared: {error}"
+        ));
+    }
     let store = host.read_with(cx, |host, _| host.secrets.clone());
     let forgotten = cx
         .background_spawn(async move { store.forget(&id, &declared) })
