@@ -19,7 +19,6 @@ use crate::kagan::{
     UseWorktreeFolder, chord_for, is_chord,
 };
 
-#[cfg(unix)]
 use super::{click, grid_text, input, open, run_shell, shows, wait_for_output, wait_for_screen};
 
 #[gpui_kit::test]
