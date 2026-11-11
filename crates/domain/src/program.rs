@@ -22,6 +22,15 @@ pub const KNOWN_PROGRAMS: &[(&str, &str)] = &[
     ("cline", "Cline"),
 ];
 
+/// The folder, under the user's home, that a known program's installer puts it in by default. A
+/// program there is found even when that folder is not on the login `PATH`.
+pub const PROGRAM_INSTALL_FOLDERS: &[(&str, &str)] = &[
+    ("opencode", ".opencode/bin"),
+    ("cursor-agent", ".local/bin"),
+    ("goose", ".local/bin"),
+    ("amp", ".amp/bin"),
+];
+
 /// The known programs the picker lists even when they are not installed.
 pub const LISTED_WHEN_MISSING: &[&str] = &["claude", "codex"];
 
@@ -155,7 +164,10 @@ pub fn split_program(line: &str) -> Result<(String, Vec<String>), SplitProgramEr
 mod tests {
     use proptest::prelude::*;
 
-    use super::{SAVED_NAME_MAX, SplitProgramError, saved_name, split_program};
+    use super::{
+        KNOWN_PROGRAMS, PROGRAM_INSTALL_FOLDERS, SAVED_NAME_MAX, SplitProgramError, saved_name,
+        split_program,
+    };
 
     #[test]
     fn a_saved_name_is_trimmed_and_bounded() {
@@ -167,6 +179,15 @@ mod tests {
         assert!(saved_name("a\tb").is_err());
         assert!(saved_name(&"x".repeat(SAVED_NAME_MAX)).is_ok());
         assert!(saved_name(&"x".repeat(SAVED_NAME_MAX + 1)).is_err());
+    }
+
+    #[test]
+    fn every_install_folder_names_a_known_program() {
+        assert!(
+            PROGRAM_INSTALL_FOLDERS
+                .iter()
+                .all(|(command, _)| { KNOWN_PROGRAMS.iter().any(|(known, _)| known == command) })
+        );
     }
 
     #[test]

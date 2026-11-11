@@ -2,8 +2,9 @@ use clap::Parser;
 use std::path::PathBuf;
 
 use kg_domain::{
-    ConfigOp, DiffOp, DiffQuery, DiffScope, EnvironmentSpec, Metadata, Op, OpResult, PluginId,
-    PluginOp, ProgramOp, ProjectId, SectionId, SectionOp, SkillOp, TerminalOp, ThreadId, ThreadOp,
+    AutomationId, AutomationOp, ConfigOp, DiffOp, DiffQuery, DiffScope, EnvironmentSpec, Metadata,
+    Op, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, SectionId, SectionOp, SkillOp,
+    TerminalOp, ThreadId, ThreadOp, Timestamp,
 };
 use serde_json::{Value, json};
 
@@ -628,6 +629,72 @@ fn thread_search_takes_text_a_limit_and_archived() {
             "archived": false,
             "snippet": {"text": "error: failed", "scroll": 3}
         }]})
+    );
+}
+
+#[test]
+fn cli_automations_parse_next_to_thread() {
+    let project = ProjectId("prj_1".into());
+    let id = AutomationId("auto_1".into());
+    assert_eq!(
+        parse(&[
+            "automation",
+            "add",
+            "Morning",
+            "ping",
+            "--project-id",
+            "prj_1",
+            "--program",
+            "claude",
+            "--minutes",
+            "15"
+        ]),
+        Op::Automation(AutomationOp::Add {
+            name: "Morning".into(),
+            body: "ping".into(),
+            project_id: project,
+            program: "claude".into(),
+            minutes: Some(15),
+            at: None,
+        })
+    );
+    assert_eq!(
+        parse(&["automation", "pause", "auto_1"]),
+        Op::Automation(AutomationOp::Pause { id: id.clone() })
+    );
+    assert_eq!(
+        parse(&["automation", "resume", "auto_1"]),
+        Op::Automation(AutomationOp::Resume { id: id.clone() })
+    );
+    assert_eq!(
+        parse(&["automation", "delete", "auto_1"]),
+        Op::Automation(AutomationOp::Delete { id })
+    );
+    assert_eq!(
+        parse(&["automation", "list"]),
+        Op::Automation(AutomationOp::List { project_id: None })
+    );
+    assert_eq!(
+        parse(&[
+            "automation",
+            "add",
+            "Once",
+            "ping",
+            "--program",
+            "codex",
+            "--at",
+            "5",
+            "--project-id",
+            "prj_1"
+        ]),
+        Op::Automation(AutomationOp::Add {
+            name: "Once".into(),
+            body: "ping".into(),
+            project_id: ProjectId("prj_1".into()),
+            program: "codex".into(),
+            minutes: None,
+            at: Some(Timestamp(5)),
+        })
     );
 }
 

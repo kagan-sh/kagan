@@ -9,7 +9,8 @@ use kg_domain::{Op, OpError, OpResult, ProgramOp, ProjectId, ProjectOp};
 
 #[test]
 fn a_program_splits_on_spaces_outside_quotes() {
-    let Err(error) = crate::thread::resolve_program("kg-no-such-program trailing", None) else {
+    let Err(error) = crate::thread::resolve_program("kg-no-such-program trailing", None, None)
+    else {
         panic!("resolved");
     };
     assert_eq!(
@@ -21,7 +22,7 @@ fn a_program_splits_on_spaces_outside_quotes() {
     } else {
         "/bin/sh -c echo"
     };
-    let resolved = crate::thread::resolve_program(line, None).unwrap();
+    let resolved = crate::thread::resolve_program(line, None, None).unwrap();
     let expected = if cfg!(windows) {
         ["/c", "echo"]
     } else {
@@ -40,7 +41,7 @@ fn a_program_splits_on_spaces_outside_quotes() {
 #[cfg(unix)]
 fn quotes_keep_spaces_and_empty_words_and_backslashes_are_plain() {
     let args = |line: &str| {
-        crate::thread::resolve_program(line, None)
+        crate::thread::resolve_program(line, None, None)
             .unwrap()
             .args
             .into_iter()
@@ -57,13 +58,13 @@ fn quotes_keep_spaces_and_empty_words_and_backslashes_are_plain() {
 #[test]
 fn a_program_with_a_bad_quote_or_no_name_is_refused() {
     assert_eq!(
-        crate::thread::resolve_program("'/bin/sh -c x", None)
+        crate::thread::resolve_program("'/bin/sh -c x", None, None)
             .err()
             .map(|error| error.to_string()),
         Some("program has an unfinished quote".to_owned())
     );
     assert_eq!(
-        crate::thread::resolve_program("\"\" -c x", None)
+        crate::thread::resolve_program("\"\" -c x", None, None)
             .err()
             .map(|error| error.to_string()),
         Some("program is empty".to_owned())
@@ -79,6 +80,7 @@ fn the_program_list_finds_known_agents_and_defaults_to_the_first_installed() {
         Some(dir.path().as_os_str()),
         None,
         Some(std::ffi::OsStr::new("/bin/sh")),
+        None,
         &[],
         &[
             "codex --resume".into(),
@@ -120,6 +122,7 @@ fn the_newest_installed_recent_program_is_the_default() {
         Some(dir.path().as_os_str()),
         None,
         None,
+        None,
         &[],
         &["tool --fast".into(), "claude".into()],
     );
@@ -134,6 +137,7 @@ fn only_installed_known_agents_get_a_version() {
     fake_program(dir.path(), "tool", "echo 'tool 1.0'");
     let mut list = crate::host::program::discover(
         Some(dir.path().as_os_str()),
+        None,
         None,
         None,
         &[],
@@ -207,6 +211,7 @@ fn saved_programs_sit_after_the_shell_and_before_recent_ones_and_fold_a_repeat()
         Some(dir.path().as_os_str()),
         None,
         Some(std::ffi::OsStr::new("/bin/sh")),
+        None,
         &[
             saved("Pinned", "tool --pinned", true),
             saved("Fast", "tool --fast", false),
@@ -254,4 +259,174 @@ fn saved_programs_sit_after_the_shell_and_before_recent_ones_and_fold_a_repeat()
         .unwrap();
     assert!(!missing.installed());
     assert!(list.programs.iter().any(|p| p.command == "tool --recent"));
+}
+
+#[test]
+fn a_recent_command_is_named_by_its_program_and_keeps_its_flags() {
+    let dir = tempfile::tempdir().unwrap();
+    let list = crate::host::program::discover(
+        Some(dir.path().as_os_str()),
+        None,
+        None,
+        None,
+        &[],
+        &[
+            "cursor-agent --model grok-4.7-high --trust --force".into(),
+            "/opt/tools/mytool --fast".into(),
+        ],
+    );
+    let label = |command: &str| {
+        list.programs
+            .iter()
+            .find(|p| p.command == command)
+            .map(|p| p.label.clone())
+    };
+    assert_eq!(
+        label("cursor-agent --model grok-4.7-high --trust --force").as_deref(),
+        Some("Cursor Agent")
+    );
+    assert_eq!(label("/opt/tools/mytool --fast").as_deref(), Some("mytool"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_known_program_in_its_install_folder_is_found_without_the_login_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("home");
+    let bin = home.join(".opencode/bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    fake_program(&bin, "opencode", "true");
+    let empty = dir.path().join("empty");
+    std::fs::create_dir(&empty).unwrap();
+    let installed = |home: Option<&std::path::Path>| {
+        crate::host::program::discover(Some(empty.as_os_str()), None, None, home, &[], &[])
+            .programs
+            .into_iter()
+            .find(|p| p.command == "opencode")
+            .and_then(|p| p.path)
+    };
+    assert_eq!(installed(Some(&home)), Some(bin.join("opencode")));
+    assert_eq!(installed(None), None);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_run_finds_a_known_program_in_its_install_folder() {
+    use crate::host::program::ProgramEnvironment;
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("home");
+    let bin = home.join(".opencode/bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    fake_program(&bin, "opencode", "true");
+    let empty = dir.path().join("empty");
+    std::fs::create_dir(&empty).unwrap();
+    let environment = ProgramEnvironment {
+        path: empty.as_os_str().to_owned(),
+        shell: "/bin/sh".into(),
+    };
+    let found =
+        crate::thread::resolve_program("opencode --model x", Some(&environment), Some(&home))
+            .unwrap();
+    assert_eq!(found.path, bin.join("opencode"));
+    assert!(crate::thread::resolve_program("opencode", Some(&environment), None).is_err());
+}
+
+#[test]
+fn a_recent_command_with_an_exe_suffix_is_named_by_its_program() {
+    let dir = tempfile::tempdir().unwrap();
+    let list = crate::host::program::discover(
+        Some(dir.path().as_os_str()),
+        None,
+        None,
+        None,
+        &[],
+        &["claude.exe --fast".into()],
+    );
+    let label = list
+        .programs
+        .iter()
+        .find(|p| p.command == "claude.exe --fast")
+        .map(|p| p.label.clone());
+    assert_eq!(label.as_deref(), Some("Claude Code"));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_program_in_the_home_install_folder_is_listed_from_the_workspace_home(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let dir = fixture.dir.path();
+    let home = dir.join("home");
+    let bin = home.join(".opencode/bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    fake_program(&bin, "opencode", "true");
+    let empty = dir.join("empty");
+    std::fs::create_dir(&empty).unwrap();
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.use_program_environment(&empty, std::path::Path::new("/bin/sh"));
+        workspace.homes.insert("HOME", home.clone());
+    });
+    let OpResult::Programs(list) = op(Op::Program(ProgramOp::Discover { project_id: None }), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("programs")
+    };
+    let opencode = list
+        .programs
+        .iter()
+        .find(|p| p.command == "opencode")
+        .and_then(|p| p.path.clone());
+    assert_eq!(opencode, Some(bin.join("opencode")));
+}
+
+#[cfg(unix)]
+#[test]
+fn more_documented_folders_find_cursor_goose_and_amp_without_the_login_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("home");
+    let empty = dir.path().join("empty");
+    std::fs::create_dir(&empty).unwrap();
+    let folders = [
+        ("cursor-agent", ".local/bin"),
+        ("goose", ".local/bin"),
+        ("amp", ".amp/bin"),
+    ];
+    for (command, folder) in folders {
+        let bin = home.join(folder);
+        std::fs::create_dir_all(&bin).unwrap();
+        fake_program(&bin, command, "true");
+    }
+    let list =
+        crate::host::program::discover(Some(empty.as_os_str()), None, None, Some(&home), &[], &[]);
+    for (command, folder) in folders {
+        let found = list
+            .programs
+            .iter()
+            .find(|p| p.command == command)
+            .and_then(|p| p.path.clone());
+        assert_eq!(found, Some(home.join(folder).join(command)), "{command}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_version_is_read_from_a_program_in_its_documented_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("home");
+    let bin = home.join(".opencode/bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    fake_program(&bin, "opencode", "echo 'opencode 1.4.2'");
+    let empty = dir.path().join("empty");
+    std::fs::create_dir(&empty).unwrap();
+    let mut list =
+        crate::host::program::discover(Some(empty.as_os_str()), None, None, Some(&home), &[], &[]);
+    crate::host::program::versions(&mut list);
+    let version = list
+        .programs
+        .iter()
+        .find(|p| p.command == "opencode")
+        .and_then(|p| p.version.clone());
+    assert_eq!(version.as_deref(), Some("opencode 1.4.2"));
 }

@@ -93,7 +93,7 @@ _Avoid_: Prompt, dialog
 Stored text the person can send. It has a title, a body, and a starred flag. It is not a question waiting for an answer.
 
 **Saved program**:
-A program line the person saved under a short name, such as "Claude, careful" for `claude --model claude-opus-5-5 --effort high`. It can be pinned, renamed, and deleted. Starting a thread from it runs its whole line [decision 236].
+A program line the person saved under a short name, such as "Claude, careful" for `claude --model claude-opus-5-5 --effort high`. It can be pinned, renamed, and deleted. Starting a thread from it runs its whole line [decision 238].
 _Avoid_: Preset, profile, alias
 
 ## Agents and extensions
@@ -125,6 +125,10 @@ _Avoid_: Marketplace (the decision-3 goal, not the file), catalog, store, regist
 **Schedule**:
 A plugin's timer. Kagan runs one of its jobs every so many minutes while kagan is open, loading the plugin for the run if needed. Not a cron expression, and not a process that keeps running.
 _Avoid_: cron job, cron, background job, service
+
+**Automation**:
+A named text, a program line, and a time, that starts a thread in one project. The time is an interval of 1 to 1440 whole minutes, or one time to run once. While kagan is open, a due automation starts a thread and sends the text once the program is running. A paused automation does not start another thread. A thread it already started is left alone. It does not run while kagan is quit [decision 236].
+_Avoid_: schedule, background job
 
 **Skill**:
 A packaged set of instructions an agent can load for one kind of task.

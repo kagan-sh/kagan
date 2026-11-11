@@ -27,7 +27,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 
 ### `Run`
 
-- **Allowed when**: the project exists and the program resolves on the login `PATH` [op/].
+- **Allowed when**: the project exists and the program resolves on the login `PATH`, or in the folder its installer puts it in by default under the home folder (`opencode` in `~/.opencode/bin`, `cursor-agent` and `goose` in `~/.local/bin`, `amp` in `~/.amp/bin`; `PROGRAM_INSTALL_FOLDERS`) [op/] [decision 237].
 - **Changes**: starts a thread in the chosen environment [op/]. The environment defaults to `worktree` [op/]. `project-default` leaves the project folder on its current branch [decision 170]. The status is `starting` [op/]. The stored provider is the full program line [op/]. Parent, quiet, lifecycle owner, visibility, and metadata are set here [docs:plugin-api]. `--quiet` keeps the parent from being typed a line about this thread [decision 201]. The host starts that program in the thread's folder, in that thread's terminal, and keeps it running whether or not a window is open [decision 46]. When agent integration is on, the host adds the note and the program flags for the programs decision 172 names. Kimi, OpenCode, and a program kagan does not recognize stay at the `KG_*` variables and `PATH` [decision 172]. Opening the app starts that program again when the thread was still running [decision 175]. `project-on:checkout:<branch>` checks out that local branch in the project folder before the thread starts, and `project-on:new:<base>` creates a branch there from that local branch; the new name is the thread title, the same way a worktree branch is named [decision 170]. A worktree's base may be a chosen local branch, and the folder is created from that branch's commit [decision 64] [decision 170]. Checking out the branch already current does not move HEAD.
 - **Shows**: the new thread [book:cli].
 - **Refused when**: an empty program — `program is empty` — `invalid` [op/]. An unfinished quote — `program has an unfinished quote` — `invalid` [op/]. A missing program — `program <name> was not found` — `invalid` [op/]. A program that cannot start — `failed` with the reason; the thread is left in `error` with a `failed` event [decision 46]. A worktree on Personal — `git worktrees need a standard project` — `invalid` [op/]. A branch change on anything but a standard project — `Changing branches needs a standard project.` — `invalid` [decision 170]. A create or switch while the checkout has uncommitted changes — `Commit or stash the uncommitted changes in this checkout to create or switch branches.` — `invalid`. While HEAD is detached — `HEAD is detached. Check out a branch here before creating or switching branches.` — `invalid`. With no commit yet — `Create the first commit in this checkout to create or switch branches.` — `invalid`. During a rebase — `Finish or abort the rebase before changing branches.` — `invalid`. During a cherry-pick — `Finish or abort the cherry-pick before changing branches.` — `invalid`. During a revert — `Finish or abort the revert before changing branches.` — `invalid`. During a merge with conflicts — `Resolve the conflicts and finish or abort the merge before changing branches.` — `invalid`. During a merge otherwise — `Finish or abort the merge before changing branches.` — `invalid`. A branch that is not local, including the base of a new branch — `branch <name> is not in this repository` — `invalid`. A new name that already exists — `branch <name> already exists` — `invalid`. A name git would refuse — `branch name <name> is not allowed` — `invalid`. Another unarchived thread in that folder — `Another thread is using this folder.` — `invalid`. A blocked checkout is reported before another thread in that folder.
@@ -185,6 +185,41 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - **Shows**: threads whose title, or whose kept terminal lines, hold the text, ignoring case: threads that are not archived first, then archived ones when `--archived` is given, each marked `archived`. Hidden threads are left out. Each has its project's name and, when a kept line matched, the last such line, cut around the match, and the lines to scroll back to show it. At most `--limit`, 50 when left out [decision 107]. Kept lines are the running program's scrollback, or the screen kept after it ended; an archived thread's screen is released when its grace ends, so then only its title is searched [decision 107] [decision 26].
 - **Refused when**: blank text, text longer than 256 characters, or a limit outside 1 to 200 — `invalid` [op/].
 
+## Automation
+
+An automation is a named text, a program line, and a time, that starts a thread in one project [CONTEXT] [decision 236]. The time is an interval of 1 to 1440 whole minutes, or one time to run once. It does not run while kagan is quit. The project page lists each automation and the thread each run started [decision 236].
+
+### `Add`
+
+- **Allowed when**: the project exists, the program line parses, and the time is either whole minutes from 1 to 1440 or one non-negative time [op/] [decision 236].
+- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A one-time automation is due at its time. The thread runs in the project folder [decision 236].
+- **Shows**: the automation [book:cli].
+- **Refused when**: an empty name, a name of only control characters, a name over 120 characters, empty text, text over 1 MiB, an empty program, an unfinished quote, minutes outside 1 to 1440, a negative time, both an interval and a time, or neither — `invalid` [op/]. A missing project — `not-found` [op/].
+
+### `Pause`, `Resume`
+
+- **Allowed when**: the automation exists [book:cli].
+- **Changes**: a paused automation does not start another thread. A thread it already started keeps running. Resume lets a due automation start a thread again at once, so a pause longer than one interval starts one thread, not one for each missed interval [decision 236].
+- **Shows**: the automation [book:cli].
+- **Refused when**: a missing automation — `not-found` [op/].
+
+### `Delete`
+
+- **Allowed when**: the person approves the question in the app. Nothing is removed before that [decision 236].
+- **Changes**: removes the automation. A thread it already started keeps running [decision 236].
+- **Refused when**: a missing automation — `not-found` [op/]. A declined question — `invalid`, `declined: …` [op/].
+
+### `List`
+
+- **Allowed when**: always [book:cli]. One project when a project is set.
+- **Shows**: each automation, and the thread each run started, oldest first. An interval that has not run yet has no thread [decision 236]. The window shows the run count and opens the last run; it does not list every run's title.
+
+### Due run (no operation)
+
+- **Allowed when**: kagan is open, the automation is not paused, its time is due, and no thread it started still has a running program [decision 236].
+- **Changes**: starts a thread in that project with that program line, then sends the body through the same path as `ThreadOp::Send` once the program has started. Runs of one automation do not overlap. A thread already running is left alone. After a start, the next interval is one interval from that start, so time spent quit does not start a run for every missed interval. A one-time automation does not start another thread after one has been started. A run that does not start, or fails before its thread is saved, waits one more interval, or one minute for a one-time automation, and then tries again. A store read error is reported, and the next tick tries again. Opening kagan starts one run that became due while it was quit [decision 236].
+- **Shows**: the thread on the automation, once a run has started [decision 236].
+
 ## Diagnostics
 
 `kg diagnostics export` writes one new local file. Omit `--path` and it goes under the data directory, in `diagnostics/`. A given path is refused when the parent folder is missing or the file already exists. Each plugin's warn and error counts come from the plugin host, which reads the last 64 KiB of its log; without a plugin host the line says `not read, no plugin host`.
@@ -225,13 +260,13 @@ A project is a named body of work, usually one repository, with one folder on th
 ### `List`, `Discover`
 
 - **Allowed when**: always. With `--project`, the project's program is read as the first recent program, so it is the default when it is installed [decision 221].
-- **Shows**: the known programs, the shell, the saved programs with pinned ones first and then by name, and the recent programs, with the default marked [book:cli]. A saved program is listed by its name, its line is the command, and it is installed when its first word is found on the same PATH as a recent program [decision 236].
+- **Shows**: the known programs, the shell, the saved programs with pinned ones first and then by name, and the recent programs, with the default marked [book:cli]. An installed known program is a card with a letter mark, its short name and its version; a missing one is a plain row marked Not installed, never a card. A recent command is a row named by its program's short name, with its arguments under it; the whole command is its tooltip. The shell is a row with its path and no mark [decision 237]. A saved program is listed by its name, its line is the command, and it is installed when its first word is found on the same PATH as a recent program [decision 238].
 - **Refused when**: `--project` names no live project — `not-found` [op/].
 
 ### `Save`, `Rename`, `Remove`, `Pin`
 
-- **Allowed when**: always. A name is trimmed, at most 40 characters, and has no control characters. A line is split as a command line [op/] [decision 236].
-- **Changes**: `Save` stores the name and the line. A name already saved, in any case, takes the new line and keeps its pin. `Rename` gives a saved program another name, and its line and pin stay. `Remove` deletes the saved program. A project's default or a thread that already holds its line keeps that line and lists it as a plain program. `Pin` sets or clears the pin, and pinned saved programs are listed first. None of them starts a program or writes an event [decision 236].
+- **Allowed when**: always. A name is trimmed, at most 40 characters, and has no control characters. A line is split as a command line [op/] [decision 238].
+- **Changes**: `Save` stores the name and the line. A name already saved, in any case, takes the new line and keeps its pin. `Rename` gives a saved program another name, and its line and pin stay. `Remove` deletes the saved program. A project's default or a thread that already holds its line keeps that line and lists it as a plain program. `Pin` sets or clears the pin, and pinned saved programs are listed first. None of them starts a program or writes an event [decision 238].
 - **Refused when**: an empty name — `A saved program needs a name.` — `invalid`. A name longer than 40 characters, or with a control character — `invalid`. A line that does not split, such as one with an unfinished quote — `invalid` [op/]. A `Rename` to a name another saved program already has, in any case — `a saved program named <name> already exists` — `invalid`. A name that is not saved — `saved program <name> not found` — `not-found`.
 
 ## Env
@@ -755,7 +790,7 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 ### `SettingsOp::Project`
 
 - **Allowed when**: the id is a live project [op/] [decision 221].
-- **Changes**: shows that project's page, with its environment variables, its default program, and its agent rules, opening the window if it is closed [decision 221]. Escape or Close leaves the page [decision 221]. The sidebar's "Project settings…" menu item sends this op.
+- **Changes**: shows that project's page, with its environment variables, its default program, its agent rules, and its automations, opening the window if it is closed [decision 221] [decision 236]. Escape or Close leaves the page [decision 221]. The sidebar's "Project settings…" menu item sends this op. The automations list shows each one and the thread each run started, and can add, pause, resume, and delete [decision 236].
 - **Refused when**: a missing id — `not-found` [op/].
 
 ### `Hide`, `HideOthers`, `ShowAll`

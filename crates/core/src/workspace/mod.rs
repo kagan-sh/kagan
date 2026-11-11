@@ -10,7 +10,7 @@ use gpui_kit::{
 };
 use kg_domain::{
     EnvironmentId, Event, KeymapOp, Op, OpError, OpResult, PendingInteractionId, PluginOp,
-    ProjectId, ThreadId,
+    ProjectId, Run, ThreadId,
 };
 use serde_json::Value;
 
@@ -133,7 +133,7 @@ pub struct Workspace {
     pub(crate) socket: Option<std::ffi::OsString>,
     pub(crate) projects: BTreeMap<ProjectId, Entity<Project>>,
     pub(crate) preparing_projects: BTreeMap<ProjectId, usize>,
-    removing_projects: BTreeSet<ProjectId>,
+    pub(crate) removing_projects: BTreeSet<ProjectId>,
     pub(crate) environments: BTreeMap<EnvironmentId, Entity<Environment>>,
     pub(crate) threads: BTreeMap<ThreadId, Entity<Thread>>,
     pub(crate) tasks: BTreeMap<ThreadId, Task<()>>,
@@ -161,6 +161,7 @@ pub struct Workspace {
     _database_task: Task<()>,
     _requests_task: Task<()>,
     _retire_task: Task<()>,
+    _automation_task: Task<()>,
     _quit: Subscription,
 }
 #[derive(Clone, Debug)]
@@ -296,6 +297,7 @@ impl Workspace {
                         _database_task: database_task,
                         _requests_task: requests_task,
                         _retire_task: retire_task,
+                        _automation_task: crate::automation::watch(cx),
                         _quit: cx.on_app_quit(|workspace, _| {
                             workspace.end_programs();
                             async {}
@@ -390,6 +392,11 @@ impl Workspace {
             shell: shell.as_os_str().to_owned(),
         });
     }
+    #[cfg(any(test, feature = "test"))]
+    pub fn use_program_home(&mut self, home: &std::path::Path) {
+        self.homes
+            .insert(crate::host::program::home_variable(), home.to_owned());
+    }
     pub fn rename_once(id: ThreadId, title: String, cx: &mut App) -> Task<Result<OpResult>> {
         let op = Op::Thread(kg_domain::ThreadOp::Rename {
             id: id.clone(),
@@ -453,44 +460,10 @@ impl Workspace {
                 archived,
             }) => crate::thread::search(&workspace, &text, limit, archived, cx),
             Op::Thread(kg_domain::ThreadOp::Run(run)) => {
-                let project = run.project_id.clone();
-                let allowed = workspace.update(cx, |workspace, _| {
-                    if workspace.removing_projects.contains(&project) {
-                        return false;
-                    }
-                    *workspace
-                        .preparing_projects
-                        .entry(project.clone())
-                        .or_default() += 1;
-                    true
-                });
-                if !allowed {
-                    return Task::ready(Err(OpError::Invalid(
-                        "this project is being removed".into(),
-                    )));
+                match workspace.update(cx, |workspace, cx| workspace.start_run(run, cx)) {
+                    Ok(started) => cx.spawn(async move |_| started.await.1),
+                    Err(error) => Task::ready(Err(error)),
                 }
-                detached(cx, async move |cx| {
-                    let result = async {
-                        let prepared = crate::thread::prepare_run(&this, run, cx).await?;
-                        let submitted = this
-                            .update(cx, |workspace, _| {
-                                workspace.submit(Request::Run(Box::new(prepared)))
-                            })
-                            .map_err(closed)?;
-                        submitted.await
-                    }
-                    .await;
-                    this.update(cx, |workspace, _| {
-                        if let Some(count) = workspace.preparing_projects.get_mut(&project) {
-                            *count -= 1;
-                            if *count == 0 {
-                                workspace.preparing_projects.remove(&project);
-                            }
-                        }
-                    })
-                    .map_err(closed)?;
-                    result
-                })
             }
             op if crate::dispatch::serialized(&op) => {
                 let submitted = workspace.read(cx).submit(Request::Op(op));
@@ -539,6 +512,50 @@ fn shown_preview(
         .await;
         Ok(result)
     })
+}
+
+/// A run's result, and the thread it made. The thread is known once the run has been prepared,
+/// so a run that then fails still names the thread it left behind.
+pub(crate) type RunOutcome = (Option<kg_domain::ThreadId>, Result<OpResult>);
+
+impl Workspace {
+    /// Starts a run in its project. The project counts as preparing until the run is committed
+    /// or fails, so removing the project waits for it. The run finishes even if the caller stops
+    /// waiting.
+    pub(crate) fn start_run(
+        &mut self,
+        run: Run,
+        cx: &mut Context<Self>,
+    ) -> Result<Task<RunOutcome>> {
+        let project = run.project_id.clone();
+        if self.removing_projects.contains(&project) {
+            return Err(OpError::Invalid("this project is being removed".into()));
+        }
+        *self.preparing_projects.entry(project.clone()).or_default() += 1;
+        let (reply, receive) = async_channel::bounded(1);
+        cx.spawn(async move |this, cx| {
+            let outcome = crate::thread::start_run(&this, run, cx).await;
+            let _ = this.update(cx, |workspace, _| workspace.finish_preparing(&project));
+            let _ = reply.send(outcome).await;
+        })
+        .detach();
+        Ok(cx.spawn(async move |_, _| {
+            receive
+                .recv()
+                .await
+                .unwrap_or((None, Err(closed("workspace closed"))))
+        }))
+    }
+
+    fn finish_preparing(&mut self, project: &ProjectId) {
+        let Some(count) = self.preparing_projects.get_mut(project) else {
+            return;
+        };
+        *count = count.saturating_sub(1);
+        if *count == 0 {
+            self.preparing_projects.remove(project);
+        }
+    }
 }
 
 // Runs work that the caller's task cannot cancel by being dropped.

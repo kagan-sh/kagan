@@ -4,6 +4,7 @@ use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags};
 
+mod automation;
 mod environment;
 mod event;
 mod interaction;
@@ -161,6 +162,28 @@ CREATE TABLE saved_prompts (
     body TEXT NOT NULL,
     starred INTEGER NOT NULL
 ) WITHOUT ROWID;
+",
+    r"
+CREATE TABLE automations (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    body TEXT NOT NULL,
+    program TEXT NOT NULL,
+    minutes INTEGER,
+    at INTEGER,
+    paused INTEGER NOT NULL,
+    next_at INTEGER,
+    CHECK ((minutes IS NOT NULL AND at IS NULL) OR (minutes IS NULL AND at IS NOT NULL)),
+    CHECK (minutes IS NULL OR (minutes >= 1 AND minutes <= 1440))
+);
+CREATE INDEX automations_project ON automations(project_id);
+CREATE TABLE automation_runs (
+    automation_id TEXT NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
+    thread_id TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    PRIMARY KEY (automation_id, thread_id)
+);
 ",
     r"
 CREATE TABLE saved_programs (

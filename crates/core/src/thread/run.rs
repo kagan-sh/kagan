@@ -3,12 +3,13 @@ use std::path::{Path, PathBuf};
 
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{EventKind, NoticeSeverity, OpError, OpResult, Run, ThreadId, ThreadStatus};
-use kg_process::{find_program, pathext};
+use kg_process::pathext;
 
 use super::clean_title;
 use crate::Workspace;
 use crate::host::database::Result;
-use crate::workspace::{id, missing, time};
+use crate::host::program::locate;
+use crate::workspace::{Request, RunOutcome, closed, id, missing, time};
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub(crate) enum ResolveError {
@@ -32,12 +33,14 @@ pub(crate) struct ResolvedProgram {
 pub(crate) fn resolve_program(
     line: &str,
     environment: Option<&crate::host::program::ProgramEnvironment>,
+    home: Option<&Path>,
 ) -> std::result::Result<ResolvedProgram, ResolveError> {
     let (name, args) = kg_domain::split_program(line).map_err(ResolveError::Line)?;
-    let found = find_program(
+    let found = locate(
         Path::new(&name),
         crate::host::program::search_path(environment).as_deref(),
         pathext().as_deref(),
+        home,
     )
     .ok_or(ResolveError::NotFound(name))?;
     Ok(ResolvedProgram {
@@ -93,13 +96,20 @@ pub(crate) struct PreparedRun {
     metadata: Option<kg_domain::Metadata>,
 }
 
+impl PreparedRun {
+    pub(crate) fn thread_id(&self) -> &ThreadId {
+        &self.thread_id
+    }
+}
+
 pub(crate) async fn prepare(
     this: &WeakEntity<Workspace>,
     run: Run,
     cx: &mut AsyncApp,
 ) -> Result<PreparedRun> {
     let environment = crate::host::program::program_environment_of(this, cx);
-    resolve_program(&run.program, environment.as_ref())
+    let home = crate::host::program::program_home_of(this, cx);
+    resolve_program(&run.program, environment.as_ref(), home.as_deref())
         .map_err(|error| OpError::Invalid(error.to_string()))?;
     let program = run.program.clone();
     let project_id = run.project_id.clone();
@@ -144,6 +154,28 @@ pub(crate) async fn prepare(
         lifecycle_owner_thread_id: run.lifecycle_owner_thread_id,
         metadata: run.metadata,
     })
+}
+
+pub(crate) async fn start_run(
+    this: &WeakEntity<Workspace>,
+    run: Run,
+    cx: &mut AsyncApp,
+) -> RunOutcome {
+    let prepared = match prepare(this, run, cx).await {
+        Ok(prepared) => prepared,
+        Err(error) => return (None, Err(error)),
+    };
+    let thread_id = prepared.thread_id().clone();
+    let submitted = this
+        .update(cx, |workspace, _| {
+            workspace.submit(Request::Run(Box::new(prepared)))
+        })
+        .map_err(closed);
+    let result = match submitted {
+        Ok(submitted) => submitted.await,
+        Err(error) => Err(error),
+    };
+    (Some(thread_id), result)
 }
 
 pub(crate) async fn commit(
