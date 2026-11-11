@@ -6,7 +6,7 @@ if sudo timeout 120 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -
   exit 0
 fi
 echo "azure.archive.ubuntu.com did not answer; using archive.ubuntu.com"
-for source in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
+for source in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list /etc/apt/apt-mirrors.txt; do
   if [ -f "$source" ]; then
     sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' "$source"
   fi
