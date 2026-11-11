@@ -28,7 +28,7 @@ pub(super) struct List {
     body: Entity<InputState>,
     program: Entity<InputState>,
     minutes: Entity<InputState>,
-    at: Entity<InputState>,
+    in_minutes: Entity<InputState>,
     fallback: Option<String>,
     note: Option<SharedString>,
     load: Option<Task<()>>,
@@ -48,7 +48,7 @@ impl List {
             body: field("Text to send", window, cx),
             program: field("Program", window, cx),
             minutes: field("Minutes", window, cx),
-            at: field("In minutes", window, cx),
+            in_minutes: field("In minutes", window, cx),
             fallback: None,
             note: None,
             load: None,
@@ -89,7 +89,7 @@ impl List {
 
     fn add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let every = self.minutes.read(cx).value().to_string();
-        let once = self.at.read(cx).value().to_string();
+        let once = self.in_minutes.read(cx).value().to_string();
         let minutes = match parse_minutes(&every) {
             Ok(minutes) => minutes,
             Err(error) => {
@@ -161,7 +161,7 @@ impl List {
                                 &this.body,
                                 &this.program,
                                 &this.minutes,
-                                &this.at,
+                                &this.in_minutes,
                             ] {
                                 field.update(cx, |state, cx| state.set_value("", window, cx));
                             }
@@ -223,6 +223,7 @@ fn next_run(automation: &Automation) -> String {
     match minutes {
         0 => "Due now".into(),
         1 => "Next in 1 min".into(),
+        minutes if minutes >= 60 => format!("Next in {} h {} min", minutes / 60, minutes % 60),
         minutes => format!("Next in {minutes} min"),
     }
 }
@@ -379,7 +380,12 @@ impl Render for List {
                     .child(field("automation-body", &self.body, "Text", cx))
                     .child(field("automation-program", &self.program, "Program", cx))
                     .child(field("automation-minutes", &self.minutes, "Minutes", cx))
-                    .child(field("automation-at", &self.at, "Once in", cx))
+                    .child(field(
+                        "automation-in",
+                        &self.in_minutes,
+                        "Run once in (minutes)",
+                        cx,
+                    ))
                     .child(control(
                         "automation-add",
                         Facts::button("Add automation"),

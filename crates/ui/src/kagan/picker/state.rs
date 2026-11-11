@@ -93,7 +93,6 @@ impl Picker {
     }
 
     // Each opening of the screen starts with the program list, so a custom command stays closed.
-    // The search is kept, as the docs say.
     // Opening the picker: a search from an earlier visit is cleared, and the list is replaced by a
     // loading line until the programs arrive.
     pub(crate) fn load(

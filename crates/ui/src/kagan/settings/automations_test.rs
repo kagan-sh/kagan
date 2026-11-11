@@ -40,6 +40,8 @@ fn the_row_says_when_the_next_run_is_due() {
     .unwrap();
     let later = automation("ping", Some(Timestamp(now + 5 * 60_000 + 1_000)), false);
     assert_eq!(next_run(&later), "Next in 5 min");
+    let hours = automation("ping", Some(Timestamp(now + 90 * 60_000 + 1_000)), false);
+    assert_eq!(next_run(&hours), "Next in 1 h 30 min");
     let due = automation("ping", Some(Timestamp(now - 1)), false);
     assert_eq!(next_run(&due), "Due now");
     let paused = automation("ping", Some(Timestamp(now + 60_000)), true);

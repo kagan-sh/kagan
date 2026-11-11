@@ -109,9 +109,9 @@ fn once_in_saves_a_one_time_automation_that_is_due_in_that_many_minutes(cx: &mut
     type_into(cx, window, "automation-name", "Lunch");
     type_into(cx, window, "automation-body", "ping");
     type_into(cx, window, "automation-program", program());
-    type_into(cx, window, "automation-at", "1");
+    type_into(cx, window, "automation-in", "1");
     assert_eq!(
-        value_of(cx, window, "automation-at").as_deref(),
+        value_of(cx, window, "automation-in").as_deref(),
         Some("1"),
         "the typed minutes reached the field"
     );
