@@ -193,3 +193,37 @@ fn stored_program(cx: &mut TestAppContext) -> Option<String> {
         other => panic!("{other:?}"),
     }
 }
+
+#[gpui_kit::test]
+fn a_variable_set_elsewhere_is_listed_while_settings_is_open(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-general");
+    cx.run_until_parked();
+    let set = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Env(EnvOp::Set {
+                name: "CLI_ONLY".into(),
+                project_id: None,
+                value: Some("1".into()),
+                thread_id: None,
+            }),
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(set).unwrap();
+    wait_until(cx, |cx| present(cx, window, "env-remove-CLI_ONLY"));
+}
+
+#[gpui_kit::test]
+fn a_hand_edited_variables_file_shows_when_settings_opens(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    std::fs::write(
+        data.path().join("environment.json"),
+        r#"{"global":{"HAND_EDITED":"x"}}"#,
+    )
+    .unwrap();
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-general");
+    wait_until(cx, |cx| present(cx, window, "env-remove-HAND_EDITED"));
+}

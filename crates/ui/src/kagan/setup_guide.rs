@@ -11,6 +11,7 @@ use serde_json::json;
 
 use super::AddProject;
 use super::Kagan;
+use super::toast::Toast;
 use crate::kagan::controls::{control, dispatch};
 use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
@@ -35,6 +36,14 @@ impl Kagan {
     pub(super) fn set_setup_guide(&mut self, show: bool, cx: &mut Context<Self>) {
         self.setup_replay = show;
         self.write_setup_guide(show, cx);
+        if !show {
+            self.show_toast(
+                Toast::said(
+                    "Setup guide hidden. Show it again from Settings, under General.".into(),
+                ),
+                cx,
+            );
+        }
     }
 
     fn write_setup_guide(&mut self, show: bool, cx: &mut Context<Self>) {

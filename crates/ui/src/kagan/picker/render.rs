@@ -12,7 +12,7 @@ use gpui_kit::{
     Pixels, Render, RenderOnce, Role, StatefulInteractiveElement as _, Styled as _, WeakEntity,
     Window, div,
 };
-use kg_domain::{ProgramSource, split_program};
+use kg_domain::ProgramSource;
 
 use super::list::{ProgramRow, Version, version_of};
 use super::saved;
@@ -30,10 +30,12 @@ impl RenderOnce for ProgramRow {
         let detail = match self.program.source {
             ProgramSource::Known => None,
             ProgramSource::Shell | ProgramSource::Saved => Some(self.program.command.clone()),
-            ProgramSource::Recent => split_program(&self.program.command)
-                .ok()
-                .map(|(_, arguments)| arguments.join(" "))
-                .filter(|arguments| !arguments.is_empty()),
+            ProgramSource::Recent => self
+                .program
+                .command
+                .split_once(char::is_whitespace)
+                .map(|(_, flags)| flags.trim_start().to_owned())
+                .filter(|flags| !flags.is_empty()),
         };
         let Version {
             shown: version,

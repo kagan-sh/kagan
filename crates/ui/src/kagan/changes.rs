@@ -339,6 +339,22 @@ impl Kagan {
     }
 
     fn changes_body(&self, cx: &mut Context<Self>) -> AnyElement {
+        // An archived thread's environment is gone, so its changes cannot be read: say so plainly.
+        let archived = self.changes.thread.as_ref().is_some_and(|id| {
+            Workspace::global(cx)
+                .read(cx)
+                .thread(id)
+                .is_some_and(|thread| thread.read(cx).record().archived_at.is_some())
+        });
+        if archived {
+            return line(
+                "changes-archived",
+                "This thread is archived.",
+                cx.theme().muted_foreground,
+                cx,
+            )
+            .into_any_element();
+        }
         if let Some(error) = &self.changes.error {
             return line("changes-error", error.clone(), cx.theme().danger, cx).into_any_element();
         }
