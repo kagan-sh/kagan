@@ -43,3 +43,24 @@ fn an_automation_keeps_its_runs_and_goes_with_its_project() {
         .unwrap();
     assert!(store.automations(None).unwrap().is_empty());
 }
+
+#[test]
+fn only_unpaused_automations_that_are_due_are_loaded() {
+    let store = store();
+    let mut due = saved(Some(1), None);
+    due.id = AutomationId("auto_due".into());
+    due.next_at = Some(Timestamp(5));
+    let mut paused = saved(Some(1), None);
+    paused.id = AutomationId("auto_paused".into());
+    paused.paused = true;
+    paused.next_at = Some(Timestamp(5));
+    let mut later = saved(Some(1), None);
+    later.id = AutomationId("auto_later".into());
+    later.next_at = Some(Timestamp(50));
+    for automation in [&due, &paused, &later] {
+        store.insert_automation(automation).unwrap();
+    }
+    let rows = store.due_automations(Timestamp(10)).unwrap();
+    let ids: Vec<_> = rows.into_iter().map(|row| row.id).collect();
+    assert_eq!(ids, vec![due.id]);
+}

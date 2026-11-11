@@ -18,7 +18,7 @@ pub(crate) use halt::{retire, stop};
 pub(crate) use interaction::{answer, clear_pending, raise, withdraw};
 pub(crate) use read::{wait, wait_event};
 pub(crate) use run::resolve_program;
-pub(crate) use run::{PreparedRun, commit as commit_run, prepare as prepare_run};
+pub(crate) use run::{PreparedRun, commit as commit_run, start_run};
 pub(crate) use search::search;
 pub(crate) use terminal::StopReason;
 pub(crate) use terminal::exited;

@@ -42,6 +42,22 @@ impl super::Store {
         Ok(automations)
     }
 
+    pub fn due_automations(&self, now: Timestamp) -> Result<Vec<Automation>> {
+        let mut statement = self.conn.prepare(
+            "SELECT id, project_id, name, body, program, minutes, at, paused, next_at
+             FROM automations
+             WHERE paused = 0 AND next_at <= ?1
+             ORDER BY next_at, id",
+        )?;
+        let mut automations = statement
+            .query_map([now.0], automation_row)?
+            .collect::<Result<Vec<_>, _>>()?;
+        for automation in &mut automations {
+            automation.threads = self.runs(&automation.id)?;
+        }
+        Ok(automations)
+    }
+
     pub fn automation(&self, id: &AutomationId) -> Result<Option<Automation>> {
         let mut automation = self
             .conn

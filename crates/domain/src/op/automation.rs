@@ -60,6 +60,8 @@ pub enum AutomationOp {
     },
 }
 
+const NAME_MAX: usize = 120;
+
 pub(super) fn valid(op: &AutomationOp) -> Result<(), String> {
     let AutomationOp::Add {
         name,
@@ -75,6 +77,9 @@ pub(super) fn valid(op: &AutomationOp) -> Result<(), String> {
     let name = name.trim();
     if name.is_empty() || name.chars().any(char::is_control) {
         return Err("an automation needs a name".into());
+    }
+    if name.chars().count() > NAME_MAX {
+        return Err(format!("a name is over {NAME_MAX} characters"));
     }
     if body.is_empty() {
         return Err("an automation needs text".into());

@@ -1,9 +1,10 @@
 use std::time::Duration;
 
-use gpui_kit::TestAppContext;
+use gpui_kit::{Task, TestAppContext};
 use kg_domain::*;
 
 use super::{Fixture, events, op, program};
+use crate::Workspace;
 
 fn add(project: &ProjectId, minutes: Option<u16>, at: Option<Timestamp>) -> Op {
     Op::Automation(AutomationOp::Add {
@@ -25,6 +26,25 @@ async fn automations(cx: &mut TestAppContext) -> Vec<Automation> {
         panic!("list")
     };
     rows
+}
+
+fn delete(id: &AutomationId, cx: &mut TestAppContext) -> Task<Result<OpResult, OpError>> {
+    cx.update(|cx| Workspace::dispatch(Op::Automation(AutomationOp::Delete { id: id.clone() }), cx))
+}
+
+async fn approve(cx: &mut TestAppContext) {
+    let approval = cx.read(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .approvals()
+            .next()
+            .unwrap()
+            .id
+            .clone()
+    });
+    cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx))
+        .await
+        .unwrap();
 }
 
 async fn thread_count(cx: &mut TestAppContext) -> usize {
@@ -182,11 +202,74 @@ async fn deleting_an_automation_leaves_a_running_thread_and_starts_no_other(
     };
     cx.executor().advance_clock(Duration::from_secs(1));
     let id = drive_until_sent(cx).await;
-    op(Op::Automation(AutomationOp::Delete { id: saved.id }), cx)
-        .await
-        .unwrap();
+    let deleting = delete(&saved.id, cx);
+    cx.run_until_parked();
+    approve(cx).await;
+    deleting.await.unwrap();
     cx.executor().advance_clock(Duration::from_mins(5));
     cx.run_until_parked();
     assert!(automations(cx).await.is_empty());
     assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Active);
+}
+
+#[gpui_kit::test]
+async fn a_one_time_automation_that_cannot_start_waits_before_it_retries(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    op(
+        Op::Automation(AutomationOp::Add {
+            name: "Missing".into(),
+            body: "ping".into(),
+            project_id: fixture.project.clone(),
+            program: "kg-no-such-program".into(),
+            minutes: None,
+            at: Some(Timestamp(1)),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    cx.executor().advance_clock(Duration::from_secs(5));
+    cx.run_until_parked();
+    let row = automations(cx).await.remove(0);
+    assert!(row.threads.is_empty());
+    assert_eq!(thread_count(cx).await, 0);
+    assert!(
+        row.next_at.is_some_and(|next| next.0 > 1),
+        "a failed start must wait, not retry every second: {:?}",
+        row.next_at
+    );
+}
+
+#[gpui_kit::test]
+async fn a_store_read_error_does_not_stop_the_automation_loop(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    op(add(&fixture.project, Some(1), None), cx).await.unwrap();
+    let raw = rusqlite::Connection::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    raw.execute("UPDATE automations SET name = x'FF'", [])
+        .unwrap();
+    cx.executor().advance_clock(Duration::from_mins(2));
+    cx.run_until_parked();
+    raw.execute("UPDATE automations SET name = 'Morning'", [])
+        .unwrap();
+    let id = drive_until_sent(cx).await;
+    assert_eq!(automations(cx).await[0].threads, vec![id]);
+}
+
+#[gpui_kit::test]
+async fn deleting_an_automation_waits_for_the_person(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Automation(saved) = op(add(&fixture.project, Some(1), None), cx).await.unwrap()
+    else {
+        panic!("add")
+    };
+    let deleting = delete(&saved.id, cx);
+    cx.run_until_parked();
+    assert_eq!(
+        automations(cx).await.len(),
+        1,
+        "nothing is deleted before the person approves"
+    );
+    approve(cx).await;
+    deleting.await.unwrap();
+    assert!(automations(cx).await.is_empty());
 }

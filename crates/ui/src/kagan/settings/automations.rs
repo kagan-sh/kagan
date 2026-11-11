@@ -5,14 +5,19 @@ use crate::theme::TypeScale as _;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use gpui_kit::{
     AppContext as _, Context, ElementId, Entity, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, Role, SharedString, Styled as _, Task, Window, div,
+    ParentElement as _, Render, Role, SharedString, Styled as _, Subscription, Task, Window, div,
 };
-use kg_core::Workspace;
-use kg_domain::{Automation, AutomationId, AutomationOp, Op, OpResult, ProjectId, Timestamp};
+use kg_core::{Workspace, WorkspaceEvent};
+use kg_domain::{
+    Automation, AutomationId, AutomationOp, Op, OpResult, ProjectId, ProjectOp, Timestamp,
+};
 
 use crate::kagan::controls::control;
+use crate::kagan::window::open_thread;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -24,9 +29,11 @@ pub(super) struct List {
     program: Entity<InputState>,
     minutes: Entity<InputState>,
     at: Entity<InputState>,
+    fallback: Option<String>,
     note: Option<SharedString>,
     load: Option<Task<()>>,
     change: Option<Task<()>>,
+    _watch: Subscription,
 }
 
 impl List {
@@ -41,10 +48,16 @@ impl List {
             body: field("Text to send", window, cx),
             program: field("Program", window, cx),
             minutes: field("Minutes", window, cx),
-            at: field("Once at, ms", window, cx),
+            at: field("Once in (minutes)", window, cx),
+            fallback: None,
             note: None,
             load: None,
             change: None,
+            _watch: cx.subscribe(&Workspace::global(cx), |this, _, event, cx| {
+                if matches!(event, WorkspaceEvent::Changed) {
+                    this.reload(cx);
+                }
+            }),
         };
         list.reload(cx);
         list
@@ -54,15 +67,20 @@ impl List {
         let project = self.project.clone();
         let task = Workspace::dispatch(
             Op::Automation(AutomationOp::List {
-                project_id: Some(project),
+                project_id: Some(project.clone()),
             }),
             cx,
         );
+        let project_task = Workspace::dispatch(Op::Project(ProjectOp::Get { id: project }), cx);
         self.load = Some(cx.spawn(async move |this, cx| {
             let result = task.await;
+            let project = project_task.await;
             _ = this.update(cx, |this, cx| {
                 if let Ok(OpResult::Automations(rows)) = result {
                     this.rows = rows;
+                }
+                if let Ok(OpResult::Project(project)) = project {
+                    this.fallback = project.program;
                 }
                 cx.notify();
             });
@@ -70,9 +88,9 @@ impl List {
     }
 
     fn add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let minutes = self.minutes.read(cx).value().to_string();
-        let at = self.at.read(cx).value().to_string();
-        let minutes = match parse_minutes(&minutes) {
+        let every = self.minutes.read(cx).value().to_string();
+        let once = self.at.read(cx).value().to_string();
+        let minutes = match parse_minutes(&every) {
             Ok(minutes) => minutes,
             Err(error) => {
                 self.note = Some(error.into());
@@ -80,7 +98,7 @@ impl List {
                 return;
             }
         };
-        let at = match parse_at(&at) {
+        let at = match parse_once(&once) {
             Ok(at) => at,
             Err(error) => {
                 self.note = Some(error.into());
@@ -88,25 +106,31 @@ impl List {
                 return;
             }
         };
+        let typed = self.program.read(cx).value().trim().to_owned();
+        let program = if typed.is_empty() {
+            self.fallback.clone().unwrap_or_default()
+        } else {
+            typed
+        };
         let op = Op::Automation(AutomationOp::Add {
             name: self.name.read(cx).value().to_string(),
             body: self.body.read(cx).value().to_string(),
             project_id: self.project.clone(),
-            program: self.program.read(cx).value().to_string(),
+            program,
             minutes,
             at,
         });
         self.send(op, true, window, cx);
     }
 
-    fn pause(
+    fn toggle(
         &mut self,
         id: AutomationId,
-        paused: bool,
+        is_paused: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let op = if paused {
+        let op = if is_paused {
             Op::Automation(AutomationOp::Resume { id })
         } else {
             Op::Automation(AutomationOp::Pause { id })
@@ -164,19 +188,19 @@ fn parse_minutes(text: &str) -> Result<Option<u16>, &'static str> {
         .ok_or("minutes must be a whole number from 1 to 1440")
 }
 
-fn parse_at(text: &str) -> Result<Option<Timestamp>, &'static str> {
-    let text = text.trim();
-    if text.is_empty() {
+/// A run once, the given minutes from now.
+fn parse_once(text: &str) -> Result<Option<Timestamp>, &'static str> {
+    let Some(minutes) = parse_minutes(text)? else {
         return Ok(None);
-    }
-    let at = text
-        .parse::<i64>()
-        .map(Timestamp)
-        .map_err(|_| "a time is milliseconds since the Unix epoch")?;
-    if at.0 < 0 {
-        return Err("a time cannot be negative");
-    }
-    Ok(Some(at))
+    };
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)
+        });
+    Ok(Some(Timestamp(now.saturating_add(
+        i64::from(minutes).saturating_mul(60_000),
+    ))))
 }
 
 fn when(automation: &Automation) -> String {
@@ -186,16 +210,12 @@ fn when(automation: &Automation) -> String {
     }
 }
 
-fn threads(automation: &Automation) -> String {
-    if automation.threads.is_empty() {
-        return "No thread yet".into();
+fn runs(automation: &Automation) -> String {
+    match automation.threads.len() {
+        0 => "No run yet".into(),
+        1 => "1 run".into(),
+        count => format!("{count} runs"),
     }
-    automation
-        .threads
-        .iter()
-        .map(|id| id.0.as_str())
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 fn labeled(name: impl Into<SharedString>) -> Facts {
@@ -211,7 +231,8 @@ fn row(automation: &Automation, cx: &mut Context<List>) -> gpui_kit::AnyElement 
     let delete_id = automation.id.clone();
     let paused = automation.paused;
     let pause = if paused { "Resume" } else { "Pause" };
-    let started = threads(automation);
+    let started = runs(automation);
+    let last = automation.threads.last().cloned();
     h_flex()
         .w_full()
         .gap_2()
@@ -243,6 +264,19 @@ fn row(automation: &Automation, cx: &mut Context<List>) -> gpui_kit::AnyElement 
                 .ui_observe_as(labeled(started.clone()))
                 .child(started),
         )
+        .children(last.map(|last| {
+            control(
+                format!("automation-open-{}", automation.id),
+                Facts::button("Open last run"),
+                Button::new(ElementId::Name(
+                    format!("button-automation-open-{}", automation.id).into(),
+                ))
+                .small()
+                .outline()
+                .label("Open last run")
+                .on_click(move |_, _, cx| open_thread(&last, cx)),
+            )
+        }))
         .child(control(
             format!("automation-pause-{}", automation.id),
             Facts::button(pause),
@@ -253,7 +287,7 @@ fn row(automation: &Automation, cx: &mut Context<List>) -> gpui_kit::AnyElement 
             .outline()
             .label(pause)
             .on_click(cx.listener(move |this, _, window, cx| {
-                this.pause(pause_id.clone(), paused, window, cx);
+                this.toggle(pause_id.clone(), paused, window, cx);
             })),
         ))
         .child(control(
@@ -302,7 +336,7 @@ impl Render for List {
                     .child(field("automation-body", &self.body, "Text", cx))
                     .child(field("automation-program", &self.program, "Program", cx))
                     .child(field("automation-minutes", &self.minutes, "Minutes", cx))
-                    .child(field("automation-at", &self.at, "Once at", cx))
+                    .child(field("automation-at", &self.at, "Once in", cx))
                     .child(control(
                         "automation-add",
                         Facts::button("Add automation"),

@@ -112,7 +112,7 @@ pub(crate) async fn execute(
         Op::Diagnostics(op) => crate::dispatch::diagnostics::export(this, op, cx).await,
         Op::Update(op) => crate::update::run(&database, op, cx).await,
         Op::Thread(op) => dispatch_thread(this, database, op, requester, cx).await,
-        Op::Automation(op) => crate::automation::run(this, database, op, cx).await,
+        Op::Automation(op) => crate::automation::run(this, database, op, requester, cx).await,
         Op::Section(op) => section(this, database, op, cx).await,
         Op::Plugin(kg_domain::PluginOp::Start) => {
             announce(this, crate::WorkspaceEvent::NewPlugin, cx)
@@ -189,7 +189,7 @@ fn announce(
 ///
 /// A serialized handler must finish without waiting for a person or for another request:
 /// `Workspace::handle` awaits it before the loop reads the next envelope. An op that asks
-/// (`ProjectOp::Remove`, `ThreadOp::Delete`, and the plugin ops that approve powers or a
+/// (`ProjectOp::Remove`, `ThreadOp::Delete`, `AutomationOp::Delete`, and the plugin ops that approve powers or a
 /// removal) is detached, and a detached handler submits its request only after the person
 /// answers. `UiOp::Snapshot` is serialized because a window job never submits a request.
 pub(crate) fn serialized(op: &Op) -> bool {
@@ -237,7 +237,9 @@ pub(crate) fn serialized(op: &Op) -> bool {
         )
         | Op::Section(_)
         | Op::Ui(_) => true,
-        Op::Automation(op) => !matches!(op, AutomationOp::List { .. }),
+        Op::Automation(op) => {
+            !matches!(op, AutomationOp::List { .. } | AutomationOp::Delete { .. })
+        }
         Op::Surface(op) => !matches!(op, kg_domain::SurfaceOp::List),
         Op::Thread(op) => match op {
             ThreadOp::Stop { .. }

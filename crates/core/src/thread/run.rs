@@ -8,7 +8,7 @@ use kg_process::{find_program, pathext};
 use super::clean_title;
 use crate::Workspace;
 use crate::host::database::Result;
-use crate::workspace::{id, missing, time};
+use crate::workspace::{Request, RunOutcome, closed, id, missing, time};
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub(crate) enum ResolveError {
@@ -150,6 +150,28 @@ pub(crate) async fn prepare(
         lifecycle_owner_thread_id: run.lifecycle_owner_thread_id,
         metadata: run.metadata,
     })
+}
+
+pub(crate) async fn start_run(
+    this: &WeakEntity<Workspace>,
+    run: Run,
+    cx: &mut AsyncApp,
+) -> RunOutcome {
+    let prepared = match prepare(this, run, cx).await {
+        Ok(prepared) => prepared,
+        Err(error) => return (None, Err(error)),
+    };
+    let thread_id = prepared.thread_id().clone();
+    let submitted = this
+        .update(cx, |workspace, _| {
+            workspace.submit(Request::Run(Box::new(prepared)))
+        })
+        .map_err(closed);
+    let result = match submitted {
+        Ok(submitted) => submitted.await,
+        Err(error) => Err(error),
+    };
+    (Some(thread_id), result)
 }
 
 pub(crate) async fn commit(

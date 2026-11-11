@@ -24,7 +24,7 @@ fn rows(cx: &mut TestAppContext) -> Vec<kg_domain::Automation> {
 }
 
 #[gpui_kit::test]
-fn the_project_page_shows_the_thread_a_run_started(cx: &mut TestAppContext) {
+fn the_project_page_counts_the_runs_an_automation_started(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     cx.run_until_parked();
     cx.update(|cx| {
@@ -45,7 +45,6 @@ fn the_project_page_shows_the_thread_a_run_started(cx: &mut TestAppContext) {
         rows(cx).first().is_some_and(|row| !row.threads.is_empty())
     });
     let row = rows(cx).remove(0);
-    let thread = row.threads[0].clone();
     cx.update(|cx| {
         Workspace::dispatch(
             Op::Settings(SettingsOp::Project {
@@ -57,7 +56,8 @@ fn the_project_page_shows_the_thread_a_run_started(cx: &mut TestAppContext) {
     .detach();
     cx.run_until_parked();
     let threads = format!("automation-threads-{}", row.id);
-    wait_until(cx, |cx| label(cx, window, &threads) == thread.0);
+    wait_until(cx, |cx| label(cx, window, &threads) == "1 run");
+    assert_eq!(row.threads.len(), 1);
     click(cx, window, &format!("automation-pause-{}", row.id));
     wait_until(cx, |cx| rows(cx).first().is_some_and(|row| row.paused));
     assert_eq!(
