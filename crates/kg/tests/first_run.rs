@@ -3,6 +3,8 @@
     clippy::expect_used,
     reason = "a test stops at the first broken step"
 )]
+// Every test here drives `kg` over a unix socket, so the file is unix-only.
+#![cfg(unix)]
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
