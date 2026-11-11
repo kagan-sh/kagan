@@ -64,7 +64,7 @@ impl Variables {
         variables
     }
 
-    fn reload(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn reload(&mut self, cx: &mut Context<Self>) {
         let task = Workspace::dispatch(
             Op::Env(EnvOp::List {
                 project_id: self.scope.clone(),

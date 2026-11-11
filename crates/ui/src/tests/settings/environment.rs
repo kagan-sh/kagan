@@ -214,3 +214,16 @@ fn a_variable_set_elsewhere_is_listed_while_settings_is_open(cx: &mut TestAppCon
     cx.foreground_executor().block_test(set).unwrap();
     wait_until(cx, |cx| present(cx, window, "env-remove-CLI_ONLY"));
 }
+
+#[gpui_kit::test]
+fn a_hand_edited_variables_file_shows_when_settings_opens(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    std::fs::write(
+        data.path().join("environment.json"),
+        r#"{"global":{"HAND_EDITED":"x"}}"#,
+    )
+    .unwrap();
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-general");
+    wait_until(cx, |cx| present(cx, window, "env-remove-HAND_EDITED"));
+}

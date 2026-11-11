@@ -247,6 +247,9 @@ impl Kagan {
         plugins::sync(&mut self.settings.drafts, window, cx);
         let rules = self.settings.rules.clone();
         rules.update(cx, |editor, cx| editor.refresh(window, cx));
+        // A hand edit of the variables file is only seen by a reload, so Settings reads it on open.
+        let variables = self.settings.variables.clone();
+        variables.update(cx, |variables, cx| variables.reload(cx));
         for (id, _) in pages::plugin_entries(cx) {
             self.mount_settings_view(&id, window, cx);
         }
