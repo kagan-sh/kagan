@@ -17,6 +17,11 @@ pub(crate) fn install(cx: &mut App) {
                 Task::ready(Ok(OpResult::Done))
             }
             UiJob::Browser(op) => browser(op, cx),
+            UiJob::Op(UiOp::Screenshot { window, path })
+                if crate::presentation::is_offscreen(cx) =>
+            {
+                Task::ready(capture_offscreen(window, &path, cx))
+            }
             UiJob::Op(UiOp::Screenshot { window, path }) => {
                 cx.spawn(async move |cx| capture_after_present(window, path, cx).await)
             }
@@ -164,6 +169,58 @@ fn captured(target: Target, path: &Path, current: bool) -> Result<OpResult, OpEr
         path: path.display().to_string(),
         current,
     })
+}
+
+// An offscreen window is never presented, so there is no frame to wait for: render the scene now
+// and write what it drew.
+fn capture_offscreen(index: u32, path: &Path, cx: &mut App) -> Result<OpResult, OpError> {
+    #[cfg(target_os = "macos")]
+    {
+        let handle =
+            window_at(cx, index).ok_or_else(|| OpError::NotFound(format!("window {index}")))?;
+        let image = cx
+            .update_window(handle, |_, window, cx| {
+                crate::ui_dispatch::render_frame(window, cx);
+                window.render_to_image()
+            })
+            .map_err(|_| closed())?
+            .map_err(|error| OpError::Failed(error.to_string()))?;
+        write_png(&image, path)?;
+        Ok(OpResult::Capture {
+            path: path.display().to_string(),
+            current: true,
+        })
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (index, path, cx);
+        Err(OpError::Failed(kg_domain::UI_SCREENSHOT_UNAVAILABLE.into()))
+    }
+}
+
+// The image is staged beside the destination and renamed over it only once it is written, as the
+// window capture does, so an older file is never reported as the new capture.
+#[cfg(target_os = "macos")]
+fn write_png(image: &image::RgbaImage, path: &Path) -> Result<(), OpError> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let folder = match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
+    std::fs::create_dir_all(folder)?;
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos());
+    let staged = folder.join(format!("kg-capture-{}-{nanos}.png", std::process::id()));
+    let written = image
+        .save_with_format(&staged, image::ImageFormat::Png)
+        .map_err(|error| OpError::Failed(error.to_string()));
+    if written.is_err() {
+        let _ = std::fs::remove_file(&staged); // Best effort: the error to report is `written`.
+        return written;
+    }
+    std::fs::rename(&staged, path).map_err(OpError::from)
 }
 
 fn window_index(op: &UiOp) -> u32 {

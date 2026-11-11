@@ -149,6 +149,10 @@ _Avoid_: Web view, embedded browser
 The page a thread drives through `kg browser` or `kagan/browser`: one per window, owned by one thread, ending on Stop agent, `kg browser close`, its tab, or kagan quitting.
 _Avoid_: Automation, headless browser
 
+**Offscreen window**:
+A kagan window that is never shown or brought forward. `kg --offscreen` makes its windows, so `kg ui` drives and captures them without taking focus.
+_Avoid_: Headless, hidden window
+
 **Preview**:
 A tab of the right sidebar that shows one file read-only: UTF-8 text, Markdown, PNG or JPEG, or CSV/TSV. One file at a time. It reads the shown thread's environment folder, or a path the person picked, and never edits, saves or fetches.
 _Avoid_: Viewer, file opener, page, browser

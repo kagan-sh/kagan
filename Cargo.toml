@@ -26,7 +26,7 @@ dunce = "=1.0.5"
 futures = "=0.3.34"
 # SQL is left out: tree-sitter-sequel requires cc 1.2, and this build already
 # uses cc 1.10. Cargo will not keep both (decision 173).
-gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "52e47a4f28ae5b3530eddc2a8e0af0d58437ae02", features = [
+gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "ccd9a616b15b057766ec861e8d4c3684029fcd06", features = [
     "tree-sitter-astro",
     "tree-sitter-bash",
     "tree-sitter-c",
@@ -62,8 +62,8 @@ gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "52e47a4f28ae5b
     "tree-sitter-yaml",
     "tree-sitter-zig",
 ] }
-gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "52e47a4f28ae5b3530eddc2a8e0af0d58437ae02", default-features = false, features = ["quickjs", "components"] }
-gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "52e47a4f28ae5b3530eddc2a8e0af0d58437ae02", default-features = false, features = ["gpui-fast"] }
+gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "ccd9a616b15b057766ec861e8d4c3684029fcd06", default-features = false, features = ["quickjs", "components"] }
+gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "ccd9a616b15b057766ec861e8d4c3684029fcd06", default-features = false, features = ["gpui-fast"] }
 hex = "=0.4.3"
 interprocess = "=2.4.8"
 keyring-core = "=1.0.1"
@@ -117,7 +117,16 @@ cargo-nextest = { version = "=0.9.151", locked = true }
 # A lost DirectX device is logged and the window stays, and a panic in the window procedure does not abort the process (decisions 166 and 168).
 [patch.crates-io]
 lb-wry = { git = "https://github.com/kagan-sh/wry", rev = "c13dc021f4d5f80f7425c5580fa2f6d1346cb308" }
-gpui-fast-windows = { git = "https://github.com/kagan-sh/gpui-fast", rev = "9501036ad80c5e32477d825283d856582ca6c5df" }
+gpui-fast-windows = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+# GPUI Fast: one rev for every gpui-fast crate. It is kagan's Windows pin plus the offscreen feature.
+gpui-fast = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+gpui-fast-apple = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+gpui-fast-macos = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+gpui-fast-platform = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+gpui-fast-linux = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+gpui-fast-wgpu = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+gpui-fast-web = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+gpui-fast-macros = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
 
 # Line tables keep panic locations. Full debug info dominates link time and the target directory.
 # unpacked skips dsymutil on macOS. Cargo ignores this value on MSVC, which only supports packed.
