@@ -8,6 +8,7 @@ use kg_domain::{
     PreviewKind, SavedPromptOp, TEXT_MAX, ThreadOp, UiSnapshot, is_git_source,
 };
 
+use crate::out;
 use crate::socket::Client;
 
 pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
@@ -58,7 +59,7 @@ pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
                     }));
                     match result {
                         Ok(result) => print(&result, json)?,
-                        Err(error) if json => println!("{}", serde_json::to_string(&error)?),
+                        Err(error) if json => out::line(serde_json::to_string(&error)?)?,
                         Err(error) => eprintln!("kg: {error}"),
                     }
                 }
@@ -97,8 +98,8 @@ pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
         }
         op @ Op::Thread(ThreadOp::Ask { .. } | ThreadOp::Wait { .. }) if !json => {
             match client.call(&op)? {
-                OpResult::Text(text) => println!("{text}"),
-                OpResult::Wait(outcome) => println!("{outcome}"),
+                OpResult::Text(text) => out::line(text)?,
+                OpResult::Wait(outcome) => out::line(outcome)?,
                 result => print(&result, false)?,
             }
             Ok(())
@@ -120,7 +121,10 @@ fn print_result(
 ) -> Result<(), OpError> {
     if !json && let Some((created, path)) = next {
         if created {
-            println!("Plugin created.\nNext: kg plugin check {}", path.display());
+            out::line(format!(
+                "Plugin created.\nNext: kg plugin check {}",
+                path.display()
+            ))?;
         } else {
             if !matches!(result, OpResult::Done) {
                 print(result, false)?;
@@ -130,10 +134,10 @@ fn print_result(
             } else {
                 path
             };
-            println!(
+            out::line(format!(
                 "Plugin check passed.\nNext: kg plugin install {}",
                 install.display()
-            );
+            ))?;
         }
         Ok(())
     } else {
@@ -158,14 +162,14 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
             OpResult::Text(text) => return print_text(text),
             OpResult::Logs { text, .. } => return print_logs(text),
             OpResult::Wait(outcome) => {
-                println!("{outcome}");
+                out::line(outcome)?;
                 return Ok(());
             }
             OpResult::Shared { entry, install } => {
-                println!(
+                out::line(format!(
                     "Add this entry to plugins in your index's .kagan/index.json:\n  {}\nOr send a teammate this line:\n  {install}",
                     serde_json::to_string(entry)?
-                );
+                ))?;
                 return Ok(());
             }
             OpResult::Diagnostics { path } => {
@@ -220,7 +224,7 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
                     ),
                     PreviewKind::Unavailable { reason } => reason.clone(),
                 };
-                println!("{text}");
+                out::line(text)?;
                 if let Some(note) = kg_core::preview_note(&file.kind) {
                     eprintln!("{note}");
                 }
@@ -234,7 +238,7 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
     } else {
         serde_json::to_string_pretty(result)
     }?;
-    println!("{text}");
+    out::line(text)?;
     if let OpResult::Cli { exit_code, .. } = result {
         exit_with(*exit_code);
     }

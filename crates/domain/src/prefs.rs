@@ -54,5 +54,5 @@ pub fn valid_branch_prefix(text: &str) -> bool {
 /// Whether `text` can name a font family: empty for the theme's own font, or a family name of up to 80 bytes.
 #[must_use]
 pub fn valid_font_name(text: &str) -> bool {
-    text.is_empty() || (text.len() <= FONT_NAME_MAX && !text.chars().any(char::is_control))
+    text.is_empty() || (text.len() <= FONT_NAME_MAX && !text.chars().any(crate::unsafe_char))
 }

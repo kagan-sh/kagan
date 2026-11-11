@@ -10,7 +10,7 @@ use super::{
     SEARCH_TEXT_MAX, SavedPromptOp, SectionOp, SurfaceOp, TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX,
     TerminalOp, ThreadOp, TurnOp, WindowOp,
 };
-use crate::{saved_name, split_program};
+use crate::{saved_name, split_program, unsafe_char};
 
 /// Rejects an op a client must not send.
 ///
@@ -83,9 +83,12 @@ pub fn check(op: &Op) -> Result<(), String> {
         },
         Op::Automation(op) => valid(op),
         Op::Section(op) => match op {
-            SectionOp::Create { thread_id, .. } => plain_opt(thread_id.as_ref()),
+            SectionOp::Create { name, thread_id } => {
+                section_name(name).and_then(|()| plain_opt(thread_id.as_ref()))
+            }
             SectionOp::File { thread_id, .. } => plain(thread_id),
-            SectionOp::Rename { .. } | SectionOp::Delete { .. } => Ok(()),
+            SectionOp::Rename { name, .. } => section_name(name),
+            SectionOp::Delete { .. } => Ok(()),
         },
         Op::SavedPrompt(op) => saved_prompt(op),
         Op::Diff(op) => match op {
@@ -116,8 +119,16 @@ fn instructions(op: &InstructionsOp) -> Result<(), String> {
     }
 }
 
+fn section_name(name: &str) -> Result<(), String> {
+    if name.chars().any(unsafe_char) {
+        Err("a section name cannot hold a control or bidi character".into())
+    } else {
+        Ok(())
+    }
+}
+
 fn printable(text: &str) -> Option<()> {
-    (!text.is_empty() && !text.chars().any(char::is_control)).then_some(())
+    (!text.is_empty() && !text.chars().any(unsafe_char)).then_some(())
 }
 
 fn terminal_size(op: &ThreadOp) -> Result<(), String> {
@@ -273,8 +284,8 @@ fn prompt_title(title: &str) -> Result<(), String> {
         Err(format!(
             "a saved prompt title is longer than {TITLE_MAX} characters"
         ))
-    } else if title.chars().any(char::is_control) {
-        Err("a saved prompt title cannot hold a control character".into())
+    } else if title.chars().any(crate::unsafe_char) {
+        Err("a saved prompt title cannot hold a control or bidi character".into())
     } else {
         Ok(())
     }

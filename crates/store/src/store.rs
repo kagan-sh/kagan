@@ -192,6 +192,7 @@ CREATE TABLE saved_programs (
     pinned INTEGER NOT NULL DEFAULT 0
 ) WITHOUT ROWID;
 ",
+    "ALTER TABLE automations ADD COLUMN last_error TEXT;",
 ];
 
 pub(crate) const REPAIR_THREAD_COLUMNS: &str = "-- repair conflicting thread migrations";

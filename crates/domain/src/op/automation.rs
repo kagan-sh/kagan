@@ -20,6 +20,8 @@ pub struct Automation {
     pub paused: bool,
     /// When the next run is due. Empty after a one-time automation has started a thread.
     pub next_at: Option<Timestamp>,
+    /// Why the last run could not start. Empty once a run starts.
+    pub last_error: Option<String>,
     /// The thread each run started, oldest first.
     pub threads: Vec<ThreadId>,
 }
@@ -78,8 +80,8 @@ pub(super) fn valid(op: &AutomationOp) -> Result<(), String> {
     if name.is_empty() {
         return Err("an automation needs a name".into());
     }
-    if name.chars().any(char::is_control) {
-        return Err("an automation name cannot hold a control character".into());
+    if name.chars().any(crate::unsafe_char) {
+        return Err("an automation name cannot hold a control or bidi character".into());
     }
     if name.chars().count() > NAME_MAX {
         return Err(format!("a name is over {NAME_MAX} characters"));

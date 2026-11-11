@@ -15,6 +15,7 @@ use crate::workspace::{self, Workspace, id, missing, time};
 
 const MINUTE_MS: i64 = 60_000;
 const RETRY_MINUTES: u16 = 1;
+const REASON_MAX: usize = 200;
 
 pub(crate) fn watch(cx: &mut Context<Workspace>) -> Task<()> {
     cx.spawn(async move |this, cx| {
@@ -60,6 +61,7 @@ pub(crate) async fn run(
                 at,
                 paused: false,
                 next_at: Some(next_at),
+                last_error: None,
                 threads: Vec::new(),
             };
             let saved = automation.clone();
@@ -106,6 +108,9 @@ pub(crate) async fn run(
 fn due(minutes: Option<u16>, at: Option<Timestamp>, now: Timestamp) -> Result<Timestamp> {
     match (minutes, at) {
         (Some(minutes), None) => Ok(later(now, minutes)),
+        (None, Some(at)) if at.0 <= now.0 => Err(OpError::Invalid(
+            "a one-time automation needs a time in the future".into(),
+        )),
         (None, Some(at)) => Ok(at),
         _ => Err(OpError::Invalid(
             "an automation needs minutes from 1 to 1440, or one time".into(),
@@ -196,7 +201,11 @@ async fn fire(
     };
     let Some(thread) = named.filter(|_| saved) else {
         let minutes = automation.minutes.unwrap_or(RETRY_MINUTES);
-        report(postpone(this, database, &automation.id, minutes, cx).await);
+        let reason = match &result {
+            Err(error) => error.to_string(),
+            Ok(_) => "the thread was not saved".into(),
+        };
+        report(postpone(this, database, &automation.id, minutes, &reason, cx).await);
         return Some(());
     };
     if matches!(&result, Ok(OpResult::Thread(record)) if record.status.live()) {
@@ -246,13 +255,27 @@ async fn postpone(
     database: &Database,
     id: &AutomationId,
     minutes: u16,
+    reason: &str,
     cx: &mut AsyncApp,
 ) -> Result<()> {
     let next = later(time(this, cx)?, minutes);
     let id = id.clone();
+    let reason = one_line(reason);
     database
-        .call(move |store| store.set_automation_next(&id, Some(next)))
-        .await
+        .call(move |store| store.postpone_automation(&id, next, &reason))
+        .await?;
+    Workspace::refresh(this, cx).await
+}
+
+// The reason is shown on one row, so only its first line, cut to a short length, is kept.
+pub(crate) fn one_line(reason: &str) -> String {
+    reason
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .chars()
+        .take(REASON_MAX)
+        .collect()
 }
 
 fn later(now: Timestamp, minutes: u16) -> Timestamp {

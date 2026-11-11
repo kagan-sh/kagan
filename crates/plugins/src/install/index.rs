@@ -269,7 +269,7 @@ pub(crate) fn parse(text: &str, folder: Option<&Path>) -> Result<(String, Vec<In
                 return Err(refuse("is listed twice"));
             }
             if entry.description.chars().count() > DESCRIPTION
-                || entry.description.chars().any(char::is_control)
+                || entry.description.chars().any(kg_domain::unsafe_char)
             {
                 return Err(refuse(
                     "needs a description of up to 300 characters on one line",

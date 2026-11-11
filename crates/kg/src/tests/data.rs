@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::path::Path;
 
-use crate::app::data_dir_of;
+use crate::app::{data_dir_of, lock_data_dir};
 
 fn os(value: &str) -> OsString {
     OsString::from(value)
@@ -42,4 +42,19 @@ fn an_empty_home_falls_back_to_user_profile() {
 #[test]
 fn no_home_or_user_profile_is_an_error() {
     assert!(data_dir_of(None, Some(os("")), None).is_err());
+}
+
+#[test]
+fn a_data_folder_refuses_a_second_owner_until_the_first_lets_go() {
+    let dir = tempfile::tempdir().unwrap();
+    let owner = lock_data_dir(dir.path()).unwrap();
+    let error = lock_data_dir(dir.path()).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains(&format!("in use by pid {}", std::process::id())),
+        "{error}"
+    );
+    drop(owner);
+    lock_data_dir(dir.path()).unwrap();
 }

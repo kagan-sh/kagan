@@ -1,13 +1,9 @@
-#![expect(
-    clippy::print_stdout,
-    reason = "the CLI writes command output and results to stdout"
-)]
-
 mod app;
 mod cli;
 #[cfg(target_os = "macos")]
 mod icon;
 mod mcp;
+mod out;
 #[cfg(windows)]
 mod pipe;
 mod socket;
@@ -173,7 +169,7 @@ fn main() -> ExitCode {
         Err(error) => {
             let argv = argv_words(std::env::args_os());
             if argv.iter().any(|word| word == "--json") {
-                println!("{}", json_error(&error, &argv));
+                let _ = out::line(json_error(&error, &argv));
             } else {
                 eprint!("{error}");
                 if let Some(note) = hint(&error, &argv) {
@@ -233,7 +229,7 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             if cli.json {
-                println!("{}", serde_json::json!(error));
+                let _ = out::line(serde_json::json!(error));
             } else {
                 eprintln!("kg: {error}");
             }

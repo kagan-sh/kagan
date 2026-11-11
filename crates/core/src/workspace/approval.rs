@@ -1,4 +1,4 @@
-use async_channel::Receiver;
+use async_channel::{Receiver, Sender};
 use futures::future::{Either, select};
 use gpui_kit::{App, Context, Task};
 use kg_domain::{InteractionOption, OpError, OpResult, PendingInteractionId};
@@ -13,18 +13,37 @@ pub struct Approval {
     pub options: Vec<InteractionOption>,
 }
 
-/// The socket connection an op came from. `gone` closes when the connection does.
+/// The socket connection an op came from. `gone` closes when the connection does. `waiting` hears
+/// each question the op puts to the person, so the caller can say what it waits for.
 #[derive(Clone, Debug)]
-pub struct Requester(Receiver<()>);
+pub struct Requester {
+    gone: Receiver<()>,
+    waiting: Option<Sender<String>>,
+}
 
 impl Requester {
     #[must_use]
     pub fn new(gone: Receiver<()>) -> Self {
-        Self(gone)
+        Self {
+            gone,
+            waiting: None,
+        }
+    }
+
+    #[must_use]
+    pub fn waiting_on(mut self, notices: Sender<String>) -> Self {
+        self.waiting = Some(notices);
+        self
+    }
+
+    pub(crate) fn waiting_for(&self, question: &str) {
+        if let Some(notices) = &self.waiting {
+            _ = notices.try_send(question.to_owned());
+        }
     }
 
     pub(crate) fn is_gone(&self) -> bool {
-        self.0.is_closed()
+        self.gone.is_closed()
     }
 
     /// `None` when the requester went away first.
@@ -35,7 +54,7 @@ impl Requester {
         let Some(requester) = requester else {
             return Some(work.await);
         };
-        let gone = requester.0.recv();
+        let gone = requester.gone.recv();
         futures::pin_mut!(gone, work);
         match select(gone, work).await {
             Either::Left(_) => None,

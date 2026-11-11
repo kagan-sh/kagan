@@ -340,15 +340,20 @@ pub(crate) fn bind(name: Name<'_>) -> io::Result<Option<Listener>> {
 
 #[derive(Deserialize)]
 #[serde(untagged)]
-enum Reply {
+enum Line {
+    Waiting { waiting: String },
     Failed(OpError),
     Done(Box<OpResult>),
 }
 
-/// `handle` gets each op and a channel that closes when its connection does.
+/// `handle` gets each op, a channel that closes when its connection does, and a way to tell the
+/// client that the op waits for the person, with the question.
 pub(crate) fn serve(
     listener: Listener,
-    handle: impl Fn(Op, &Receiver<()>) -> Result<OpResult, OpError> + Send + Sync + 'static,
+    handle: impl Fn(Op, &Receiver<()>, &mut dyn FnMut(&str)) -> Result<OpResult, OpError>
+    + Send
+    + Sync
+    + 'static,
 ) {
     let handle = Arc::new(handle);
     thread::spawn(move || {
@@ -371,7 +376,7 @@ pub(crate) fn serve(
 // A reader thread sees the client leave while an op still waits for a person.
 fn answer(
     stream: Stream,
-    handle: &impl Fn(Op, &Receiver<()>) -> Result<OpResult, OpError>,
+    handle: &impl Fn(Op, &Receiver<()>, &mut dyn FnMut(&str)) -> Result<OpResult, OpError>,
 ) -> io::Result<()> {
     let stream = Arc::new(stream);
     let receive = Arc::clone(&stream);
@@ -388,7 +393,11 @@ fn answer(
     });
     for line in incoming {
         let reply = match serde_json::from_str::<Op>(&line?) {
-            Ok(op) => handle(op, &gone),
+            Ok(op) => handle(op, &gone, &mut |question| {
+                let mut frame = serde_json::json!({ "waiting": question }).to_string();
+                frame.push('\n');
+                _ = send.write_all(frame.as_bytes());
+            }),
             Err(error) => Err(OpError::Invalid(error.to_string())),
         };
         let mut out = match reply {
@@ -429,21 +438,50 @@ impl Client {
             ));
         }
         start_headless(&location)?;
-        wait_for_socket(&location, START_TIMEOUT)
+        wait_for_socket(&location, START_TIMEOUT).map_err(|error| start_failed(&location, error))
     }
 
     pub(crate) fn call(&mut self, op: &Op) -> Result<OpResult, OpError> {
+        self.call_to(op, &mut io::stderr())
+    }
+
+    /// Sends `op` and reads frames until its reply. A question is written to `notices` as it
+    /// arrives, and an approved reply says so after it. Control characters are dropped from the
+    /// question, since it can come from thread output or a plugin.
+    pub(crate) fn call_to(
+        &mut self,
+        op: &Op,
+        notices: &mut impl Write,
+    ) -> Result<OpResult, OpError> {
         let mut out = serde_json::to_vec(op)?;
         out.push(b'\n');
         self.0.get_mut().write_all(&out)?;
-        let mut line = String::new();
-        if self.0.read_line(&mut line)? == 0 {
-            return Err(OpError::Failed("kagan closed the connection".into()));
+        let mut asked = false;
+        let result = loop {
+            let mut line = String::new();
+            if self.0.read_line(&mut line)? == 0 {
+                return Err(OpError::Failed("kagan closed the connection".into()));
+            }
+            match serde_json::from_str(&line)? {
+                Line::Waiting { waiting } => {
+                    asked = true;
+                    let shown: String = waiting
+                        .chars()
+                        .filter(|ch| !kg_domain::unsafe_char(*ch))
+                        .collect();
+                    _ = writeln!(
+                        notices,
+                        "kg: waiting for the person to answer in kagan: {shown}"
+                    );
+                }
+                Line::Done(result) => break Ok(*result),
+                Line::Failed(error) => break Err(error),
+            }
+        };
+        if asked && result.is_ok() {
+            _ = writeln!(notices, "kg: the person answered in kagan.");
         }
-        match serde_json::from_str(&line)? {
-            Reply::Done(result) => Ok(*result),
-            Reply::Failed(error) => Err(error),
-        }
+        result
     }
 }
 
@@ -455,6 +493,22 @@ pub(crate) fn wait_for_socket(location: &std::ffi::OsStr, timeout: Duration) -> 
             Err(error) if Instant::now() > deadline => return Err(error),
             Err(_) => thread::sleep(Duration::from_millis(50)),
         }
+    }
+}
+
+// The app we started may have died on the data folder lock, because another app holds it. Say so,
+// rather than a plain timeout.
+fn start_failed(location: &std::ffi::OsStr, error: io::Error) -> io::Error {
+    let holder = crate::app::data_dir_from_env()
+        .and_then(|dir| crate::app::folder_holder(&dir))
+        .ok()
+        .flatten();
+    match holder {
+        Some(holder) => io::Error::other(format!(
+            "this data folder is in use by {holder}, and no app answers on {}",
+            location.to_string_lossy()
+        )),
+        None => error,
     }
 }
 
