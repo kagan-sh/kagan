@@ -304,7 +304,7 @@ pub(in crate::tests) fn wait_until(
     cx: &mut TestAppContext,
     done: impl FnMut(&mut TestAppContext) -> bool,
 ) {
-    wait_or_report(cx, done, |_| String::new());
+    wait_or_report(cx, Duration::from_secs(8), done, |_| String::new());
 }
 
 // A wait on the terminal grid. A timeout prints the grid rows, their lengths, and whether each row
@@ -315,16 +315,32 @@ pub(in crate::tests) fn wait_for_screen(
     kagan: &Entity<Kagan>,
     done: impl FnMut(&mut TestAppContext) -> bool,
 ) {
-    wait_or_report(cx, done, |cx| grid_report(cx, kagan));
+    wait_or_report(cx, Duration::from_secs(8), done, |cx| {
+        grid_report(cx, kagan)
+    });
+}
+
+// A wait for output a program prints in real time, which the test clock cannot speed up. It gets
+// the long limit that `wait_for_shell` gets, and a timeout prints the grid.
+#[track_caller]
+pub(in crate::tests) fn wait_for_output(
+    cx: &mut TestAppContext,
+    kagan: &Entity<Kagan>,
+    done: impl FnMut(&mut TestAppContext) -> bool,
+) {
+    wait_or_report(cx, Duration::from_secs(120), done, |cx| {
+        grid_report(cx, kagan)
+    });
 }
 
 #[track_caller]
 fn wait_or_report(
     cx: &mut TestAppContext,
+    limit: Duration,
     mut done: impl FnMut(&mut TestAppContext) -> bool,
     report: impl FnOnce(&mut TestAppContext) -> String,
 ) {
-    let deadline = Instant::now() + Duration::from_secs(8);
+    let deadline = Instant::now() + limit;
     loop {
         cx.executor().advance_clock(Duration::from_millis(50));
         cx.run_until_parked();

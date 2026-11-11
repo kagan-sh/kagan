@@ -18,8 +18,7 @@ use crate::kagan::changes::POLL;
 use super::notice_of;
 use super::{
     add_project, approvals_waiting, click, focused_of, hover_to, label, open, present, repo_thread,
-    run_shell, selected_of, set_preference, shell, shows, two_changes, value_of, wait_for_screen,
-    wait_until,
+    run_shell, selected_of, set_preference, shell, shows, two_changes, value_of, wait_until,
 };
 #[cfg(unix)]
 use super::{grid_text, line, run_program, thread_status};
@@ -225,7 +224,7 @@ fn sending_review_adds_the_focused_draft(cx: &mut TestAppContext) {
     cx.run_until_parked();
     cx.simulate_keystrokes(window, &chord("SendReview"));
     wait_until(cx, |cx| !shows(cx, window, "review"));
-    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("directly"));
+    wait_until(cx, |cx| grid_text(cx, &kagan).contains("directly"));
 }
 
 #[cfg(unix)]
@@ -346,9 +345,7 @@ fn review_draft_keeps_its_file_and_survives_closing(cx: &mut TestAppContext) {
     click(cx, window, "review-add-comment");
     click(cx, window, "review-send");
     wait_until(cx, |cx| !shows(cx, window, "review"));
-    wait_for_screen(cx, &kagan, |cx| {
-        grid_text(cx, &kagan).contains("keep this draft")
-    });
+    wait_until(cx, |cx| grid_text(cx, &kagan).contains("keep this draft"));
     let screen = grid_text(cx, &kagan);
     assert!(screen.contains("file: notes.txt"), "{screen}");
     assert!(screen.contains("scope: uncommitted"), "{screen}");
@@ -394,7 +391,7 @@ fn a_held_paste_reaches_the_program_after_its_new_size(cx: &mut TestAppContext) 
         "/bin/sh -c \"stty -icanon -echo min 1; echo ready; dd bs=1 count=1 2>/dev/null >/dev/null; echo size $(stty size) end; exec sleep 60\"",
     );
     click(cx, window, &format!("thread-{}", id.0));
-    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("ready"));
+    wait_until(cx, |cx| grid_text(cx, &kagan).contains("ready"));
     cx.simulate_keystrokes(window, &chord("OpenSettings"));
     cx.run_until_parked();
     assert!(shows(cx, window, "settings-page"));
@@ -414,7 +411,7 @@ fn a_held_paste_reaches_the_program_after_its_new_size(cx: &mut TestAppContext) 
         "pasted before the terminal was drawn"
     );
     cx.simulate_keystrokes(window, "escape");
-    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("end"));
+    wait_until(cx, |cx| grid_text(cx, &kagan).contains("end"));
     assert!(cx.foreground_executor().block_test(sent));
     let cols = cx
         .update(|cx| screen_read::terminal_grid(kagan.read(cx), cx))

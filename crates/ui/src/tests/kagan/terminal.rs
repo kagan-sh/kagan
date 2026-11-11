@@ -21,7 +21,7 @@ use crate::kagan::{
 
 #[cfg(unix)]
 use super::wait_for_shell;
-use super::{click, grid_text, input, open, run_shell, shows, wait_for_screen};
+use super::{click, grid_text, input, open, run_shell, shows, wait_for_output, wait_for_screen};
 
 #[gpui_kit::test]
 fn a_program_that_ends_keeps_its_last_output_on_screen(cx: &mut TestAppContext) {
@@ -147,7 +147,7 @@ fn shift_page_up_scrolls_back_and_the_program_gets_no_keys(cx: &mut TestAppConte
         "for i in $(seq 1 200); do echo row$i; done"
     };
     cx.simulate_input(window, &line(rows));
-    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("row200"));
+    wait_for_output(cx, &kagan, |cx| grid_text(cx, &kagan).contains("row200"));
 
     cx.simulate_keystrokes(window, "shift-pageup");
     wait_for_screen(cx, &kagan, |cx| !grid_text(cx, &kagan).contains("row200"));

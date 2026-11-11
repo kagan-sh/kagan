@@ -17,7 +17,7 @@ use kg_plugins::PluginHost;
 #[cfg(unix)]
 use crate::kagan::Kagan;
 
-use super::{PAGE, PAGE_FRAME, open_with_plugins, shows, wait_for_screen, wait_until};
+use super::{PAGE, PAGE_FRAME, open_with_plugins, shows, wait_until};
 #[cfg(unix)]
 use super::{cell_point, drag_to, grid_text, press, release, selection, shown_row, split_command};
 #[cfg(unix)]
@@ -134,7 +134,7 @@ pub(in crate::tests) fn grid_focus_and_selection_survive(
 ) {
     cx.simulate_input(window, &split_command("pick", "ed"));
     cx.simulate_keystrokes(window, "enter");
-    wait_for_screen(cx, &kagan, |cx| grid_text(cx, kagan).contains("picked"));
+    wait_until(cx, |cx| grid_text(cx, kagan).contains("picked"));
     let (row, _) = shown_row(cx, kagan, "picked");
     let start = cell_point(cx, window, kagan, row, 0);
     press(cx, window, start, 1, Modifiers::default());
@@ -172,7 +172,7 @@ fn an_overlay_that_reaches_for_the_keyboard_is_refused_and_typing_goes_on(cx: &m
     cx.executor().advance_clock(Duration::from_millis(20));
     cx.simulate_input(window, "echo still''here");
     cx.simulate_keystrokes(window, "enter");
-    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("stillhere"));
+    wait_until(cx, |cx| grid_text(cx, &kagan).contains("stillhere"));
     grid_focus_and_selection_survive(cx, &kagan, window);
 }
 

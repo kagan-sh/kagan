@@ -22,7 +22,7 @@ fn terminal_focused(
 
 fn program_receives(cx: &mut TestAppContext, window: AnyWindowHandle, kagan: &Entity<Kagan>) {
     cx.simulate_input(window, "qx");
-    wait_for_screen(cx, &kagan, |cx| grid_text(cx, kagan).contains("qx"));
+    wait_for_screen(cx, kagan, |cx| grid_text(cx, kagan).contains("qx"));
 }
 
 #[gpui_kit::test]

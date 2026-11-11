@@ -365,10 +365,12 @@ fn the_edit_menu_copy_and_paste_reach_the_terminal(cx: &mut TestAppContext) {
     let grid = cx
         .update(|cx| screen_read::terminal_grid(kagan.read(cx), cx))
         .unwrap();
+    // The output is the last row with the word: the typed command row may wrap the word apart.
     let (row, line) = grid
         .lines
         .iter()
         .enumerate()
+        .rev()
         .find(|(_, line)| {
             line.iter()
                 .map(|cell| cell.c)

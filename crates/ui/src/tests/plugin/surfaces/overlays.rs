@@ -10,7 +10,7 @@ use super::THROWING_OVERLAY;
 use super::{TINT, TINT_OVERLAY, narrow, run, wide};
 use crate::tests::kagan::{
     click, install_overlay, open_with_plugins_then, plugin_log, present, run_shell, shows,
-    wait_for_screen, wait_until,
+    wait_until,
 };
 
 pub(in crate::tests) fn bounds_of(
@@ -165,7 +165,7 @@ fn an_overlay_that_throws_draws_nothing_and_the_terminal_still_types(cx: &mut Te
     wait_until(cx, |cx| !present(cx, window, &overlay));
     cx.simulate_input(window, "echo still''here");
     cx.simulate_keystrokes(window, "enter");
-    wait_for_screen(cx, &kagan, |cx| {
+    wait_until(cx, |cx| {
         crate::tests::kagan::grid_text(cx, &kagan).contains("stillhere")
     });
     assert!(!present(cx, window, &overlay));
