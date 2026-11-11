@@ -5,4 +5,5 @@ mod cli_reference;
 mod data;
 mod mcp;
 mod offscreen;
+mod out;
 mod socket;

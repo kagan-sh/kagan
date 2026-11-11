@@ -188,3 +188,34 @@ fn in_view(cx: &mut TestAppContext, window: gpui_kit::AnyWindowHandle, name: &st
     })
     .unwrap()
 }
+
+#[gpui_kit::test]
+fn a_failed_start_reaches_the_open_project_page_without_a_reopen(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    cx.run_until_parked();
+    cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Automation(AutomationOp::Add {
+                name: "Missing".into(),
+                body: "ping".into(),
+                project_id: ProjectId("prj_kagan".into()),
+                program: "kg-no-such-program".into(),
+                minutes: None,
+                in_minutes: Some(1),
+            }),
+            cx,
+        )
+    })
+    .detach();
+    cx.run_until_parked();
+    open_project_page(cx);
+    let row = rows(cx).remove(0);
+    let threads = format!("automation-threads-{}", row.id);
+    cx.executor().advance_clock(Duration::from_secs(61));
+    cx.run_until_parked();
+    assert!(
+        label(cx, window, &threads).starts_with("Last start failed"),
+        "{}",
+        label(cx, window, &threads)
+    );
+}

@@ -4,7 +4,7 @@ use gpui_kit::{Task, TestAppContext};
 use kg_domain::*;
 
 use super::{Fixture, events, op, program};
-use crate::Workspace;
+use crate::{Requester, Workspace};
 
 fn add(project: &ProjectId, minutes: Option<u16>, in_minutes: Option<u16>) -> Op {
     Op::Automation(AutomationOp::Add {
@@ -229,6 +229,10 @@ async fn a_one_time_automation_that_cannot_start_waits_before_it_retries(cx: &mu
         .advance_clock(Duration::from_mins(1) + Duration::from_secs(1));
     cx.run_until_parked();
     let row = automations(cx).await.remove(0);
+    assert!(
+        row.last_error.is_some(),
+        "the failure must be kept on the row"
+    );
     assert!(row.threads.is_empty());
     assert_eq!(thread_count(cx).await, 0);
     assert!(
@@ -413,4 +417,45 @@ async fn three_failed_runs_in_a_row_pause_the_automation(cx: &mut TestAppContext
         "the first run after a resume starts"
     );
     assert!(!automations(cx).await.remove(0).failing);
+}
+
+#[gpui_kit::test]
+async fn a_person_question_is_reported_to_the_requester_by_title(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Automation(saved) = op(add(&fixture.project, Some(1), None), cx).await.unwrap()
+    else {
+        panic!("add")
+    };
+    let (gone_sender, gone) = async_channel::bounded::<()>(1);
+    let (questions, asked) = async_channel::unbounded();
+    let requester = Requester::new(gone).waiting_on(questions);
+    let deleting = cx.update(|cx| {
+        Workspace::dispatch_for(
+            Op::Automation(AutomationOp::Delete {
+                id: saved.id.clone(),
+            }),
+            Some(requester),
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        asked.try_recv().unwrap(),
+        "Delete the automation “Morning”?"
+    );
+    approve(cx).await;
+    deleting.await.unwrap();
+    drop(gone_sender);
+}
+
+#[test]
+fn a_failure_reason_is_one_short_line() {
+    assert_eq!(crate::automation::one_line("first\nsecond"), "first");
+    assert_eq!(crate::automation::one_line(""), "");
+    assert_eq!(
+        crate::automation::one_line(&"x".repeat(500))
+            .chars()
+            .count(),
+        200
+    );
 }

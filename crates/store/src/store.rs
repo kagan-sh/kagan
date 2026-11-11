@@ -192,6 +192,7 @@ CREATE TABLE saved_programs (
     pinned INTEGER NOT NULL DEFAULT 0
 ) WITHOUT ROWID;
 ",
+    "ALTER TABLE automations ADD COLUMN last_error TEXT;",
     "ALTER TABLE automations ADD COLUMN streak_from INTEGER NOT NULL DEFAULT 0;",
 ];
 

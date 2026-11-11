@@ -11,6 +11,7 @@ mod program;
 mod record;
 #[cfg(test)]
 mod tests;
+mod text;
 mod theme;
 mod update;
 
@@ -54,6 +55,7 @@ pub use record::{
     Section, Sidebar, Snippet, Thread, ThreadMark, ThreadStatus, Visibility, archive_span,
     is_git_source, newest_first, order_sidebar_projects, owned_thread_ids,
 };
+pub use text::unsafe_char;
 pub use theme::{
     Color, Highlight, Look, MAX_THEME_BYTES, Palette, Radius, Space, TerminalColors, ThemeFile,
     ThemeFileError, TypeSizes,

@@ -28,7 +28,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Run`
 
 - **Allowed when**: the project exists and the program resolves on the login `PATH`, or in the folder its installer puts it in by default under the home folder (`opencode` in `~/.opencode/bin`, `cursor-agent` and `goose` in `~/.local/bin`, `amp` in `~/.amp/bin`; `PROGRAM_INSTALL_FOLDERS`) [op/] [decision 237].
-- **Changes**: starts a thread in the chosen environment [op/]. The environment defaults to `worktree` [op/]. `project-default` leaves the project folder on its current branch [decision 170]. The status is `starting` [op/]. The stored provider is the full program line [op/]. Without a title, the thread is named by the one saved program whose line it runs, when exactly one has that line; otherwise by the program's short name, such as `Codex` for `/path/codex --fast`, never by the path. Such a thread is not locked, so a rename can still set its title [decision 252]. Parent, quiet, lifecycle owner, visibility, and metadata are set here [docs:plugin-api]. `--quiet` keeps the parent from being typed a line about this thread [decision 201]. The host starts that program in the thread's folder, in that thread's terminal, and keeps it running whether or not a window is open [decision 46]. When agent integration is on, the host adds the note and the program flags for the programs decision 172 names. Kimi, OpenCode, and a program kagan does not recognize stay at the `KG_*` variables and `PATH` [decision 172]. Opening the app starts that program again when the thread was still running [decision 175]. `project-on:checkout:<branch>` checks out that local branch in the project folder before the thread starts, and `project-on:new:<base>` creates a branch there from that local branch; the new name is the thread title, the same way a worktree branch is named [decision 170]. A worktree's base may be a chosen local branch, and the folder is created from that branch's commit [decision 64] [decision 170]. Checking out the branch already current does not move HEAD.
+- **Changes**: starts a thread in the chosen environment [op/]. The environment defaults to `worktree` [op/]. `project-default` leaves the project folder on its current branch [decision 170]. The status is `starting` [op/]. The stored provider is the full program line [op/]. Without a title, the thread is named by the one saved program whose line it runs, when exactly one has that line; otherwise by the program's short name, such as `Codex` for `/path/codex --fast`, never by the path. Such a thread is not locked, so a rename can still set its title [decision 257]. Parent, quiet, lifecycle owner, visibility, and metadata are set here [docs:plugin-api]. `--quiet` keeps the parent from being typed a line about this thread [decision 201]. The host starts that program in the thread's folder, in that thread's terminal, and keeps it running whether or not a window is open [decision 46]. When agent integration is on, the host adds the note and the program flags for the programs decision 172 names. Kimi, OpenCode, and a program kagan does not recognize stay at the `KG_*` variables and `PATH` [decision 172]. Opening the app starts that program again when the thread was still running [decision 175]. `project-on:checkout:<branch>` checks out that local branch in the project folder before the thread starts, and `project-on:new:<base>` creates a branch there from that local branch; the new name is the thread title, the same way a worktree branch is named [decision 170]. A worktree's base may be a chosen local branch, and the folder is created from that branch's commit [decision 64] [decision 170]. Checking out the branch already current does not move HEAD.
 - **Shows**: the new thread [book:cli].
 - **Refused when**: an empty program — `program is empty` — `invalid` [op/]. An unfinished quote — `program has an unfinished quote` — `invalid` [op/]. A missing program — `program <name> was not found` — `invalid` [op/]. A program that cannot start — `failed` with the reason; the thread is left in `error` with a `failed` event [decision 46]. A worktree on Personal — `git worktrees need a standard project` — `invalid` [op/]. A branch change on anything but a standard project — `Changing branches needs a standard project.` — `invalid` [decision 170]. A create or switch while the checkout has uncommitted changes — `Commit or stash the uncommitted changes in this checkout to create or switch branches.` — `invalid`. While HEAD is detached — `HEAD is detached. Check out a branch here before creating or switching branches.` — `invalid`. With no commit yet — `Create the first commit in this checkout to create or switch branches.` — `invalid`. During a rebase — `Finish or abort the rebase before changing branches.` — `invalid`. During a cherry-pick — `Finish or abort the cherry-pick before changing branches.` — `invalid`. During a revert — `Finish or abort the revert before changing branches.` — `invalid`. During a merge with conflicts — `Resolve the conflicts and finish or abort the merge before changing branches.` — `invalid`. During a merge otherwise — `Finish or abort the merge before changing branches.` — `invalid`. A branch that is not local, including the base of a new branch — `branch <name> is not in this repository` — `invalid`. A new name that already exists — `branch <name> already exists` — `invalid`. A name git would refuse — `branch name <name> is not allowed` — `invalid`. Another unarchived thread in that folder — `Another thread is using this folder.` — `invalid`. A blocked checkout is reported before another thread in that folder.
 
@@ -109,7 +109,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Rename`
 
 - **Allowed when**: the thread exists, including one that is archived [book:cli].
-- **Changes**: a rename in the window stores the trimmed title [book:cli]. A rename from the socket stores it once; a later one leaves the locked title as it is [record.rs]. The program, the environment, and the branch stay. It writes no event.
+- **Changes**: a rename in the window stores the trimmed title, with bidi marks and control characters removed [book:cli] [decision 248]. A rename from the socket stores it once; a later one leaves the locked title as it is [record.rs]. The program, the environment, and the branch stay. It writes no event.
 - **Shows**: the thread, with that title, when the title changed [book:cli].
 - **Refused when**: a blank title — `invalid` [op/]. A locked title renamed from the socket — `invalid`, and the title stays [record.rs]. A missing thread — `not-found` [op/].
 
@@ -191,15 +191,15 @@ An automation is a named text, a program line, and a time, that starts a thread 
 
 ### `Add`
 
-- **Allowed when**: the project exists, the program line parses, and the time is either whole minutes between runs, from 1 to 1440, or one run that many whole minutes from now, from 1 to 1440 [op/] [decision 236] [decision 249].
-- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A one-time automation is due that many minutes after it is saved [decision 249]. The thread runs in the project folder [decision 236]. A due interval whose last three runs in a row all ended in an error does not start a thread: it pauses instead, and the activity log gets one line, `Automation “X” paused: 3 runs failed in a row` [decision 246].
+- **Allowed when**: the project exists, the program line parses, and the time is either whole minutes between runs, from 1 to 1440, or one run that many whole minutes from now, from 1 to 1440 [op/] [decision 236] [decision 254].
+- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A one-time automation is due that many minutes after it is saved [decision 254]. A run that does not start keeps its reason as `lastError` on the automation, and its row says `Last start failed: <reason>`, until a run starts. The thread runs in the project folder [decision 236]. A due interval whose last three runs in a row all ended in an error does not start a thread: it pauses instead, and the activity log gets one line, `Automation “X” paused: 3 runs failed in a row` [decision 251].
 - **Shows**: the automation [book:cli].
-- **Refused when**: an empty name, a name of only control characters, a name over 120 characters, empty text, text over 1 MiB, an empty program, an unfinished quote, minutes outside 1 to 1440, one-time minutes outside 1 to 1440, both an interval and a time, or neither — `invalid` [op/]. A missing project — `not-found` [op/].
+- **Refused when**: an empty name, a name with a control or bidi character (a bidi override or isolate, which reverses the text drawn after it), a name over 120 characters, empty text, text over 1 MiB, an empty program, an unfinished quote, minutes outside 1 to 1440, one-time minutes outside 1 to 1440, both an interval and a time, or neither — `invalid` [op/]. A missing project — `not-found` [op/].
 
 ### `Pause`, `Resume`
 
 - **Allowed when**: the automation exists [book:cli].
-- **Changes**: a paused automation does not start another thread. A thread it already started keeps running. Resume lets a due automation start a thread again at once, so a pause longer than one interval starts one thread, not one for each missed interval [decision 236]. Resume also starts a new streak of runs, so the failures before it no longer count [decision 246].
+- **Changes**: a paused automation does not start another thread. A thread it already started keeps running. Resume lets a due automation start a thread again at once, so a pause longer than one interval starts one thread, not one for each missed interval [decision 236]. Resume also starts a new streak of runs, so the failures before it no longer count [decision 251].
 - **Shows**: the automation [book:cli].
 - **Refused when**: a missing automation — `not-found` [op/].
 
@@ -212,7 +212,7 @@ An automation is a named text, a program line, and a time, that starts a thread 
 ### `List`
 
 - **Allowed when**: always [book:cli]. One project when a project is set.
-- **Shows**: each automation, and the thread each run started, oldest first. An interval that has not run yet has no thread [decision 236]. The window's row shows the program, the start of the text, when the next run is due or that it is paused or done, the run count, and opens the last run; it does not list every run's title. An automation whose last three runs in a row ended in an error says so on its row: `3 runs failed in a row`, or `Paused: 3 runs failed in a row` once it has paused [decision 246].
+- **Shows**: each automation, and the thread each run started, oldest first. An interval that has not run yet has no thread [decision 236]. The window's row shows the program, the start of the text, when the next run is due or that it is paused or done, the run count, and opens the last run; it does not list every run's title. An automation whose last three runs in a row ended in an error says so on its row: `3 runs failed in a row`, or `Paused: 3 runs failed in a row` once it has paused [decision 251].
 
 ### Due run (no operation)
 
@@ -259,15 +259,15 @@ A project is a named body of work, usually one repository, with one folder on th
 
 ### `List`, `Discover`
 
-- **Allowed when**: always. The default is the project's program when `--project` names one and it is installed, else the first installed known agent [decision 221] [decision 244]. A recent program, a failed one, or one an automation started never changes the default [decision 244].
-- **Shows**: pinned saved programs first, then the recent programs newest first, then the rest: the known programs, the shell, and the saved programs that are not pinned, in their stored order [book:cli]. The default is marked [decision 247]. An installed known program is a card with a letter mark, its short name and its version; a missing one is a plain row marked Not installed, never a card. A recent command is a row named by its program's short name, with its arguments under it; the whole command is its tooltip. The shell is a row with its path and no mark [decision 237]. A saved program is listed by its name, its line is the command, and it is installed when its first word is found on the same PATH as a recent program [decision 240].
+- **Allowed when**: always. The default is the project's program when `--project` names one and it is installed, else the first installed known agent [decision 221] [decision 249]. A recent program, a failed one, or one an automation started never changes the default [decision 249].
+- **Shows**: pinned saved programs first, then the recent programs newest first, then the rest: the known programs, the shell, and the saved programs that are not pinned, in their stored order [book:cli]. The default is marked [decision 252]. An installed known program is a card with a letter mark, its short name and its version; a missing one is a plain row marked Not installed, never a card. A recent command is a row named by its program's short name, with its arguments under it; the whole command is its tooltip. The shell is a row with its path and no mark [decision 237]. A saved program is listed by its name, its line is the command, and it is installed when its first word is found on the same PATH as a recent program [decision 240].
 - **Refused when**: `--project` names no live project — `not-found` [op/].
 
 ### `Save`, `Rename`, `Remove`, `Pin`
 
-- **Allowed when**: always. A name is trimmed, at most 40 characters, and has no control characters. A line is split as a command line [op/] [decision 240].
-- **Changes**: `Save` stores the name and the line. A name already saved, in any case, takes the new line and keeps its pin. `Rename` gives a saved program another name, and its line and pin stay. `Remove` deletes the saved program once the person approves it in the app, the same as an automation's delete; a name that is not saved is refused before that question [decision 248]. A project's default or a thread that already holds its line keeps that line and lists it as a plain program. `Pin` sets or clears the pin, and pinned saved programs are listed first. None of them starts a program or writes an event [decision 240]. The window's buttons and these keys act on the selected row, and only a saved program has them: `PinSavedProgram` pins or unpins it, `RenameSavedProgram` opens the rename form, `DeleteSavedProgram` deletes it, and `SaveSavedProgram` saves or renames from the custom command form [decision 240].
-- **Refused when**: an empty name — `A saved program needs a name.` — `invalid`. A name longer than 40 characters, or with a control character — `invalid`. A line that does not split, such as one with an unfinished quote — `invalid` [op/]. A `Rename` to a name another saved program already has, in any case — `a saved program named <name> already exists` — `invalid`. A name that is not saved — `saved program <name> not found` — `not-found`.
+- **Allowed when**: always. A name is trimmed, at most 40 characters, and has no control or bidi characters. A line is split as a command line [op/] [decision 240].
+- **Changes**: `Save` stores the name and the line. A name already saved, in any case, takes the new line and keeps its pin. `Rename` gives a saved program another name, and its line and pin stay. `Remove` deletes the saved program once the person approves it in the app, the same as an automation's delete; a name that is not saved is refused before that question [decision 253]. A project's default or a thread that already holds its line keeps that line and lists it as a plain program. `Pin` sets or clears the pin, and pinned saved programs are listed first. None of them starts a program or writes an event [decision 240]. The window's buttons and these keys act on the selected row, and only a saved program has them: `PinSavedProgram` pins or unpins it, `RenameSavedProgram` opens the rename form, `DeleteSavedProgram` deletes it, and `SaveSavedProgram` saves or renames from the custom command form [decision 240].
+- **Refused when**: an empty name — `A saved program needs a name.` — `invalid`. A name longer than 40 characters, or with a control or bidi character — `invalid`. A line that does not split, such as one with an unfinished quote — `invalid` [op/]. A `Rename` to a name another saved program already has, in any case — `a saved program named <name> already exists` — `invalid`. A name that is not saved — `saved program <name> not found` — `not-found`.
 
 ## Env
 
@@ -463,7 +463,7 @@ A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matche
 
 - **Allowed when**: the skill is a user or project skill [decision 203].
 - **Changes**: replaces the whole `SKILL.md` with the text given, frontmatter included. The file is written as-is, unless it has changed since the window read it: then nothing is written and the call is refused [decision 206]. `kg skill update` does not send that check [decision 206].
-- **Refused when**: an unknown name — `not-found` [op/]. A bundled or plugin skill — `invalid`; or text whose frontmatter does not parse, or names another skill — `invalid` [decision 203]; or the file changed since the window read it — `invalid` [decision 206].
+- **Refused when**: an unknown name — `not-found` [op/]. A bundled or plugin skill — `invalid`; or text whose frontmatter does not parse, or names another skill — `invalid` [decision 203]; or a description or hint with a control or bidi mark — `invalid` [decision 248]; or the file changed since the window read it — `invalid` [decision 206].
 
 ### `Remove`
 
@@ -478,12 +478,12 @@ A section is a user-named group that threads can be filed under in the sidebar [
 ### `Create`
 
 - **Changes**: creates a section, and files the given thread under it when a thread id is passed [book:cli].
-- **Refused when**: an empty name, or a name that already exists — `invalid` [person 2026-10-08] [op/].
+- **Refused when**: an empty name, a name with a control or bidi mark [decision 248], or a name that already exists — `invalid` [person 2026-10-08] [op/].
 
 ### `Rename`
 
 - **Changes**: renames the section [book:cli].
-- **Refused when**: a missing section — `not-found` [op/]. An empty name — `invalid` [person 2026-10-08] [op/].
+- **Refused when**: a missing section — `not-found` [op/]. An empty name, or a name with a control or bidi mark [decision 248] — `invalid` [person 2026-10-08] [op/].
 
 ### `Delete`
 
@@ -498,20 +498,20 @@ A section is a user-named group that threads can be filed under in the sidebar [
 
 ## Saved prompt
 
-A saved prompt is stored text the person can send, with a title, a body, and a starred flag. It is not a question waiting for an answer [CONTEXT] [decision 234]. Rows live in SQLite. Add, edit, and star are serialized. Search and send are not, and send follows `ThreadOp::Send` [decision 234]. Delete waits for the person's approval, so it is not serialized [decision 248].
+A saved prompt is stored text the person can send, with a title, a body, and a starred flag. It is not a question waiting for an answer [CONTEXT] [decision 234]. Rows live in SQLite. Add, edit, and star are serialized. Search and send are not, and send follows `ThreadOp::Send` [decision 234]. Delete waits for the person's approval, so it is not serialized [decision 253].
 
 ### `Add`
 
-- **Allowed when**: the title trims to at most 200 characters with no control character, and the body has text other than control characters and is at most 1 MiB [op/].
+- **Allowed when**: the title trims to at most 200 characters with no control or bidi character, and the body has text other than control characters and is at most 1 MiB [op/].
 - **Changes**: stores the trimmed title, the body as given, and starred off. The id starts with `svp_` [decision 234].
-- **Refused when**: an empty title or body, a body of only control characters, a longer title, a control character in the title, or a body over 1 MiB — `invalid` [op/].
+- **Refused when**: an empty title or body, a body of only control characters, a longer title, a control or bidi character in the title, or a body over 1 MiB — `invalid` [op/].
 
 ### `Edit`
 
-- **Allowed when**: the saved prompt exists, and the title and text pass `Add`'s checks [op/] [decision 250].
-- **Changes**: stores the trimmed title and the body as given. The star and the id stay [decision 250].
+- **Allowed when**: the saved prompt exists, and the title and text pass `Add`'s checks [op/] [decision 255].
+- **Changes**: stores the trimmed title and the body as given. The star and the id stay [decision 255].
 - **Refused when**: a missing id — `not-found`. An id that is not a plain identifier, an empty title, or a body with no text — `invalid` [op/].
-- **Shows**: the saved prompt. The window's row Edit button opens the same form as New, with the prompt's title and text in it, and its Save sends `Edit` [decision 250].
+- **Shows**: the saved prompt. The window's row Edit button opens the same form as New, with the prompt's title and text in it, and its Save sends `Edit` [decision 255].
 
 ### `Search`
 
@@ -525,8 +525,8 @@ A saved prompt is stored text the person can send, with a title, a body, and a s
 
 ### `Delete`
 
-- **Allowed when**: the saved prompt exists, and the person approves the delete in the app [decision 248].
-- **Changes**: removes the saved prompt once the person approves. Nothing is removed before that [decision 248].
+- **Allowed when**: the saved prompt exists, and the person approves the delete in the app [decision 253].
+- **Changes**: removes the saved prompt once the person approves. Nothing is removed before that [decision 253].
 - **Refused when**: a missing id — `not-found`, before any question. An id that is not a plain identifier — `invalid` [op/]. A declined question — `invalid`, `declined: …` [op/].
 
 ### `Send`
@@ -700,7 +700,7 @@ The app starts on `fjord`, in system mode, so it follows the operating system's 
 
 - **Allowed when**: the id is lowercase letters, digits, and dashes, and the mode is `light`, `dark` or `system` [book:themes] [docs:look]. `fjord`, `ember` and `grey` ship with the app [book:themes].
 - **Changes**: selects that theme and mode for every open window [docs:look] [book:cli]. A custom theme is `<dataDir>/themes/<id>.json` [book:themes]. A well-formed id with no file yet stays selected; the window shows an error and uses the default palette for the mode [book:themes] [docs:look]. Saving a file updates the list; a missing or invalid selected file does the same and keeps the id [book:themes] [docs:look].
-- **Refused when**: an id with any other character, a path, a dot, or traversal — `invalid` [docs:look] [op/].
+- **Refused when**: an id with any other character, a path, a dot, or traversal — `invalid` [docs:look] [op/]. A theme file whose name has a control or bidi mark — `invalid` [decision 248].
 
 ## Keymap
 
@@ -805,7 +805,7 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 ### `SettingsOp::Project`
 
 - **Allowed when**: the id is a live project [op/] [decision 221].
-- **Changes**: shows that project's page, with its environment variables, its default program, its agent rules, and its automations, opening the window if it is closed [decision 221] [decision 236]. Escape or Close leaves the page [decision 221]. The sidebar's "Project settings…" menu item sends this op. `section automations` also scrolls the page to its Automations section, and the project menu's "Automations…" item sends it that way [decision 251]. The automations list shows each one and the thread each run started, and can add, pause, resume, and delete [decision 236].
+- **Changes**: shows that project's page, with its environment variables, its default program, its agent rules, and its automations, opening the window if it is closed [decision 221] [decision 236]. Escape or Close leaves the page [decision 221]. The sidebar's "Project settings…" menu item sends this op. `section automations` also scrolls the page to its Automations section, and the project menu's "Automations…" item sends it that way [decision 256]. The automations list shows each one and the thread each run started, and can add, pause, resume, and delete [decision 236].
 - **Refused when**: a missing id — `not-found` [op/].
 
 ### `Hide`, `HideOthers`, `ShowAll`
@@ -835,7 +835,7 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 The strip is the host's. Its one `Op` is `WindowOp::ToggleActivityLog` [decision 196]; the rest the window reads from state it already has [decision 148]. A plugin adds one approved status item to it, which may be a button that runs one of its declared commands [decision 157] [decision 197].
 
 - **Shows**: closed, one 28 px line across the bottom of the window. `1 agent working` or `N agents working` for threads whose program is busy, or `Quiet`; `N needs you` for the threads `NextThreadNeedingYou` can reach, which is every thread other than the one on screen that is unread or asking; `Update available` when a check found a newer kagan that Not now has not put off; `Installing <source>` while a plugin install runs [CONTEXT] [decision 148]. At the right of that summary row, after install, it draws at most four plugin items in plugin-id order, one per plugin whose manifest declares `ui.status` and whose `setStatus` sets a line: the approved title in `muted_foreground`, then the text in the tone's color, both `type_small`, shortened with an ellipsis and bounded to about 200 px. They show only while the `plugin-status` preference is on and the window is at least 720 px wide; a narrower window keeps the host summary and hides them [decision 157]. The needs-you count, `Update available`, `Installing <source>` and a plugin item that names a command are buttons; the summary text is not a control, and a click elsewhere on the strip does nothing. The log toggle is the `Op` `WindowOp::ToggleActivityLog`, bound to Cmd+Shift+E, which shows or hides the log [decision 196]. It draws only what the workspace, the attention list, the updater, the plugin host and the plugin strip entity already report.
-- **Changes**: `ToggleActivityLog`, from its button or Cmd+Shift+E, opens the last seven rows of an in-memory log, newest last: a turn started or ended, a thread other than the one on screen that needs the person, an update found, downloading or ready, a plugin install starting, and a plugin command the window ran. The same key, or the button again, closes it, and Escape closes it while focus is in the strip. The needs-you button runs `NextThreadNeedingYou`; the shown thread is not counted in either place, because that action skips it. `Update available`, or `Update ready` once a download waits, opens the Update menu for this install (Release notes, the install action, and Not now while only offered) [decision 246]; `Installing <source>` opens Settings → Installed. Each of these, and the log button, is its own Tab stop. A status item with a command is a button that runs that command; one without takes no click or focus [decision 196] [decision 197]. It keeps 100 rows in memory and saves none. It never takes the keyboard on its own [decision 148].
+- **Changes**: `ToggleActivityLog`, from its button or Cmd+Shift+E, opens the last seven rows of an in-memory log, newest last: a turn started or ended, a thread other than the one on screen that needs the person, an update found, downloading or ready, a plugin install starting, and a plugin command the window ran. The same key, or the button again, closes it, and Escape closes it while focus is in the strip. The needs-you button runs `NextThreadNeedingYou`; the shown thread is not counted in either place, because that action skips it. `Update available`, or `Update ready` once a download waits, opens the Update menu for this install (Release notes, the install action, and Not now while only offered) [decision 243]; `Installing <source>` opens Settings → Installed. Each of these, and the log button, is its own Tab stop. A status item with a command is a button that runs that command; one without takes no click or focus [decision 196] [decision 197]. It keeps 100 rows in memory and saves none. It never takes the keyboard on its own [decision 148].
 - **Refused when**: nothing. A panel placed `bottom` stays refused [decision 56] [decision 59], and a plugin gets one text item, not a drawn strip [decision 157].
 
 ## Update

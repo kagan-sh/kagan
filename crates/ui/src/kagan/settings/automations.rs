@@ -229,13 +229,21 @@ fn next_run(automation: &Automation) -> String {
 }
 
 fn runs(automation: &Automation) -> String {
+    // The streak and the last failed start both show, so neither hides the other.
+    let mut notes = Vec::new();
     if automation.failing {
         let failed = format!("{FAILED_RUNS_LIMIT} runs failed in a row");
-        return if automation.paused {
+        notes.push(if automation.paused {
             format!("Paused: {failed}")
         } else {
             failed
-        };
+        });
+    }
+    if let Some(error) = &automation.last_error {
+        notes.push(format!("Last start failed: {error}"));
+    }
+    if !notes.is_empty() {
+        return notes.join(" · ");
     }
     match automation.threads.len() {
         0 => "No run yet".into(),

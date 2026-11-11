@@ -15,6 +15,7 @@ fn automation(body: &str, next_at: Option<Timestamp>, paused: bool) -> Automatio
         next_at,
         threads: Vec::new(),
         failing: false,
+        last_error: None,
     }
 }
 
