@@ -365,6 +365,11 @@ pub(crate) async fn run(
         if saved.contains(location) {
             return Err(already(location));
         }
+        if !is_git_source(location) && !Path::new(location).exists() {
+            return Err(OpError::Invalid(format!(
+                "{location} is not a folder or file on this computer, and not a git:<url>@<ref> address"
+            )));
+        }
         let (location, saved) = (location.clone(), saved.clone());
         cx.background_spawn(async move {
             let (_keep, never) = async_channel::bounded::<()>(1);

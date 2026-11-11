@@ -170,3 +170,23 @@ pub(in crate::tests) fn keyboard_with_navigator(
     click(cx, window, "settings-section-keyboard");
     (window, data)
 }
+
+#[gpui_kit::test]
+fn a_bad_index_address_is_named_beside_its_field(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |_| {});
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-installed");
+    click(cx, window, "plugin-index");
+    cx.simulate_input(window, "banana");
+    cx.simulate_keystrokes(window, "enter");
+    wait_until(cx, |cx| {
+        aria_label(cx, window, "plugin-index-error").is_some()
+    });
+    let error = aria_label(cx, window, "plugin-index-error").unwrap_or_default();
+    assert!(error.starts_with("banana is not a folder"), "{error}");
+    assert!(!error.contains("os error"), "{error}");
+    cx.simulate_input(window, "x");
+    wait_until(cx, |cx| {
+        aria_label(cx, window, "plugin-index-error").is_none()
+    });
+}

@@ -157,6 +157,7 @@ impl Kagan {
     ) {
         self.settings.cursor = section_position(&section, cx);
         self.settings.section = section;
+        self.plugins.index_error = None;
         ThemeState::global(cx).update(cx, ThemeState::end_preview);
         self.settings
             .query

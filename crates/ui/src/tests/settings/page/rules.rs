@@ -116,7 +116,7 @@ fn save_refuses_rules_changed_elsewhere_and_keeps_the_draft(cx: &mut TestAppCont
     );
 
     click(cx, window, "agent-rules-save");
-    wait_until(cx, |cx| {
+    wait_until(cx, |_| {
         std::fs::read_to_string(data.path().join("instructions.md")).unwrap() == "first draft!"
     });
 }

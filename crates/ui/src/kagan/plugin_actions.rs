@@ -1,6 +1,7 @@
-use gpui_kit::component::input::InputState;
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::{
-    AppContext as _, Context, Entity, KeyBinding, PathPromptOptions, Task, Window, actions,
+    AppContext as _, Context, Entity, KeyBinding, PathPromptOptions, Subscription, Task, Window,
+    actions,
 };
 use kg_core::Workspace;
 use kg_domain::{Listing, Op, OpError, OpResult, OutdatedPlugin, PluginId, PluginOp, RailAction};
@@ -65,14 +66,25 @@ pub(super) struct Plugins {
     pub(super) logs: Option<(PluginId, String)>,
     pub(super) focus: Option<PluginId>,
     pub(super) index: Entity<InputState>,
+    /// Why the last Add an index failed, shown beside its field until the field changes.
+    pub(super) index_error: Option<String>,
     pub(super) query: Entity<InputState>,
     pub(super) found: Option<(Vec<Listing>, Vec<String>)>,
     load: Task<()>,
     ops: Vec<Task<()>>,
+    _index_watch: Subscription,
 }
 
 impl Plugins {
     pub(super) fn new(window: &mut Window, cx: &mut Context<Kagan>) -> Self {
+        let index =
+            cx.new(|cx| InputState::new(window, cx).placeholder("git:<url>@<ref> or a folder"));
+        let index_watch = cx.subscribe(&index, |this, _, event: &InputEvent, cx| {
+            if matches!(event, InputEvent::Change) {
+                this.plugins.index_error = None;
+                cx.notify();
+            }
+        });
         Self {
             updates: None,
             note: None,
@@ -84,12 +96,13 @@ impl Plugins {
             expanded: None,
             logs: None,
             focus: None,
-            index: cx
-                .new(|cx| InputState::new(window, cx).placeholder("git:<url>@<ref> or a folder")),
+            index,
+            index_error: None,
             query: cx.new(|cx| InputState::new(window, cx).placeholder("Plugin name or words")),
             found: None,
             load: Task::ready(()),
             ops: Vec::new(),
+            _index_watch: index_watch,
         }
     }
 }
@@ -114,14 +127,30 @@ impl Kagan {
         done: impl FnOnce(&mut Self, &Result<OpResult, OpError>, &mut Context<Self>) + 'static,
         cx: &mut Context<Self>,
     ) {
-        let task = Workspace::dispatch(Op::Plugin(op), cx);
-        let running = cx.spawn(async move |this, cx| {
-            let result = task.await;
-            _ = this.update(cx, |this, cx| {
+        self.run_plugin_op(
+            op,
+            move |this, result, cx| {
                 done(this, &result, cx);
                 if let Err(error) = result {
                     this.note = Some(format!("Could not {attempt}: {error}").into());
                 }
+            },
+            cx,
+        );
+    }
+
+    /// Runs a plugin op and hands its result to `finish`, which decides where a failure shows.
+    pub(super) fn run_plugin_op(
+        &mut self,
+        op: PluginOp,
+        finish: impl FnOnce(&mut Self, Result<OpResult, OpError>, &mut Context<Self>) + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        let task = Workspace::dispatch(Op::Plugin(op), cx);
+        let running = cx.spawn(async move |this, cx| {
+            let result = task.await;
+            _ = this.update(cx, |this, cx| {
+                finish(this, result, cx);
                 this.refresh_plugins(cx);
                 cx.notify();
             });
