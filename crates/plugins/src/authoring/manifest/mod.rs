@@ -557,7 +557,7 @@ fn tool_name(name: &str) -> bool {
 }
 
 fn plain_line(text: &str) -> Result<(), Error> {
-    if text.chars().any(char::is_control) {
+    if text.chars().any(kg_domain::unsafe_char) {
         Err(Error::PlainLine(text.to_owned()))
     } else {
         Ok(())
