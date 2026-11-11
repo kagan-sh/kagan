@@ -225,8 +225,14 @@ A project is a named body of work, usually one repository, with one folder on th
 ### `List`, `Discover`
 
 - **Allowed when**: always. With `--project`, the project's program is read as the first recent program, so it is the default when it is installed [decision 221].
-- **Shows**: the known programs, the shell, and the recent programs, with the default marked [book:cli].
+- **Shows**: the known programs, the shell, the saved programs with pinned ones first and then by name, and the recent programs, with the default marked [book:cli]. A saved program is listed by its name, its line is the command, and it is installed when its first word is found on the same PATH as a recent program [decision 236].
 - **Refused when**: `--project` names no live project — `not-found` [op/].
+
+### `Save`, `Rename`, `Remove`, `Pin`
+
+- **Allowed when**: always. A name is trimmed, at most 40 characters, and has no control characters. A line is split as a command line [op/] [decision 236].
+- **Changes**: `Save` stores the name and the line. A name already saved, in any case, takes the new line and keeps its pin. `Rename` gives a saved program another name, and its line and pin stay. `Remove` deletes the saved program. A project's default or a thread that already holds its line keeps that line and lists it as a plain program. `Pin` sets or clears the pin, and pinned saved programs are listed first. None of them starts a program or writes an event [decision 236].
+- **Refused when**: an empty name — `A saved program needs a name.` — `invalid`. A name longer than 40 characters, or with a control character — `invalid`. A line that does not split, such as one with an unfinished quote — `invalid` [op/]. A `Rename` to a name another saved program already has, in any case — `a saved program named <name> already exists` — `invalid`. A name that is not saved — `saved program <name> not found` — `not-found`.
 
 ## Env
 

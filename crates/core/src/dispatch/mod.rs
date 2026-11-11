@@ -87,6 +87,18 @@ pub(crate) async fn execute(
         Op::Program(ProgramOp::Discover { project_id }) => {
             crate::host::program::list(this, &database, false, project_id, cx).await
         }
+        Op::Program(ProgramOp::Save { name, line }) => {
+            crate::host::saved_program::save(database, name, line).await
+        }
+        Op::Program(ProgramOp::Rename { name, to }) => {
+            crate::host::saved_program::rename(database, name, to).await
+        }
+        Op::Program(ProgramOp::Remove { name }) => {
+            crate::host::saved_program::remove(database, name).await
+        }
+        Op::Program(ProgramOp::Pin { name, pinned }) => {
+            crate::host::saved_program::pin(database, name, pinned).await
+        }
         Op::Env(op) => crate::host::variables::run(this, op, cx).await,
         Op::Environment(EnvironmentOp::SetBase { id, base }) => {
             crate::host::git::set_base(this, &database, id, base, cx).await
@@ -242,6 +254,12 @@ pub(crate) fn serialized(op: &Op) -> bool {
             kg_domain::SavedPromptOp::Add { .. }
             | kg_domain::SavedPromptOp::Star { .. }
             | kg_domain::SavedPromptOp::Delete { .. },
+        )
+        | Op::Program(
+            ProgramOp::Save { .. }
+            | ProgramOp::Rename { .. }
+            | ProgramOp::Remove { .. }
+            | ProgramOp::Pin { .. },
         )
         | Op::Ui(_) => true,
         Op::Surface(op) => !matches!(op, kg_domain::SurfaceOp::List),

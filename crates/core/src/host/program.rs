@@ -7,7 +7,7 @@ use gpui_kit::{AsyncApp, WeakEntity};
 use crate::Workspace;
 use kg_domain::{
     KNOWN_PROGRAMS, LISTED_WHEN_MISSING, OpError, OpResult, Program, ProgramList, ProgramSource,
-    ProjectId, Visibility, split_program,
+    ProjectId, SavedProgram, Visibility, split_program,
 };
 use kg_process::{find_program, pathext, user_path};
 
@@ -59,6 +59,7 @@ pub(crate) async fn list(
         }
         distinct
     });
+    let saved = database.call(|store| store.saved_programs()).await?;
     let programs = cx
         .background_executor()
         .spawn(async move {
@@ -67,6 +68,7 @@ pub(crate) async fn list(
                 path.as_deref(),
                 pathext.as_deref(),
                 shell.as_deref(),
+                &saved,
                 &recent,
             );
             if include_versions {
@@ -78,12 +80,14 @@ pub(crate) async fn list(
     Ok(OpResult::Programs(programs))
 }
 
-/// The programs found with `path` and `pathext`, the `shell`, and the `recent` commands, newest
-/// first. Versions are filled in separately, so this reads nothing but the filesystem.
+/// The programs found with `path` and `pathext`, the `shell`, the `saved` programs, and the
+/// `recent` commands, newest first. Versions are filled in separately, so this reads nothing but
+/// the filesystem.
 pub(crate) fn discover(
     path: Option<&OsStr>,
     pathext: Option<&OsStr>,
     shell: Option<&OsStr>,
+    saved: &[SavedProgram],
     recent: &[String],
 ) -> ProgramList {
     let mut programs = Vec::new();
@@ -98,6 +102,7 @@ pub(crate) fn discover(
             source: ProgramSource::Known,
             path: found,
             version: None,
+            pinned: false,
         });
     }
     if let Some(shell) = shell.filter(|shell| !shell.is_empty()) {
@@ -114,6 +119,20 @@ pub(crate) fn discover(
             source: ProgramSource::Shell,
             path: shell.is_file().then_some(shell),
             version: None,
+            pinned: false,
+        });
+    }
+    for saved in saved {
+        let Ok((name, _)) = split_program(&saved.line) else {
+            continue;
+        };
+        programs.push(Program {
+            command: saved.line.clone(),
+            label: saved.name.clone(),
+            source: ProgramSource::Saved,
+            path: find_program(Path::new(&name), path, pathext),
+            version: None,
+            pinned: saved.pinned,
         });
     }
     for command in recent {
@@ -129,6 +148,7 @@ pub(crate) fn discover(
             source: ProgramSource::Recent,
             path: find_program(Path::new(&name), path, pathext),
             version: None,
+            pinned: false,
         });
     }
     let default = recent

@@ -14,7 +14,7 @@ thread: `kg thread get`, `kg thread list`, `kg thread run`, `kg thread stop`, `k
 
 project: `kg project list`, `kg project get`, `kg project add`, `kg project remove`, `kg project reorder`, `kg project set-program`.
 
-program: `kg program list`, with `--project` for a project's default.
+program: `kg program list`, with `--project` for a project's default. Save a program line under a name with `kg program save`, giving the name and the line, such as "Claude, careful" and `claude --model claude-opus-5-5 --effort high`; saving a taken name changes its line. `kg program rename` gives one another name, `kg program remove` deletes it, and `kg program pin` pins it with `true` or unpins it with `false`. A saved program is listed by its name, pinned ones first, and starts its line.
 
 env: `kg env list`, `kg env set`, `kg env remove`. A variable is set for every program kagan starts, or for one project with `--project`; a value comes from stdin, and `kg` never prints one.
 

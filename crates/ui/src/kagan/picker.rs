@@ -4,7 +4,7 @@ use gpui_kit::component::list::ListState;
 use gpui_kit::component::v_flex;
 use gpui_kit::{
     AnyElement, Context, Entity, EventEmitter, IntoElement, ParentElement as _, Pixels,
-    Styled as _, Subscription, Task,
+    SharedString, Styled as _, Subscription, Task, WeakEntity,
 };
 use kg_domain::{Program, split_program};
 
@@ -41,6 +41,8 @@ pub(super) struct Rows {
     loading: bool,
     mode: Mode,
     row_height: Option<Pixels>,
+    // The picker that owns these rows, for a saved program's pin, rename and delete buttons.
+    picker: Option<WeakEntity<Picker>>,
 }
 
 impl Rows {
@@ -79,6 +81,10 @@ pub(crate) struct Picker {
     mode: Mode,
     program: Entity<InputState>,
     arguments: Entity<InputState>,
+    // The name a custom command is saved under. While `editing`, it is the only field: a rename.
+    name: Entity<InputState>,
+    editing: Option<String>,
+    notice: Option<SharedString>,
     _subscriptions: Vec<Subscription>,
     load_task: Option<Task<()>>,
     // The project the program list was read for: its default, and the default of a retry.
@@ -92,10 +98,25 @@ mod list;
 
 use list::{Field, custom_command, custom_field};
 mod render;
+mod saved;
 mod state;
 impl Picker {
     fn render_custom(&self, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
+        if self.editing.is_some() {
+            return v_flex()
+                .gap_2()
+                .child(custom_field(
+                    "custom-name",
+                    "Name",
+                    &self.name,
+                    None,
+                    muted,
+                    cx,
+                ))
+                .child(saved::save_control(true, cx))
+                .into_any_element();
+        }
         let (program_note, arguments_note) = match custom_command(
             self.program.read(cx).value().trim(),
             self.arguments.read(cx).value().trim(),
@@ -132,6 +153,15 @@ impl Picker {
                 muted,
                 cx,
             ))
+            .child(custom_field(
+                "custom-name",
+                "Name",
+                &self.name,
+                None,
+                muted,
+                cx,
+            ))
+            .child(saved::save_control(false, cx))
             .into_any_element()
     }
 }

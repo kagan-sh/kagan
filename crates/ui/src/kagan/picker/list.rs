@@ -7,9 +7,9 @@ use gpui_kit::{
     App, Context, Entity, Focusable as _, Hsla, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement as _, StatefulInteractiveElement as _, Styled as _, WeakEntity, Window, div,
 };
-use kg_domain::{Program, split_program};
+use kg_domain::{Program, ProgramSource, split_program};
 
-use super::{Mode, Rows};
+use super::{Mode, Picker, Rows};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -79,11 +79,12 @@ impl ListDelegate for Rows {
     ) -> Option<Self::Item> {
         let program = self.matches.get(ix.row)?.clone();
         Some(ProgramRow {
-            base: ListItem::new(format!("program-item-{}", program.command)),
+            base: ListItem::new(format!("program-item-{}", key(&program))),
             selected: self.mode == Mode::Catalog && self.selected == Some(ix.row),
             mode: self.mode,
             first: ix.row == 0,
             list: cx.entity().downgrade(),
+            picker: self.picker.clone(),
             program,
         })
     }
@@ -120,6 +121,14 @@ impl ListDelegate for Rows {
     }
 }
 
+// The id part of a row. A saved line can equal a known command, so a saved row is kept apart.
+pub(super) fn key(program: &Program) -> String {
+    match program.source {
+        ProgramSource::Saved => format!("saved-{}", program.command),
+        _ => program.command.clone(),
+    }
+}
+
 #[derive(IntoElement)]
 pub(crate) struct ProgramRow {
     pub(super) base: ListItem,
@@ -128,6 +137,7 @@ pub(crate) struct ProgramRow {
     pub(super) mode: Mode,
     pub(super) first: bool,
     pub(super) list: WeakEntity<ListState<Rows>>,
+    pub(super) picker: Option<WeakEntity<Picker>>,
 }
 
 impl Selectable for ProgramRow {

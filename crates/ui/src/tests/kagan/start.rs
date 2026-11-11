@@ -200,9 +200,10 @@ const FORM_STOPS: [&str; 6] = [
 fn tab_visits_each_control_of_the_form_in_order_then_escape_leaves(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open_git_form(cx);
     click(cx, window, "program-search");
-    // Shell is a custom command, so its two text fields sit between the toggle and the folder.
+    // Shell is a custom command, so its text fields, the saved program name and its Save sit
+    // between the toggle and the folder.
     let mut order = Vec::new();
-    for _ in 0..FORM_STOPS.len() + 2 {
+    for _ in 0..FORM_STOPS.len() + 4 {
         press_key(cx, window, "tab");
         order.extend(
             FORM_STOPS

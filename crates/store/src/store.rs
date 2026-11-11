@@ -9,6 +9,7 @@ mod event;
 mod interaction;
 mod plugin;
 mod project;
+mod saved_program;
 mod saved_prompt;
 mod screen;
 mod section;
@@ -159,6 +160,13 @@ CREATE TABLE saved_prompts (
     title TEXT NOT NULL,
     body TEXT NOT NULL,
     starred INTEGER NOT NULL
+) WITHOUT ROWID;
+",
+    r"
+CREATE TABLE saved_programs (
+    name TEXT PRIMARY KEY COLLATE NOCASE,
+    line TEXT NOT NULL,
+    pinned INTEGER NOT NULL DEFAULT 0
 ) WITHOUT ROWID;
 ",
 ];

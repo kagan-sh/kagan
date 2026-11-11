@@ -15,6 +15,7 @@ impl Picker {
         let program =
             cx.new(|cx| InputState::new(window, cx).placeholder("Program, such as claude"));
         let arguments = cx.new(|cx| InputState::new(window, cx).placeholder("Arguments, if any"));
+        let name = cx.new(|cx| InputState::new(window, cx).placeholder("Name, to save it"));
         let mut subscriptions = vec![
             cx.observe(&list, |_, _, cx| cx.notify()),
             cx.subscribe_in(
@@ -53,6 +54,13 @@ impl Picker {
                 }
             })
         }));
+        subscriptions.push(
+            cx.subscribe_in(&name, window, |this, _, event, window, cx| {
+                if let InputEvent::PressEnter { .. } = event {
+                    this.save_program(window, cx);
+                }
+            }),
+        );
         Self {
             state: Programs::default(),
             list,
@@ -60,6 +68,9 @@ impl Picker {
             mode: Mode::Catalog,
             program,
             arguments,
+            name,
+            editing: None,
+            notice: None,
             _subscriptions: subscriptions,
             load_task: None,
             project: None,
@@ -80,9 +91,14 @@ impl Picker {
     ) {
         self.project.clone_from(&project);
         self.set_mode(Mode::Catalog, cx);
+        self.notice = None;
         self.state = Programs::Loading;
-        self.list
-            .update(cx, |list, _| list.delegate_mut().loading = true);
+        let picker = cx.entity().downgrade();
+        self.list.update(cx, |list, _| {
+            let rows = list.delegate_mut();
+            rows.loading = true;
+            rows.picker = Some(picker);
+        });
         let task = Workspace::dispatch(
             Op::Program(ProgramOp::Discover {
                 project_id: project.clone(),
@@ -229,9 +245,13 @@ impl Picker {
         cx.notify();
     }
 
-    // The list draws its selection from the same mode, so both change together.
-    fn set_mode(&mut self, mode: Mode, cx: &mut Context<Self>) {
+    // The list draws its selection from the same mode, so both change together. Leaving the custom
+    // command ends a rename too.
+    pub(super) fn set_mode(&mut self, mode: Mode, cx: &mut Context<Self>) {
         self.mode = mode;
+        if mode == Mode::Catalog {
+            self.editing = None;
+        }
         self.list.update(cx, |list, cx| {
             list.delegate_mut().mode = mode;
             cx.notify();

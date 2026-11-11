@@ -79,6 +79,7 @@ fn the_program_list_finds_known_agents_and_defaults_to_the_first_installed() {
         Some(dir.path().as_os_str()),
         None,
         Some(std::ffi::OsStr::new("/bin/sh")),
+        &[],
         &[
             "codex --resume".into(),
             "claude".into(),
@@ -119,6 +120,7 @@ fn the_newest_installed_recent_program_is_the_default() {
         Some(dir.path().as_os_str()),
         None,
         None,
+        &[],
         &["tool --fast".into(), "claude".into()],
     );
     assert_eq!(list.default.as_deref(), Some("tool --fast"));
@@ -130,8 +132,13 @@ fn only_installed_known_agents_get_a_version() {
     let dir = tempfile::tempdir().unwrap();
     fake_program(dir.path(), "claude", "echo 'claude 9.9.9 (test)'");
     fake_program(dir.path(), "tool", "echo 'tool 1.0'");
-    let mut list =
-        crate::host::program::discover(Some(dir.path().as_os_str()), None, None, &["tool".into()]);
+    let mut list = crate::host::program::discover(
+        Some(dir.path().as_os_str()),
+        None,
+        None,
+        &[],
+        &["tool".into()],
+    );
     crate::host::program::versions(&mut list);
     let version = |command: &str| {
         list.programs
@@ -184,4 +191,67 @@ async fn a_projects_installed_program_is_its_new_thread_default(cx: &mut TestApp
     .await
     .unwrap_err();
     assert!(matches!(missing, OpError::NotFound(_)), "{missing}");
+}
+
+#[cfg(unix)]
+#[test]
+fn saved_programs_sit_after_the_shell_and_before_recent_ones_and_fold_a_repeat() {
+    let dir = tempfile::tempdir().unwrap();
+    fake_program(dir.path(), "tool", "true");
+    let saved = |name: &str, line: &str, pinned: bool| kg_domain::SavedProgram {
+        name: name.into(),
+        line: line.into(),
+        pinned,
+    };
+    let list = crate::host::program::discover(
+        Some(dir.path().as_os_str()),
+        None,
+        Some(std::ffi::OsStr::new("/bin/sh")),
+        &[
+            saved("Pinned", "tool --pinned", true),
+            saved("Fast", "tool --fast", false),
+            saved("Missing", "kg-no-such-program", false),
+        ],
+        &["tool --fast".into(), "tool --recent".into()],
+    );
+    let order: Vec<_> = list
+        .programs
+        .iter()
+        .map(|program| (program.source, program.label.as_str()))
+        .collect();
+    let at = |source| {
+        order
+            .iter()
+            .position(|(found, _)| *found == source)
+            .unwrap()
+    };
+    assert!(at(kg_domain::ProgramSource::Shell) < at(kg_domain::ProgramSource::Saved));
+    assert_eq!(
+        order
+            .iter()
+            .filter(|(source, _)| *source == kg_domain::ProgramSource::Saved)
+            .map(|(_, label)| *label)
+            .collect::<Vec<_>>(),
+        ["Pinned", "Fast", "Missing"],
+        "saved programs keep the order the store gives them"
+    );
+    assert!(at(kg_domain::ProgramSource::Saved) < at(kg_domain::ProgramSource::Recent));
+    let fast: Vec<_> = list
+        .programs
+        .iter()
+        .filter(|program| program.command == "tool --fast")
+        .collect();
+    assert_eq!(
+        fast.len(),
+        1,
+        "a saved line that was also recent is one row"
+    );
+    assert_eq!(fast[0].label, "Fast");
+    let missing = list
+        .programs
+        .iter()
+        .find(|program| program.label == "Missing")
+        .unwrap();
+    assert!(!missing.installed());
+    assert!(list.programs.iter().any(|p| p.command == "tool --recent"));
 }

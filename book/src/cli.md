@@ -1336,8 +1336,12 @@ Programs a new thread can run, as the new-thread picker lists them
 Usage: kg program [OPTIONS] <COMMAND>
 
 Commands:
-  list  Programs found on the PATH, the shell, and the recent threads. The default is the project's program when it is installed, else the first installed one
-  help  Print this message or the help of the given subcommand(s)
+  list    Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed one
+  save    Save a program line under a name. A name already saved takes the new line and keeps its pin
+  rename  Give a saved program another name
+  remove  Delete a saved program. The project and threads that used its line keep the line
+  pin     Pin or unpin a saved program. Pinned ones are listed first among the saved programs
+  help    Print this message or the help of the given subcommand(s)
 
 Options:
       --json
@@ -1350,7 +1354,7 @@ Options:
 ## `kg program list`
 
 ```text
-Programs found on the PATH, the shell, and the recent threads. The default is the project's program when it is installed, else the first installed one
+Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed one
 
 Usage: kg program list [OPTIONS]
 
@@ -1358,6 +1362,79 @@ Options:
       --project <PROJECT_ID>
           
 
+  -h, --help
+          Print help
+```
+
+## `kg program save`
+
+```text
+Save a program line under a name. A name already saved takes the new line and keeps its pin
+
+Usage: kg program save <NAME> <LINE>
+
+Arguments:
+  <NAME>
+          
+
+  <LINE>
+          
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg program rename`
+
+```text
+Give a saved program another name
+
+Usage: kg program rename <NAME> <TO>
+
+Arguments:
+  <NAME>
+          
+
+  <TO>
+          
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg program remove`
+
+```text
+Delete a saved program. The project and threads that used its line keep the line
+
+Usage: kg program remove <NAME>
+
+Arguments:
+  <NAME>
+          
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg program pin`
+
+```text
+Pin or unpin a saved program. Pinned ones are listed first among the saved programs
+
+Usage: kg program pin <NAME> <PINNED>
+
+Arguments:
+  <NAME>
+          
+
+  <PINNED>
+          [possible values: true, false]
+
+Options:
   -h, --help
           Print help
 ```
