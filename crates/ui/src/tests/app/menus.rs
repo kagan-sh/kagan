@@ -14,7 +14,7 @@ use kg_domain::{Op, SelectMode, ThreadOp, WindowOp};
 use crate::kagan::menus::{About, Close, Hide, HideOthers, Minimize, Quit, ShowAll, Zoom};
 
 use crate::tests::kagan::{
-    chord, click, focused_of, grid_text, open, run_shell, shows, wait_until,
+    chord, click, focused_of, grid_text, open, run_shell, shows, wait_for_screen, wait_until,
 };
 
 #[gpui_kit::test]
@@ -354,11 +354,13 @@ fn the_edit_menu_copy_and_paste_reach_the_terminal(cx: &mut TestAppContext) {
     click(cx, window, &format!("thread-{}", id.0));
     cx.write_to_clipboard(ClipboardItem::new_string("menu-paste".into()));
     cx.dispatch_action(window, Paste);
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("menu-paste"));
+    wait_for_screen(cx, &kagan, |cx| {
+        grid_text(cx, &kagan).contains("menu-paste")
+    });
 
     cx.simulate_input(window, "echo menu-copy");
     cx.simulate_keystrokes(window, "enter");
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("menu-copy"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("menu-copy"));
 
     let grid = cx
         .update(|cx| screen_read::terminal_grid(kagan.read(cx), cx))

@@ -15,7 +15,7 @@ use crate::kagan::{Kagan, replace_read};
 use crate::tests::kagan::repo_thread;
 use crate::tests::kagan::{
     chord, click, label, open_with_plugins_then, pending, plugin_log, present, run_shell, shows,
-    wait_until,
+    wait_for_screen, wait_until,
 };
 
 const SWAP: &str = "dev.test.swap";
@@ -507,7 +507,7 @@ fn a_review_plugin_adds_notes_that_only_the_host_sends(cx: &mut TestAppContext) 
     });
     click(cx, window, "review-send");
     wait_until(cx, |cx| !shows(cx, window, "review"));
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         crate::tests::kagan::grid_text(cx, &kagan).contains("from the plugin")
     });
 }

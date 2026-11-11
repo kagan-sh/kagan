@@ -4,7 +4,7 @@ use crate::kagan::changes::POLL;
 use crate::kagan::{NewTerminal, OpenLocalLink};
 use crate::tests::kagan::{
     cell_point, click, grid_text, label, open, present, press, release, run_shell, shown_row,
-    wait_for_shell, wait_until,
+    wait_for_screen, wait_for_shell, wait_until,
 };
 
 #[gpui_kit::test]
@@ -13,7 +13,7 @@ fn a_secondary_click_on_a_printed_link_opens_it(cx: &mut TestAppContext) {
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, "printf 'at http%s now\\n' '://localhost:4321/x'\n");
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         grid_text(cx, &kagan).contains("http://localhost:4321/x")
     });
     let (row, column) = shown_row(cx, &kagan, "http://localhost:4321/x");
@@ -65,7 +65,7 @@ fn a_link_opens_in_the_browser_tab_when_the_switch_is_on(cx: &mut TestAppContext
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, "printf 'at http%s now\\n' '://localhost:4321/x'\n");
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         grid_text(cx, &kagan).contains("http://localhost:4321/x")
     });
     let set = kg_domain::Op::Preference(kg_domain::PreferenceOp::Set {
@@ -111,7 +111,7 @@ fn a_link_with_the_switch_off_opens_the_system_browser(cx: &mut TestAppContext) 
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, "printf 'at http%s now\\n' '://localhost:4321/x'\n");
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         grid_text(cx, &kagan).contains("http://localhost:4321/x")
     });
     let (row, column) = shown_row(cx, &kagan, "http://localhost:4321/x");

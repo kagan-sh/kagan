@@ -644,3 +644,30 @@ fn a_double_click_with_copy_on_copies_the_word(cx: &mut TestAppContext) {
             .is_some_and(|text| text == "picked")
     });
 }
+
+// The rows the terminal wrapped at the edge (a prompt that fills a row) must read as one line, or
+// a word typed across the edge is missed.
+#[test]
+fn a_row_the_terminal_wrapped_reads_as_one_line() {
+    use kg_core::{Cell, Color, Grid, Weight};
+    let row = |text: &str| {
+        text.chars()
+            .map(|c| Cell {
+                c,
+                zerowidth: Vec::new(),
+                fg: Color::Foreground,
+                bg: Color::Background,
+                weight: Weight::Normal,
+                italic: false,
+                underline: false,
+                strikeout: false,
+            })
+            .collect::<Vec<_>>()
+    };
+    let grid = Grid {
+        lines: vec![row("C:\\personal\\cmd>pa"), row("sted-words")],
+        wrapped: vec![true, false],
+        ..Grid::default()
+    };
+    assert!(super::screen_text(&grid).contains("pasted-words"));
+}

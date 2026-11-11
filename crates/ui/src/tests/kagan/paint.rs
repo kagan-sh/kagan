@@ -11,7 +11,7 @@ use kg_domain::{Op, OpResult, PreferenceOp, ThreadId};
 
 use super::{
     click, count_repaints, grid_text, host_grid, input, line, open, run_shell, set_preference,
-    split_command, wait_until,
+    split_command, wait_for_screen, wait_until,
 };
 
 #[cfg(unix)]
@@ -300,7 +300,7 @@ fn a_screen_for_the_shown_thread_reads_and_repaints_it(cx: &mut TestAppContext) 
 
     // Typed text changes the host's screen, which sends the shown thread a screen event.
     cx.simulate_input(window, &split_command("ke", "yed"));
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         grid_text(cx, &kagan).contains(&split_command("ke", "yed"))
     });
     assert!(
@@ -397,23 +397,23 @@ fn switching_threads_shows_each_threads_own_screen(cx: &mut TestAppContext) {
     cx.update(|cx| {
         Workspace::dispatch(input(&first, &line(&split_command("fir", "st-out"))), cx).detach();
     });
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("first-out"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("first-out"));
 
     click(cx, window, &format!("thread-{}", second.0));
     cx.update(|cx| {
         Workspace::dispatch(input(&second, &line(&split_command("bra", "vo-out"))), cx).detach();
     });
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("bravo-out"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("bravo-out"));
     assert!(!grid_text(cx, &kagan).contains("first-out"));
 
     click(cx, window, &format!("thread-{}", first.0));
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("first-out"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("first-out"));
     assert!(!grid_text(cx, &kagan).contains("bravo-out"));
 }
 
 #[gpui_kit::test]
 fn a_thread_keeps_its_screen_when_the_window_closes_and_reopens(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = open(cx);
+    let (kagan, window, _data) = open(cx);
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
     cx.update(|cx| {
@@ -435,5 +435,7 @@ fn a_thread_keeps_its_screen_when_the_window_closes_and_reopens(cx: &mut TestApp
     cx.run_until_parked();
     let window = cx.update(|cx| cx.windows()[0]);
     click(cx, window, &format!("thread-{}", id.0));
-    wait_until(cx, |cx| grid_text(cx, &reopened).contains("keep-out"));
+    wait_for_screen(cx, &kagan, |cx| {
+        grid_text(cx, &reopened).contains("keep-out")
+    });
 }

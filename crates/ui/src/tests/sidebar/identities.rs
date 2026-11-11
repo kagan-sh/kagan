@@ -5,7 +5,7 @@ use crate::kagan::{ArchiveThread, FocusSidebar, Kagan, TogglePinned};
 
 use crate::tests::kagan::{
     click, focused_of, grid_text, label, open, present, press_key, run_shell, selected_of, shows,
-    thread_record, value_of, wait_until,
+    thread_record, value_of, wait_for_screen, wait_until,
 };
 use crate::tests::sidebar::layout::focus_row;
 
@@ -22,7 +22,7 @@ fn terminal_focused(
 
 fn program_receives(cx: &mut TestAppContext, window: AnyWindowHandle, kagan: &Entity<Kagan>) {
     cx.simulate_input(window, "qx");
-    wait_until(cx, |cx| grid_text(cx, kagan).contains("qx"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, kagan).contains("qx"));
 }
 
 #[gpui_kit::test]

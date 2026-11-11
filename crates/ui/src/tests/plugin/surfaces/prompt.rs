@@ -12,7 +12,7 @@ use kg_domain::{Op, PluginOp, ThreadId};
 use super::wide;
 #[cfg(unix)]
 use super::{run, tab_to};
-use crate::tests::kagan::{click, label, open, wait_until};
+use crate::tests::kagan::{click, label, open, wait_for_screen, wait_until};
 #[cfg(unix)]
 use crate::tests::kagan::{press_key, shows, thread_record};
 
@@ -27,7 +27,7 @@ fn add_plugin_starts_a_thread_and_pastes_without_enter(cx: &mut TestAppContext) 
     );
     assert_eq!(label(cx, window, "plugins-add"), "New plugin…");
     click(cx, window, "plugins-add");
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         crate::tests::kagan::grid_text(cx, &kagan).contains("Build a kagan plugin that")
     });
     let text = crate::tests::kagan::grid_text(cx, &kagan);
@@ -91,7 +91,7 @@ pub(in crate::tests) fn wait_for_plugin(
     cx: &mut TestAppContext,
     kagan: &gpui_kit::Entity<crate::kagan::Kagan>,
 ) -> ThreadId {
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         crate::tests::kagan::grid_text(cx, kagan).contains("Ready>")
     });
     cx.update(|cx| kagan.read(cx).shown_thread(cx)).unwrap()
@@ -251,7 +251,7 @@ fn a_paused_splash_can_receive_the_plugin_prompt(cx: &mut TestAppContext) {
         "printf 'Ready> '; sleep 8; printf 'SECOND'; read line; sleep 30",
     );
     click(cx, window, "plugins-add");
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         crate::tests::kagan::grid_text(cx, &kagan).contains("Build a kagan plugin that")
     });
     assert!(!crate::tests::kagan::grid_text(cx, &kagan).contains("SECOND"));

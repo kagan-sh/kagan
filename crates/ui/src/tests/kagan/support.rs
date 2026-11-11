@@ -270,13 +270,20 @@ pub(in crate::tests) fn host_grid(cx: &mut TestAppContext, id: &ThreadId) -> Gri
 
 pub(in crate::tests) fn grid_text(cx: &mut TestAppContext, kagan: &Entity<Kagan>) -> String {
     let grid = cx.update(|cx| screen_read::terminal_grid(kagan.read(cx), cx));
-    grid.map_or_else(String::new, |grid| {
-        grid.lines
-            .iter()
-            .map(|line| line.iter().map(|cell| cell.c).collect::<String>())
-            .collect::<Vec<_>>()
-            .join("\n")
-    })
+    grid.map_or_else(String::new, |grid| screen_text(&grid))
+}
+
+// The screen as the program printed it: a row the terminal wrapped continues on the next row
+// with no break, so a word split by the wrap still reads as one word.
+pub(in crate::tests) fn screen_text(grid: &Grid) -> String {
+    let mut text = String::new();
+    for (index, line) in grid.lines.iter().enumerate() {
+        text.extend(line.iter().map(|cell| cell.c));
+        if !grid.wrapped.get(index).copied().unwrap_or(false) {
+            text.push('\n');
+        }
+    }
+    text
 }
 
 pub(in crate::tests) fn thread_record(cx: &mut TestAppContext, id: &ThreadId) -> kg_domain::Thread {

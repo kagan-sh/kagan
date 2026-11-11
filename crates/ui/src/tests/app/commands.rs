@@ -18,7 +18,7 @@ use kg_domain::{Plugin, PluginId, ThreadId, ThreadOp};
 
 use crate::tests::kagan::{
     chord, click, install_navigator, label, open, open_with_plugins_then, press_key, shows,
-    value_of, wait_until,
+    value_of, wait_for_screen, wait_until,
 };
 #[cfg(unix)]
 use crate::tests::kagan::{grid_text, plugin_log, press, release, run_shell, shown, thread_record};
@@ -442,7 +442,9 @@ fn enter_opens_the_thread_at_the_matched_line(cx: &mut TestAppContext) {
     press_key(cx, window, "enter");
     wait_until(cx, |cx| shown(cx, &kagan).as_ref() == Some(&id));
     assert!(!shows(cx, window, "command-list"));
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("FIRST-MARK"));
+    wait_for_screen(cx, &kagan, |cx| {
+        grid_text(cx, &kagan).contains("FIRST-MARK")
+    });
 }
 
 #[cfg(unix)]

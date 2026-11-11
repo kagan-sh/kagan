@@ -347,6 +347,7 @@ fn a_saved_program_has_a_letter_mark_like_a_built_in_one(cx: &mut TestAppContext
 }
 
 // Whether an element lies inside the picker list, top and bottom.
+#[cfg(unix)]
 fn inside_list(cx: &mut TestAppContext, window: AnyWindowHandle, row: &str) -> bool {
     cx.update_window(window, |_, window, _| {
         let within = crate::ui_registry::find(
