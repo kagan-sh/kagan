@@ -5,7 +5,7 @@ use kg_domain::{Op, TerminalOp, ThreadId, ThreadOp};
 use crate::kagan::screen_read::{shown_tab, tab_focused, tab_grid, tab_numbers};
 use crate::kagan::{CloseTerminal, Kagan, NewTerminal, NextTerminal, PreviousTerminal};
 use crate::tests::kagan::{
-    click, focused_of, open, present, run_shell, selected_of, shows, wait_for_shell, wait_until,
+    click, focused_of, open, present, run_shell, selected_of, shows, wait_for_output, wait_until,
 };
 use crate::tests::plugin::panels::disabled_of;
 
@@ -71,12 +71,12 @@ fn the_plus_opens_a_right_terminal_that_takes_the_keys(cx: &mut TestAppContext) 
     assert!(!present(cx, window, "new-terminal"));
 
     add(cx, window, "right-add-terminal");
-    wait_for_shell(cx, |cx| tabs(cx, &kagan) == (vec![1], Some(1)));
+    wait_for_output(cx, &kagan, |cx| tabs(cx, &kagan) == (vec![1], Some(1)));
     assert_eq!(selected_of(cx, window, "right-tab-terminal-1"), Some(true));
     assert!(has_keys(cx, window, &kagan, 1));
 
     cx.simulate_input(window, "printf 'ex%s\\n' tra\n");
-    wait_for_shell(cx, |cx| tab_text(cx, &kagan, 1).contains("extra"));
+    wait_for_output(cx, &kagan, |cx| tab_text(cx, &kagan, 1).contains("extra"));
 
     click(cx, window, "changes-header");
     assert_eq!(tabs(cx, &kagan).1, None);

@@ -15,8 +15,7 @@ use kg_domain::{Op, SelectMode, ThreadOp, WindowOp};
 use crate::kagan::menus::{About, Close, Hide, HideOthers, Minimize, Quit, ShowAll, Zoom};
 
 use crate::tests::kagan::{
-    chord, click, focused_of, grid_text, open, run_shell, shows, wait_for_output, wait_for_screen,
-    wait_until,
+    chord, click, focused_of, grid_text, open, run_shell, shows, wait_for_screen, wait_until,
 };
 
 #[gpui_kit::test]
@@ -379,7 +378,7 @@ fn the_edit_menu_copy_and_paste_reach_the_terminal(cx: &mut TestAppContext) {
     cx.simulate_keystrokes(window, "enter");
     // The output is a row of its own. The typed command row can hold the word too, or wrap it
     // apart, so wait for a row that holds the whole word.
-    wait_for_output(cx, &kagan, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         last_row_with(cx, &kagan, "menu-copy").is_some()
     });
     let (row, text) = last_row_with(cx, &kagan, "menu-copy").unwrap();

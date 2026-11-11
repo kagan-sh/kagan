@@ -304,7 +304,7 @@ pub(in crate::tests) fn wait_until(
     cx: &mut TestAppContext,
     done: impl FnMut(&mut TestAppContext) -> bool,
 ) {
-    wait_or_report(cx, Duration::from_secs(8), done, |_| String::new());
+    wait_or_report(cx, SCREEN_WAIT, done, |_| String::new());
 }
 
 // A wait on the terminal grid. A timeout prints the grid rows, their lengths, and whether each row
@@ -315,22 +315,23 @@ pub(in crate::tests) fn wait_for_screen(
     kagan: &Entity<Kagan>,
     done: impl FnMut(&mut TestAppContext) -> bool,
 ) {
-    wait_or_report(cx, Duration::from_secs(8), done, |cx| {
-        grid_report(cx, kagan)
-    });
+    wait_or_report(cx, SCREEN_WAIT, done, |cx| grid_report(cx, kagan));
 }
 
-// A wait for output a program prints in real time, which the test clock cannot speed up. It gets
-// the long limit that `wait_for_shell` gets, and a timeout prints the grid.
+// How long a wait for the screen may take. A program's real-time output can take longer, so
+// `wait_for_output` gets OUTPUT_WAIT: a hang guard for loaded runners, not a speed-up.
+const SCREEN_WAIT: Duration = Duration::from_secs(8);
+const OUTPUT_WAIT: Duration = Duration::from_secs(120);
+
+// A wait for output a program prints in real time, which the test clock cannot speed up. A timeout
+// prints the grid.
 #[track_caller]
 pub(in crate::tests) fn wait_for_output(
     cx: &mut TestAppContext,
     kagan: &Entity<Kagan>,
     done: impl FnMut(&mut TestAppContext) -> bool,
 ) {
-    wait_or_report(cx, Duration::from_secs(120), done, |cx| {
-        grid_report(cx, kagan)
-    });
+    wait_or_report(cx, OUTPUT_WAIT, done, |cx| grid_report(cx, kagan));
 }
 
 #[track_caller]
@@ -376,28 +377,6 @@ fn grid_report(cx: &mut TestAppContext, kagan: &Entity<Kagan>) -> String {
             .join("\n");
         format!("cols={cols} rows={}\n{rows}", grid.lines.len())
     })
-}
-
-// The shell prints in real time, which the test clock cannot speed up, so this wait gets no short
-// limit. The 120 s limit only stops a test that can never pass from hanging.
-#[cfg(unix)]
-pub(in crate::tests) fn wait_for_shell(
-    cx: &mut TestAppContext,
-    mut done: impl FnMut(&mut TestAppContext) -> bool,
-) {
-    let hang = Instant::now() + Duration::from_secs(120);
-    loop {
-        cx.executor().advance_clock(Duration::from_millis(50));
-        cx.run_until_parked();
-        if done(cx) {
-            return;
-        }
-        assert!(
-            Instant::now() < hang,
-            "the shell never printed what the test waits for"
-        );
-        std::thread::sleep(Duration::from_millis(20));
-    }
 }
 
 // In a short window the controls below the fields sit below the fold, so a person scrolls the form to them.

@@ -20,7 +20,6 @@ use crate::kagan::{
 };
 
 #[cfg(unix)]
-use super::wait_for_shell;
 use super::{click, grid_text, input, open, run_shell, shows, wait_for_output, wait_for_screen};
 
 #[gpui_kit::test]
@@ -241,7 +240,7 @@ fn a_program_that_asks_for_mouse_gets_the_click_and_shift_selects_instead(cx: &m
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, "printf '\\033[?1000h\\033[?1006h'");
     cx.simulate_keystrokes(window, "enter");
-    wait_for_shell(cx, |cx| {
+    wait_for_output(cx, &kagan, |cx| {
         cx.update(|cx| screen_read::terminal_grid(kagan.read(cx), cx))
             .is_some_and(|grid| grid.mouse.is_some())
     });
@@ -563,7 +562,7 @@ fn copy_on_select_skips_a_reported_release_and_copies_a_shift_drag(cx: &mut Test
     wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("picked"));
     cx.simulate_input(window, "printf '\\033[?1000h\\033[?1006h'");
     cx.simulate_keystrokes(window, "enter");
-    wait_for_shell(cx, |cx| {
+    wait_for_output(cx, &kagan, |cx| {
         cx.update(|cx| screen_read::terminal_grid(kagan.read(cx), cx))
             .is_some_and(|grid| grid.mouse.is_some())
     });

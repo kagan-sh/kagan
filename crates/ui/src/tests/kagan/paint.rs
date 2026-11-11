@@ -413,7 +413,7 @@ fn switching_threads_shows_each_threads_own_screen(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn a_thread_keeps_its_screen_when_the_window_closes_and_reopens(cx: &mut TestAppContext) {
-    let (kagan, window, _data) = open(cx);
+    let (_kagan, window, _data) = open(cx);
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
     cx.update(|cx| {
@@ -435,7 +435,7 @@ fn a_thread_keeps_its_screen_when_the_window_closes_and_reopens(cx: &mut TestApp
     cx.run_until_parked();
     let window = cx.update(|cx| cx.windows()[0]);
     click(cx, window, &format!("thread-{}", id.0));
-    wait_for_screen(cx, &kagan, |cx| {
+    wait_for_screen(cx, &reopened, |cx| {
         grid_text(cx, &reopened).contains("keep-out")
     });
 }
