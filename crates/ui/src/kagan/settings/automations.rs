@@ -13,7 +13,8 @@ use gpui_kit::{
 };
 use kg_core::{Workspace, WorkspaceEvent};
 use kg_domain::{
-    Automation, AutomationId, AutomationOp, Op, OpResult, ProjectId, ProjectOp, Timestamp,
+    Automation, AutomationId, AutomationOp, FAILED_RUNS_LIMIT, Op, OpResult, ProjectId, ProjectOp,
+    Timestamp,
 };
 
 use crate::kagan::controls::control;
@@ -210,6 +211,14 @@ fn when(automation: &Automation) -> String {
 }
 
 fn runs(automation: &Automation) -> String {
+    if automation.failing {
+        let failed = format!("{FAILED_RUNS_LIMIT} runs failed in a row");
+        return if automation.paused {
+            format!("Paused: {failed}")
+        } else {
+            failed
+        };
+    }
     match automation.threads.len() {
         0 => "No run yet".into(),
         1 => "1 run".into(),

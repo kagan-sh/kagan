@@ -22,7 +22,13 @@ pub struct Automation {
     pub next_at: Option<Timestamp>,
     /// The thread each run started, oldest first.
     pub threads: Vec<ThreadId>,
+    /// The last `FAILED_RUNS_LIMIT` runs since the last resume all ended in an error. A due
+    /// automation like this pauses instead of starting another run.
+    pub failing: bool,
 }
+
+/// How many runs in a row must end in an error before an automation pauses itself.
+pub const FAILED_RUNS_LIMIT: usize = 3;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Subcommand)]
 #[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]

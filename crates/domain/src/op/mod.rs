@@ -40,7 +40,7 @@ use crate::{
     Sidebar, Thread, ThreadId,
 };
 
-pub use automation::{Automation, AutomationOp};
+pub use automation::{Automation, AutomationOp, FAILED_RUNS_LIMIT};
 pub use browser::{BrowserControl, BrowserOp, BrowserSnapshot, BrowserView};
 pub use check::check;
 pub use config::ConfigOp;

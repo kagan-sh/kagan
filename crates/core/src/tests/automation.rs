@@ -311,3 +311,87 @@ async fn deleting_an_automation_waits_for_the_person(cx: &mut TestAppContext) {
     deleting.await.unwrap();
     assert!(automations(cx).await.is_empty());
 }
+
+#[cfg(unix)]
+async fn runs_with_status(
+    automation: &AutomationId,
+    status: ThreadStatus,
+    count: usize,
+    cx: &mut TestAppContext,
+) -> bool {
+    for _ in 0..200 {
+        cx.executor().advance_clock(Duration::from_millis(50));
+        cx.run_until_parked();
+        let row = automations(cx)
+            .await
+            .into_iter()
+            .find(|row| &row.id == automation);
+        if let Some(row) = row
+            && row.threads.len() == count
+            && super::thread(&row.threads[count - 1], cx).await.status == status
+        {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    false
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn three_failed_runs_in_a_row_pause_the_automation(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Automation(automation) = op(
+        Op::Automation(AutomationOp::Add {
+            name: "Failing".into(),
+            body: "ping".into(),
+            project_id: fixture.project.clone(),
+            program: "/bin/sh -c 'exit 3'".into(),
+            minutes: Some(1),
+            at: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("automation")
+    };
+    for run in 1..=3 {
+        cx.executor().advance_clock(Duration::from_secs(60));
+        assert!(
+            runs_with_status(&automation.id, ThreadStatus::Error, run, cx).await,
+            "run {run} did not fail"
+        );
+    }
+    let row = automations(cx).await.remove(0);
+    assert!(row.failing, "three failed runs are a failing automation");
+    assert!(!row.paused, "it pauses only when the next run is due");
+
+    cx.executor().advance_clock(Duration::from_secs(60));
+    for _ in 0..20 {
+        cx.executor().advance_clock(Duration::from_millis(50));
+        cx.run_until_parked();
+    }
+    let row = automations(cx).await.remove(0);
+    assert!(row.paused, "the due run pauses instead of starting");
+    assert!(row.failing);
+    assert_eq!(row.threads.len(), 3, "no fourth thread was started");
+    assert_eq!(thread_count(cx).await, 3);
+
+    op(
+        Op::Automation(AutomationOp::Resume {
+            id: automation.id.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let row = automations(cx).await.remove(0);
+    assert!(!row.failing, "a resume starts a new streak");
+    cx.executor().advance_clock(Duration::from_secs(60));
+    assert!(
+        runs_with_status(&automation.id, ThreadStatus::Error, 4, cx).await,
+        "the first run after a resume starts"
+    );
+    assert!(!automations(cx).await.remove(0).failing);
+}

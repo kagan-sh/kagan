@@ -14,6 +14,7 @@ fn saved(minutes: Option<u16>, at: Option<Timestamp>) -> Automation {
         paused: false,
         next_at: Some(Timestamp(5)),
         threads: Vec::new(),
+        failing: false,
     }
 }
 
@@ -35,7 +36,9 @@ fn an_automation_keeps_its_runs_and_goes_with_its_project() {
     assert_eq!(loaded.threads, vec![ThreadId("thr_1".into())]);
     assert_eq!(loaded.next_at, Some(Timestamp(9)));
 
-    store.set_automation_paused(&automation.id, true).unwrap();
+    store
+        .set_automation_paused(&automation.id, true, Timestamp(2))
+        .unwrap();
     assert!(store.automation(&automation.id).unwrap().unwrap().paused);
 
     store

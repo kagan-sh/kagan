@@ -61,6 +61,7 @@ pub(crate) async fn run(
                 paused: false,
                 next_at: Some(next_at),
                 threads: Vec::new(),
+                failing: false,
             };
             let saved = automation.clone();
             database
@@ -68,8 +69,8 @@ pub(crate) async fn run(
                 .await?;
             OpResult::Automation(automation)
         }
-        AutomationOp::Pause { id } => set_paused(&database, id, true).await?,
-        AutomationOp::Resume { id } => set_paused(&database, id, false).await?,
+        AutomationOp::Pause { id } => set_paused(&database, id, true, time(this, cx)?).await?,
+        AutomationOp::Resume { id } => set_paused(&database, id, false, time(this, cx)?).await?,
         AutomationOp::Delete { id } => {
             let lookup = id.clone();
             let automation = database
@@ -113,10 +114,15 @@ fn due(minutes: Option<u16>, at: Option<Timestamp>, now: Timestamp) -> Result<Ti
     }
 }
 
-async fn set_paused(database: &Database, id: AutomationId, paused: bool) -> Result<OpResult> {
+async fn set_paused(
+    database: &Database,
+    id: AutomationId,
+    paused: bool,
+    at: Timestamp,
+) -> Result<OpResult> {
     let lookup = id.clone();
     database
-        .call(move |store| store.set_automation_paused(&lookup, paused))
+        .call(move |store| store.set_automation_paused(&lookup, paused, at))
         .await?;
     let loaded = id.clone();
     let automation = database
@@ -139,12 +145,31 @@ async fn tick(this: &WeakEntity<Workspace>, cx: &mut AsyncApp) -> Option<()> {
         }
     };
     for automation in due {
+        if automation.failing {
+            report(halt(this, &database, &automation.id, cx).await);
+            continue;
+        }
         if running(this, &automation, cx)? {
             continue;
         }
         fire(this, &database, &automation, cx).await?;
     }
     Some(())
+}
+
+// A run that keeps failing is not started again: the automation pauses, and its row says why.
+async fn halt(
+    this: &WeakEntity<Workspace>,
+    database: &Database,
+    id: &AutomationId,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    let at = time(this, cx)?;
+    let id = id.clone();
+    database
+        .call(move |store| store.set_automation_paused(&id, true, at))
+        .await?;
+    Workspace::refresh(this, cx).await
 }
 
 fn running(

@@ -192,14 +192,14 @@ An automation is a named text, a program line, and a time, that starts a thread 
 ### `Add`
 
 - **Allowed when**: the project exists, the program line parses, and the time is either whole minutes from 1 to 1440 or one non-negative time [op/] [decision 236].
-- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A one-time automation is due at its time. The thread runs in the project folder [decision 236].
+- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A one-time automation is due at its time. The thread runs in the project folder [decision 236]. A due interval whose last three runs in a row all ended in an error does not start a thread: it pauses instead [decision 243].
 - **Shows**: the automation [book:cli].
 - **Refused when**: an empty name, a name of only control characters, a name over 120 characters, empty text, text over 1 MiB, an empty program, an unfinished quote, minutes outside 1 to 1440, a negative time, both an interval and a time, or neither — `invalid` [op/]. A missing project — `not-found` [op/].
 
 ### `Pause`, `Resume`
 
 - **Allowed when**: the automation exists [book:cli].
-- **Changes**: a paused automation does not start another thread. A thread it already started keeps running. Resume lets a due automation start a thread again at once, so a pause longer than one interval starts one thread, not one for each missed interval [decision 236].
+- **Changes**: a paused automation does not start another thread. A thread it already started keeps running. Resume lets a due automation start a thread again at once, so a pause longer than one interval starts one thread, not one for each missed interval [decision 236]. Resume also starts a new streak of runs, so the failures before it no longer count [decision 243].
 - **Shows**: the automation [book:cli].
 - **Refused when**: a missing automation — `not-found` [op/].
 
@@ -212,7 +212,7 @@ An automation is a named text, a program line, and a time, that starts a thread 
 ### `List`
 
 - **Allowed when**: always [book:cli]. One project when a project is set.
-- **Shows**: each automation, and the thread each run started, oldest first. An interval that has not run yet has no thread [decision 236]. The window shows the run count and opens the last run; it does not list every run's title.
+- **Shows**: each automation, and the thread each run started, oldest first. An interval that has not run yet has no thread [decision 236]. The window shows the run count and opens the last run; it does not list every run's title. An automation whose last three runs in a row ended in an error says so on its row: `3 runs failed in a row`, or `Paused: 3 runs failed in a row` once it has paused [decision 243].
 
 ### Due run (no operation)
 
