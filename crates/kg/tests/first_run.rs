@@ -61,8 +61,8 @@ fn documented_first_run_commands_run() {
     let _ = std::fs::remove_file(&socket);
 }
 
-#[cfg(unix)]
-#[cfg(unix)]
+// macOS only until Linux and Windows offscreen are proven; see decision 237.
+#[cfg(target_os = "macos")]
 #[test]
 fn offscreen_app_answers_ui_commands_and_captures_its_window() {
     let dir = tempfile::tempdir().unwrap();
@@ -106,7 +106,7 @@ fn offscreen_app_answers_ui_commands_and_captures_its_window() {
         ))
     );
 
-    if cfg!(target_os = "macos") {
+    {
         let image = dir.path().join("offscreen.png");
         let shot = kg(
             &[
@@ -125,11 +125,9 @@ fn offscreen_app_answers_ui_commands_and_captures_its_window() {
             "{}",
             server.failure(&String::from_utf8_lossy(&shot.stdout))
         );
-        // A blank frame compresses to a few kilobytes; the start screen is far larger.
-        let size = std::fs::metadata(&image)
-            .expect("the screenshot was written")
-            .len();
-        assert!(size > 20_000, "the capture is only {size} bytes");
+        // A blank or nearly blank frame has a handful of colours; the start screen has hundreds.
+        let colours = distinct_colours(&image);
+        assert!(colours >= 64, "the capture has only {colours} colours");
     }
 }
 
@@ -193,6 +191,16 @@ fn first_run_commands() -> Vec<Vec<String>> {
         "book/src/start.md has no first-run commands"
     );
     commands
+}
+
+/// Decodes a PNG and counts its distinct colours.
+fn distinct_colours(path: &Path) -> usize {
+    let image = image::open(path).expect("the capture is a PNG").to_rgba8();
+    image
+        .pixels()
+        .map(|pixel| pixel.0)
+        .collect::<std::collections::HashSet<[u8; 4]>>()
+        .len()
 }
 
 #[cfg(unix)]
