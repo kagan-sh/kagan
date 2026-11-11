@@ -273,7 +273,10 @@ fn row(automation: &Automation, cx: &mut Context<List>) -> gpui_kit::AnyElement 
                 .small()
                 .outline()
                 .label("Open last run")
-                .on_click(move |_, _, cx| open_thread(&last, cx)),
+                .on_click(move |_, _, cx| {
+                    let last = last.clone();
+                    cx.defer(move |cx| open_thread(&last, cx));
+                }),
             )
         }))
         .child(control(
