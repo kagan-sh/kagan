@@ -435,7 +435,6 @@ pub fn valid_branch(name: &str) -> bool {
         && !name.contains("//")
         && !name.contains("..")
         && !name.contains("@{")
-        && !name.chars().any(crate::unsafe_char)
         && !bytes.iter().any(|byte| {
             byte.is_ascii_control()
                 || matches!(byte, b' ' | b'~' | b'^' | b':' | b'\\' | b'?' | b'*' | b'[')

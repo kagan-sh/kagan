@@ -463,7 +463,7 @@ A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matche
 
 - **Allowed when**: the skill is a user or project skill [decision 203].
 - **Changes**: replaces the whole `SKILL.md` with the text given, frontmatter included. The file is written as-is, unless it has changed since the window read it: then nothing is written and the call is refused [decision 206]. `kg skill update` does not send that check [decision 206].
-- **Refused when**: an unknown name — `not-found` [op/]. A bundled or plugin skill — `invalid`; or text whose frontmatter does not parse, or names another skill — `invalid` [decision 203]; or the file changed since the window read it — `invalid` [decision 206].
+- **Refused when**: an unknown name — `not-found` [op/]. A bundled or plugin skill — `invalid`; or text whose frontmatter does not parse, or names another skill — `invalid` [decision 203]; or a description or hint with a control or bidi mark — `invalid` [decision 245]; or the file changed since the window read it — `invalid` [decision 206].
 
 ### `Remove`
 
@@ -478,12 +478,12 @@ A section is a user-named group that threads can be filed under in the sidebar [
 ### `Create`
 
 - **Changes**: creates a section, and files the given thread under it when a thread id is passed [book:cli].
-- **Refused when**: an empty name, or a name that already exists — `invalid` [person 2026-10-08] [op/].
+- **Refused when**: an empty name, a name with a control or bidi mark [decision 245], or a name that already exists — `invalid` [person 2026-10-08] [op/].
 
 ### `Rename`
 
 - **Changes**: renames the section [book:cli].
-- **Refused when**: a missing section — `not-found` [op/]. An empty name — `invalid` [person 2026-10-08] [op/].
+- **Refused when**: a missing section — `not-found` [op/]. An empty name, or a name with a control or bidi mark [decision 245] — `invalid` [person 2026-10-08] [op/].
 
 ### `Delete`
 
@@ -692,7 +692,7 @@ The app starts on `fjord`, in system mode, so it follows the operating system's 
 
 - **Allowed when**: the id is lowercase letters, digits, and dashes, and the mode is `light`, `dark` or `system` [book:themes] [docs:look]. `fjord`, `ember` and `grey` ship with the app [book:themes].
 - **Changes**: selects that theme and mode for every open window [docs:look] [book:cli]. A custom theme is `<dataDir>/themes/<id>.json` [book:themes]. A well-formed id with no file yet stays selected; the window shows an error and uses the default palette for the mode [book:themes] [docs:look]. Saving a file updates the list; a missing or invalid selected file does the same and keeps the id [book:themes] [docs:look].
-- **Refused when**: an id with any other character, a path, a dot, or traversal — `invalid` [docs:look] [op/].
+- **Refused when**: an id with any other character, a path, a dot, or traversal — `invalid` [docs:look] [op/]. A theme file whose name has a control or bidi mark — `invalid` [decision 245].
 
 ## Keymap
 

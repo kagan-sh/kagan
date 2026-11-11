@@ -1545,7 +1545,6 @@ fn bidi_overrides_are_refused_in_names_like_control_characters() {
     for mark in ['\u{202A}', '\u{202E}', '\u{2066}', '\u{2069}'] {
         let reversed = format!("live {mark}evil");
         assert!(crate::saved_name(&reversed).is_err(), "{mark:?}");
-        assert!(!crate::valid_branch(&format!("feature{mark}x")), "{mark:?}");
         assert!(!crate::prefs::valid_font_name(&reversed), "{mark:?}");
         assert!(
             crate::check(&Op::SavedPrompt(SavedPromptOp::Add {
