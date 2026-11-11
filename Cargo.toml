@@ -117,16 +117,16 @@ cargo-nextest = { version = "=0.9.151", locked = true }
 # A lost DirectX device is logged and the window stays, and a panic in the window procedure does not abort the process (decisions 166 and 168).
 [patch.crates-io]
 lb-wry = { git = "https://github.com/kagan-sh/wry", rev = "c13dc021f4d5f80f7425c5580fa2f6d1346cb308" }
-gpui-fast-windows = { git = "https://github.com/kagan-sh/gpui-fast", rev = "9501036ad80c5e32477d825283d856582ca6c5df" }
-# GPUI Fast with the offscreen feature (kagan-sh/gpui-fast offscreen-render, on upstream v0.1.14).
-gpui-fast = { git = "https://github.com/kagan-sh/gpui-fast", rev = "8e7c66d4d5739f9b97986bc75b86b8880414ecbe" }
-gpui-fast-apple = { git = "https://github.com/kagan-sh/gpui-fast", rev = "8e7c66d4d5739f9b97986bc75b86b8880414ecbe" }
-gpui-fast-macos = { git = "https://github.com/kagan-sh/gpui-fast", rev = "8e7c66d4d5739f9b97986bc75b86b8880414ecbe" }
-gpui-fast-platform = { git = "https://github.com/kagan-sh/gpui-fast", rev = "8e7c66d4d5739f9b97986bc75b86b8880414ecbe" }
-gpui-fast-linux = { git = "https://github.com/kagan-sh/gpui-fast", rev = "8e7c66d4d5739f9b97986bc75b86b8880414ecbe" }
-gpui-fast-wgpu = { git = "https://github.com/kagan-sh/gpui-fast", rev = "8e7c66d4d5739f9b97986bc75b86b8880414ecbe" }
-gpui-fast-web = { git = "https://github.com/kagan-sh/gpui-fast", rev = "8e7c66d4d5739f9b97986bc75b86b8880414ecbe" }
-gpui-fast-macros = { git = "https://github.com/kagan-sh/gpui-fast", rev = "8e7c66d4d5739f9b97986bc75b86b8880414ecbe" }
+gpui-fast-windows = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+# GPUI Fast: one rev for every gpui-fast crate. It is kagan's Windows pin plus the offscreen feature.
+gpui-fast = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+gpui-fast-apple = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+gpui-fast-macos = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+gpui-fast-platform = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+gpui-fast-linux = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+gpui-fast-wgpu = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+gpui-fast-web = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
+gpui-fast-macros = { git = "https://github.com/kagan-sh/gpui-fast", rev = "0f27075e33dee5a09bc7ae7a6634d2995aa867fa" }
 
 # Line tables keep panic locations. Full debug info dominates link time and the target directory.
 # unpacked skips dsymutil on macOS. Cargo ignores this value on MSVC, which only supports packed.
