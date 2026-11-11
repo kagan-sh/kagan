@@ -254,8 +254,8 @@ fn prompt_title(title: &str) -> Result<(), String> {
         Err(format!(
             "a saved prompt title is longer than {TITLE_MAX} characters"
         ))
-    } else if title.chars().any(char::is_control) {
-        Err("a saved prompt title cannot hold a control character".into())
+    } else if title.chars().any(crate::unsafe_char) {
+        Err("a saved prompt title cannot hold a control or bidi character".into())
     } else {
         Ok(())
     }

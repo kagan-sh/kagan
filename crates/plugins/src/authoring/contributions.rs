@@ -51,7 +51,7 @@ pub(crate) enum Error {
     StatusTitle,
     #[error("ui.{0} is not in this version of kagan; remove it")]
     Spot(&'static str),
-    #[error("UI contribution id {0:?} is blank, repeated or contains control characters")]
+    #[error("UI contribution id {0:?} is blank, repeated or contains control or bidi characters")]
     BlankId(String),
     #[error("panel {0} uses a view, so store belongs on WebView.store(true)")]
     StoreOnView(String),
@@ -144,7 +144,7 @@ impl Contributions {
                 return Err(Error::BottomPanel(panel.id.clone()));
             }
             check_body(panel)?;
-            if panel.title.trim().is_empty() || panel.title.chars().any(char::is_control) {
+            if panel.title.trim().is_empty() || panel.title.chars().any(kg_domain::unsafe_char) {
                 return Err(Error::PlainTitle(panel.id.clone()));
             }
             match (panel.replaces, panel.placement) {
@@ -208,7 +208,7 @@ impl Contributions {
 }
 
 fn check_id<'a>(id: &'a str, ids: &mut BTreeSet<&'a str>) -> Result<(), Error> {
-    if id.trim().is_empty() || id.chars().any(char::is_control) || !ids.insert(id) {
+    if id.trim().is_empty() || id.chars().any(kg_domain::unsafe_char) || !ids.insert(id) {
         return Err(Error::BlankId(id.to_owned()));
     }
     Ok(())

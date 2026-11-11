@@ -194,7 +194,7 @@ An automation is a named text, a program line, and a time, that starts a thread 
 - **Allowed when**: the project exists, the program line parses, and the time is either whole minutes from 1 to 1440 or one non-negative time [op/] [decision 236].
 - **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A one-time automation is due at its time. The thread runs in the project folder [decision 236].
 - **Shows**: the automation [book:cli].
-- **Refused when**: an empty name, a name of only control characters, a name over 120 characters, empty text, text over 1 MiB, an empty program, an unfinished quote, minutes outside 1 to 1440, a negative time, both an interval and a time, or neither — `invalid` [op/]. A missing project — `not-found` [op/].
+- **Refused when**: an empty name, a name with a control or bidi character (a bidi override or isolate, which reverses the text drawn after it), a name over 120 characters, empty text, text over 1 MiB, an empty program, an unfinished quote, minutes outside 1 to 1440, a negative time, both an interval and a time, or neither — `invalid` [op/]. A missing project — `not-found` [op/].
 
 ### `Pause`, `Resume`
 
@@ -265,9 +265,9 @@ A project is a named body of work, usually one repository, with one folder on th
 
 ### `Save`, `Rename`, `Remove`, `Pin`
 
-- **Allowed when**: always. A name is trimmed, at most 40 characters, and has no control characters. A line is split as a command line [op/] [decision 240].
+- **Allowed when**: always. A name is trimmed, at most 40 characters, and has no control or bidi characters. A line is split as a command line [op/] [decision 240].
 - **Changes**: `Save` stores the name and the line. A name already saved, in any case, takes the new line and keeps its pin. `Rename` gives a saved program another name, and its line and pin stay. `Remove` deletes the saved program. A project's default or a thread that already holds its line keeps that line and lists it as a plain program. `Pin` sets or clears the pin, and pinned saved programs are listed first. None of them starts a program or writes an event [decision 240]. The window's buttons and these keys act on the selected row, and only a saved program has them: `PinSavedProgram` pins or unpins it, `RenameSavedProgram` opens the rename form, `DeleteSavedProgram` deletes it, and `SaveSavedProgram` saves or renames from the custom command form [decision 240].
-- **Refused when**: an empty name — `A saved program needs a name.` — `invalid`. A name longer than 40 characters, or with a control character — `invalid`. A line that does not split, such as one with an unfinished quote — `invalid` [op/]. A `Rename` to a name another saved program already has, in any case — `a saved program named <name> already exists` — `invalid`. A name that is not saved — `saved program <name> not found` — `not-found`.
+- **Refused when**: an empty name — `A saved program needs a name.` — `invalid`. A name longer than 40 characters, or with a control or bidi character — `invalid`. A line that does not split, such as one with an unfinished quote — `invalid` [op/]. A `Rename` to a name another saved program already has, in any case — `a saved program named <name> already exists` — `invalid`. A name that is not saved — `saved program <name> not found` — `not-found`.
 
 ## Env
 
@@ -502,9 +502,9 @@ A saved prompt is stored text the person can send, with a title, a body, and a s
 
 ### `Add`
 
-- **Allowed when**: the title trims to at most 200 characters with no control character, and the body has text other than control characters and is at most 1 MiB [op/].
+- **Allowed when**: the title trims to at most 200 characters with no control or bidi character, and the body has text other than control characters and is at most 1 MiB [op/].
 - **Changes**: stores the trimmed title, the body as given, and starred off. The id starts with `svp_` [decision 234].
-- **Refused when**: an empty title or body, a body of only control characters, a longer title, a control character in the title, or a body over 1 MiB — `invalid` [op/].
+- **Refused when**: an empty title or body, a body of only control characters, a longer title, a control or bidi character in the title, or a body over 1 MiB — `invalid` [op/].
 
 ### `Search`
 
