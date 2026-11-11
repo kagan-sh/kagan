@@ -373,6 +373,8 @@ fn the_edit_menu_copy_and_paste_reach_the_terminal(cx: &mut TestAppContext) {
         grid_text(cx, &kagan).contains("menu-paste")
     });
 
+    // Submit the pasted text, so the echo below starts on a clean prompt line.
+    cx.simulate_keystrokes(window, "enter");
     cx.simulate_input(window, "echo menu-copy");
     cx.simulate_keystrokes(window, "enter");
     // The output is a row of its own. The typed command row can hold the word too, or wrap it
