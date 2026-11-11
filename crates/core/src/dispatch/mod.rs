@@ -53,16 +53,7 @@ pub(crate) async fn execute(
             announce(this, crate::WorkspaceEvent::SettingsPlugins, cx)
         }
         Op::Settings(SettingsOp::Project { id, section }) => {
-            let lookup = id.clone();
-            database
-                .call(move |store| store.project(&lookup))
-                .await?
-                .ok_or_else(|| missing("project", &id))?;
-            announce(
-                this,
-                crate::WorkspaceEvent::ProjectSettings(id, section),
-                cx,
-            )
+            project_page(this, &database, id, section, cx).await
         }
         Op::Window(op) => announce(this, crate::WorkspaceEvent::Window(op), cx),
         Op::Sidebar => database.call(read_sidebar).await,
@@ -191,6 +182,26 @@ async fn project_op(
             Ok(result)
         }
     }
+}
+
+// The page of a project that exists, at `section` when one is asked for.
+async fn project_page(
+    this: &WeakEntity<Workspace>,
+    database: &Database,
+    id: kg_domain::ProjectId,
+    section: Option<kg_domain::ProjectSection>,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let lookup = id.clone();
+    database
+        .call(move |store| store.project(&lookup))
+        .await?
+        .ok_or_else(|| missing("project", &id))?;
+    announce(
+        this,
+        crate::WorkspaceEvent::ProjectSettings(id, section),
+        cx,
+    )
 }
 
 fn announce(

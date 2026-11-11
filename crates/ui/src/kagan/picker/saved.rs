@@ -191,7 +191,7 @@ pub(super) fn row_actions(
         .gap_1()
         .flex_shrink_0()
         .invisible()
-        .group_hover(row_group.to_owned(), |this| this.visible());
+        .group_hover(row_group.to_owned(), gpui_kit::Styled::visible);
     Some(
         if selected { shown.visible() } else { shown }
             .child(row_button(

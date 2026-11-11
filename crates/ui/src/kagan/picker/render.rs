@@ -12,7 +12,7 @@ use gpui_kit::{
     Pixels, Render, RenderOnce, Role, StatefulInteractiveElement as _, Styled as _, WeakEntity,
     Window, div,
 };
-use kg_domain::ProgramSource;
+use kg_domain::{Program, ProgramSource};
 
 use super::list::{ProgramRow, Version, version_of};
 use super::saved;
@@ -23,20 +23,24 @@ use crate::kagan::controls::{control, dispatch, note};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
+// The text beside a row's name: the path of a saved or shell program, the flags of a recent one.
+fn command_detail(program: &Program) -> Option<String> {
+    match program.source {
+        ProgramSource::Known => None,
+        ProgramSource::Shell | ProgramSource::Saved => Some(program.command.clone()),
+        ProgramSource::Recent => program
+            .command
+            .split_once(char::is_whitespace)
+            .map(|(_, flags)| flags.trim_start().to_owned())
+            .filter(|flags| !flags.is_empty()),
+    }
+}
+
 impl RenderOnce for ProgramRow {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let card = self.program.source == ProgramSource::Known && self.program.installed();
-        let detail = match self.program.source {
-            ProgramSource::Known => None,
-            ProgramSource::Shell | ProgramSource::Saved => Some(self.program.command.clone()),
-            ProgramSource::Recent => self
-                .program
-                .command
-                .split_once(char::is_whitespace)
-                .map(|(_, flags)| flags.trim_start().to_owned())
-                .filter(|flags| !flags.is_empty()),
-        };
+        let detail = command_detail(&self.program);
         let Version {
             shown: version,
             full: full_version,
