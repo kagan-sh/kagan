@@ -223,3 +223,25 @@ fn the_delete_chord_deletes_the_selected_saved_program(cx: &mut TestAppContext) 
     cx.simulate_keystrokes(window, &chord("DeleteSavedProgram"));
     wait_until(cx, |cx| saved(cx).is_empty());
 }
+
+#[gpui_kit::test]
+fn enter_in_the_rename_box_renames_once_and_leaves_no_error(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    save(cx, "Second", "codex --second");
+    start_in_plain_folder(cx, window, data.path());
+    search(cx, window, "second");
+    click(cx, window, "program-rename-saved-Second");
+    wait_until(cx, |cx| shows(cx, window, "custom-name"));
+    cx.simulate_keystrokes(window, "cmd-a");
+    cx.simulate_input(window, "Third");
+    cx.simulate_keystrokes(window, "enter enter");
+    wait_until(cx, |cx| {
+        saved(cx).iter().any(|program| program.label == "Third")
+    });
+    cx.run_until_parked();
+    assert!(
+        !shows(cx, window, "saved-program-notice"),
+        "a rename that worked leaves no error"
+    );
+    assert!(!shows(cx, window, "custom-name"), "the rename box closes");
+}

@@ -23,7 +23,7 @@ use crate::ui_registry::Facts;
 impl Picker {
     // Saves the custom command under the typed name, or renames the saved program being edited.
     pub(crate) fn save_program(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.mode != Mode::Custom {
+        if self.mode != Mode::Custom || self.saving {
             return;
         }
         let name = self.name.read(cx).value().trim().to_owned();
@@ -44,6 +44,7 @@ impl Picker {
             }
         };
         let task = Workspace::dispatch(Op::Program(op), cx);
+        self.saving = true;
         self.after_change(task, window, cx);
     }
 
@@ -119,14 +120,17 @@ impl Picker {
         self.notice = None;
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
-            _ = this.update_in(cx, |this, window, cx| match result {
-                Ok(_) => {
-                    this.name
-                        .update(cx, |state, cx| state.set_value("", window, cx));
-                    let project = this.project.clone();
-                    this.load(project, window, cx);
+            _ = this.update_in(cx, |this, window, cx| {
+                this.saving = false;
+                match result {
+                    Ok(_) => {
+                        this.name
+                            .update(cx, |state, cx| state.set_value("", window, cx));
+                        let project = this.project.clone();
+                        this.load(project, window, cx);
+                    }
+                    Err(error) => this.fail(error.to_string(), cx),
                 }
-                Err(error) => this.fail(error.to_string(), cx),
             });
         })
         .detach();

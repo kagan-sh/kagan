@@ -84,6 +84,7 @@ impl Picker {
             _subscriptions: subscriptions,
             load_task: None,
             project: None,
+            saving: false,
         }
     }
 
