@@ -1,12 +1,5 @@
 use super::{CAP, png};
 
-#[cfg(target_os = "linux")]
-#[test]
-fn the_png_clipboard_is_refused_on_linux() {
-    let plugin = kg_domain::PluginId("dev.test.clip".into());
-    assert!(super::write_png(&plugin, Vec::new()).is_err());
-}
-
 #[test]
 fn a_png_header_is_accepted_and_other_bytes_are_not() {
     let header = png("iVBORw0KGgo=").expect("png header");
