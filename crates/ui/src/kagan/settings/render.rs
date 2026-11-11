@@ -7,7 +7,7 @@ use gpui_kit::{
 };
 
 use super::row;
-use crate::theme::{SpaceStep, control_height, space};
+use crate::theme::{SpaceStep, space};
 use crate::ui_observe::UiObserveExt as _;
 use gpui_kit::component::StyledExt as _;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -18,44 +18,46 @@ pub(super) fn group_block(group: row::Group, cx: &App) -> AnyElement {
     let card = cx.theme().group_box;
     let muted = cx.theme().muted_foreground;
     let rows = group.rows.len();
-    let shortcut = group.style != row::GroupStyle::Plain;
-    let first_shortcut = group.style == row::GroupStyle::FirstShortcuts;
+    let anchored = group.anchored;
     let title = group.title.clone();
-    let block =
-        v_flex()
-            .flex_shrink_0()
-            .id(ElementId::Name(
-                format!("settings-group-{}", group.key).into(),
-            ))
-            .ui_container()
-            .gap(px(space(SpaceStep::Sm, cx)))
-            .when(group.headed, |card| {
-                card.child(
-                    div()
-                        .id(ElementId::Name(
-                            format!("settings-heading-{}", group.key).into(),
-                        ))
-                        .ui_container()
-                        .aria_label(title.clone())
-                        .type_caption(cx)
-                        .font_semibold()
-                        .text_color(cx.theme().foreground)
-                        .child(title),
-                )
-            })
-            .child(
-                v_flex()
-                    .rounded(radius)
-                    .border_1()
-                    .border_color(line)
-                    .bg(card)
-                    .overflow_hidden()
-                    .children(group.rows.into_iter().enumerate().map(|(ix, row)| {
-                        row_element(row, ix + 1 == rows, line, muted, shortcut, cx)
-                    })),
+    let block = v_flex()
+        .flex_shrink_0()
+        .id(ElementId::Name(
+            format!("settings-group-{}", group.key).into(),
+        ))
+        .ui_container()
+        .gap(px(space(SpaceStep::Sm, cx)))
+        .when(group.headed, |card| {
+            card.child(
+                div()
+                    .id(ElementId::Name(
+                        format!("settings-heading-{}", group.key).into(),
+                    ))
+                    .ui_container()
+                    .aria_label(title.clone())
+                    .type_caption(cx)
+                    .font_semibold()
+                    .text_color(cx.theme().foreground)
+                    .child(title),
             )
-            .into_any_element();
-    if first_shortcut {
+        })
+        .child(
+            v_flex()
+                .rounded(radius)
+                .border_1()
+                .border_color(line)
+                .bg(card)
+                .overflow_hidden()
+                .children(
+                    group
+                        .rows
+                        .into_iter()
+                        .enumerate()
+                        .map(|(ix, row)| row_element(row, ix + 1 == rows, line, muted, cx)),
+                ),
+        )
+        .into_any_element();
+    if anchored {
         div()
             .flex_shrink_0()
             .id("settings-group-shortcuts")
@@ -72,11 +74,9 @@ pub(super) fn row_element(
     last: bool,
     line: Hsla,
     muted: Hsla,
-    shortcut: bool,
     cx: &App,
 ) -> AnyElement {
     let show_text = !row.bare;
-    let noted = !row.note.is_empty();
     let alias = row.alias;
     let note = row
         .note_content
@@ -142,15 +142,8 @@ pub(super) fn row_element(
         .id(row.id)
         .ui_container()
         .aria_label(row.title)
-        .when(shortcut, |item| item.px(px(space(SpaceStep::Lg, cx))))
-        .when(shortcut && !noted, |item| item.h(px(control_height(cx))))
-        .when(shortcut && noted, |item| {
-            item.py(px(space(SpaceStep::Xs, cx)))
-        })
-        .when(!shortcut, |item| {
-            item.px(px(space(SpaceStep::Lg, cx)))
-                .py(px(space(SpaceStep::Md, cx)))
-        })
+        .px(px(space(SpaceStep::Lg, cx)))
+        .py(px(space(SpaceStep::Md, cx)))
         .when(!last, |item| item.border_b_1().border_color(line))
         .child(body)
         .into_any_element();
