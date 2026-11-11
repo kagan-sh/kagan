@@ -1119,6 +1119,23 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
 }
 
 #[test]
+fn a_setup_revision_may_not_start_with_a_dash() {
+    let setup = |rev: &str| {
+        crate::check(&Op::Environment(crate::EnvironmentOp::Setup {
+            project_id: crate::ProjectId("project".into()),
+            rev: rev.into(),
+        }))
+    };
+    assert_eq!(setup("main"), Ok(()));
+    assert_eq!(setup("-x"), Err("a revision cannot start with -".into()));
+}
+
+#[test]
+fn a_saved_screen_keeps_four_mebibytes_at_most() {
+    assert_eq!(crate::SCREEN_MAX_BYTES, 4_194_304);
+}
+
+#[test]
 fn surface_ids_and_window_indexes_match_the_documented_checks() {
     use crate::{SurfaceOp, WindowOp};
     let open = |id: &str| {
