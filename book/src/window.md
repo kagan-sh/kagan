@@ -107,7 +107,7 @@ Type to filter. Each row shows its key. Enter runs the selected command. A comma
 
 **Search threads…** (Cmd+Alt+F) finds threads by title and terminal text. Enter opens the thread at the matching line. After an archived thread's 10 seconds end, search finds it only by title. `kg thread search` gives the same results.
 
-**Saved prompts** (Cmd+Shift+G) lists stored text the person can send. The field searches the title and the body. Star and Delete sit on the row. Enter pastes the body into the shown thread. **New saved prompt** writes one in the same list. `kg saved-prompt` does the same.
+**Saved prompts** (Cmd+Shift+I) lists stored text the person can send. The field searches the title and the body. Cmd+D stars the selected row and Cmd+Alt+Backspace deletes it (Ctrl+Shift off macOS). Enter sends its body into the shown thread and presses Enter. **New saved prompt** (Cmd+Alt+N) writes one in the same list; Cmd+Alt+S saves it and Escape drops it. `kg saved-prompt` does the same.
 
 ## Settings
 

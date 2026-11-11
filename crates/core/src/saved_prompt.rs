@@ -1,9 +1,9 @@
 use gpui_kit::{AsyncApp, WeakEntity};
-use kg_domain::{OpError, OpResult, SavedPrompt, SavedPromptId, SavedPromptOp};
+use kg_domain::{OpResult, SavedPrompt, SavedPromptId, SavedPromptOp};
 
 use crate::Workspace;
 use crate::host::database::{Database, Result};
-use crate::workspace::{closed, id, missing};
+use crate::workspace::{id, missing};
 
 pub(crate) async fn run(
     this: &WeakEntity<Workspace>,
@@ -49,17 +49,13 @@ pub(crate) async fn run(
                 .await?;
             Ok(OpResult::Done)
         }
-        SavedPromptOp::Send { id } => {
+        SavedPromptOp::Send { id, thread_id } => {
             let lookup = id.clone();
             let prompt = database
                 .call(move |store| store.saved_prompt(&lookup))
                 .await?
                 .ok_or_else(|| missing("saved prompt", &id))?;
-            let thread = this
-                .update(cx, |workspace, _| workspace.shown_thread.clone())
-                .map_err(closed)?
-                .ok_or_else(|| OpError::Invalid("no thread is shown".into()))?;
-            crate::thread::send(this, thread, &prompt.body, cx).await
+            crate::thread::send(this, thread_id, &prompt.body, cx).await
         }
     }
 }

@@ -1,7 +1,7 @@
 use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 
-use crate::SavedPromptId;
+use crate::{SavedPromptId, ThreadId};
 
 pub(crate) const TITLE_MAX: usize = 200;
 
@@ -23,6 +23,10 @@ pub enum SavedPromptOp {
     },
     /// Delete a saved prompt
     Delete { id: SavedPromptId },
-    /// Paste a saved prompt into the shown thread
-    Send { id: SavedPromptId },
+    /// Type a saved prompt into a thread and press Enter
+    Send {
+        id: SavedPromptId,
+        #[arg(env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
 }

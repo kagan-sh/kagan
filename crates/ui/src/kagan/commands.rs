@@ -23,13 +23,24 @@ use super::{Kagan, Shown};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-mod saved;
+pub(crate) mod saved;
 mod search;
 
 #[cfg(test)]
 pub(crate) use search::found;
 
-actions!(kagan, [OpenCommandList, SearchThreads, OpenSavedPrompts]);
+actions!(
+    kagan,
+    [
+        OpenCommandList,
+        SearchThreads,
+        OpenSavedPrompts,
+        StarSavedPrompt,
+        NewSavedPrompt,
+        DeleteSavedPrompt,
+        SaveSavedPrompt,
+    ]
+);
 
 const TOP: f32 = 48.;
 const WIDTH: f32 = 560.;
@@ -200,12 +211,27 @@ pub(super) fn layer(
                     .bg(cx.theme().popover)
                     .rounded(cx.theme().radius_lg)
                     .shadow_lg()
+                    .when(list.mode == Mode::Saved, |this| {
+                        this.key_context(saved::CONTEXT)
+                            .on_action(cx.listener(|this, _: &StarSavedPrompt, window, cx| {
+                                this.star_selected(window, cx);
+                            }))
+                            .on_action(cx.listener(|this, _: &NewSavedPrompt, window, cx| {
+                                this.new_saved(window, cx);
+                            }))
+                            .on_action(cx.listener(|this, _: &DeleteSavedPrompt, window, cx| {
+                                this.delete_selected(window, cx);
+                            }))
+                            .on_action(cx.listener(|this, _: &SaveSavedPrompt, window, cx| {
+                                this.save_draft(window, cx);
+                            }))
+                    })
                     .capture_action(cx.listener(|this, _: &Cancel, window, cx| {
-                        this.close_commands(window, cx);
+                        this.back_out(window, cx);
                         cx.stop_propagation();
                     }))
                     .capture_action(cx.listener(|this, _: &Escape, window, cx| {
-                        this.close_commands(window, cx);
+                        this.back_out(window, cx);
                         cx.stop_propagation();
                     }))
                     .on_mouse_down_out(cx.listener(|this, _, window, cx| {

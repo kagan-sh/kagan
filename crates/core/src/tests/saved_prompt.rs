@@ -75,18 +75,16 @@ async fn add_search_star_and_delete_round_trip(cx: &mut TestAppContext) {
     assert!(matches!(missing, OpError::NotFound(_)));
     let empty = op(add("   ", "text"), cx).await.unwrap_err();
     assert!(matches!(empty, OpError::Invalid(_)));
-    let no_body = op(add("Title", "  \n"), cx).await.unwrap_err();
-    assert!(matches!(no_body, OpError::Invalid(_)));
 }
 
 #[gpui_kit::test]
-async fn send_is_refused_when_no_thread_is_shown(cx: &mut TestAppContext) {
+async fn add_refuses_a_body_with_no_text_and_keeps_line_breaks(cx: &mut TestAppContext) {
     let _fixture = Fixture::new(cx).await;
-    let prompt = added("Send", "hello", cx).await;
-    let error = op(Op::SavedPrompt(SavedPromptOp::Send { id: prompt.id }), cx)
-        .await
-        .unwrap_err();
-    assert!(matches!(error, OpError::Invalid(message) if message == "no thread is shown"));
+    for body in ["  \n", "\u{1}\u{2}"] {
+        let error = op(add("Title", body), cx).await.unwrap_err();
+        assert!(matches!(error, OpError::Invalid(_)), "{body:?}");
+    }
+    added("Lines", "one\ntwo", cx).await;
 }
 
 #[cfg(unix)]
@@ -100,14 +98,10 @@ async fn send_uses_the_same_path_as_thread_send(cx: &mut TestAppContext) {
     );
     let (id, _reap) = started(&fixture, &program, cx).await;
     let prompt = added("Greet", "hello", cx).await;
-    cx.update(|cx| {
-        fixture.workspace.update(cx, |workspace, _| {
-            workspace.note_shown_thread(Some(id.clone()));
-        });
-    });
     op(
         Op::SavedPrompt(SavedPromptOp::Send {
             id: prompt.id.clone(),
+            thread_id: id.clone(),
         }),
         cx,
     )
@@ -116,13 +110,4 @@ async fn send_uses_the_same_path_as_thread_send(cx: &mut TestAppContext) {
     let frame = screen_with(&id, "got:hello", cx).await;
     assert!(frame.contains("got:hello"), "{frame}");
     assert_eq!(sent_text(&events(&id, cx).await), ["hello"]);
-    cx.update(|cx| {
-        fixture.workspace.update(cx, |workspace, _| {
-            workspace.note_shown_thread(None);
-        });
-    });
-    let hidden = op(Op::SavedPrompt(SavedPromptOp::Send { id: prompt.id }), cx)
-        .await
-        .unwrap_err();
-    assert!(matches!(hidden, OpError::Invalid(message) if message == "no thread is shown"));
 }

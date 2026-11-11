@@ -152,8 +152,6 @@ pub struct Workspace {
     #[cfg(any(test, feature = "test"))]
     pub(crate) homes: BTreeMap<&'static str, PathBuf>,
     pub(crate) ui: Option<crate::dispatch::ui::UiDispatch>,
-    /// The thread the window is showing. Send of a saved prompt uses it.
-    pub(crate) shown_thread: Option<ThreadId>,
     sections: Vec<kg_domain::Section>,
     requests: Sender<Envelope>,
     // Wall time at open plus executor time, so grace deadlines follow GPUI's test clock.
@@ -193,20 +191,6 @@ impl EventEmitter<WorkspaceEvent> for Workspace {}
 pub(crate) struct WorkspaceGlobal(Entity<Workspace>);
 impl Global for WorkspaceGlobal {}
 impl Workspace {
-    /// The window reports the thread it is showing, so a saved prompt can be sent there.
-    pub fn note_shown_thread(&mut self, id: Option<ThreadId>) {
-        self.shown_thread = id;
-    }
-
-    /// Records the shown thread when the window is open. A missing workspace is left alone.
-    pub fn remember_shown_thread(id: Option<ThreadId>, cx: &mut gpui_kit::App) {
-        let workspace = cx
-            .try_global::<WorkspaceGlobal>()
-            .map(|global| global.0.clone());
-        if let Some(workspace) = workspace {
-            workspace.update(cx, |workspace, _| workspace.note_shown_thread(id));
-        }
-    }
     /// Built-in shortcut overrides last read or written by a keymap operation.
     #[must_use]
     pub fn keymap(&self) -> &kg_domain::Keymap {
@@ -305,7 +289,6 @@ impl Workspace {
                         #[cfg(any(test, feature = "test"))]
                         homes: BTreeMap::new(),
                         ui: None,
-                        shown_thread: None,
                         requests,
                         clock: (now(), cx.background_executor().now()),
                         #[cfg(any(test, feature = "test"))]

@@ -7,21 +7,50 @@ use gpui_kit::component::input::{Input, InputState, Textarea, TextareaState};
 use gpui_kit::component::{ActiveTheme as _, IndexPath, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     App, AppContext as _, Context, ElementId, Entity, Focusable as _, InteractiveElement as _,
-    IntoElement, ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
-    WeakEntity, Window, div, px,
+    IntoElement, KeyBinding, ParentElement as _, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Task, WeakEntity, Window, div, px,
 };
 use kg_core::Workspace;
-use kg_domain::{Op, OpResult, SavedPrompt, SavedPromptId, SavedPromptOp};
+use kg_domain::{Op, OpError, OpResult, SavedPrompt, SavedPromptId, SavedPromptOp};
 
-use super::{CommandList, Mode};
+use super::{
+    CommandList, DeleteSavedPrompt, Mode, NewSavedPrompt, SaveSavedPrompt, StarSavedPrompt,
+};
 use crate::kagan::Kagan;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
+
+pub(super) const CONTEXT: &str = "SavedPrompts";
+const UNEXPECTED: &str = "Saved prompts gave an unexpected answer.";
+const NO_THREAD: &str = "No thread is shown.";
 
 #[derive(Clone)]
 pub(super) struct Draft {
     title: Entity<InputState>,
     body: Entity<TextareaState>,
+}
+
+pub(crate) fn chords() -> [&'static str; 4] {
+    if cfg!(target_os = "macos") {
+        ["cmd-d", "cmd-alt-n", "cmd-alt-backspace", "cmd-alt-s"]
+    } else {
+        [
+            "ctrl-shift-d",
+            "ctrl-shift-alt-n",
+            "ctrl-shift-alt-backspace",
+            "ctrl-shift-alt-s",
+        ]
+    }
+}
+
+pub(crate) fn bindings() -> Vec<KeyBinding> {
+    let [star, new, delete, save] = chords();
+    vec![
+        KeyBinding::new(star, StarSavedPrompt, Some(CONTEXT)),
+        KeyBinding::new(new, NewSavedPrompt, Some(CONTEXT)),
+        KeyBinding::new(delete, DeleteSavedPrompt, Some(CONTEXT)),
+        KeyBinding::new(save, SaveSavedPrompt, Some(CONTEXT)),
+    ]
 }
 
 impl Kagan {
@@ -56,9 +85,7 @@ impl Kagan {
                         list.prompts = prompts;
                         list.failed = None;
                     }
-                    Ok(_) => {
-                        list.failed = Some("Saved prompts gave an unexpected answer.".into());
-                    }
+                    Ok(_) => list.failed = Some(UNEXPECTED.into()),
                     Err(error) => list.failed = Some(error.to_string().into()),
                 }
                 list.state
@@ -67,6 +94,52 @@ impl Kagan {
             });
         });
         cx.notify();
+    }
+
+    // Escape closes only a draft when one is open, so typed text is not lost by accident.
+    pub(super) fn back_out(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self
+            .commands
+            .as_ref()
+            .is_some_and(|list| list.draft.is_some())
+        {
+            self.cancel_draft(window, cx);
+        } else {
+            self.close_commands(window, cx);
+        }
+    }
+
+    pub(super) fn new_saved(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self
+            .commands
+            .as_ref()
+            .is_some_and(|list| list.mode == Mode::Saved && list.draft.is_none())
+        {
+            self.begin_draft(window, cx);
+        }
+    }
+
+    pub(super) fn star_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(prompt) = self.selected_prompt(cx) else {
+            return;
+        };
+        self.set_star(prompt.id, !prompt.starred, window, cx);
+    }
+
+    pub(super) fn delete_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(prompt) = self.selected_prompt(cx) else {
+            return;
+        };
+        self.delete_saved(prompt.id, window, cx);
+    }
+
+    fn selected_prompt(&self, cx: &App) -> Option<SavedPrompt> {
+        let list = self
+            .commands
+            .as_ref()
+            .filter(|list| list.mode == Mode::Saved && list.draft.is_none())?;
+        let row = list.state.read(cx).selected_index()?.row;
+        list.prompts.get(row).cloned()
     }
 
     fn begin_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -87,16 +160,17 @@ impl Kagan {
         cx.notify();
     }
 
-    fn cancel_draft(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn cancel_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(list) = self.commands.as_mut() else {
             return;
         };
         list.draft = None;
         list.failed = None;
+        list.state.update(cx, |state, cx| state.focus(window, cx));
         cx.notify();
     }
 
-    fn save_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn save_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(draft) = self.commands.as_ref().and_then(|list| list.draft.clone()) else {
             return;
         };
@@ -116,9 +190,7 @@ impl Kagan {
                         let query = list.state.read(cx).query(cx).to_string();
                         this.search_saved(&query, window, cx);
                     }
-                    Ok(_) => {
-                        list.failed = Some("Saved prompts gave an unexpected answer.".into());
-                    }
+                    Ok(_) => list.failed = Some(UNEXPECTED.into()),
                     Err(error) => list.failed = Some(error.to_string().into()),
                 }
                 cx.notify();
@@ -145,7 +217,7 @@ impl Kagan {
 
     fn after_saved(
         &mut self,
-        task: gpui_kit::Task<std::result::Result<OpResult, kg_domain::OpError>>,
+        task: Task<std::result::Result<OpResult, OpError>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -169,6 +241,32 @@ impl Kagan {
         })
         .detach();
     }
+
+    fn send_saved(&mut self, id: SavedPromptId, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(thread_id) = self.shown_thread(cx) else {
+            if let Some(list) = self.commands.as_mut() {
+                list.failed = Some(NO_THREAD.into());
+            }
+            cx.notify();
+            return;
+        };
+        let task = Workspace::dispatch(Op::SavedPrompt(SavedPromptOp::Send { id, thread_id }), cx);
+        cx.spawn_in(window, async move |this, cx| {
+            let result = task.await;
+            _ = this.update_in(cx, |this, window, cx| match result {
+                Ok(_) => {
+                    this.close_commands(window, cx);
+                }
+                Err(error) => {
+                    if let Some(list) = this.commands.as_mut() {
+                        list.failed = Some(error.to_string().into());
+                        cx.notify();
+                    }
+                }
+            });
+        })
+        .detach();
+    }
 }
 
 pub(super) fn view(list: &CommandList, this: &WeakEntity<Kagan>) -> Command {
@@ -176,25 +274,6 @@ pub(super) fn view(list: &CommandList, this: &WeakEntity<Kagan>) -> Command {
         return draft_form(list, draft, this);
     }
     prompt_list(list, this)
-}
-
-fn paste_saved(id: SavedPromptId, window: &mut Window, cx: &mut Context<Kagan>) {
-    let task = Workspace::dispatch(Op::SavedPrompt(SavedPromptOp::Send { id }), cx);
-    cx.spawn_in(window, async move |this, cx| {
-        let result = task.await;
-        _ = this.update_in(cx, |this, window, cx| match result {
-            Ok(_) => {
-                this.close_commands(window, cx);
-            }
-            Err(error) => {
-                if let Some(list) = this.commands.as_mut() {
-                    list.failed = Some(error.to_string().into());
-                    cx.notify();
-                }
-            }
-        });
-    })
-    .detach();
 }
 
 fn prompt_list(list: &CommandList, this: &WeakEntity<Kagan>) -> Command {
@@ -228,7 +307,7 @@ fn prompt_list(list: &CommandList, this: &WeakEntity<Kagan>) -> Command {
             let Some(prompt) = opened.get(index.row).cloned() else {
                 return;
             };
-            _ = sending.update(cx, |_, cx| paste_saved(prompt.id, window, cx));
+            _ = sending.update(cx, |this, cx| this.send_saved(prompt.id, window, cx));
         })
         .footer(move |_, _, cx| {
             let owner = adding.clone();
@@ -430,8 +509,10 @@ fn draft_form(list: &CommandList, draft: &Draft, this: &WeakEntity<Kagan>) -> Co
                                 .small()
                                 .ghost()
                                 .label("Cancel")
-                                .on_click(move |_, _, cx| {
-                                    _ = cancelling.update(cx, Kagan::cancel_draft);
+                                .on_click(move |_, window, cx| {
+                                    _ = cancelling.update(cx, |this, cx| {
+                                        this.cancel_draft(window, cx);
+                                    });
                                 }),
                         ),
                 )
@@ -445,8 +526,13 @@ fn notice_line(notice: Option<SharedString>, cx: &App) -> gpui_kit::AnyElement {
     div()
         .id("saved-prompt-notice")
         .ui_observe_as(Facts {
+            role: gpui_kit::Role::Status,
+            name: "Saved prompt notice".into(),
             value: Some(notice.clone()),
-            ..Facts::button("Saved prompt notice")
+            disabled: false,
+            selected: None,
+            focus: None,
+            hint: None,
         })
         .text_color(cx.theme().danger)
         .child(notice)

@@ -244,7 +244,6 @@ impl Kagan {
         for (id, _) in pages::plugin_entries(cx) {
             self.mount_settings_view(&id, window, cx);
         }
-        self.remember_shown(cx);
     }
 
     pub(super) fn manage_plugins(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -271,7 +270,6 @@ impl Kagan {
         self.open_center(super::screen::Center::Work(work), window, cx);
         self.announce_questions(window, cx);
         self.return_focus(super::screen::FocusReturn::Center, window, cx);
-        self.remember_shown(cx);
         cx.notify();
     }
 

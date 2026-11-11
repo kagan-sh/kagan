@@ -2151,7 +2151,7 @@ Commands:
   search  Saved prompts whose title or body contains this text. An empty search lists them all
   star    Star or unstar a saved prompt
   delete  Delete a saved prompt
-  send    Paste a saved prompt into the shown thread
+  send    Type a saved prompt into a thread and press Enter
   help    Print this message or the help of the given subcommand(s)
 
 Options:
@@ -2235,13 +2235,16 @@ Options:
 ## `kg saved-prompt send`
 
 ```text
-Paste a saved prompt into the shown thread
+Type a saved prompt into a thread and press Enter
 
-Usage: kg saved-prompt send <ID>
+Usage: kg saved-prompt send <ID> <THREAD_ID>
 
 Arguments:
   <ID>
           
+
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
 
 Options:
   -h, --help

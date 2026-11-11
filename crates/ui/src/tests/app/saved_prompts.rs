@@ -6,6 +6,7 @@ use kg_domain::{
 };
 
 use crate::kagan::Kagan;
+use crate::kagan::commands::saved::chords;
 use crate::kagan::commands::state as commands_state;
 use crate::tests::kagan::{click, open, run_shell, shows, value_of, wait_until};
 
@@ -42,6 +43,22 @@ fn add(cx: &mut TestAppContext, title: &str, body: &str) -> SavedPrompt {
         OpResult::SavedPrompt(prompt) => prompt,
         other => panic!("{other:?}"),
     }
+}
+
+fn star_key() -> &'static str {
+    chords()[0]
+}
+
+fn new_key() -> &'static str {
+    chords()[1]
+}
+
+fn delete_key() -> &'static str {
+    chords()[2]
+}
+
+fn save_key() -> &'static str {
+    chords()[3]
 }
 
 fn row(id: &SavedPromptId) -> String {
@@ -99,30 +116,94 @@ fn has_value(cx: &mut TestAppContext, window: AnyWindowHandle, value: &str) -> b
 }
 
 #[gpui_kit::test]
-fn send_is_refused_until_a_thread_is_shown(cx: &mut TestAppContext) {
-    let (_kagan, _window, _data) = open(cx);
-    let prompt = add(cx, "Away", "not yet");
-    let error = outcome(cx, Op::SavedPrompt(SavedPromptOp::Send { id: prompt.id })).unwrap_err();
-    assert!(matches!(error, OpError::Invalid(message) if message == "no thread is shown"));
+fn star_and_delete_act_on_the_selected_row_from_the_keyboard(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let notes = add(cx, "Notes", "remember this");
+    dispatch(cx, Op::Window(WindowOp::SavedPrompts));
+    cx.run_until_parked();
+    cx.simulate_keystrokes(window, star_key());
+    cx.run_until_parked();
+    assert_eq!(
+        value_of(cx, window, &format!("saved-prompt-star-{}", notes.id.0)).as_deref(),
+        Some("starred")
+    );
+    cx.simulate_keystrokes(window, delete_key());
+    cx.run_until_parked();
+    assert!(!shows(cx, window, &row(&notes.id)));
+    assert!(cx.update(|cx| commands_state(kagan.read(cx))).is_some());
+}
+
+#[gpui_kit::test]
+fn new_then_escape_leaves_the_list_open_and_drops_the_draft(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    dispatch(cx, Op::Window(WindowOp::SavedPrompts));
+    cx.run_until_parked();
+    cx.simulate_keystrokes(window, new_key());
+    assert!(shows(cx, window, "saved-prompt-title"));
+    cx.simulate_keystrokes(window, "escape");
+    cx.run_until_parked();
+    assert!(!shows(cx, window, "saved-prompt-title"));
+    assert!(cx.update(|cx| commands_state(kagan.read(cx))).is_some());
+}
+
+#[gpui_kit::test]
+fn the_new_key_mid_draft_keeps_the_typed_title(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    dispatch(cx, Op::Window(WindowOp::SavedPrompts));
+    cx.run_until_parked();
+    cx.simulate_keystrokes(window, new_key());
+    click(cx, window, "saved-prompt-title");
+    cx.simulate_input(window, "Kept");
+    cx.simulate_keystrokes(window, new_key());
+    cx.run_until_parked();
+    assert!(has_value(cx, window, "Kept"));
+}
+
+#[gpui_kit::test]
+fn the_save_key_adds_the_draft_from_its_body(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    dispatch(cx, Op::Window(WindowOp::SavedPrompts));
+    cx.run_until_parked();
+    cx.simulate_keystrokes(window, new_key());
+    click(cx, window, "saved-prompt-title");
+    cx.simulate_input(window, "Keys");
+    click(cx, window, "saved-prompt-body");
+    cx.simulate_input(window, "typed by key");
+    cx.simulate_keystrokes(window, save_key());
+    cx.run_until_parked();
+    assert!(!shows(cx, window, "saved-prompt-title"));
+    assert!(has_value(cx, window, "typed by key"));
+    assert!(cx.update(|cx| commands_state(kagan.read(cx))).is_some());
 }
 
 #[cfg(unix)]
 #[gpui_kit::test]
-fn send_pastes_into_the_shown_thread_and_refuses_in_settings(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = open(cx);
+fn enter_sends_the_selected_prompt_into_the_shown_thread(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
-    let prompt = add(cx, "Mark", "printf saved-mark");
-    dispatch(
-        cx,
-        Op::SavedPrompt(SavedPromptOp::Send {
-            id: prompt.id.clone(),
-        }),
-    );
+    add(cx, "Mark", "printf saved-mark");
+    dispatch(cx, Op::Window(WindowOp::SavedPrompts));
+    cx.run_until_parked();
+    cx.simulate_keystrokes(window, "enter");
     wait_until(cx, |cx| screen(cx, &id).contains("saved-mark"));
+    assert!(cx.update(|cx| commands_state(kagan.read(cx))).is_none());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn enter_says_no_thread_is_shown_while_settings_covers_the_thread(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    add(cx, "Away", "not here");
     dispatch(cx, Op::Settings(SettingsOp::Open));
-    let hidden = outcome(cx, Op::SavedPrompt(SavedPromptOp::Send { id: prompt.id })).unwrap_err();
-    assert!(matches!(hidden, OpError::Invalid(message) if message == "no thread is shown"));
+    dispatch(cx, Op::Window(WindowOp::SavedPrompts));
+    cx.run_until_parked();
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert!(has_value(cx, window, "No thread is shown."));
+    assert!(cx.update(|cx| commands_state(kagan.read(cx))).is_some());
 }
 
 #[cfg(unix)]

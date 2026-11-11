@@ -225,9 +225,8 @@ fn saved_prompt(op: &SavedPromptOp) -> Result<(), String> {
             "search text is longer than {SEARCH_TEXT_MAX} characters"
         )),
         SavedPromptOp::Search { .. } => Ok(()),
-        SavedPromptOp::Star { id, .. }
-        | SavedPromptOp::Delete { id }
-        | SavedPromptOp::Send { id } => prompt_id(id),
+        SavedPromptOp::Star { id, .. } | SavedPromptOp::Delete { id } => prompt_id(id),
+        SavedPromptOp::Send { id, thread_id } => prompt_id(id).and_then(|()| plain(thread_id)),
     }
 }
 
@@ -247,7 +246,7 @@ fn prompt_title(title: &str) -> Result<(), String> {
 }
 
 fn prompt_body(body: &str) -> Result<(), String> {
-    if body.trim().is_empty() {
+    if body.trim().is_empty() || !body.chars().any(|c| !c.is_control()) {
         Err("a saved prompt needs text".into())
     } else if body.len() > TEXT_MAX {
         Err(format!("text is over {} MiB", TEXT_MAX >> 20))
