@@ -1372,6 +1372,21 @@ async fn a_rename_for_a_requester_locks_the_title_after_one(cx: &mut TestAppCont
 }
 
 #[gpui_kit::test]
+async fn sending_to_an_unknown_thread_names_the_thread(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    let error = op(
+        Op::Thread(ThreadOp::Send {
+            id: ThreadId("thr_nope".into()),
+            text: "hi".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(error.to_string(), "thread thr_nope not found");
+}
+
+#[gpui_kit::test]
 async fn a_rename_drops_bidi_marks_from_the_title(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let OpResult::Thread(started) = op(fixture.run(program()), cx).await.unwrap() else {
