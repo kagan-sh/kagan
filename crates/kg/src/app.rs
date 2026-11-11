@@ -68,7 +68,10 @@ pub(crate) fn data_dir_of(
 pub(crate) fn run(presentation: kg_ui::Presentation) -> Result<()> {
     let location = socket::location()?;
     let Some(listener) = socket::open(&location).context("cannot open the kg socket")? else {
-        return Ok(());
+        anyhow::bail!(
+            "an app is already listening on {}",
+            Path::new(&location).display()
+        );
     };
     let (requests, incoming) = async_channel::unbounded::<Request>();
     socket::serve(listener, move |op, gone| {
