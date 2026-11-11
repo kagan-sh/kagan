@@ -153,7 +153,7 @@ fn a_refused_save_says_why_and_the_notice_clears_when_the_name_changes(cx: &mut 
     wait_until(cx, |cx| shows(cx, window, "saved-program-notice"));
     assert_eq!(
         label(cx, window, "saved-program-notice"),
-        "A saved program needs a name."
+        "a saved program needs a name"
     );
     click(cx, window, "custom-name");
     cx.simulate_input(window, "Named");

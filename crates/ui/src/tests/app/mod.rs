@@ -9,4 +9,5 @@ mod notify;
 pub(super) mod picker;
 mod saved_programs;
 mod saved_prompts;
+mod ui_driver;
 mod update;

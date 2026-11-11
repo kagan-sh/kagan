@@ -176,7 +176,14 @@ impl Kagan {
         };
         let title = draft.title.read(cx).value().to_string();
         let body = draft.body.read(cx).value().to_string();
-        let task = Workspace::dispatch(Op::SavedPrompt(SavedPromptOp::Add { title, body }), cx);
+        let task = Workspace::dispatch(
+            Op::SavedPrompt(SavedPromptOp::Add {
+                title,
+                body: Some(body),
+                file: None,
+            }),
+            cx,
+        );
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
             _ = this.update_in(cx, |this, window, cx| {
