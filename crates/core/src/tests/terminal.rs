@@ -708,6 +708,42 @@ async fn input_to_an_ended_program_is_refused(cx: &mut TestAppContext) {
 
 #[cfg(unix)]
 #[gpui_kit::test]
+async fn input_past_the_queue_budget_is_refused_as_full(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Thread(started) = op(fixture.run("/bin/sh -c \"sleep 30\""), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("thread")
+    };
+    let text = "a".repeat(1 << 20);
+    for _ in 0..4 {
+        op(
+            Op::Thread(ThreadOp::Input {
+                id: started.id.clone(),
+                text: text.clone(),
+                terminal: None,
+            }),
+            cx,
+        )
+        .await
+        .expect("input inside the budget is accepted");
+    }
+    let refused = op(
+        Op::Thread(ThreadOp::Input {
+            id: started.id.clone(),
+            text: "x".into(),
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(refused, OpError::Full(_)), "{refused}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
 async fn deleting_an_ended_thread_releases_its_screen(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let OpResult::Thread(started) = op(fixture.run("/bin/sh -c \"printf done; exit 0\""), cx)
