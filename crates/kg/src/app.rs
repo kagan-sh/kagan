@@ -1,12 +1,19 @@
 use std::ffi::OsString;
+use std::fs::{File, OpenOptions, TryLockError};
 use std::path::{Path, PathBuf};
+use std::pin::pin;
 
 use anyhow::{Context as _, Result};
-use async_channel::Sender;
+use async_channel::{Receiver, Sender};
+use futures::executor::block_on;
+use futures::future::{Either, select};
 use gpui_kit::QuitMode;
 use kg_domain::{Op, OpError, OpResult};
 
 use crate::socket;
+
+const LOCK_FILE: &str = "kagan.lock";
+const PID_FILE: &str = "kagan.pid";
 
 type Request = (Op, kg_core::Requester, Sender<Result<OpResult, OpError>>);
 
@@ -65,22 +72,75 @@ pub(crate) fn data_dir_of(
     Ok(Path::new(&home).join(".kagan"))
 }
 
+/// Holds a data folder for one app. A second app on the same folder would run the same threads
+/// again and write the same database, so it is refused. The lock ends when the app exits.
+/// The lock file itself is never read: Windows blocks reads of a locked range, so the owner's
+/// pid goes in `kagan.pid` beside it.
+pub(crate) fn lock_data_dir(data_dir: &Path) -> Result<File> {
+    let lock = open_lock(data_dir)?;
+    match lock.try_lock() {
+        Ok(()) => {}
+        Err(TryLockError::WouldBlock) => {
+            anyhow::bail!("this data folder is in use by {}", holder_text(data_dir));
+        }
+        Err(TryLockError::Error(error)) => return Err(error.into()),
+    }
+    std::fs::write(data_dir.join(PID_FILE), format!("{}\n", std::process::id()))
+        .with_context(|| format!("cannot write {PID_FILE}"))?;
+    Ok(lock)
+}
+
+/// Who holds a data folder, as `pid N`, or `None` when no app holds it. The lock is released at
+/// once when it was free.
+pub(crate) fn folder_holder(data_dir: &Path) -> Result<Option<String>> {
+    match open_lock(data_dir)?.try_lock() {
+        Ok(()) => Ok(None),
+        Err(TryLockError::WouldBlock) => Ok(Some(holder_text(data_dir))),
+        Err(TryLockError::Error(error)) => Err(error.into()),
+    }
+}
+
+fn open_lock(data_dir: &Path) -> Result<File> {
+    std::fs::create_dir_all(data_dir)
+        .with_context(|| format!("cannot create {}", data_dir.display()))?;
+    let path = data_dir.join(LOCK_FILE);
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+        .with_context(|| format!("cannot open {}", path.display()))
+}
+
+fn holder_text(data_dir: &Path) -> String {
+    std::fs::read_to_string(data_dir.join(PID_FILE))
+        .ok()
+        .map(|text| text.trim().to_owned())
+        .filter(|text| text.parse::<u32>().is_ok())
+        .map_or_else(|| "another kagan app".into(), |pid| format!("pid {pid}"))
+}
+
 pub(crate) fn run(presentation: kg_ui::Presentation) -> Result<()> {
+    let data_dir = data_dir_from_env()?;
+    let _data_folder = lock_data_dir(&data_dir)?;
     let location = socket::location()?;
     let Some(listener) = socket::open(&location).context("cannot open the kg socket")? else {
-        return Ok(());
+        anyhow::bail!(
+            "an app is already listening on {}",
+            Path::new(&location).display()
+        );
     };
     let (requests, incoming) = async_channel::unbounded::<Request>();
-    socket::serve(listener, move |op, gone| {
+    socket::serve(listener, move |op, gone, waiting| {
         let (reply, replied) = async_channel::bounded(1);
+        let (questions, asked) = async_channel::unbounded();
+        let requester = kg_core::Requester::new(gone.clone()).waiting_on(questions);
         requests
-            .send_blocking((op, kg_core::Requester::new(gone.clone()), reply))
+            .send_blocking((op, requester, reply))
             .map_err(|_| OpError::Failed("kagan is quitting".into()))?;
-        replied
-            .recv_blocking()
-            .map_err(|_| OpError::Failed("kagan dropped the request".into()))?
+        wait_for_reply(&asked, &replied, waiting)
     });
-    let data_dir = data_dir_from_env()?;
     let cli = std::env::current_exe()?;
     kg_process::warm_user_path();
     let components = component_catalog()?;
@@ -143,6 +203,25 @@ pub(crate) fn run(presentation: kg_ui::Presentation) -> Result<()> {
         .detach();
     });
     Ok(())
+}
+
+// Passes each question the op puts to the person to `waiting`, until the op replies.
+fn wait_for_reply(
+    asked: &Receiver<String>,
+    replied: &Receiver<Result<OpResult, OpError>>,
+    waiting: &mut dyn FnMut(&str),
+) -> Result<OpResult, OpError> {
+    let dropped = || OpError::Failed("kagan dropped the request".into());
+    block_on(async {
+        loop {
+            match select(pin!(asked.recv()), pin!(replied.recv())).await {
+                Either::Left((Ok(question), _)) => waiting(&question),
+                Either::Left((Err(_), _)) => break,
+                Either::Right((reply, _)) => return reply.unwrap_or_else(|_| Err(dropped())),
+            }
+        }
+        replied.recv().await.unwrap_or_else(|_| Err(dropped()))
+    })
 }
 
 fn component_catalog() -> Result<gpui_shell::FrozenComponentRegistry> {

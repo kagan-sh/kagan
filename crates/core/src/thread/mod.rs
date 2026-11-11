@@ -185,7 +185,10 @@ pub(crate) async fn rename_once(
 }
 
 pub(crate) fn clean_title(title: &str) -> Result<String> {
-    let title: String = title.chars().filter(|ch| !ch.is_control()).collect();
+    let title: String = title
+        .chars()
+        .filter(|ch| !kg_domain::unsafe_char(*ch))
+        .collect();
     let title = title.trim();
     if title.is_empty() {
         return Err(OpError::Invalid("a thread needs a title".into()));
