@@ -1222,15 +1222,16 @@ async fn a_claude_launch_gets_a_settings_file_with_its_turn_hooks(cx: &mut TestA
     let settings: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&args[at + 1]).unwrap()).unwrap();
     assert!(args[at + 1].ends_with(&format!("threads/{}/settings.json", id.0)));
-    let command = |event: &str| {
-        settings["hooks"][event][0]["hooks"][0]["command"]
-            .as_str()
-            .unwrap_or_default()
-            .to_owned()
-    };
-    assert!(command("UserPromptSubmit").ends_with("thread turn start"));
-    assert!(command("Stop").ends_with("thread turn end"));
-    assert!(command("StopFailure").ends_with("thread turn end"));
+    let hook = |event: &str| settings["hooks"][event][0]["hooks"][0].clone();
+    assert_eq!(
+        hook("UserPromptSubmit")["args"],
+        json!(["thread", "turn", "start"])
+    );
+    assert_eq!(hook("Stop")["args"], json!(["thread", "turn", "end"]));
+    assert_eq!(
+        hook("StopFailure")["args"],
+        json!(["thread", "turn", "end"])
+    );
 }
 
 #[cfg(unix)]
@@ -1242,8 +1243,17 @@ async fn a_claude_line_with_its_own_settings_gets_no_turn_hooks(cx: &mut TestApp
         "{} --settings person.json",
         fake_agent(&run, "claude").display()
     );
-    let (_id, _reap) = started(&fixture, &line, cx).await;
+    let (id, _reap) = started(&fixture, &line, cx).await;
     let (args, _env) = ran(&run);
+    let recorded = events(&id, cx).await;
+    assert!(
+        recorded.iter().any(|event| matches!(
+            &event.kind,
+            EventKind::Notice { severity: NoticeSeverity::Info, text }
+                if text.contains("--settings")
+        )),
+        "{recorded:?}"
+    );
     assert!(
         args.windows(2)
             .any(|pair| pair == ["--settings", "person.json"]),

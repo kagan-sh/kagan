@@ -500,12 +500,13 @@ fn claude_files(
 }
 
 // Claude runs each hook with the agent's environment, so `KG_THREAD_ID` names the thread. The hook
-// prints nothing, and it never exits 2, the one code that would block a turn.
+// prints nothing and always exits 0. Only exit 2 would block a turn.
 fn claude_settings(cli: &Path) -> String {
     let hook = |phase: &str| {
         json!([{ "hooks": [{
             "type": "command",
-            "command": format!("\"{}\" thread turn {phase}", cli.to_string_lossy()),
+            "command": cli.to_string_lossy(),
+            "args": ["thread", "turn", phase],
         }] }])
     };
     json!({ "hooks": {

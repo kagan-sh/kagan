@@ -51,11 +51,14 @@ fn a_plain_title_waits_only_after_one_second(cx: &mut gpui_kit::TestAppContext) 
     let now = std::time::Instant::now();
     cx.update(|cx| {
         assert!(matches!(
-            super::follow(&thread, Some("\u{2819} work"), false, now, cx),
+            super::follow(&thread, Some("\u{2819} work"), false, || 0, now, cx),
             Some(super::Spin::Opened)
         ));
         assert!(thread.read(cx).turn.open());
-        assert_eq!(super::follow(&thread, Some("work"), false, now, cx), None);
+        assert_eq!(
+            super::follow(&thread, Some("work"), false, || 0, now, cx),
+            None
+        );
         assert!(thread.read(cx).busy(), "the title just went plain");
         assert!(thread.read(cx).turn.open());
         assert_eq!(
@@ -63,6 +66,7 @@ fn a_plain_title_waits_only_after_one_second(cx: &mut gpui_kit::TestAppContext) 
                 &thread,
                 Some("work"),
                 false,
+                || 0,
                 now + std::time::Duration::from_millis(999),
                 cx,
             ),
@@ -74,6 +78,7 @@ fn a_plain_title_waits_only_after_one_second(cx: &mut gpui_kit::TestAppContext) 
                 &thread,
                 Some("work"),
                 false,
+                || 0,
                 now + std::time::Duration::from_secs(1),
                 cx,
             ),
@@ -90,12 +95,12 @@ fn a_spinner_after_stop_clears_busy_does_not_open_another_turn(cx: &mut gpui_kit
     let now = std::time::Instant::now();
     cx.update(|cx| {
         assert!(matches!(
-            super::follow(&thread, Some("\u{2819} work"), false, now, cx),
+            super::follow(&thread, Some("\u{2819} work"), false, || 0, now, cx),
             Some(super::Spin::Opened)
         ));
         thread.update(cx, |thread, _| thread.busy = false);
         assert!(matches!(
-            super::follow(&thread, Some("\u{2819} work"), false, now, cx),
+            super::follow(&thread, Some("\u{2819} work"), false, || 0, now, cx),
             Some(super::Spin::Resumed)
         ));
         assert!(thread.read(cx).busy());
@@ -139,4 +144,30 @@ fn running() -> kg_domain::Thread {
         created_at: at,
         updated_at: at,
     }
+}
+
+#[gpui_kit::test]
+fn a_hook_turn_is_not_closed_by_a_plain_title_from_an_earlier_turn(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use crate::thread::turn_state::{Signal, Source, TurnState};
+    let thread = cx.update(|cx| cx.new(|_| crate::Thread::new(running())));
+    let first = std::time::Instant::now();
+    let later = first + std::time::Duration::from_secs(60);
+    cx.update(|cx| {
+        thread.update(cx, |thread, _| thread.turn = TurnState::new(Source::Hook));
+        thread.update(cx, |thread, _| thread.turn.apply(Signal::HookStart, first));
+        assert_ne!(
+            super::follow(&thread, Some("work"), false, || 0, first, cx),
+            Some(super::Spin::Closed)
+        );
+        thread.update(cx, |thread, _| thread.turn.apply(Signal::HookEnd, first));
+        thread.update(cx, |thread, _| thread.turn.apply(Signal::HookStart, later));
+        assert_ne!(
+            super::follow(&thread, Some("work"), false, || 0, later, cx),
+            Some(super::Spin::Closed),
+            "a second hook turn closed on its first tick"
+        );
+        assert!(thread.read(cx).turn.open());
+    });
 }

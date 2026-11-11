@@ -463,8 +463,11 @@ async fn a_busy_parent_is_not_told_while_its_turn_is_open_or_busy(cx: &mut TestA
             .cloned()
             .expect("thread")
     });
+    let now = cx.executor().now();
     parent_thread.update(cx, |thread, _| {
-        thread.turn.apply(crate::thread::turn_state::Signal::Ended)
+        thread
+            .turn
+            .apply(crate::thread::turn_state::Signal::Ended, now)
     });
     let program = finishing(fixture.dir.path(), "done");
     let (child_id, _child_run) = child(&fixture, &program, &parent, false, cx).await;

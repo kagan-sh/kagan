@@ -32,8 +32,6 @@ pub(super) use turn::{Spin, busy, follow};
 pub(super) const COLS: u16 = 80;
 pub(super) const ROWS: u16 = 24;
 const TICK: Duration = Duration::from_millis(33);
-// A program can drop its spinner for a frame in the middle of a reply. Waiting counts only after this quiet.
-const QUIET: Duration = Duration::from_secs(1);
 
 pub(crate) async fn start(
     this: &WeakEntity<Workspace>,
@@ -233,8 +231,11 @@ pub(crate) async fn send(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     let typed = submit(this, &id, text, cx).await?;
-    this.update(cx, |workspace, cx| turn::note_submit(workspace, &id, cx))
-        .map_err(closed)?;
+    this.update(cx, |workspace, cx| {
+        let now = cx.background_executor().now();
+        turn::note_submit(workspace, &id, now, cx);
+    })
+    .map_err(closed)?;
     Workspace::events(
         this,
         id,
@@ -281,7 +282,7 @@ pub(crate) fn run(
                 ThreadOp::Input { text, .. } => {
                     super::notify::typed(workspace, &id, text, now);
                     if text.ends_with('\r') {
-                        turn::note_submit(workspace, &id, cx);
+                        turn::note_submit(workspace, &id, now, cx);
                     }
                 }
                 ThreadOp::Paste { .. } => super::notify::typed(workspace, &id, "", now),

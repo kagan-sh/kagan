@@ -106,8 +106,11 @@ async fn close_open_turn(
             workspace.runs.get(id).and_then(|run| run.stopping) == Some(super::StopReason::Quit)
         })
         .map_err(closed)?;
+    let now = cx.background_executor().now();
     thread.update(cx, |thread, _| {
-        thread.turn.apply(crate::thread::turn_state::Signal::Ended)
+        thread
+            .turn
+            .apply(crate::thread::turn_state::Signal::Ended, now)
     });
     if quit {
         return Ok(());

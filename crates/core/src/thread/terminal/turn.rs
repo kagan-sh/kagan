@@ -1,15 +1,17 @@
+use std::hash::{Hash, Hasher};
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use gpui_kit::{App, AsyncApp, Entity, WeakEntity};
 use kg_domain::{EventKind, KNOWN_PROGRAMS, OpResult, ThreadId, TurnOp, TurnOutcome};
+use kg_terminal::Grid;
 
 use crate::host::database::Result;
 use crate::thread::turn_state::{Change, Signal, Source, TurnState};
 use crate::workspace::closed;
 use crate::{Thread, Workspace, WorkspaceEvent};
 
-use super::{QUIET, StopReason};
+use super::StopReason;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Spin {
@@ -19,36 +21,32 @@ pub(crate) enum Spin {
     Closed,
 }
 
-/// One watch tick: the window title, and whether the program's output changed since the last tick.
+/// One watch tick. `changed` is the terminal's cheap redraw flag; `screen` reads the visible text,
+/// and is called only when a quiet turn or a submit is waiting on it.
 pub(crate) fn follow(
     thread: &Entity<Thread>,
     title: Option<&str>,
     changed: bool,
+    screen: impl FnOnce() -> u64,
     now: Instant,
     cx: &mut App,
 ) -> Option<Spin> {
     thread.update(cx, |thread, cx| {
         let busy_before = thread.busy;
-        if changed {
-            thread.output_at = Some(now);
-        }
         let mut change = None;
-        if std::mem::take(&mut thread.submitted) {
-            change = step(thread, Signal::Submit, now).or(change);
+        if changed {
+            let signal = if thread.turn.wants_text() {
+                Signal::Screen(screen())
+            } else {
+                Signal::Output
+            };
+            change = step(thread, signal, now).or(change);
         }
-        if title.is_some_and(busy) {
-            thread.plain_since = None;
-            change = step(thread, Signal::Title { busy: true }, now).or(change);
-        } else if thread.turn.open() {
-            let since = *thread.plain_since.get_or_insert(now);
-            if now.duration_since(since) >= QUIET {
-                change = step(thread, Signal::Title { busy: false }, now).or(change);
-            }
-        }
-        let silent = thread
-            .output_at
-            .map_or(Duration::ZERO, |at| now.duration_since(at));
-        change = step(thread, Signal::Silence(silent), now).or(change);
+        let title = Signal::Title {
+            busy: title.is_some_and(busy),
+        };
+        change = step(thread, title, now).or(change);
+        change = step(thread, Signal::Tick, now).or(change);
         let spin = match change {
             Some(Change::Opened) => Spin::Opened,
             Some(Change::Closed) => Spin::Closed,
@@ -58,6 +56,16 @@ pub(crate) fn follow(
         cx.notify();
         Some(spin)
     })
+}
+
+/// A hash of the visible rows. A repaint with the same text hashes the same.
+pub(crate) fn screen_hash(grid: &Grid) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for line in &grid.lines {
+        let text: String = line.iter().map(|cell| cell.c).collect();
+        text.trim_end().hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 /// An agent's own hook reports a turn boundary. A start from a program that is not running is ignored.
@@ -90,18 +98,12 @@ pub(crate) async fn hook(
     Ok(OpResult::Done)
 }
 
-/// Applies one signal to a thread's turn, and keeps `busy` in step with it.
 fn step(thread: &mut Thread, signal: Signal, now: Instant) -> Option<Change> {
-    let change = thread.turn.apply(signal);
-    if change == Some(Change::Opened) {
-        thread.output_at = Some(now);
-    }
+    let change = thread.turn.apply(signal, now);
     thread.busy = thread.turn.open();
     change
 }
 
-/// A new run starts with its source already known when kagan set a hook; otherwise it is decided by
-/// the first signal it sees.
 pub(crate) fn begin_run(workspace: &Workspace, id: &ThreadId, hooks: bool, cx: &mut App) {
     let Some(thread) = workspace.threads.get(id) else {
         return;
@@ -114,21 +116,17 @@ pub(crate) fn begin_run(workspace: &Workspace, id: &ThreadId, hooks: bool, cx: &
     thread.update(cx, |thread, _| {
         thread.turn = TurnState::new(source);
         thread.busy = false;
-        thread.output_at = None;
-        thread.plain_since = None;
-        thread.submitted = false;
     });
 }
 
-/// The person sent a line to the program. Only a known agent gets a quiet turn from it, so a shell
-/// never reports a turn it cannot end.
-pub(crate) fn note_submit(workspace: &Workspace, id: &ThreadId, cx: &mut App) {
+/// Only a known agent's line can start a quiet turn, so a shell never reports one.
+pub(crate) fn note_submit(workspace: &Workspace, id: &ThreadId, now: Instant, cx: &mut App) {
     let Some(thread) = workspace.threads.get(id) else {
         return;
     };
     thread.update(cx, |thread, _| {
         if known_agent(&thread.record.provider) {
-            thread.submitted = true;
+            thread.turn.apply(Signal::Submit, now);
         }
     });
 }

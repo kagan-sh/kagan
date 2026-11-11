@@ -322,6 +322,13 @@ pub(crate) async fn integrate(
         ),
     };
     let mut notices = Vec::new();
+    if matches!(known, Known::Claude) && !sets_hooks(&known, &program.args) {
+        notices.push(EventKind::Notice {
+            severity: NoticeSeverity::Info,
+            text: "Turn hooks are off: this line sets its own --settings, so turns follow the window's spinner."
+                .to_owned(),
+        });
+    }
     if let Some((severity, text)) = notice {
         notices.push(EventKind::Notice { severity, text });
     }

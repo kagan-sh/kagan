@@ -5,7 +5,7 @@ use kg_terminal::Finished;
 use crate::workspace::Request;
 use crate::{Workspace, WorkspaceEvent};
 
-use super::turn::{Spin, follow, waiting};
+use super::turn::{Spin, follow, screen_hash, waiting};
 use super::{Shown, TICK};
 
 pub(super) async fn persist(
@@ -112,7 +112,14 @@ fn watch(cx: &mut Context<Workspace>) {
                         cx.emit(WorkspaceEvent::Screen(id.clone(), None));
                     }
                     if let Some(thread) = workspace.threads.get(id) {
-                        match follow(thread, terminal.title().as_deref(), changed, now, cx) {
+                        match follow(
+                            thread,
+                            terminal.title().as_deref(),
+                            changed,
+                            || screen_hash(&terminal.view().grid()),
+                            now,
+                            cx,
+                        ) {
                             Some(Spin::Opened) => {
                                 cx.emit(WorkspaceEvent::Changed);
                                 started.push(id.clone());

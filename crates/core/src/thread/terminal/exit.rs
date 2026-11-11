@@ -99,7 +99,8 @@ pub(crate) async fn exited(
     if !matches!(current, ThreadStatus::Active | ThreadStatus::Stopping) {
         return Ok(OpResult::Done);
     }
-    thread.update(cx, |thread, _| thread.turn.apply(Signal::Ended));
+    let now = cx.background_executor().now();
+    thread.update(cx, |thread, _| thread.turn.apply(Signal::Ended, now));
     crate::thread::halt::settle(this, &thread, cx).await?;
     this.update(cx, |workspace, cx| keep_screen(workspace, &id, cx))
         .map_err(closed)?;
