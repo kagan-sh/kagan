@@ -2,9 +2,12 @@ use std::ffi::OsString;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::pin::pin;
 
 use anyhow::{Context as _, Result};
-use async_channel::Sender;
+use async_channel::{Receiver, Sender};
+use futures::executor::block_on;
+use futures::future::{Either, select};
 use gpui_kit::QuitMode;
 use kg_domain::{Op, OpError, OpResult};
 
@@ -110,14 +113,14 @@ pub(crate) fn run(presentation: kg_ui::Presentation) -> Result<()> {
         );
     };
     let (requests, incoming) = async_channel::unbounded::<Request>();
-    socket::serve(listener, move |op, gone| {
+    socket::serve(listener, move |op, gone, waiting| {
         let (reply, replied) = async_channel::bounded(1);
+        let (notices, noticed) = async_channel::unbounded();
+        let requester = kg_core::Requester::new(gone.clone()).waiting_on(notices);
         requests
-            .send_blocking((op, kg_core::Requester::new(gone.clone()), reply))
+            .send_blocking((op, requester, reply))
             .map_err(|_| OpError::Failed("kagan is quitting".into()))?;
-        replied
-            .recv_blocking()
-            .map_err(|_| OpError::Failed("kagan dropped the request".into()))?
+        wait_for_reply(&noticed, &replied, waiting)
     });
     let cli = std::env::current_exe()?;
     kg_process::warm_user_path();
@@ -181,6 +184,25 @@ pub(crate) fn run(presentation: kg_ui::Presentation) -> Result<()> {
         .detach();
     });
     Ok(())
+}
+
+// Passes each question the op puts to the person to `waiting`, until the op replies.
+fn wait_for_reply(
+    noticed: &Receiver<String>,
+    replied: &Receiver<Result<OpResult, OpError>>,
+    waiting: &mut dyn FnMut(&str),
+) -> Result<OpResult, OpError> {
+    let dropped = || OpError::Failed("kagan dropped the request".into());
+    block_on(async {
+        loop {
+            match select(pin!(noticed.recv()), pin!(replied.recv())).await {
+                Either::Left((Ok(question), _)) => waiting(&question),
+                Either::Left((Err(_), _)) => break,
+                Either::Right((reply, _)) => return reply.unwrap_or_else(|_| Err(dropped())),
+            }
+        }
+        replied.recv().await.unwrap_or_else(|_| Err(dropped()))
+    })
 }
 
 fn component_catalog() -> Result<gpui_shell::FrozenComponentRegistry> {

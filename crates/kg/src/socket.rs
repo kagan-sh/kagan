@@ -331,15 +331,20 @@ pub(crate) fn bind(name: Name<'_>) -> io::Result<Option<Listener>> {
 
 #[derive(Deserialize)]
 #[serde(untagged)]
-enum Reply {
+enum Line {
+    Waiting { waiting: String },
     Failed(OpError),
     Done(Box<OpResult>),
 }
 
-/// `handle` gets each op and a channel that closes when its connection does.
+/// `handle` gets each op, a channel that closes when its connection does, and a way to tell the
+/// client that the op waits for the person, with the question.
 pub(crate) fn serve(
     listener: Listener,
-    handle: impl Fn(Op, &Receiver<()>) -> Result<OpResult, OpError> + Send + Sync + 'static,
+    handle: impl Fn(Op, &Receiver<()>, &mut dyn FnMut(&str)) -> Result<OpResult, OpError>
+    + Send
+    + Sync
+    + 'static,
 ) {
     let handle = Arc::new(handle);
     thread::spawn(move || {
@@ -362,7 +367,7 @@ pub(crate) fn serve(
 // A reader thread sees the client leave while an op still waits for a person.
 fn answer(
     stream: Stream,
-    handle: &impl Fn(Op, &Receiver<()>) -> Result<OpResult, OpError>,
+    handle: &impl Fn(Op, &Receiver<()>, &mut dyn FnMut(&str)) -> Result<OpResult, OpError>,
 ) -> io::Result<()> {
     let stream = Arc::new(stream);
     let receive = Arc::clone(&stream);
@@ -379,7 +384,11 @@ fn answer(
     });
     for line in incoming {
         let reply = match serde_json::from_str::<Op>(&line?) {
-            Ok(op) => handle(op, &gone),
+            Ok(op) => handle(op, &gone, &mut |question| {
+                let mut frame = serde_json::json!({ "waiting": question }).to_string();
+                frame.push('\n');
+                _ = send.write_all(frame.as_bytes());
+            }),
             Err(error) => Err(OpError::Invalid(error.to_string())),
         };
         let mut out = match reply {
@@ -423,17 +432,38 @@ impl Client {
         wait_for_socket(&location, START_TIMEOUT)
     }
 
+    /// Says on stderr when the op waits for the person, and how that ended.
     pub(crate) fn call(&mut self, op: &Op) -> Result<OpResult, OpError> {
+        let mut asked = false;
+        let result = self.call_with(op, |question| {
+            asked = true;
+            eprintln!("kg: waiting for the person to answer in kagan: {question}");
+        });
+        if asked && result.is_ok() {
+            eprintln!("kg: the person answered in kagan.");
+        }
+        result
+    }
+
+    /// Sends `op` and reads frames until its reply. `waiting` hears each question first.
+    pub(crate) fn call_with(
+        &mut self,
+        op: &Op,
+        mut waiting: impl FnMut(&str),
+    ) -> Result<OpResult, OpError> {
         let mut out = serde_json::to_vec(op)?;
         out.push(b'\n');
         self.0.get_mut().write_all(&out)?;
-        let mut line = String::new();
-        if self.0.read_line(&mut line)? == 0 {
-            return Err(OpError::Failed("kagan closed the connection".into()));
-        }
-        match serde_json::from_str(&line)? {
-            Reply::Done(result) => Ok(*result),
-            Reply::Failed(error) => Err(error),
+        loop {
+            let mut line = String::new();
+            if self.0.read_line(&mut line)? == 0 {
+                return Err(OpError::Failed("kagan closed the connection".into()));
+            }
+            match serde_json::from_str(&line)? {
+                Line::Waiting { waiting: question } => waiting(&question),
+                Line::Done(result) => return Ok(*result),
+                Line::Failed(error) => return Err(error),
+            }
         }
     }
 }

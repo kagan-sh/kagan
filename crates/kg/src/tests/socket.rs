@@ -60,7 +60,7 @@ fn socket_dir_is_private_and_stale_socket_is_replaced() {
         );
         std::thread::sleep(std::time::Duration::from_millis(1));
     };
-    socket::serve(listener, |_, _| Ok(OpResult::Done));
+    socket::serve(listener, |_, _, _| Ok(OpResult::Done));
     assert_eq!(
         Client::connect(name).unwrap().call(&Op::Sidebar),
         Ok(OpResult::Done)
@@ -88,7 +88,7 @@ fn a_bare_socket_name_replaces_a_stale_socket() {
         );
         std::thread::sleep(std::time::Duration::from_millis(1));
     };
-    socket::serve(listener, |_, _| Ok(OpResult::Done));
+    socket::serve(listener, |_, _, _| Ok(OpResult::Done));
     assert_eq!(
         Client::connect(socket::name(&location).unwrap())
             .unwrap()
@@ -101,7 +101,7 @@ fn a_bare_socket_name_replaces_a_stale_socket() {
 fn socket_round_trip() {
     let (_dir, name) = test_name("round-trip");
     let listener = socket::bind(name.borrow()).unwrap().unwrap();
-    socket::serve(listener, |op, _| match op {
+    socket::serve(listener, |op, _, _| match op {
         Op::Sidebar => Ok(OpResult::Done),
         _ => Err(OpError::NotFound("thread thr_9 not found".into())),
     });
@@ -130,7 +130,7 @@ fn a_client_that_leaves_closes_its_requester_while_the_op_waits() {
     let listener = socket::bind(name.borrow()).unwrap().unwrap();
     let (started, waiting) = mpsc::channel();
     let (ended, gone) = mpsc::channel();
-    socket::serve(listener, move |_, requester| {
+    socket::serve(listener, move |_, requester, _| {
         started.send(requester.is_closed()).unwrap();
         ended.send(requester.recv_blocking().is_err()).unwrap();
         Ok(OpResult::Done)
@@ -158,7 +158,7 @@ fn connect_or_start_uses_the_socket_that_is_already_listening() {
     let location = socket::location_in(dir.path()).unwrap();
     let name = socket::name(&location).unwrap();
     let listener = socket::bind(name.borrow()).unwrap().unwrap();
-    socket::serve(listener, |_, _| Ok(OpResult::Done));
+    socket::serve(listener, |_, _, _| Ok(OpResult::Done));
     let _guard = socket_var(&location);
     let mut client = Client::connect_or_start().unwrap_or_else(|error| panic!("{error}"));
     assert_eq!(client.call(&Op::Sidebar), Ok(OpResult::Done));
@@ -387,7 +387,7 @@ fn a_relative_data_dir_stays_absolute_from_another_folder() {
     let listener = socket::open(&located)
         .unwrap_or_else(|error| panic!("{error}"))
         .unwrap_or_else(|| panic!("socket was already open"));
-    socket::serve(listener, |_, _| Ok(OpResult::Done));
+    socket::serve(listener, |_, _, _| Ok(OpResult::Done));
     std::env::set_current_dir(&elsewhere).unwrap();
     let mut client = Client::connect(socket::name(&located).unwrap()).unwrap();
     assert_eq!(client.call(&Op::Sidebar), Ok(OpResult::Done));
@@ -521,4 +521,19 @@ fn a_turn_hook_never_starts_an_app_and_never_fails() {
         "a turn hook started an app"
     );
     assert!(started.elapsed() < std::time::Duration::from_secs(1));
+}
+
+#[test]
+fn a_question_reaches_the_client_before_the_reply() {
+    let (_dir, name) = test_name("waiting");
+    let listener = socket::bind(name.borrow()).unwrap().unwrap();
+    socket::serve(listener, |_, _, waiting| {
+        waiting("Delete the automation “Morning”?");
+        Ok(OpResult::Done)
+    });
+    let mut client = Client::connect(name.borrow()).unwrap();
+    let mut asked = Vec::new();
+    let reply = client.call_with(&Op::Sidebar, |question| asked.push(question.to_owned()));
+    assert_eq!(reply, Ok(OpResult::Done));
+    assert_eq!(asked, ["Delete the automation “Morning”?"]);
 }
