@@ -58,15 +58,21 @@ impl SearchableListItem for FontItem {
     }
 }
 
-pub(super) fn font_items(cx: &App) -> Vec<FontItem> {
-    let families = ThemeState::global(cx).read(cx).installed_fonts.clone();
+/// The choices for a font picker. The terminal's picker lists monospace faces only.
+pub(super) fn font_items(cx: &App, monospace_only: bool) -> Vec<FontItem> {
+    let state = ThemeState::global(cx).read(cx);
+    let families = if monospace_only {
+        &state.monospace_fonts
+    } else {
+        &state.installed_fonts
+    };
     std::iter::once(FontItem {
         value: String::new(),
         title: SharedString::from("Default"),
     })
-    .chain(families.into_iter().map(|name| FontItem {
+    .chain(families.iter().map(|name| FontItem {
         title: SharedString::from(name.clone()),
-        value: name,
+        value: name.clone(),
     }))
     .collect()
 }

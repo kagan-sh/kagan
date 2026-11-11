@@ -85,8 +85,6 @@ pub(super) fn diff_file(
     if binary {
         return Ok(DiffFileView {
             binary: true,
-            added,
-            removed,
             ..DiffFileView::empty(path)
         });
     }

@@ -1,9 +1,10 @@
 use gpui_kit::component::button::Button;
 use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::{Disableable as _, Sizable as _, h_flex};
+use gpui_kit::component::{ActiveTheme as _, Disableable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, AppContext as _, ClickEvent, Context, ElementId, Entity,
-    InteractiveElement as _, IntoElement as _, ParentElement as _, Styled as _, Window, div,
+    InteractiveElement as _, IntoElement as _, ParentElement as _, StatefulInteractiveElement as _,
+    Styled as _, Window, div, px,
 };
 use kg_domain::{IndexOp, OpResult, PluginOp};
 use kg_plugins::PluginHost;
@@ -12,6 +13,7 @@ use super::Kagan;
 use super::row::{Group, Row, group as row_group, row};
 use crate::kagan::controls::control;
 use crate::kagan::plugin_actions::{AddIndex, SearchIndexes};
+use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -56,30 +58,7 @@ pub(super) fn group(kagan: &Kagan, cx: &mut Context<Kagan>) -> Group {
             div().into_any_element(),
         ));
     }
-    let add = button(
-        "plugin-index-add",
-        "Add",
-        false,
-        cx.listener(|this, _, _, cx| this.add_index(cx)),
-    );
-    let add = field(
-        "plugin-index",
-        "Index address",
-        &kagan.plugins.index,
-        add,
-        cx,
-    )
-    .key_context("PluginIndex")
-    .on_action(cx.listener(|this, _: &AddIndex, _, cx| this.add_index(cx)));
-    rows.push(Row {
-        wide: true,
-        ..row(
-            "index-add",
-            "Add an index",
-            "A git address with a ref, git:<url>@<ref>, or a folder or file on this computer. Private repositories use your own git sign-in.",
-            add.into_any_element(),
-        )
-    });
+    rows.push(add_row(kagan, cx));
     if !locations.is_empty() {
         let search = button(
             "plugin-search-run",
@@ -209,11 +188,11 @@ impl Kagan {
         let op = PluginOp::Index {
             op: IndexOp::Add { location },
         };
-        self.plugin_op(
+        self.plugins.index_error = None;
+        self.run_plugin_op(
             op,
-            "add the index",
-            |this, result, cx| {
-                if result.is_ok() {
+            |this, result, cx| match result {
+                Ok(_) => {
                     this.plugins.found = None;
                     let window = this.window;
                     let input = this.plugins.index.clone();
@@ -225,6 +204,7 @@ impl Kagan {
                     })
                     .detach();
                 }
+                Err(error) => this.plugins.index_error = Some(error.to_string()),
             },
             cx,
         );
@@ -242,5 +222,50 @@ impl Kagan {
             },
             cx,
         );
+    }
+}
+
+fn add_row(kagan: &Kagan, cx: &mut Context<Kagan>) -> Row {
+    let add = button(
+        "plugin-index-add",
+        "Add",
+        false,
+        cx.listener(|this, _, _, cx| this.add_index(cx)),
+    );
+    let add = field(
+        "plugin-index",
+        "Index address",
+        &kagan.plugins.index,
+        add,
+        cx,
+    )
+    .key_context("PluginIndex")
+    .on_action(cx.listener(|this, _: &AddIndex, _, cx| this.add_index(cx)));
+    // One line is always reserved under the field, so an error does not resize the row.
+    let error = kagan.plugins.index_error.clone();
+    let slot = div()
+        .id("plugin-index-error")
+        .h(px(20.))
+        .type_small(cx)
+        .text_color(cx.theme().danger)
+        .children(error.clone());
+    let slot = match error {
+        Some(error) => slot.ui_container().aria_label(error),
+        None => slot.ui_container(),
+    };
+    let control = v_flex()
+        .w_full()
+        .gap_1()
+        .child(add.into_any_element())
+        .child(slot)
+        .into_any_element();
+    Row {
+        wide: true,
+        ..row(
+            "index-add",
+            "Add an index",
+            "A git address with a ref, git:<url>@<ref>, or a folder or file on this computer. Private repositories use your own git sign-in.",
+            control,
+        )
     }
 }

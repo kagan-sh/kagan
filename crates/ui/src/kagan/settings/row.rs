@@ -17,6 +17,7 @@ pub(super) struct Row {
     pub(super) wide: bool,
     pub(super) alias: Option<&'static str>,
     pub(super) bare: bool,
+    pub(super) marked: bool,
 }
 
 pub(super) struct Group {
@@ -38,6 +39,7 @@ pub(super) fn row(id: &str, title: &str, note: &str, control: AnyElement) -> Row
         wide: false,
         alias: None,
         bare: false,
+        marked: false,
     }
 }
 

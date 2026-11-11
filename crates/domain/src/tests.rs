@@ -262,6 +262,15 @@ fn error_wire() {
         "hint": "set KG_THREAD_ID, or pass the id",
     }});
     assert_eq!(serde_json::from_value::<OpError>(hinted).unwrap(), error);
+    let stale = OpError::Changed("the rules changed".into());
+    assert_eq!(
+        serde_json::to_value(&stale).unwrap(),
+        json!({ "error": { "kind": "changed", "message": "the rules changed" } })
+    );
+    assert_eq!(
+        serde_json::from_value::<OpError>(serde_json::to_value(&stale).unwrap()).unwrap(),
+        stale
+    );
     let changed = OpError::SetupChanged("script changed".into());
     let changed_wire = json!({ "error": { "kind": "setup-changed", "message": "script changed" } });
     assert_eq!(serde_json::to_value(&changed).unwrap(), changed_wire);
@@ -1120,6 +1129,23 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
 }
 
 #[test]
+fn a_setup_revision_may_not_start_with_a_dash() {
+    let setup = |rev: &str| {
+        crate::check(&Op::Environment(crate::EnvironmentOp::Setup {
+            project_id: crate::ProjectId("project".into()),
+            rev: rev.into(),
+        }))
+    };
+    assert_eq!(setup("main"), Ok(()));
+    assert_eq!(setup("-x"), Err("a revision cannot start with -".into()));
+}
+
+#[test]
+fn a_saved_screen_keeps_four_mebibytes_at_most() {
+    assert_eq!(crate::SCREEN_MAX_BYTES, 4_194_304);
+}
+
+#[test]
 fn surface_ids_and_window_indexes_match_the_documented_checks() {
     use crate::{SurfaceOp, WindowOp};
     let open = |id: &str| {
@@ -1547,6 +1573,7 @@ fn rules_refuse_a_control_character_but_keep_line_breaks_and_tabs() {
             text: Some(text.into()),
             file: None,
             project: None,
+            expected: None,
         }))
     };
     assert_eq!(set("first line\n\tindented"), Ok(()));

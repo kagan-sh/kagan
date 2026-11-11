@@ -347,3 +347,43 @@ fn a_turn_hook_runs_kg_directly_for_any_path() {
         }
     }
 }
+
+#[test]
+fn the_cursor_rule_line_is_set_on_its_own_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let fresh = folder(dir.path(), "fresh");
+    exclude_cursor_rule(&fresh).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(fresh.join(".git/info/exclude")).unwrap(),
+        ".cursor/rules/kagan.mdc\n"
+    );
+    let partial = folder(dir.path(), "partial");
+    std::fs::write(partial.join(".git/info/exclude"), "target").unwrap();
+    exclude_cursor_rule(&partial).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(partial.join(".git/info/exclude")).unwrap(),
+        "target\n.cursor/rules/kagan.mdc\n"
+    );
+    let whole = folder(dir.path(), "whole");
+    std::fs::write(whole.join(".git/info/exclude"), "target\n").unwrap();
+    exclude_cursor_rule(&whole).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(whole.join(".git/info/exclude")).unwrap(),
+        "target\n.cursor/rules/kagan.mdc\n"
+    );
+}
+
+#[test]
+fn hide_from_git_keeps_a_bare_root_line_and_a_nested_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let work = folder(dir.path(), "work");
+    let exclude = work.join(".git/info/exclude");
+    std::fs::create_dir_all(work.join(".agents/skills/a")).unwrap();
+    std::fs::write(work.join(".agents/skills/a/b"), "real").unwrap();
+    std::fs::write(&exclude, ".agents/skills/\n.agents/skills/a/b\n").unwrap();
+    hide_from_git(&work, ".agents/skills", &names(&[])).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(&exclude).unwrap(),
+        ".agents/skills/\n.agents/skills/a/b\n"
+    );
+}

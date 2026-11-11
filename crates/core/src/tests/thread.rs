@@ -779,8 +779,13 @@ async fn sweep_stops_a_running_thread_after_archive_grace(cx: &mut TestAppContex
     .await
     .unwrap();
     cx.executor()
-        .advance_clock(std::time::Duration::from_secs(12));
+        .advance_clock(std::time::Duration::from_secs(10));
     cx.run_until_parked();
+    assert_eq!(
+        thread(&started.id, cx).await.status,
+        ThreadStatus::Stopping,
+        "the sweep stops the thread at the grace instant"
+    );
     wait_for_status(&started.id, ThreadStatus::Idle, cx).await;
     assert_eq!(thread(&started.id, cx).await.status, ThreadStatus::Idle);
     let OpResult::Environment(folder) = op(

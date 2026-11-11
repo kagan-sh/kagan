@@ -166,9 +166,7 @@ fn accepts(kind: Kind, key: &str, value: &serde_json::Value) -> Result<()> {
             .as_str()
             .filter(|text| prefs::DENSITIES.contains(text))
             .map(|_| ())
-            .ok_or_else(|| {
-                OpError::Invalid(format!("{key} must be compact, default or roomy"))
-            }),
+            .ok_or_else(|| OpError::Invalid(format!("{key} must be compact, default or roomy"))),
         Kind::SidebarOrder => value
             .as_str()
             .filter(|text| prefs::SIDEBAR_ORDERS.contains(text))
@@ -180,8 +178,9 @@ fn accepts(kind: Kind, key: &str, value: &serde_json::Value) -> Result<()> {
             .map(|_| ())
             .ok_or_else(|| {
                 OpError::Invalid(format!(
-                    "{key} must be empty, or up to {} bytes and a valid git branch start such as bb/",
-                    prefs::BRANCH_PREFIX_MAX
+                    "{key} must be empty, or up to {} bytes. {}",
+                    prefs::BRANCH_PREFIX_MAX,
+                    prefs::BRANCH_PREFIX_RULE
                 ))
             }),
         Kind::Map => {

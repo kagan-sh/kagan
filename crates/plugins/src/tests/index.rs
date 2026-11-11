@@ -54,6 +54,14 @@ fn an_index_lists_git_sources_and_local_paths_inside_its_folder() {
 }
 
 #[test]
+fn a_description_of_exactly_the_limit_is_kept() {
+    let text = index(
+        &json!([{ "name": "a", "description": "x".repeat(300), "source": "git:https://e.com/p@v1" }]),
+    );
+    assert!(parse(&text, None).is_ok());
+}
+
+#[test]
 fn a_bad_index_is_refused_with_the_reason() {
     let git =
         |name: &str| json!({ "name": name, "description": "", "source": "git:https://e.com/p@v1" });
@@ -741,4 +749,21 @@ fn share_keeps_the_ssh_user_and_drops_a_token(cx: &mut TestAppContext) {
     assert_eq!(entry.source, source);
     assert_eq!(entry.plugin, None);
     assert_eq!(install, format!("kg plugin install {source}"));
+}
+
+#[gpui_kit::test]
+fn adding_a_path_that_is_not_there_is_invalid_input_that_names_it(cx: &mut TestAppContext) {
+    open(cx, &[]);
+    let error = run(
+        cx,
+        index_op(IndexOp::Add {
+            location: "banana".into(),
+        }),
+    )
+    .unwrap_err();
+    assert!(matches!(error, OpError::Invalid(_)), "{error:?}");
+    assert!(
+        error.to_string().starts_with("banana is not a folder"),
+        "{error}"
+    );
 }

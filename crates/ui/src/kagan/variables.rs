@@ -8,9 +8,9 @@ use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AppContext as _, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
-    Render, SharedString, Styled as _, Task, Window, div, rems,
+    Render, SharedString, Styled as _, Subscription, Task, Window, div, rems,
 };
-use kg_core::Workspace;
+use kg_core::{Workspace, WorkspaceEvent};
 use kg_domain::{EnvOp, Op, OpResult, ProjectId};
 
 use crate::kagan::controls::control;
@@ -26,6 +26,7 @@ pub(crate) struct Variables {
     // Each task is kept while it runs; dropping one cancels it.
     load: Option<Task<()>>,
     change: Option<Task<()>>,
+    _stored: Subscription,
 }
 
 impl Variables {
@@ -40,7 +41,16 @@ impl Variables {
                 .masked(true)
                 .placeholder("Value (hidden)")
         });
-        Self {
+        let stored = cx.subscribe_in(
+            &Workspace::global(cx),
+            window,
+            |this, _, event: &WorkspaceEvent, _, cx| {
+                if matches!(event, WorkspaceEvent::Changed) {
+                    this.reload(cx);
+                }
+            },
+        );
+        let mut variables = Self {
             scope,
             names: Vec::new(),
             name,
@@ -48,10 +58,13 @@ impl Variables {
             note: None,
             load: None,
             change: None,
-        }
+            _stored: stored,
+        };
+        variables.reload(cx);
+        variables
     }
 
-    pub(crate) fn reload(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn reload(&mut self, cx: &mut Context<Self>) {
         let task = Workspace::dispatch(
             Op::Env(EnvOp::List {
                 project_id: self.scope.clone(),

@@ -33,6 +33,13 @@ pub(super) fn render(page: &Page, window: &mut Window, cx: &mut Context<Page>) -
             cx.theme().muted_foreground,
             cx,
         )
+    } else if skills.is_empty() && page.query_is_empty(cx) && page.yours_is_empty() {
+        note(
+            "skills-empty",
+            "You have no skills yet. Make one with New skill.",
+            cx.theme().muted_foreground,
+            cx,
+        )
     } else if skills.is_empty() {
         note(
             "skills-none-match",
@@ -87,7 +94,7 @@ fn header(cx: &Context<Page>) -> impl IntoElement {
             div()
                 .type_small(cx)
                 .text_color(cx.theme().muted_foreground)
-                .child("Skills / My skills"),
+                .child("Skills"),
         )
         .child(
             div()
@@ -269,20 +276,40 @@ fn create_row(
     input: &gpui_kit::Entity<gpui_kit::component::input::InputState>,
     cx: &mut Context<Page>,
 ) -> impl IntoElement {
-    h_flex()
-        .gap(gpui_kit::px(space(SpaceStep::Sm, cx)))
-        .child(div().flex_1().min_w_0().child(Input::new(input)))
-        .child(template_menu(page, cx))
-        .child(scope_menu(page, cx))
-        .child(control(
-            "skills-create",
-            Facts::button("Create skill"),
-            Button::new("skills-create-button")
-                .small()
-                .primary()
-                .label("Create skill")
-                .on_click(cx.listener(|this, _, _, cx| this.create(cx))),
-        ))
+    let no_project = page.project.is_none();
+    v_flex()
+        .gap(gpui_kit::px(space(SpaceStep::Xs, cx)))
+        .child(
+            h_flex()
+                .gap(gpui_kit::px(space(SpaceStep::Sm, cx)))
+                .child(
+                    div()
+                        .id("skills-name")
+                        .ui_observe_as(Facts::input("Skill name", input, cx))
+                        .flex_1()
+                        .min_w_0()
+                        .child(Input::new(input)),
+                )
+                .child(template_menu(page, cx))
+                .child(scope_menu(page, cx))
+                .child(control(
+                    "skills-create",
+                    Facts::button("Create skill"),
+                    Button::new("skills-create-button")
+                        .small()
+                        .primary()
+                        .label("Create skill")
+                        .on_click(cx.listener(|this, _, _, cx| this.create(cx))),
+                )),
+        )
+        .when(no_project, |column| {
+            column.child(note(
+                "skills-scope-reason",
+                "Save in Project needs a project. Pick one in the project list.",
+                cx.theme().muted_foreground,
+                cx,
+            ))
+        })
 }
 
 fn template_menu(page: &Page, cx: &mut Context<Page>) -> impl IntoElement {

@@ -178,12 +178,15 @@ pub(super) fn shown(check: Option<&Check>, platform: Platform) -> Shown {
 
 pub(super) fn group(kagan: &Kagan, cx: &mut Context<Kagan>) -> Group {
     let platform = platform();
-    let title = match platform {
-        Platform::MacOs => "Install the kg command",
-        Platform::Linux | Platform::Windows => "Add kg to your PATH",
-    };
     let check = kagan.prefs.read(cx).kg_check.clone();
-    let body = match shown(check.as_ref(), platform) {
+    let state = shown(check.as_ref(), platform);
+    // Once kg is on the PATH the row is a status, not a task left to do.
+    let title = match (&state, platform) {
+        (Shown::OnPath, _) => "The kg command",
+        (_, Platform::MacOs) => "Install the kg command",
+        (_, Platform::Linux | Platform::Windows) => "Add kg to your PATH",
+    };
+    let body = match state {
         Shown::Checking => plain("Checking your PATH…", cx),
         Shown::OnPath => plain("kg is on your PATH.", cx),
         Shown::CouldNotCheck => plain(

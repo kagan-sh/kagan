@@ -28,8 +28,8 @@ use gpui_kit::component::{ActiveTheme as _, StyledExt as _};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _,
-    IntoElement, KeyBinding, ParentElement as _, ScrollHandle, StatefulInteractiveElement as _,
-    Styled as _, Subscription, Window, actions, div, px, rems,
+    IntoElement, KeyBinding, ParentElement as _, ScrollHandle, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Window, actions, div, px, rems,
 };
 use kg_core::{Approval, Workspace};
 use kg_domain::{NotifyLevel, PluginId};
@@ -100,6 +100,8 @@ pub(super) struct Prefs {
 
 pub(super) struct SettingsState {
     pub(super) scroll: ScrollHandle,
+    // The row a search result jumped to, until the search or the section changes.
+    pub(super) marked: Option<SharedString>,
     pub(super) approvals: usize,
     pub(super) drafts: Drafts,
     pub(super) keyboard: Recorder,
@@ -123,6 +125,7 @@ impl SettingsState {
         // A new query starts at the first result; an empty one puts the cursor back on the section.
         let watch = cx.subscribe(&query, |this, query, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
+                this.settings.marked = None;
                 this.settings.cursor = if query.read(cx).value().trim().is_empty() {
                     nav::section_position(&this.settings.section, cx)
                 } else {
@@ -147,12 +150,13 @@ impl SettingsState {
         );
         let variables = cx.new(|cx| Variables::new(None, window, cx));
         let rules = cx.new(|cx| RulesEditor::new(None, window, cx));
-        let fonts = font_items(cx);
         let ui_font = cx.new(|cx| {
-            SelectState::new(SearchableVec::new(fonts.clone()), None, window, cx).searchable(true)
+            SelectState::new(SearchableVec::new(font_items(cx, false)), None, window, cx)
+                .searchable(true)
         });
         let terminal_font = cx.new(|cx| {
-            SelectState::new(SearchableVec::new(fonts), None, window, cx).searchable(true)
+            SelectState::new(SearchableVec::new(font_items(cx, true)), None, window, cx)
+                .searchable(true)
         });
         let ui_watch = cx.subscribe_in(
             &ui_font,
@@ -179,6 +183,7 @@ impl SettingsState {
             drafts: Drafts::default(),
             keyboard: Recorder::default(),
             section: Category::default(),
+            marked: None,
             cursor: 0,
             query,
             _query_watch: watch,
@@ -242,6 +247,9 @@ impl Kagan {
         plugins::sync(&mut self.settings.drafts, window, cx);
         let rules = self.settings.rules.clone();
         rules.update(cx, |editor, cx| editor.refresh(window, cx));
+        // A hand edit of the variables file is only seen by a reload, so Settings reads it on open.
+        let variables = self.settings.variables.clone();
+        variables.update(cx, super::variables::Variables::reload);
         for (id, _) in pages::plugin_entries(cx) {
             self.mount_settings_view(&id, window, cx);
         }
@@ -337,9 +345,6 @@ impl Kagan {
     }
 
     pub(super) fn load_settings(&mut self, cx: &mut Context<Self>) {
-        self.settings
-            .variables
-            .update(cx, super::variables::Variables::reload);
         Self::load_layout(cx);
         self.load_prefs(cx);
         self.load_kg_on_path(cx);
@@ -373,12 +378,13 @@ impl Kagan {
         let branch = super::layout::read::<String>(kg_domain::prefs::BRANCH_PREFIX, cx);
         let ui_name = super::layout::read::<String>(kg_domain::prefs::FONT_UI, cx);
         let terminal_name = super::layout::read::<String>(kg_domain::prefs::FONT_TERMINAL, cx);
+        let ui_fonts = font_items(cx, false);
+        let terminal_fonts = font_items(cx, true);
         let ui_font = self.settings.ui_font.clone();
         let terminal_font = self.settings.terminal_font.clone();
         let copy = super::layout::read::<bool>(kg_domain::prefs::TERMINAL_COPY_ON_SELECT, cx);
         let links = super::layout::read::<bool>(kg_domain::prefs::TERMINAL_LINKS_BROWSER, cx);
         let branch_input = self.settings.branch_prefix.clone();
-        let fonts = font_items(cx);
         let window = self.window;
         let setup = super::layout::read::<bool>(kg_domain::prefs::SETUP_GUIDE, cx);
         let list_order = super::layout::read::<String>(kg_domain::prefs::SIDEBAR_ORDER, cx);
@@ -404,11 +410,11 @@ impl Kagan {
             _ = cx.update_window(window, |_, window, cx| {
                 branch_input.update(cx, |state, cx| state.set_value(branch_prefix, window, cx));
                 ui_font.update(cx, |state, cx| {
-                    state.set_items(SearchableVec::new(fonts.clone()), window, cx);
+                    state.set_items(SearchableVec::new(ui_fonts), window, cx);
                     state.set_selected_value(&ui_name, window, cx);
                 });
                 terminal_font.update(cx, |state, cx| {
-                    state.set_items(SearchableVec::new(fonts), window, cx);
+                    state.set_items(SearchableVec::new(terminal_fonts), window, cx);
                     state.set_selected_value(&terminal_name, window, cx);
                 });
             });
@@ -439,8 +445,13 @@ impl Kagan {
 }
 
 pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) -> AnyElement {
-    let groups = pages::groups(kagan, window, cx);
+    let mut groups = pages::groups(kagan, window, cx);
     let entries = nav::entries(kagan, &groups, cx);
+    if let Some(marked) = &kagan.settings.marked {
+        for row in groups.iter_mut().flat_map(|group| group.rows.iter_mut()) {
+            row.marked = row.id == *marked;
+        }
+    }
     let sidebar = nav::sidebar(kagan, &entries, window, cx);
     let approvals: Vec<Approval> = Workspace::global(cx)
         .read(cx)

@@ -274,10 +274,16 @@ async fn instructions_op_sets_gets_and_clears_each_file(cx: &mut TestAppContext)
             text: Some(text.into()),
             file: None,
             project,
+            expected: None,
         })
     };
     let get = |project: Option<ProjectId>| Op::Instructions(InstructionsOp::Get { project });
-    let clear = |project: Option<ProjectId>| Op::Instructions(InstructionsOp::Clear { project });
+    let clear = |project: Option<ProjectId>| {
+        Op::Instructions(InstructionsOp::Clear {
+            project,
+            expected: None,
+        })
+    };
     let text = |result: Result<OpResult, OpError>| match result.unwrap() {
         OpResult::Text(text) => text,
         other => panic!("{other:?}"),
@@ -305,6 +311,32 @@ async fn instructions_op_sets_gets_and_clears_each_file(cx: &mut TestAppContext)
     assert!(!checkout.join(".kagan/instructions.md").exists());
     assert_eq!(text(op(get(Some(project)), cx).await), "");
     assert_eq!(text(op(get(None), cx).await), "be brief");
+}
+
+#[gpui_kit::test]
+async fn instructions_write_refuses_text_that_changed_since_it_was_read(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let file = fixture.dir.path().join("instructions.md");
+    let set = |text: &str, expected: Option<&str>| {
+        Op::Instructions(InstructionsOp::Set {
+            text: Some(text.into()),
+            file: None,
+            project: None,
+            expected: expected.map(str::to_owned),
+        })
+    };
+    op(set("first", None), cx).await.unwrap();
+    let refused = op(set("mine", Some("older")), cx).await;
+    assert!(matches!(refused, Err(OpError::Changed(_))), "{refused:?}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "first");
+    op(set("mine", Some("first")), cx).await.unwrap();
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "mine");
+    let clear = Op::Instructions(InstructionsOp::Clear {
+        project: None,
+        expected: Some("first".into()),
+    });
+    assert!(matches!(op(clear, cx).await, Err(OpError::Changed(_))));
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "mine");
 }
 
 #[cfg(unix)]
@@ -1138,6 +1170,7 @@ async fn instructions_set_does_not_recreate_a_missing_project_folder(cx: &mut Te
             text: Some("be brief".into()),
             file: None,
             project: Some(project),
+            expected: None,
         }),
         cx,
     )

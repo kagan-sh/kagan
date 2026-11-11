@@ -1027,3 +1027,109 @@ async fn a_terminal_cannot_be_resized_past_its_limits(cx: &mut TestAppContext) {
     .await
     .unwrap();
 }
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_selected_word_copies_its_text(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (id, _reap) = started(&fixture, program(), cx).await;
+    type_in(&id, "printf 'COPY''-ME\\n'\n", cx).await;
+    let frame = screen_with(&id, "COPY-ME", cx).await;
+    let at = frame.find("COPY-ME").unwrap();
+    let before = &frame[..at];
+    let place = &before[before.rfind("\u{1b}[").unwrap() + 2..];
+    let line: u16 = place.split(';').next().unwrap().parse().unwrap();
+    let row = line - 1;
+    op(
+        Op::Thread(ThreadOp::Select {
+            id: id.clone(),
+            terminal: None,
+            mode: SelectMode::Word,
+            column: 0,
+            row,
+            right: false,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let OpResult::Text(text) = op(
+        Op::Thread(ThreadOp::Copy {
+            id: id.clone(),
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("text")
+    };
+    assert!(text.contains("COPY-ME"), "{text:?}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_report_reaches_a_running_program(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (id, _reap) = started(&fixture, program(), cx).await;
+    let answered = op(
+        Op::Thread(ThreadOp::Report {
+            id: id.clone(),
+            terminal: None,
+            bytes: b"\x1b[0n".to_vec(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert!(matches!(answered, OpResult::Done), "{answered:?}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn resize_and_report_to_a_stopped_program_do_nothing(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (id, _reap) = started(&fixture, program(), cx).await;
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Idle, cx).await;
+    let resized = op(
+        Op::Thread(ThreadOp::Resize {
+            id: id.clone(),
+            cols: 80,
+            rows: 24,
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert!(matches!(resized, OpResult::Done), "{resized:?}");
+    let reported = op(
+        Op::Thread(ThreadOp::Report {
+            id: id.clone(),
+            terminal: None,
+            bytes: b"\x1b[0n".to_vec(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert!(matches!(reported, OpResult::Done), "{reported:?}");
+}
+
+#[gpui_kit::test]
+async fn send_accepts_text_up_to_the_cap(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    let error = op(
+        Op::Thread(ThreadOp::Send {
+            id: ThreadId("thread".into()),
+            text: "x".repeat(kg_domain::TEXT_MAX),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(error, OpError::NotFound(_)), "{error}");
+}
