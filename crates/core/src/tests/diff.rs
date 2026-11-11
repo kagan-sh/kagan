@@ -146,19 +146,26 @@ async fn a_text_file_view_counts_its_lines_and_carries_its_hunks_and_text(cx: &m
 }
 
 #[gpui_kit::test]
-async fn a_tracked_file_that_is_binary_or_too_large_says_so(cx: &mut TestAppContext) {
+async fn a_committed_file_that_is_binary_or_too_large_says_so(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let root = fixture.dir.path();
     git_in(root, &["init", "-b", "main"]);
-    let late_nul = vec![b'a'; 9_000];
+    let late = vec![b'a'; 9_000];
     let mut big = "x".repeat(99);
     big.push('\n');
     let big = big.repeat(11_000);
     std::fs::write(root.join("blob.bin"), [0, 1, 2]).unwrap();
-    std::fs::write(root.join("late.txt"), &late_nul).unwrap();
+    std::fs::write(root.join("late.txt"), &late).unwrap();
     std::fs::write(root.join("large.txt"), &big).unwrap();
     git_in(root, &["add", "."]);
     commit(root, &["commit", "-m", "base"]);
+    std::fs::write(root.join("blob.bin"), [0, 1, 3]).unwrap();
+    let mut nul = late;
+    nul[8_500] = 0;
+    std::fs::write(root.join("late.txt"), nul).unwrap();
+    std::fs::write(root.join("large.txt"), big.replacen('x', "y", 1)).unwrap();
+    git_in(root, &["add", "."]);
+    commit(root, &["commit", "-m", "change"]);
     let OpResult::Thread(started) = op(fixture.run(program()), cx).await.unwrap() else {
         panic!("thread")
     };
@@ -166,14 +173,13 @@ async fn a_tracked_file_that_is_binary_or_too_large_says_so(cx: &mut TestAppCont
         Op::Diff(DiffOp::Show {
             query: DiffQuery {
                 thread_id: started.id.clone(),
-                scope: DiffScope::Uncommitted,
+                scope: DiffScope::Commit,
                 base: None,
-                rev: None,
+                rev: Some("HEAD".to_owned()),
             },
             path: path.to_owned(),
         })
     };
-    std::fs::write(root.join("blob.bin"), [0, 1, 3]).unwrap();
     let OpResult::DiffFile(binary) = op(show("blob.bin"), cx).await.unwrap() else {
         panic!("file")
     };
@@ -184,16 +190,12 @@ async fn a_tracked_file_that_is_binary_or_too_large_says_so(cx: &mut TestAppCont
     );
     assert_eq!((binary.added, binary.removed), (0, 0), "{binary:?}");
 
-    let mut nul = late_nul;
-    nul[8_500] = 0;
-    std::fs::write(root.join("late.txt"), nul).unwrap();
     let OpResult::DiffFile(late) = op(show("late.txt"), cx).await.unwrap() else {
         panic!("file")
     };
     assert!(late.binary, "{late:?}");
     assert!(late.hunks.is_empty() && late.file.is_none(), "{late:?}");
 
-    std::fs::write(root.join("large.txt"), big.replacen('x', "y", 1)).unwrap();
     let OpResult::DiffFile(large) = op(show("large.txt"), cx).await.unwrap() else {
         panic!("file")
     };
