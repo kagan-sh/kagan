@@ -48,7 +48,7 @@ pub enum Containment {
     Job(kg_process::Job),
     /// The job could not be made or assigned, so only the program is ended. The text is the OS error.
     #[cfg(windows)]
-    Unavailable(String),
+    Unavailable(io::Error),
 }
 
 impl std::fmt::Display for Containment {
@@ -353,11 +353,10 @@ fn contain(
     match assign(process_id) {
         Ok(job) => Containment::Job(job),
         Err(error) => {
-            let reason = error.to_string();
             eprintln!(
-                "kg: the program is not in a job object, so stopping it ends only the program: {reason}"
+                "kg: program {process_id} is not in a job object, so stopping it ends only the program: {error}"
             );
-            Containment::Unavailable(reason)
+            Containment::Unavailable(error)
         }
     }
 }
