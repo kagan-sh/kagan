@@ -111,16 +111,16 @@ pub(super) fn menu_items(menu: PopupMenu, cx: &App) -> PopupMenu {
         _ => return menu,
     };
     let menu = menu.item(item("update-notes", NOTES, move |_, cx| {
-        cx.open_url(&notes)
+        cx.open_url(&notes);
     }));
     let menu = match updater.kind() {
         InstallKind::Homebrew => menu.item(item("update-copy", COPY, |_, cx| copy_brew(cx))),
         kind if kind.replaces_itself() => menu
             .item(item("update-later", "Install when kagan quits", |_, cx| {
-                later(cx)
+                later(cx);
             }))
             .item(item("update-install", RESTART, |window, cx| {
-                ask(window, cx)
+                ask(window, cx);
             })),
         _ => menu,
     };
