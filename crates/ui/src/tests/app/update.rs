@@ -236,3 +236,28 @@ fn an_update_does_not_add_a_banner_to_the_page_or_move_it(cx: &mut TestAppContex
         "the update button sits inside the strip"
     );
 }
+
+#[gpui_kit::test]
+fn a_ready_install_keeps_the_menu_so_restart_can_still_be_chosen(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let target = Target::find("macos", &bundle(data.path()), None, None, &[]);
+    cx.update(|cx| {
+        Updater::global(cx).update(cx, |updater, cx| {
+            updater.use_state(
+                UpdateState::Ready {
+                    version: "99.0.0".into(),
+                    notes: "https://github.com/kagan-sh/kagan/releases/tag/v99.0.0".into(),
+                    at_quit: true,
+                },
+                target,
+                cx,
+            );
+        });
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        notice(cx, window),
+        ["update-notes", "update-install"],
+        "a ready install still offers its notes and its restart"
+    );
+}

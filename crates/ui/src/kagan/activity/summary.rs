@@ -156,15 +156,16 @@ fn needs_part(needs: usize, focus: &FocusHandle, cx: &Context<Kagan>) -> Option<
 }
 
 fn update_part(focus: &FocusHandle, cx: &Context<Kagan>) -> Option<AnyElement> {
-    let (available, progress) = {
+    let (label, progress) = {
         let updater = Updater::global(cx);
         let updater = updater.read(cx);
         match updater.state() {
-            UpdateState::Available { version, .. } => (
-                update::hidden(cx).as_deref() != Some(version.as_str()),
-                None,
-            ),
-            state => (false, update::progress_sentence(state)),
+            UpdateState::Available { version, .. } => {
+                let shown = update::hidden(cx).as_deref() != Some(version.as_str());
+                (shown.then_some("Update available"), None)
+            }
+            UpdateState::Ready { .. } => (Some("Update ready"), None),
+            state => (None, update::progress_sentence(state)),
         }
     };
     if let Some(text) = progress {
@@ -178,23 +179,23 @@ fn update_part(focus: &FocusHandle, cx: &Context<Kagan>) -> Option<AnyElement> {
                 .into_any_element(),
         );
     }
-    available.then(|| {
+    label.map(|label| {
         control(
             "activity-update",
             Facts {
                 role: Role::Button,
-                name: "Update available".into(),
+                name: label.into(),
                 value: None,
                 disabled: false,
                 selected: None,
                 focus: Some(focus.clone()),
-                hint: Some(update::primary_label(cx).into()),
+                hint: Some("Update options".into()),
             },
             Button::new("activity-update-button")
                 .small()
                 .outline()
-                .label("Update available")
-                .tooltip(update::primary_label(cx))
+                .label(label)
+                .tooltip("Update options")
                 .text_color(cx.theme().muted_foreground)
                 .track_focus(focus)
                 .dropdown_menu(|menu, _, cx| update::menu_items(menu, cx)),

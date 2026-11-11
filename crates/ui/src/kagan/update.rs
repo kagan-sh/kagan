@@ -44,8 +44,7 @@ const COPY: &str = "Copy command";
 const RESTART: &str = "Restart and install…";
 const NOTES: &str = "Release notes";
 
-// What the main update action is for this install: the activity strip's Update button and the
-// notice both use it, so they can't disagree.
+// What this install's update menu adds to the notes: the copy command, or the restart.
 #[derive(Clone, Copy)]
 enum Primary {
     Copy,
@@ -69,10 +68,6 @@ impl Primary {
             Self::Notes => NOTES,
         }
     }
-}
-
-pub(super) fn primary_label(cx: &App) -> &'static str {
-    Primary::of(Updater::global(cx).read(cx).kind()).label()
 }
 
 fn copy_brew(cx: &mut App) {
@@ -103,29 +98,45 @@ pub(super) fn hidden(cx: &App) -> Option<String> {
     cx.try_global::<Hidden>().map(|hidden| hidden.0.clone())
 }
 
-// The update actions, as the activity strip's Update menu offers them.
+// The update actions, as the activity strip's Update menu offers them. Available and Ready
+// both offer the notes and this install's install action.
 pub(super) fn menu_items(menu: PopupMenu, cx: &App) -> PopupMenu {
     let updater = Updater::global(cx).read(cx);
-    let notes = match updater.state() {
-        UpdateState::Available { notes, .. } => notes.clone(),
+    let (notes, at_quit, available) = match updater.state() {
+        UpdateState::Available { notes, .. } => (notes.clone(), false, true),
+        UpdateState::Ready { notes, at_quit, .. } => (notes.clone(), *at_quit, false),
         _ => return menu,
     };
     let menu = menu.item(item("update-notes", NOTES, move |_, cx| {
         cx.open_url(&notes);
     }));
-    let menu = match updater.kind() {
-        InstallKind::Homebrew => menu.item(item("update-copy", COPY, |_, cx| copy_brew(cx))),
-        kind if kind.replaces_itself() => menu
-            .item(item("update-later", "Install when kagan quits", |_, cx| {
-                later(cx);
-            }))
-            .item(item("update-install", RESTART, |window, cx| {
-                ask(window, cx);
-            })),
-        _ => menu,
+    let menu = match Primary::of(updater.kind()) {
+        Primary::Copy => menu.item(item("update-copy", Primary::Copy.label(), |_, cx| {
+            copy_brew(cx);
+        })),
+        Primary::Restart => {
+            let menu = if at_quit {
+                menu
+            } else {
+                menu.item(item("update-later", "Install when kagan quits", |_, cx| {
+                    later(cx)
+                }))
+            };
+            menu.item(item(
+                "update-install",
+                Primary::Restart.label(),
+                |window, cx| {
+                    ask(window, cx);
+                },
+            ))
+        }
+        Primary::Notes => menu,
     };
+    if !available {
+        return menu;
+    }
     menu.item(item("update-hide", "Not now", |_, cx| {
-        if let Some(version) = available(cx) {
+        if let Some(version) = available_version(cx) {
             cx.set_global(Hidden(version));
             cx.refresh_windows();
         }
@@ -149,7 +160,7 @@ fn item(
     .on_click(move |_, window, cx| on_click(window, cx))
 }
 
-fn available(cx: &App) -> Option<String> {
+fn available_version(cx: &App) -> Option<String> {
     match Updater::global(cx).read(cx).state() {
         UpdateState::Available { version, .. } => Some(version.clone()),
         _ => None,
