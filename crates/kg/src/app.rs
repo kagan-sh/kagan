@@ -1,6 +1,5 @@
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions, TryLockError};
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::pin::pin;
 
@@ -12,6 +11,9 @@ use gpui_kit::QuitMode;
 use kg_domain::{Op, OpError, OpResult};
 
 use crate::socket;
+
+const LOCK_FILE: &str = "kagan.lock";
+const PID_FILE: &str = "kagan.pid";
 
 type Request = (Op, kg_core::Requester, Sender<Result<OpResult, OpError>>);
 
@@ -72,34 +74,51 @@ pub(crate) fn data_dir_of(
 
 /// Holds a data folder for one app. A second app on the same folder would run the same threads
 /// again and write the same database, so it is refused. The lock ends when the app exits.
+/// The lock file itself is never read: Windows blocks reads of a locked range, so the owner's
+/// pid goes in `kagan.pid` beside it.
 pub(crate) fn lock_data_dir(data_dir: &Path) -> Result<File> {
+    let lock = open_lock(data_dir)?;
+    match lock.try_lock() {
+        Ok(()) => {}
+        Err(TryLockError::WouldBlock) => {
+            anyhow::bail!("this data folder is in use by {}", holder_text(data_dir));
+        }
+        Err(TryLockError::Error(error)) => return Err(error.into()),
+    }
+    std::fs::write(data_dir.join(PID_FILE), format!("{}\n", std::process::id()))
+        .with_context(|| format!("cannot write {PID_FILE}"))?;
+    Ok(lock)
+}
+
+/// Who holds a data folder, as `pid N`, or `None` when no app holds it. The lock is released at
+/// once when it was free.
+pub(crate) fn folder_holder(data_dir: &Path) -> Result<Option<String>> {
+    match open_lock(data_dir)?.try_lock() {
+        Ok(()) => Ok(None),
+        Err(TryLockError::WouldBlock) => Ok(Some(holder_text(data_dir))),
+        Err(TryLockError::Error(error)) => Err(error.into()),
+    }
+}
+
+fn open_lock(data_dir: &Path) -> Result<File> {
     std::fs::create_dir_all(data_dir)
         .with_context(|| format!("cannot create {}", data_dir.display()))?;
-    let path = data_dir.join("kagan.lock");
-    let mut file = OpenOptions::new()
+    let path = data_dir.join(LOCK_FILE);
+    OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .truncate(false)
         .open(&path)
-        .with_context(|| format!("cannot open {}", path.display()))?;
-    match file.try_lock() {
-        Ok(()) => {}
-        Err(TryLockError::WouldBlock) => {
-            let owner = std::fs::read_to_string(&path)
-                .ok()
-                .map(|text| text.trim().to_owned())
-                .filter(|text| !text.is_empty());
-            anyhow::bail!(
-                "this data folder is in use by pid {}",
-                owner.as_deref().unwrap_or("of another kagan app")
-            );
-        }
-        Err(TryLockError::Error(error)) => return Err(error.into()),
-    }
-    file.set_len(0)?;
-    writeln!(file, "{}", std::process::id())?;
-    Ok(file)
+        .with_context(|| format!("cannot open {}", path.display()))
+}
+
+fn holder_text(data_dir: &Path) -> String {
+    std::fs::read_to_string(data_dir.join(PID_FILE))
+        .ok()
+        .map(|text| text.trim().to_owned())
+        .filter(|text| text.parse::<u32>().is_ok())
+        .map_or_else(|| "another kagan app".into(), |pid| format!("pid {pid}"))
 }
 
 pub(crate) fn run(presentation: kg_ui::Presentation) -> Result<()> {

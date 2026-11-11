@@ -429,7 +429,7 @@ impl Client {
             ));
         }
         start_headless(&location)?;
-        wait_for_socket(&location, START_TIMEOUT)
+        wait_for_socket(&location, START_TIMEOUT).map_err(|error| start_failed(&location, error))
     }
 
     /// Says on stderr when the op waits for the person, and how that ended.
@@ -476,6 +476,22 @@ pub(crate) fn wait_for_socket(location: &std::ffi::OsStr, timeout: Duration) -> 
             Err(error) if Instant::now() > deadline => return Err(error),
             Err(_) => thread::sleep(Duration::from_millis(50)),
         }
+    }
+}
+
+// The app we started may have died on the data folder lock, because another app holds it. Say so,
+// rather than a plain timeout.
+fn start_failed(location: &std::ffi::OsStr, error: io::Error) -> io::Error {
+    let holder = crate::app::data_dir_from_env()
+        .and_then(|dir| crate::app::folder_holder(&dir))
+        .ok()
+        .flatten();
+    match holder {
+        Some(holder) => io::Error::other(format!(
+            "this data folder is in use by {holder}, and no app answers on {}",
+            location.to_string_lossy()
+        )),
+        None => error,
     }
 }
 
