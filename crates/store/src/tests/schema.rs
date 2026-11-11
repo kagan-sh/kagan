@@ -5,9 +5,8 @@ use crate::{Error, Store};
 
 #[test]
 fn conflicting_schema_five_keeps_threads_and_accepts_new_ones() {
-    let path =
-        std::env::temp_dir().join(format!("kg-store-conflict-{}.sqlite3", std::process::id()));
-    let _ = std::fs::remove_file(&path);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("kagan.sqlite3");
     let mut conn = rusqlite::Connection::open(&path).unwrap();
     let migrations = &crate::store::MIGRATIONS;
     let initial = migrations[0]
@@ -36,7 +35,6 @@ fn conflicting_schema_five_keeps_threads_and_accepts_new_ones() {
     store.put_thread(&thread("thr_2", 2)).unwrap();
     assert!(store.thread(&id("thr_2")).unwrap().is_some());
     drop(store);
-    std::fs::remove_file(&path).unwrap();
 }
 
 #[test]
@@ -50,11 +48,8 @@ fn conflicting_earlier_schemas_upgrade_without_repeating_columns() {
             vec![migrations[0], migrations[1], migrations[3], migrations[4]],
         ),
     ] {
-        let path = std::env::temp_dir().join(format!(
-            "kg-store-conflict-{name}-{}.sqlite3",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_file(&path);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(format!("{name}.sqlite3"));
         let mut conn = rusqlite::Connection::open(&path).unwrap();
         crate::migrate(&mut conn, earlier).unwrap();
         drop(conn);
@@ -66,14 +61,13 @@ fn conflicting_earlier_schemas_upgrade_without_repeating_columns() {
         store.conn.execute("INSERT INTO projects (id, kind, name, path) VALUES ('prj_1', 'standard', 'kagan', '/code/kagan')", []).unwrap();
         store.put_thread(&thread("thr_1", 1)).unwrap();
         drop(store);
-        std::fs::remove_file(&path).unwrap();
     }
 }
 
 #[test]
 fn a_schema_one_database_gains_the_conversation_and_keeps_its_threads() {
-    let path = std::env::temp_dir().join(format!("kg-store-v1-{}.sqlite3", std::process::id()));
-    let _ = std::fs::remove_file(&path);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("kagan.sqlite3");
     let mut conn = rusqlite::Connection::open(&path).unwrap();
     crate::migrate(&mut conn, crate::store::MIGRATIONS[..1].iter().copied()).unwrap();
     conn.execute(
@@ -111,15 +105,12 @@ fn a_schema_one_database_gains_the_conversation_and_keeps_its_threads() {
         0
     );
     drop(store);
-    std::fs::remove_file(&path).unwrap();
 }
 #[test]
 fn a_future_schema_is_refused_before_anything_is_written() {
-    let dir = std::env::temp_dir().join(format!("kg-store-future-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("kagan.sqlite3");
-    let side = dir.join("notes.txt");
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("kagan.sqlite3");
+    let side = dir.path().join("notes.txt");
     std::fs::write(&side, "keep").unwrap();
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch("CREATE TABLE canary (id INTEGER); INSERT INTO canary VALUES (1);")
@@ -152,9 +143,8 @@ fn a_future_schema_is_refused_before_anything_is_written() {
         .unwrap();
     assert_eq!(canary, 1);
     assert_eq!(std::fs::read_to_string(&side).unwrap(), "keep");
-    assert!(!dir.join("kagan.sqlite3-wal").exists());
+    assert!(!dir.path().join("kagan.sqlite3-wal").exists());
     drop(conn);
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -173,11 +163,9 @@ fn a_new_database_is_current_schema_and_marked_as_kagan() {
 
 #[test]
 fn a_pre_release_database_is_refused_with_its_path_and_left_alone() {
-    let dir = std::env::temp_dir().join(format!("kg-store-pre-release-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = tempfile::tempdir().unwrap();
     for version in [1i64, 14] {
-        let path = dir.join(format!("v{version}.sqlite3"));
+        let path = dir.path().join(format!("v{version}.sqlite3"));
         let conn = rusqlite::Connection::open(&path).unwrap();
         if version == 14 {
             conn.pragma_update_and_check(None, "journal_mode", "wal", |_| Ok(()))
@@ -200,23 +188,20 @@ fn a_pre_release_database_is_refused_with_its_path_and_left_alone() {
             )
         );
         assert_eq!(std::fs::read(&path).unwrap(), before);
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
         std::fs::remove_file(&path).unwrap();
     }
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn another_file_is_refused_unchanged_and_an_empty_one_is_built() {
-    let dir = std::env::temp_dir().join(format!("kg-store-foreign-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let other = dir.join("other.sqlite3");
+    let dir = tempfile::tempdir().unwrap();
+    let other = dir.path().join("other.sqlite3");
     let conn = rusqlite::Connection::open(&other).unwrap();
     conn.execute_batch("CREATE TABLE projects (id TEXT); INSERT INTO projects VALUES ('mine');")
         .unwrap();
     drop(conn);
-    let text = dir.join("notes.sqlite3");
+    let text = dir.path().join("notes.sqlite3");
     std::fs::write(&text, "not a database").unwrap();
     for path in [&other, &text] {
         let before = std::fs::read(path).unwrap();
@@ -232,21 +217,19 @@ fn another_file_is_refused_unchanged_and_an_empty_one_is_built() {
         );
         assert_eq!(std::fs::read(path).unwrap(), before);
     }
-    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
-    let empty = dir.join("empty.sqlite3");
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
+    let empty = dir.path().join("empty.sqlite3");
     std::fs::write(&empty, "").unwrap();
     assert_eq!(
         Store::open(&empty).unwrap().schema_version().unwrap(),
         i64::try_from(crate::store::MIGRATIONS.len()).unwrap()
     );
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn a_failed_migration_leaves_the_previous_schema() {
-    let path =
-        std::env::temp_dir().join(format!("kg-store-migrate-{}.sqlite3", std::process::id()));
-    let _ = std::fs::remove_file(&path);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("kagan.sqlite3");
     let mut conn = rusqlite::Connection::open(&path).unwrap();
     let error = crate::migrate(&mut conn, ["CREATE TABLE keep_me (id INTEGER);", "NOT SQL"]);
     assert!(error.is_err());
@@ -262,8 +245,6 @@ fn a_failed_migration_leaves_the_previous_schema() {
         )
         .unwrap();
     assert_eq!(tables, 0);
-    drop(conn);
-    std::fs::remove_file(&path).unwrap();
 }
 
 #[test]

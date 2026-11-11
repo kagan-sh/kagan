@@ -196,8 +196,8 @@ fn pinned_read_and_attention() {
 
 #[test]
 fn reopening_a_file_keeps_done() {
-    let path = std::env::temp_dir().join(format!("kg-store-done-{}.sqlite3", std::process::id()));
-    let _ = std::fs::remove_file(&path);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("kagan.sqlite3");
     let project = store()
         .project(&ProjectId("prj_1".into()))
         .unwrap()
@@ -214,7 +214,6 @@ fn reopening_a_file_keeps_done() {
         kg_domain::ThreadMark::Done
     );
     drop(store);
-    std::fs::remove_file(path).unwrap();
 }
 
 #[test]
