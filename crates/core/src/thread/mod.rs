@@ -10,6 +10,7 @@ mod read;
 mod run;
 mod search;
 mod terminal;
+pub(crate) mod turn_state;
 
 pub(crate) use agent::note_with;
 
@@ -24,12 +25,13 @@ pub(crate) use terminal::StopReason;
 pub(crate) use terminal::exited;
 #[cfg(test)]
 pub(crate) use terminal::remember;
+pub(crate) use terminal::send;
 pub(crate) use terminal::start as start_terminal;
 pub(crate) use terminal::start_again;
 pub(crate) use terminal::{Run, Shown};
 
 use gpui_kit::{AsyncApp, Entity, WeakEntity};
-use kg_domain::{OpError, OpResult, ThreadId, ThreadOp};
+use kg_domain::{OpError, OpResult, PluginId, ThreadId, ThreadOp};
 
 use crate::host::database::{Database, Result};
 use crate::workspace::{closed, missing, time};
@@ -48,6 +50,48 @@ async fn set_notify(
         .call(move |store| store.set_notify(&id, level))
         .await?;
     Workspace::refresh(this, cx).await?;
+    Ok(OpResult::Done)
+}
+
+async fn set_pinned(
+    this: &WeakEntity<Workspace>,
+    database: Database,
+    id: ThreadId,
+    pinned: bool,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    database
+        .call(move |store| store.set_pinned(&id, pinned))
+        .await?;
+    Workspace::refresh(this, cx).await?;
+    Ok(OpResult::Done)
+}
+
+async fn mark_read(
+    this: &WeakEntity<Workspace>,
+    database: Database,
+    id: ThreadId,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let at = time(this, cx)?;
+    database.call(move |store| store.mark_read(&id, at)).await?;
+    Workspace::refresh(this, cx).await?;
+    Ok(OpResult::Done)
+}
+
+async fn set_metadata(
+    this: &WeakEntity<Workspace>,
+    database: Database,
+    id: ThreadId,
+    plugin_id: PluginId,
+    value: serde_json::Value,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    thread(this, &id, cx)?;
+    database
+        .call(move |store| store.set_thread_metadata(&id, &plugin_id, &value))
+        .await?;
+    crate::workspace::changed(this, cx)?;
     Ok(OpResult::Done)
 }
 
@@ -79,6 +123,7 @@ pub(crate) async fn dispatch_thread(
         | ThreadOp::Paste { .. }
         | ThreadOp::Report { .. }) => terminal::run(this, op, cx),
         ThreadOp::Send { id, text } => terminal::send(this, id, &text, cx).await,
+        ThreadOp::Turn(op) => terminal::turn_hook(this, op, cx).await,
         ThreadOp::Terminal(op) => extra::run(this, op, cx).await,
         ThreadOp::Details { id } => details::read(database, id, cx).await,
         ThreadOp::Links { id } => extra::links(this, id, cx).await,
@@ -89,13 +134,7 @@ pub(crate) async fn dispatch_thread(
             approval_thread_id,
         } => delete(this, database, id, approval_thread_id, requester, cx).await,
         ThreadOp::Notify { id, level } => set_notify(this, database, id, level, cx).await,
-        ThreadOp::SetPinned { id, pinned } => {
-            database
-                .call(move |store| store.set_pinned(&id, pinned))
-                .await?;
-            Workspace::refresh(this, cx).await?;
-            Ok(OpResult::Done)
-        }
+        ThreadOp::SetPinned { id, pinned } => set_pinned(this, database, id, pinned, cx).await,
         ThreadOp::Rename { id, title } => rename(this, database, id, title, true, cx).await,
         ThreadOp::Ask {
             id,
@@ -103,24 +142,12 @@ pub(crate) async fn dispatch_thread(
             options,
             fields,
         } => interaction::ask(this, id, title, options, fields, cx).await,
-        ThreadOp::MarkRead { id } => {
-            let at = time(this, cx)?;
-            database.call(move |store| store.mark_read(&id, at)).await?;
-            Workspace::refresh(this, cx).await?;
-            Ok(OpResult::Done)
-        }
+        ThreadOp::MarkRead { id } => mark_read(this, database, id, cx).await,
         ThreadOp::SetMetadata {
             id,
             plugin_id,
             value,
-        } => {
-            thread(this, &id, cx)?;
-            database
-                .call(move |store| store.set_thread_metadata(&id, &plugin_id, &value))
-                .await?;
-            crate::workspace::changed(this, cx)?;
-            Ok(OpResult::Done)
-        }
+        } => set_metadata(this, database, id, plugin_id, value, cx).await,
         ThreadOp::StartAgain { id } => terminal::start_again(this, id, cx).await,
         ThreadOp::Get { id } => read::get(this, &id, cx),
         ThreadOp::List {

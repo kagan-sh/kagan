@@ -211,6 +211,8 @@ pub(crate) enum Start {
 pub(crate) struct Integration {
     pub(crate) env: Vec<(OsString, OsString)>,
     pub(crate) args: Vec<OsString>,
+    /// The program reports its turns through a hook kagan set, so the watcher does not guess them.
+    pub(crate) hooks: bool,
 }
 
 #[derive(Clone)]
@@ -286,6 +288,7 @@ pub(crate) async fn integrate(
         return Ok(Integration {
             env,
             args: Vec::new(),
+            hooks: false,
         });
     };
     let setup = configure(
@@ -302,11 +305,12 @@ pub(crate) async fn integrate(
         },
         cx,
     );
-    let (args, notice, warning) = match setup.await {
-        Ok((args, notice, warning)) => (
+    let (args, notice, warning, hooks) = match setup.await {
+        Ok((args, notice, warning, hooks)) => (
             args,
             notice.map(|text| (NoticeSeverity::Info, text.to_owned())),
             warning,
+            hooks,
         ),
         Err(error) => (
             Vec::new(),
@@ -314,9 +318,17 @@ pub(crate) async fn integrate(
             Some(format!(
                 "kagan could not set up the agent integration, so the program starts without it: {error}"
             )),
+            false,
         ),
     };
     let mut notices = Vec::new();
+    if matches!(known, Known::Claude) && !sets_hooks(&known, &program.args) {
+        notices.push(EventKind::Notice {
+            severity: NoticeSeverity::Info,
+            text: "Turn hooks are off: this line sets its own --settings, so turns follow the window's spinner."
+                .to_owned(),
+        });
+    }
     if let Some((severity, text)) = notice {
         notices.push(EventKind::Notice { severity, text });
     }
@@ -329,7 +341,7 @@ pub(crate) async fn integrate(
     if !notices.is_empty() {
         Workspace::events(this, record.id.clone(), notices, cx).await?;
     }
-    Ok(Integration { env, args })
+    Ok(Integration { env, args, hooks })
 }
 
 struct Setup<'a> {
@@ -347,7 +359,7 @@ struct Setup<'a> {
 async fn configure(
     input: Setup<'_>,
     cx: &mut AsyncApp,
-) -> Result<(Vec<OsString>, Option<&'static str>, Option<String>)> {
+) -> Result<(Vec<OsString>, Option<&'static str>, Option<String>, bool)> {
     let Setup {
         this,
         record,
@@ -368,7 +380,9 @@ async fn configure(
         .map_err(closed)?;
     let (skills_root, skills, skill_errors) =
         skill::mirror(this, agent.clone(), record.project_id.clone(), cx).await?;
+    let hooks = sets_hooks(known, &program.args);
     let files = files::AgentFiles {
+        hooks,
         agent: &agent,
         id,
         folder,
@@ -418,7 +432,16 @@ async fn configure(
     let (conversation, notice) =
         conversation::args(this, known, record, &program.args, folder, start, cx).await?;
     args.extend(conversation);
-    Ok((args, notice, warning))
+    Ok((args, notice, warning, hooks))
+}
+
+// Claude reads `--settings` as an extra source, so a line that already sets one keeps its own and
+// kagan's turn hooks are left out.
+fn sets_hooks(known: &Known, args: &[OsString]) -> bool {
+    matches!(known, Known::Claude)
+        && !args
+            .iter()
+            .any(|arg| arg.to_string_lossy().starts_with("--settings"))
 }
 
 fn joined(warning: Option<String>, text: String) -> String {

@@ -168,7 +168,7 @@ fn schedule(workspace: &mut Workspace, parent: &ThreadId, cx: &mut Context<Works
     }
     let busy = workspace.threads.get(parent).is_some_and(|thread| {
         let thread = thread.read(cx);
-        thread.busy || thread.turn_open
+        thread.busy || thread.turn.open()
     });
     if busy {
         return;

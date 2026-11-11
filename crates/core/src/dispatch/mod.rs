@@ -114,6 +114,7 @@ pub(crate) async fn execute(
         Op::Thread(op) => dispatch_thread(this, database, op, requester, cx).await,
         Op::Automation(op) => crate::automation::run(this, database, op, requester, cx).await,
         Op::Section(op) => section(this, database, op, cx).await,
+        Op::SavedPrompt(op) => crate::saved_prompt::run(this, database, op, cx).await,
         Op::Plugin(kg_domain::PluginOp::Start) => {
             announce(this, crate::WorkspaceEvent::NewPlugin, cx)
         }
@@ -219,7 +220,10 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Preview(_)
         | Op::Diagnostics(_)
         | Op::Browser(_)
-        | Op::Update(_) => false,
+        | Op::Update(_)
+        | Op::SavedPrompt(
+            kg_domain::SavedPromptOp::Search { .. } | kg_domain::SavedPromptOp::Send { .. },
+        ) => false,
         Op::Project(
             ProjectOp::Add { .. } | ProjectOp::Reorder { .. } | ProjectOp::SetProgram { .. },
         )
@@ -236,6 +240,11 @@ pub(crate) fn serialized(op: &Op) -> bool {
             kg_domain::InstructionsOp::Set { .. } | kg_domain::InstructionsOp::Clear { .. },
         )
         | Op::Section(_)
+        | Op::SavedPrompt(
+            kg_domain::SavedPromptOp::Add { .. }
+            | kg_domain::SavedPromptOp::Star { .. }
+            | kg_domain::SavedPromptOp::Delete { .. },
+        )
         | Op::Ui(_) => true,
         Op::Automation(op) => {
             !matches!(op, AutomationOp::List { .. } | AutomationOp::Delete { .. })
@@ -252,6 +261,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
             | ThreadOp::MarkRead { .. }
             | ThreadOp::SetMetadata { .. }
             | ThreadOp::StartAgain { .. }
+            | ThreadOp::Turn(_)
             | ThreadOp::Terminal(TerminalOp::New { .. } | TerminalOp::Close { .. }) => true,
             ThreadOp::Run(_)
             | ThreadOp::Input { .. }

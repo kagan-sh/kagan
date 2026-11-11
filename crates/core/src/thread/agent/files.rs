@@ -12,6 +12,7 @@ const CURSOR_RULE: &str = ".cursor/rules/kagan.mdc";
 
 #[derive(Clone, Copy)]
 pub(super) struct AgentFiles<'a> {
+    pub(super) hooks: bool,
     pub(super) agent: &'a Path,
     pub(super) id: &'a str,
     pub(super) folder: &'a Path,
@@ -29,6 +30,7 @@ pub(super) async fn write_agent_files(
     cx: &mut AsyncApp,
 ) -> Result<()> {
     let AgentFiles {
+        hooks,
         agent,
         id,
         folder,
@@ -42,7 +44,7 @@ pub(super) async fn write_agent_files(
     match known {
         Known::Claude => {
             write_files(
-                claude_files(agent, id, cli, socket, instructions, extra),
+                claude_files(agent, id, cli, socket, instructions, extra, hooks),
                 cx,
             )
             .await
@@ -83,13 +85,14 @@ pub(super) fn flags(known: &Known, files: &AgentFiles) -> Vec<OsString> {
         socket,
         skills_root,
         kimi_home,
+        hooks,
         ..
     } = *files;
     match known {
         Known::Claude => {
             let thread = thread_dir(agent, id);
             let plugin = skills_root.parent().unwrap_or(agent);
-            vec![
+            let mut flags = vec![
                 OsString::from("--mcp-config"),
                 thread.join("mcp.json").into_os_string(),
                 OsString::from("--plugin-dir"),
@@ -98,7 +101,12 @@ pub(super) fn flags(known: &Known, files: &AgentFiles) -> Vec<OsString> {
                 note_path(agent, id).into_os_string(),
                 OsString::from("--disallowed-tools"),
                 OsString::from("Task,Agent"),
-            ]
+            ];
+            if hooks {
+                flags.push(OsString::from("--settings"));
+                flags.push(claude_settings_path(agent, id).into_os_string());
+            }
+            flags
         }
         Known::Cursor => vec![
             OsString::from("--plugin-dir"),
@@ -465,6 +473,10 @@ fn git_exclude(folder: &Path) -> Option<PathBuf> {
     Some(common.join("info").join("exclude"))
 }
 
+fn claude_settings_path(agent: &Path, id: &str) -> PathBuf {
+    thread_dir(agent, id).join("settings.json")
+}
+
 fn claude_files(
     agent: &Path,
     id: &str,
@@ -472,14 +484,37 @@ fn claude_files(
     socket: Option<&OsStr>,
     instructions: &str,
     extra: &str,
+    hooks: bool,
 ) -> Vec<(PathBuf, String)> {
-    vec![
+    let mut files = vec![
         (
             thread_dir(agent, id).join("mcp.json"),
             mcp_config(id, cli, socket),
         ),
         (note_path(agent, id), note_with(id, instructions, extra)),
-    ]
+    ];
+    if hooks {
+        files.push((claude_settings_path(agent, id), claude_settings(cli)));
+    }
+    files
+}
+
+// Claude runs each hook with the agent's environment, so `KG_THREAD_ID` names the thread. The hook
+// prints nothing and always exits 0. Only exit 2 would block a turn.
+fn claude_settings(cli: &Path) -> String {
+    let hook = |phase: &str| {
+        json!([{ "hooks": [{
+            "type": "command",
+            "command": cli.to_string_lossy(),
+            "args": ["thread", "turn", phase],
+        }] }])
+    };
+    json!({ "hooks": {
+        "UserPromptSubmit": hook("start"),
+        "Stop": hook("end"),
+        "StopFailure": hook("end"),
+    } })
+    .to_string()
 }
 
 fn pi_files(agent: &Path, id: &str, instructions: &str, extra: &str) -> Vec<(PathBuf, String)> {

@@ -23,6 +23,7 @@ mod project;
 mod read;
 #[cfg(unix)]
 mod resume;
+mod saved_prompt;
 mod screen;
 mod search;
 mod settings;

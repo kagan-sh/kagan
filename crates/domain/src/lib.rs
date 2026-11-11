@@ -23,7 +23,7 @@ pub use event::{
 };
 pub use id::{
     AutomationId, Conversation, EnvironmentId, PendingInteractionId, PluginId, ProjectId,
-    SectionId, ThreadId, Timestamp,
+    SavedPromptId, SectionId, ThreadId, Timestamp,
 };
 pub use notify::{NotifyLevel, NotifyReason, ThreadNotify};
 pub use op::{
@@ -33,10 +33,10 @@ pub use op::{
     INSTRUCTIONS_MAX, IndexOp, InstructionsOp, KeyPlatform, Keymap, KeymapAction, KeymapOp,
     Metadata, NotifyOp, Op, OpError, OpResult, Order, OutdatedPlugin, PinnedSetup, PluginOp,
     PreferenceOp, ProgramOp, ProjectBranch, ProjectOp, Run, SCREEN_MAX_BYTES, SEARCH_DEFAULT,
-    SEARCH_LIMIT, SEARCH_TEXT_MAX, SHORTCUTS, SectionOp, SelectMode, SettingsOp, SetupFile,
-    Shortcut, ShortcutGroup, ShortcutScope, ShortcutWhen, Skill, SkillOp, SkillSource,
+    SEARCH_LIMIT, SEARCH_TEXT_MAX, SHORTCUTS, SavedPromptOp, SectionOp, SelectMode, SettingsOp,
+    SetupFile, Shortcut, ShortcutGroup, ShortcutScope, ShortcutWhen, Skill, SkillOp, SkillSource,
     SkillTemplate, Slot, SlotChoice, SlotChoiceError, SurfaceItem, SurfaceOp, SurfacePlacement,
-    TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThemeOp, ThemeSettings, ThreadOp,
+    TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThemeOp, ThemeSettings, ThreadOp, TurnOp,
     UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,
     UiSnapshot, UpdateTarget, WaitOutcome, WindowOp, branch_slug, check, default_chord,
     expand_secondary, invalid_json, valid_branch, valid_theme_choice, valid_theme_id,
@@ -49,9 +49,9 @@ pub use program::{
 pub use record::{
     ASK_TEXT_MAX_CHARS, AgentTool, AskField, Environment, EnvironmentProvider, EnvironmentStatus,
     Found, GIT_SOURCE, IndexEntry, InteractionOption, Listing, LogCounts, OptionRole,
-    PendingInteraction, Plugin, PluginCommand, PluginLog, Project, ProjectKind, Section, Sidebar,
-    Snippet, Thread, ThreadMark, ThreadStatus, Visibility, archive_span, is_git_source,
-    newest_first, order_sidebar_projects, owned_thread_ids,
+    PendingInteraction, Plugin, PluginCommand, PluginLog, Project, ProjectKind, SavedPrompt,
+    Section, Sidebar, Snippet, Thread, ThreadMark, ThreadStatus, Visibility, archive_span,
+    is_git_source, newest_first, order_sidebar_projects, owned_thread_ids,
 };
 pub use theme::{
     Color, Highlight, Look, MAX_THEME_BYTES, Palette, Radius, Space, TerminalColors, ThemeFile,

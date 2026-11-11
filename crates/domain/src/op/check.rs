@@ -3,10 +3,11 @@ use crate::ThreadId;
 use super::automation::valid;
 use super::browser::browser_check;
 use super::env::{shell_name, variable_name, variable_value};
+use super::saved_prompt::TITLE_MAX;
 use super::{
     DiffOp, EnvOp, EnvironmentOp, Op, PluginOp, PreviewOp, ProjectOp, SEARCH_LIMIT,
-    SEARCH_TEXT_MAX, SectionOp, SurfaceOp, TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX, TerminalOp,
-    ThreadOp, WindowOp,
+    SEARCH_TEXT_MAX, SavedPromptOp, SectionOp, SurfaceOp, TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX,
+    TerminalOp, ThreadOp, TurnOp, WindowOp,
 };
 use crate::split_program;
 
@@ -72,6 +73,7 @@ pub fn check(op: &Op) -> Result<(), String> {
             SectionOp::File { thread_id, .. } => plain(thread_id),
             SectionOp::Rename { .. } | SectionOp::Delete { .. } => Ok(()),
         },
+        Op::SavedPrompt(op) => saved_prompt(op),
         Op::Diff(op) => match op {
             DiffOp::List { query } | DiffOp::Show { query, .. } => plain(&query.thread_id),
             DiffOp::Commits { thread_id } => plain(thread_id),
@@ -172,6 +174,7 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
         | ThreadOp::Paste { id, .. }
         | ThreadOp::Send { id, .. }
         | ThreadOp::Report { id, .. }
+        | ThreadOp::Turn(TurnOp::Start { id } | TurnOp::End { id })
         | ThreadOp::Terminal(
             TerminalOp::New { id } | TerminalOp::List { id } | TerminalOp::Close { id, .. },
         )
@@ -215,6 +218,51 @@ fn env_check(op: &EnvOp) -> Result<(), String> {
             value.as_deref().map_or(Ok(()), variable_value)
         }
         EnvOp::Remove { name, .. } => shell_name(name),
+    }
+}
+
+fn saved_prompt(op: &SavedPromptOp) -> Result<(), String> {
+    match op {
+        SavedPromptOp::Add { title, body } => prompt_title(title).and_then(|()| prompt_body(body)),
+        SavedPromptOp::Search { text } if text.chars().count() > SEARCH_TEXT_MAX => Err(format!(
+            "search text is longer than {SEARCH_TEXT_MAX} characters"
+        )),
+        SavedPromptOp::Search { .. } => Ok(()),
+        SavedPromptOp::Star { id, .. } | SavedPromptOp::Delete { id } => prompt_id(id),
+        SavedPromptOp::Send { id, thread_id } => prompt_id(id).and_then(|()| plain(thread_id)),
+    }
+}
+
+fn prompt_title(title: &str) -> Result<(), String> {
+    let title = title.trim();
+    if title.is_empty() {
+        Err("a saved prompt needs a title".into())
+    } else if title.chars().count() > TITLE_MAX {
+        Err(format!(
+            "a saved prompt title is longer than {TITLE_MAX} characters"
+        ))
+    } else if title.chars().any(char::is_control) {
+        Err("a saved prompt title cannot hold a control character".into())
+    } else {
+        Ok(())
+    }
+}
+
+fn prompt_body(body: &str) -> Result<(), String> {
+    if body.trim().is_empty() || !body.chars().any(|c| !c.is_control()) {
+        Err("a saved prompt needs text".into())
+    } else if body.len() > TEXT_MAX {
+        Err(format!("text is over {} MiB", TEXT_MAX >> 20))
+    } else {
+        Ok(())
+    }
+}
+
+fn prompt_id(id: &crate::SavedPromptId) -> Result<(), String> {
+    if id.plain() {
+        Ok(())
+    } else {
+        Err("saved prompt id must be a plain identifier".into())
     }
 }
 

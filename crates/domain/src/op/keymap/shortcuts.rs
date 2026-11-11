@@ -128,6 +128,7 @@ pub const SHORTCUTS: &[Shortcut] = &[
     bind("UseBuiltInReview", "kagan::UseBuiltInReview", "secondary-alt-v", "Use built-in review", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Settings, ShortcutGroup::Window)),
     bind("OpenCommandList", "kagan::OpenCommandList", "secondary-shift-a", "Command list", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Threads, ShortcutGroup::Window)),
     bind("SearchThreads", "kagan::SearchThreads", "secondary-alt-f", "Search threads…", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Threads, ShortcutGroup::Window)),
+    bind("OpenSavedPrompts", "kagan::OpenSavedPrompts", "secondary-shift-i", "Saved prompts", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Threads, ShortcutGroup::Window)),
     bind("NewTerminal", "kagan::NewTerminal", "secondary-t", "New terminal", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Threads, ShortcutGroup::Window)),
     bind("CloseTerminal", "kagan::CloseTerminal", "secondary-shift-w", "Close terminal", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Threads, ShortcutGroup::Window)),
     bind("NextTerminal", "kagan::NextTerminal", "secondary-alt-]", "Next terminal", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Threads, ShortcutGroup::Window)),

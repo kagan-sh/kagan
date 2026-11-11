@@ -1,4 +1,4 @@
-use std::time::Instant;
+use crate::thread::turn_state::{Source, TurnState};
 
 pub struct Project {
     pub(crate) record: kg_domain::Project,
@@ -25,10 +25,9 @@ impl Environment {
 pub struct Thread {
     pub(crate) record: kg_domain::Thread,
     pub(crate) busy: bool,
-    /// Stays set after Stop clears `busy`, until the turn's end is written.
-    /// The watcher uses it so a spinner that is still up does not open a second turn.
-    pub(crate) turn_open: bool,
-    pub(crate) plain_since: Option<Instant>,
+    /// The turn of the current run. Stays open after Stop clears `busy`, until the turn's end is
+    /// written, so a spinner that is still up does not open a second turn.
+    pub(crate) turn: TurnState,
     pub(crate) instruct: Option<String>,
 }
 
@@ -47,8 +46,7 @@ impl Thread {
         Self {
             record,
             busy: false,
-            turn_open: false,
-            plain_since: None,
+            turn: TurnState::new(Source::Undecided),
             instruct: None,
         }
     }

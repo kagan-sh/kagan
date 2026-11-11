@@ -8,7 +8,7 @@ fn guide_names_every_command() {
     fn check(command: &clap::Command, path: &str, guide: &str) {
         let children: Vec<_> = command
             .get_subcommands()
-            .filter(|child| child.get_name() != "help")
+            .filter(|child| child.get_name() != "help" && !child.is_hide_set())
             .collect();
         if children.is_empty() && path != "kg" {
             assert!(guide.contains(&format!("`{path}`")), "missing {path}");

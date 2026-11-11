@@ -146,6 +146,7 @@ impl Render for Kagan {
             .on_action(cx.listener(Self::close_page))
             .on_action(commands::open_list)
             .on_action(commands::search_threads)
+            .on_action(commands::open_saved_prompts)
             .on_action(|_: &settings::NextItem, window, cx| window.focus_next(cx))
             .on_action(|_: &settings::PreviousItem, window, cx| window.focus_prev(cx))
             .child(self.title_bar(window, cx))

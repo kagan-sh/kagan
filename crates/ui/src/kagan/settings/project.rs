@@ -3,10 +3,10 @@
 
 use crate::theme::{SpaceStep, TypeScale as _, radius_md, space};
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::menu::PopupMenu;
+use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::{
-    AppContext as _, Context, ElementId, Entity, FocusHandle, InteractiveElement as _, IntoElement,
+    AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement,
     KeyBinding, ParentElement as _, Render, Role, SharedString, StatefulInteractiveElement as _,
     Styled as _, Task, WeakEntity, Window, actions, div, px,
 };
@@ -18,7 +18,7 @@ use super::automations::List;
 use super::group_block;
 use super::row::{Group, Row, group, row};
 use crate::kagan::Kagan;
-use crate::kagan::controls::control;
+use crate::kagan::controls::{choice_item, choice_trigger};
 use crate::kagan::rules::RulesEditor;
 use crate::kagan::screen::{Center, FocusReturn};
 use crate::kagan::variables::Variables;
@@ -147,46 +147,26 @@ impl Page {
         }
     }
 
-    fn program_row(&self, cx: &mut Context<Self>) -> Row {
-        let current = self.program.clone();
-        let mut buttons = h_flex().gap_2().flex_wrap().items_center();
-        for program in &self.programs {
-            let picked = program.command.clone();
-            let selected = current.as_deref() == Some(program.command.as_str());
-            let button = Button::new(ElementId::Name(
-                format!("button-project-program-{}", program.command).into(),
-            ))
-            .small()
-            .label(program.label.clone())
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.pick(Some(picked.clone()), cx);
-            }));
-            let button = if selected {
-                button.primary()
-            } else {
-                button.outline()
-            };
-            buttons = buttons.child(control(
-                format!("project-program-{}", program.command),
-                Facts::button(program.label.clone()),
-                button,
-            ));
+    fn program_label(&self) -> String {
+        match &self.program {
+            Some(stored) => self
+                .programs
+                .iter()
+                .find(|program| &program.command == stored)
+                .map_or_else(|| stored.clone(), |program| program.label.clone()),
+            None => "First installed".to_owned(),
         }
-        let first = Button::new("button-project-program-first")
-            .small()
-            .outline()
-            .label("First installed")
-            .on_click(cx.listener(|this, _, _, cx| this.pick(None, cx)));
-        buttons = buttons.child(control(
-            "project-program-first",
-            Facts::button("First installed"),
-            first,
-        ));
-        let mut column = v_flex()
-            .w_full()
-            .items_end()
-            .gap_2()
-            .child(buttons.w_full().justify_end());
+    }
+
+    fn program_row(&self, cx: &mut Context<Self>) -> Row {
+        let label = self.program_label();
+        let page = cx.entity().downgrade();
+        let current = self.program.clone();
+        let (picked, programs) = (current.clone(), self.programs.clone());
+        let choice = choice_trigger("project-program-choice", label, move |menu, _, _| {
+            program_menu(menu, &page, picked.as_ref(), &programs)
+        });
+        let mut column = v_flex().w_full().items_end().gap_2().child(choice);
         if let Some(stored) = current.filter(|stored| {
             self.programs_loaded && !self.programs.iter().any(|p| &p.command == stored)
         }) {
@@ -260,6 +240,40 @@ impl Page {
             },
         ]
     }
+}
+
+fn program_menu(
+    menu: PopupMenu,
+    page: &WeakEntity<Page>,
+    current: Option<&String>,
+    programs: &[Program],
+) -> PopupMenu {
+    let menu = programs
+        .iter()
+        .fold(menu.scrollable(true), |menu, program| {
+            let selected = current.is_some_and(|stored| stored == &program.command);
+            let item = choice_item(
+                format!("project-program-menu-{}", program.command),
+                program.label.clone(),
+                selected,
+            );
+            let pick = program.command.clone();
+            let page = page.clone();
+            menu.item(item.on_click(move |_, _, cx| {
+                _ = page.update(cx, |page, cx| page.pick(Some(pick.clone()), cx));
+            }))
+        });
+    let page = page.clone();
+    menu.item(
+        choice_item(
+            "project-program-menu-first".to_owned(),
+            "First installed".to_owned(),
+            current.is_none(),
+        )
+        .on_click(move |_, _, cx| {
+            _ = page.update(cx, |page, cx| page.pick(None, cx));
+        }),
+    )
 }
 
 impl Render for Page {

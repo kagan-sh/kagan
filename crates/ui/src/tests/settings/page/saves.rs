@@ -7,7 +7,9 @@ use super::{
     approval_count, approve_waiting, aria_label, canonical, choose_folder, host_setting,
     install_plugins, plugin_config, press, until_saved, waiting,
 };
-use crate::tests::kagan::{click, open_with_plugins_then, present, selected_of, value_of};
+use crate::tests::kagan::{
+    click, label, open_with_plugins_then, present, selected_of, shows, value_of, wait_until,
+};
 
 const PREFS: &str = "dev.test.prefs";
 
@@ -94,7 +96,10 @@ fn an_older_select_cannot_overwrite_a_newer_one(cx: &mut TestAppContext) {
     cx.run_until_parked();
     click(cx, window, "settings-gear");
     click(cx, window, "settings-section-plugin-dev.test.prefs");
+    let select = "setting-select-dev.test.prefs/density";
+    press(cx, window, select);
     press(cx, window, "option-dev.test.prefs/density/compact");
+    press(cx, window, select);
     press(cx, window, "option-dev.test.prefs/density/comfortable");
     until_saved(cx, "density", &json!("compact"));
     assert!(
@@ -108,6 +113,11 @@ fn an_older_select_cannot_overwrite_a_newer_one(cx: &mut TestAppContext) {
     );
     cx.run_until_parked();
     assert_eq!(plugin_config(cx, "density"), json!("comfortable"));
+    assert_eq!(label(cx, window, select), "comfortable");
+    click(cx, window, select);
+    wait_until(cx, |cx| {
+        shows(cx, window, "option-dev.test.prefs/density/comfortable")
+    });
     assert_eq!(
         selected_of(cx, window, "option-dev.test.prefs/density/comfortable"),
         Some(true)

@@ -504,3 +504,21 @@ impl Drop for SocketVar {
         }
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn a_turn_hook_never_starts_an_app_and_never_fails() {
+    let dir = tempfile::tempdir().unwrap();
+    let location = socket::location_in(dir.path()).unwrap();
+    let _socket = socket_var(&location);
+    let started = std::time::Instant::now();
+    let op = kg_domain::Op::Thread(kg_domain::ThreadOp::Turn(kg_domain::TurnOp::Start {
+        id: kg_domain::ThreadId("thr_hook".into()),
+    }));
+    crate::cli::run(op, false).expect("a turn hook must not fail the agent's turn");
+    assert!(
+        !std::path::Path::new(&location).exists(),
+        "a turn hook started an app"
+    );
+    assert!(started.elapsed() < std::time::Duration::from_secs(1));
+}

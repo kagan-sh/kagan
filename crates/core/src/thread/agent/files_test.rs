@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use super::{exclude_cursor_rule, git_exclude, hide_from_git, link_root};
+use super::{claude_settings, exclude_cursor_rule, git_exclude, hide_from_git, link_root};
 
 fn skill(dir: &Path, name: &str) -> PathBuf {
     let path = dir.join(name);
@@ -320,4 +320,30 @@ fn a_folder_without_git_skips_the_cursor_exclude() {
     std::fs::create_dir_all(&plain).unwrap();
     exclude_cursor_rule(&plain).unwrap();
     assert!(!plain.join(".git").exists());
+}
+
+#[test]
+fn a_turn_hook_runs_kg_directly_for_any_path() {
+    for cli in [
+        Path::new("/opt/my kg/kg"),
+        Path::new("C:\\Program Files\\kg\\kg.exe"),
+        Path::new("/x/a\"b$c`d/kg"),
+    ] {
+        let settings: serde_json::Value = serde_json::from_str(&claude_settings(cli)).unwrap();
+        let hooks = &settings["hooks"];
+        for (event, phase) in [
+            ("UserPromptSubmit", "start"),
+            ("Stop", "end"),
+            ("StopFailure", "end"),
+        ] {
+            let hook = &hooks[event][0]["hooks"][0];
+            assert_eq!(hook["type"], "command", "{event}");
+            assert_eq!(hook["command"], cli.to_string_lossy().as_ref(), "{event}");
+            assert_eq!(
+                hook["args"],
+                serde_json::json!(["thread", "turn", phase]),
+                "{event}"
+            );
+        }
+    }
 }

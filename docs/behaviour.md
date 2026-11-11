@@ -17,7 +17,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Get`, `Metadata`, `Events`, `Interactions`
 
 - **Allowed when**: the thread id is known [book:cli]. These reads are allowed in every status, including an archived thread [person 2026-10-08].
-- **Shows**: `Get` returns the thread. The stored provider is the program line [record.rs] [op/]. A plugin's own thread record omits the program [docs:plugin-api]. `Metadata` that plugin's value on the thread [book:cli]. `Events` the log after `after_seq`, limited, in `asc` or `desc` order [book:cli]. The types are `created`, `started`, `exited`, `stopped`, `idle`, `waiting`, `failed`, `archived`, `unarchived`, `deleted`, `turn.started`, `turn.ended`, `message`, `tool`, `tool.started`, `tool.ended`, `restore.failed`, `snapshot.failed`, `notice`, `answered`, `file.changed`, `file.read`, `file.predicted`, `opened`, `rewound`, and `reconnecting` [event.rs]. `turn.started` and `turn.ended` are written from the title spinner [decision 123]. Types kagan no longer writes stay in the plugin event list. A live thread appends a user message when `Send` submits a line [decision 136]. It does not append a message from the screen [docs:architecture]. `Interactions` the pending questions; each shows its options [decision 43] [book:cli].
+- **Shows**: `Get` returns the thread. The stored provider is the program line [record.rs] [op/]. A plugin's own thread record omits the program [docs:plugin-api]. `Metadata` that plugin's value on the thread [book:cli]. `Events` the log after `after_seq`, limited, in `asc` or `desc` order [book:cli]. The types are `created`, `started`, `exited`, `stopped`, `idle`, `waiting`, `failed`, `archived`, `unarchived`, `deleted`, `turn.started`, `turn.ended`, `message`, `tool`, `tool.started`, `tool.ended`, `restore.failed`, `snapshot.failed`, `notice`, `answered`, `file.changed`, `file.read`, `file.predicted`, `opened`, `rewound`, and `reconnecting` [event.rs]. `turn.started` and `turn.ended` are written from the turn's source, the hook, the spinner, or quiet output [decision 235]. Types kagan no longer writes stay in the plugin event list. A live thread appends a user message when `Send` submits a line [decision 136]. It does not append a message from the screen [docs:architecture]. `Interactions` the pending questions; each shows its options [decision 43] [book:cli].
 - **Refused when**: the thread is missing — `not-found` [op/].
 
 ### `List`
@@ -35,7 +35,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Stop`
 
 - **Allowed when**: the thread exists, including one that is archived [book:cli]. On an archived thread it ends the run now instead of waiting for the archive grace [decision 138].
-- **Changes**: a thread that is still starting becomes idle. A running thread is marked `stopping`; once its program has ended, it records `stopped` and `idle` and becomes idle, with no attention. A program whose title never shows a spinner has no turn to end. Stopping during an open turn records `turn.ended` with `interrupted` beside `stopped` and `idle` [decision 123]. The program and what it started end at once, except a process that calls `setsid` itself; on Windows the program's Job Object ends what it started, except a process started before the program joined the job [decision 46] [decision 110]. It does not ask [decision 12].
+- **Changes**: a thread that is still starting becomes idle. A running thread is marked `stopping`; once its program has ended, it records `stopped` and `idle` and becomes idle, with no attention. A turn ends when the program's own hook says so, when its spinner goes plain, when a known agent with no hook shows no change in its visible text for 15 seconds, when a hook-run turn is silent for 120 seconds, or when the program ends [decision 235]. Stopping during an open turn records `turn.ended` with `interrupted` beside `stopped` and `idle` [decision 123]. The program and what it started end at once, except a process that calls `setsid` itself; on Windows the program's Job Object ends what it started, except a process started before the program joined the job [decision 46] [decision 110]. It does not ask [decision 12].
 - **Shows**: the thread leaves the running status [book:window].
 - **Refused when**: a missing thread — `not-found` [op/].
 
@@ -134,7 +134,14 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Wait`
 
 - **Allowed when**: the thread exists [book:cli].
-- **Shows**: `waiting` after a spinner goes quiet, `exited` when the row is idle (a clean exit or Stop), `failed` when the program failed, `not-busy` after two seconds with no spinner, or `timeout` when `timeout_ms` passes [op/]. `not-busy` waits out that arm. A timeout leaves the thread alone.
+- **Shows**: `waiting` after the turn ends, `exited` when the row is idle (a clean exit or Stop), `failed` when the program failed, `not-busy` after two seconds with no open turn, or `timeout` when `timeout_ms` passes [op/]. `not-busy` waits out that arm. A timeout leaves the thread alone.
+- **Refused when**: a missing thread — `not-found` [op/].
+
+### `Turn`
+
+- **Allowed when**: the thread exists. A `start` for a program that is not running is ignored [decision 235].
+- **Changes**: `start` opens a turn and records `turn.started`; `end` closes it and records `turn.ended` and `waiting`. A `start` while a turn is open, or an `end` while none is, changes nothing, so a late `end` is harmless [decision 235].
+- **Shows**: nothing. An agent's own hook calls it, so it is hidden from `kg --help`. It sends to a running app and otherwise does nothing: it never starts an app, and it always exits 0 [decision 235].
 - **Refused when**: a missing thread — `not-found` [op/].
 
 ### `Ask`
@@ -180,38 +187,38 @@ A thread is one program running in one environment, with a status (`pending`, `i
 
 ## Automation
 
-An automation is a named text, a program line, and a time, that starts a thread in one project [CONTEXT] [decision 233]. The time is an interval of 1 to 1440 whole minutes, or one time to run once. It does not run while kagan is quit. The project page lists each automation and the thread each run started [decision 233].
+An automation is a named text, a program line, and a time, that starts a thread in one project [CONTEXT] [decision 236]. The time is an interval of 1 to 1440 whole minutes, or one time to run once. It does not run while kagan is quit. The project page lists each automation and the thread each run started [decision 236].
 
 ### `Add`
 
-- **Allowed when**: the project exists, the program line parses, and the time is either whole minutes from 1 to 1440 or one non-negative time [op/] [decision 233].
-- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A one-time automation is due at its time. The thread runs in the project folder [decision 233].
+- **Allowed when**: the project exists, the program line parses, and the time is either whole minutes from 1 to 1440 or one non-negative time [op/] [decision 236].
+- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A one-time automation is due at its time. The thread runs in the project folder [decision 236].
 - **Shows**: the automation [book:cli].
 - **Refused when**: an empty name, a name of only control characters, a name over 120 characters, empty text, text over 1 MiB, an empty program, an unfinished quote, minutes outside 1 to 1440, a negative time, both an interval and a time, or neither — `invalid` [op/]. A missing project — `not-found` [op/].
 
 ### `Pause`, `Resume`
 
 - **Allowed when**: the automation exists [book:cli].
-- **Changes**: a paused automation does not start another thread. A thread it already started keeps running. Resume lets a due automation start a thread again at once, so a pause longer than one interval starts one thread, not one for each missed interval [decision 233].
+- **Changes**: a paused automation does not start another thread. A thread it already started keeps running. Resume lets a due automation start a thread again at once, so a pause longer than one interval starts one thread, not one for each missed interval [decision 236].
 - **Shows**: the automation [book:cli].
 - **Refused when**: a missing automation — `not-found` [op/].
 
 ### `Delete`
 
-- **Allowed when**: the person approves the question in the app. Nothing is removed before that [decision 233].
-- **Changes**: removes the automation. A thread it already started keeps running [decision 233].
+- **Allowed when**: the person approves the question in the app. Nothing is removed before that [decision 236].
+- **Changes**: removes the automation. A thread it already started keeps running [decision 236].
 - **Refused when**: a missing automation — `not-found` [op/]. A declined question — `invalid`, `declined: …` [op/].
 
 ### `List`
 
 - **Allowed when**: always [book:cli]. One project when a project is set.
-- **Shows**: each automation, and the thread each run started, oldest first. An interval that has not run yet has no thread [decision 233]. The window shows the run count and opens the last run; it does not list every run's title.
+- **Shows**: each automation, and the thread each run started, oldest first. An interval that has not run yet has no thread [decision 236]. The window shows the run count and opens the last run; it does not list every run's title.
 
 ### Due run (no operation)
 
-- **Allowed when**: kagan is open, the automation is not paused, its time is due, and no thread it started still has a running program [decision 233].
-- **Changes**: starts a thread in that project with that program line, then sends the body through the same path as `ThreadOp::Send` once the program has started. Runs of one automation do not overlap. A thread already running is left alone. After a start, the next interval is one interval from that start, so time spent quit does not start a run for every missed interval. A one-time automation does not start another thread after one has been started. A run that does not start, or fails before its thread is saved, waits one more interval, or one minute for a one-time automation, and then tries again. A store read error is reported, and the next tick tries again. Opening kagan starts one run that became due while it was quit [decision 233].
-- **Shows**: the thread on the automation, once a run has started [decision 233].
+- **Allowed when**: kagan is open, the automation is not paused, its time is due, and no thread it started still has a running program [decision 236].
+- **Changes**: starts a thread in that project with that program line, then sends the body through the same path as `ThreadOp::Send` once the program has started. Runs of one automation do not overlap. A thread already running is left alone. After a start, the next interval is one interval from that start, so time spent quit does not start a run for every missed interval. A one-time automation does not start another thread after one has been started. A run that does not start, or fails before its thread is saved, waits one more interval, or one minute for a one-time automation, and then tries again. A store read error is reported, and the next tick tries again. Opening kagan starts one run that became due while it was quit [decision 236].
+- **Shows**: the thread on the automation, once a run has started [decision 236].
 
 ## Diagnostics
 
@@ -478,6 +485,37 @@ A section is a user-named group that threads can be filed under in the sidebar [
 - **Changes**: files the thread under the section, or clears the section when the id is omitted [book:cli].
 - **Refused when**: a missing thread or section — `not-found` [op/].
 
+## Saved prompt
+
+A saved prompt is stored text the person can send, with a title, a body, and a starred flag. It is not a question waiting for an answer [CONTEXT] [decision 234]. Rows live in SQLite. Add, star, and delete are serialized. Search and send are not, and send follows `ThreadOp::Send` [decision 234].
+
+### `Add`
+
+- **Allowed when**: the title trims to at most 200 characters with no control character, and the body has text other than control characters and is at most 1 MiB [op/].
+- **Changes**: stores the trimmed title, the body as given, and starred off. The id starts with `svp_` [decision 234].
+- **Refused when**: an empty title or body, a body of only control characters, a longer title, a control character in the title, or a body over 1 MiB — `invalid` [op/].
+
+### `Search`
+
+- **Allowed when**: the text is at most 256 characters. Empty text lists every saved prompt [op/].
+- **Shows**: saved prompts whose title or body contains the text, ignoring case for ASCII letters only. A `%`, `_`, or `\` in the text is literal. Starred rows come first, then title, then id [decision 234].
+
+### `Star`
+
+- **Changes**: sets the starred flag [decision 234].
+- **Refused when**: a missing id — `not-found`. An id that is not a plain identifier — `invalid` [op/].
+
+### `Delete`
+
+- **Changes**: removes the saved prompt [decision 234].
+- **Refused when**: a missing id — `not-found`. An id that is not a plain identifier — `invalid` [op/].
+
+### `Send`
+
+- **Allowed when**: the saved prompt exists and `thread_id` names a thread. The CLI reads `thread_id` from `KG_THREAD_ID` when it is not given. The window passes the thread it shows, and shows "No thread is shown." when Settings covers it [decision 234].
+- **Changes**: types the body into that thread and presses Enter, through the same path as `ThreadOp::Send` [decision 234].
+- **Refused when**: a missing saved prompt — `not-found`. A missing thread — `not-found`. An id or thread id that is not a plain identifier — `invalid`. The same refusals as `ThreadOp::Send` [op/].
+
 ## Diff
 
 A thread environment's diff reads git and never writes the worktree [book:cli]. Scopes are uncommitted, the branch against a base, and one commit [docs:look] [book:cli].
@@ -651,7 +689,7 @@ Built-in shortcut overrides, and the keys of plugin commands, named `<plugin-id>
 
 ### `Get`
 
-- **Shows**: the saved overrides under `shared`, and under `plugins` each enabled plugin command with its key, or null when it has none [decision 102]. Defaults, before an override, are NewThread `secondary-n`, StopThread `secondary-.`, ArchiveThread `secondary-shift-backspace`, TogglePinned `secondary-shift-p`, OpenSettings `secondary-,`, UseProjectFolder `secondary-alt-p`, UseWorktreeFolder `secondary-alt-w`, RetryBranches `secondary-alt-r`, RetryPrograms `secondary-alt-l`, ToggleCustomCommand `secondary-alt-c`, ThreadActions `secondary-shift-m`, ToggleSidebar `secondary-b`, ToggleRightSidebar `secondary-\`, AddProject `secondary-shift-o`, NextHunk `alt-]`, PrevHunk `alt-[`, FindInDiff `secondary-f`, NextMatch `secondary-g`, PrevMatch `secondary-alt-g`, StartAgain `secondary-shift-s`, FocusSidebar `secondary-shift-l`, RestoreThread `secondary-shift-r`, UseBuiltInSidebar `secondary-alt-b`, UseBuiltInReview `secondary-alt-v`, OpenCommandList `secondary-shift-a`, SearchThreads `secondary-alt-f`, NewTerminal `secondary-t`, CloseTerminal `secondary-shift-w`, NextTerminal `secondary-alt-]`, PreviousTerminal `secondary-alt-[`, and OpenLocalLink `secondary-alt-o` [op/]. Bigger is `secondary-=`, Smaller `secondary--`, ActualSize `secondary-0`, NextThread `secondary-shift-]`, PreviousThread `secondary-shift-[`, NextThreadNeedingYou `secondary-alt-j`, Thread1 through Thread9 `secondary-1` through `secondary-9`, SendReview `secondary-enter`, and ToggleWrap `alt-z` [op/]. Off macOS a `secondary` chord is bound as `ctrl-shift` plus the rest, and a following `shift-` is already in that. A saved override is used as saved. ShowHelp, NextFile and PrevFile were removed as unused (decision 54). The command list came back as OpenCommandList (decision 107).
+- **Shows**: the saved overrides under `shared`, and under `plugins` each enabled plugin command with its key, or null when it has none [decision 102]. Defaults, before an override, are NewThread `secondary-n`, StopThread `secondary-.`, ArchiveThread `secondary-shift-backspace`, TogglePinned `secondary-shift-p`, OpenSettings `secondary-,`, UseProjectFolder `secondary-alt-p`, UseWorktreeFolder `secondary-alt-w`, RetryBranches `secondary-alt-r`, RetryPrograms `secondary-alt-l`, ToggleCustomCommand `secondary-alt-c`, ThreadActions `secondary-shift-m`, ToggleSidebar `secondary-b`, ToggleRightSidebar `secondary-\`, AddProject `secondary-shift-o`, NextHunk `alt-]`, PrevHunk `alt-[`, FindInDiff `secondary-f`, NextMatch `secondary-g`, PrevMatch `secondary-alt-g`, StartAgain `secondary-shift-s`, FocusSidebar `secondary-shift-l`, RestoreThread `secondary-shift-r`, UseBuiltInSidebar `secondary-alt-b`, UseBuiltInReview `secondary-alt-v`, OpenCommandList `secondary-shift-a`, SearchThreads `secondary-alt-f`, OpenSavedPrompts `secondary-shift-i`, NewTerminal `secondary-t`, CloseTerminal `secondary-shift-w`, NextTerminal `secondary-alt-]`, PreviousTerminal `secondary-alt-[`, and OpenLocalLink `secondary-alt-o` [op/]. Bigger is `secondary-=`, Smaller `secondary--`, ActualSize `secondary-0`, NextThread `secondary-shift-]`, PreviousThread `secondary-shift-[`, NextThreadNeedingYou `secondary-alt-j`, Thread1 through Thread9 `secondary-1` through `secondary-9`, SendReview `secondary-enter`, and ToggleWrap `alt-z` [op/]. Off macOS a `secondary` chord is bound as `ctrl-shift` plus the rest, and a following `shift-` is already in that. A saved override is used as saved. ShowHelp, NextFile and PrevFile were removed as unused (decision 54). The command list came back as OpenCommandList (decision 107).
 
 ### `Set`
 
@@ -746,7 +784,7 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 ### `SettingsOp::Project`
 
 - **Allowed when**: the id is a live project [op/] [decision 221].
-- **Changes**: shows that project's page, with its environment variables, its default program, its agent rules, and its automations, opening the window if it is closed [decision 221] [decision 233]. Escape or Close leaves the page [decision 221]. The sidebar's "Project settings…" menu item sends this op. The automations list shows each one and the thread each run started, and can add, pause, resume, and delete [decision 233].
+- **Changes**: shows that project's page, with its environment variables, its default program, its agent rules, and its automations, opening the window if it is closed [decision 221] [decision 236]. Escape or Close leaves the page [decision 221]. The sidebar's "Project settings…" menu item sends this op. The automations list shows each one and the thread each run started, and can add, pause, resume, and delete [decision 236].
 - **Refused when**: a missing id — `not-found` [op/].
 
 ### `Hide`, `HideOthers`, `ShowAll`
@@ -766,10 +804,10 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 
 - **Changes**: closes the window. Programs keep running [decision 46] [docs:look]. Clicking the Dock icon opens the window again [decision 66].
 
-### `CommandList`, `SearchThreads`
+### `CommandList`, `SearchThreads`, `SavedPrompts`
 
-- **Changes**: opens the window when it is closed, and shows the command list, or the list on thread search. When the list is open, each switches it to its own view [decision 107].
-- **Shows**: every window command and each enabled plugin's commands, grouped, with the key that runs it from where the keyboard was. A command that cannot run there is greyed with its reason. Enter runs it from there; Escape or a click outside closes the list and gives the keyboard back. Thread search shows the same rows as `kg thread search --archived`, under Threads and Archived; Enter opens the thread at the matched line [decision 107].
+- **Changes**: opens the window when it is closed, and shows the command list, the list on thread search, or the list of saved prompts. When the list is open, each switches it to its own view [decision 107] [decision 234].
+- **Shows**: every window command and each enabled plugin's commands, grouped, with the key that runs it from where the keyboard was. A command that cannot run there is greyed with its reason. Enter runs it from there; Escape or a click outside closes the list and gives the keyboard back. Thread search shows the same rows as `kg thread search --archived`, under Threads and Archived; Enter opens the thread at the matched line [decision 107]. Saved prompts lists the same rows as `SavedPromptOp::Search`, starred first. The field searches title and body. Enter sends the selected body into the shown thread and closes the list, or stays open and shows the refusal. Star and Delete change that row. New saved prompt writes a title and a body in the same list [decision 231].
 
 ## Activity strip
 
@@ -825,7 +863,7 @@ Finds a newer kagan on the GitHub releases page (decision 113). Installing is no
 - Opening the app starts again a thread that was still running [decision 175]. A thread left stopping, with no quit mark to resume it, is marked failed with "kagan quit while the program was running". An archived thread left running is marked failed the same way, and a thread left starting whose folder is not ready is marked failed with "kagan stopped while the thread was starting". Archive and environment-removal deadlines resume [docs:architecture].
 - A live thread appends a user message when `Send` submits a line [decision 136]. It does not append a message from the screen [docs:architecture].
 - A restart drops standalone approvals, because their responders are gone [decision 38] [docs:architecture]. A question with no window open waits until a person answers; it does not time out [decision 13].
-- Stopping a thread that is still starting leaves it idle. Stopping a running thread marks it `stopping`; once the program has ended it records `stopped` and `idle` and goes idle, with no attention. A program that exits 0 records `exited` and `idle`. Any other exit records `exited` and `failed`, leaves the thread in `error`, and writes no `idle`. A program whose title never shows a spinner has no turn to end. Stopping during an open turn records `turn.ended` with `interrupted` beside `stopped` and `idle` [decision 123].
+- Stopping a thread that is still starting leaves it idle. Stopping a running thread marks it `stopping`; once the program has ended it records `stopped` and `idle` and goes idle, with no attention. A program that exits 0 records `exited` and `idle`. Any other exit records `exited` and `failed`, leaves the thread in `error`, and writes no `idle`. A turn ends when the program's own hook says so, when its spinner goes plain, when a known agent with no hook shows no change in its visible text for 15 seconds, when a hook-run turn is silent for 120 seconds, or when the program ends [decision 235]. Stopping during an open turn records `turn.ended` with `interrupted` beside `stopped` and `idle` [decision 123].
 - A child left running that cannot be started again, and an archived child left running, appends a notice on its sidebar parent. A thread that resumes, and a thread left stopping, stay quiet. The lifecycle owner gets no copy [decision 19] [decision 175].
 - A child with a parent, not started with `--quiet`, types one line into the parent's program and presses Enter when its turn ends, it asks the person a question, its program exits, or it fails. A stop the person asked for, and the stop's own end, send nothing. The line waits until the parent is idle, the person has not typed into it for 1.5 seconds after Enter, and 30 seconds after the last key of a line they have not sent, and several waiting lines go as one message. A `wait` or `wait-event` on that child that returns its end drops the line queued for it, so the parent is not told twice; a wait from another thread drops the line too [decision 201]. A parent whose program has ended gets nothing [decision 201].
 - Parent is sidebar nesting only. The lifecycle owner is set at creation and is not changed later. Archiving or deleting the owner does the same to its dependents [decision 20] [CONTEXT].
