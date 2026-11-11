@@ -103,6 +103,26 @@ async fn a_crash_while_a_program_runs_keeps_no_screen(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+async fn a_quit_returns_once_the_screen_is_saved(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (id, _reap) = started(&fixture, program(), cx).await;
+    #[cfg(unix)]
+    type_in(&id, "printf SAVED-MARKER\n", cx).await;
+    #[cfg(windows)]
+    type_in(&id, "echo SAVED-MARKER\r\n", cx).await;
+    assert!(
+        screen_with(&id, "SAVED-MARKER", cx)
+            .await
+            .contains("SAVED-MARKER")
+    );
+    let stopping = cx.update(Workspace::stop_for_quit);
+    cx.run_until_parked();
+    stopping.await.unwrap();
+    assert!(saved_screen(fixture.dir.path(), &id).is_some_and(|row| row.screen_kept));
+    drop(fixture);
+}
+
+#[gpui_kit::test]
 async fn a_finished_program_keeps_its_screen_and_its_cause(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let line = if cfg!(windows) {
