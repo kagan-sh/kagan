@@ -2415,7 +2415,7 @@ Commands:
   edit    Change a saved prompt's title and text. Its star stays
   search  Saved prompts whose title or body contains this text. An empty search lists them all
   star    Star or unstar a saved prompt
-  delete  Delete a saved prompt
+  delete  Delete a saved prompt after the person approves it in kagan
   send    Type a saved prompt into a thread and press Enter
   help    Print this message or the help of the given subcommand(s)
 
@@ -2506,7 +2506,7 @@ Options:
 ## `kg saved-prompt delete`
 
 ```text
-Delete a saved prompt
+Delete a saved prompt after the person approves it in kagan
 
 Usage: kg saved-prompt delete <ID>
 

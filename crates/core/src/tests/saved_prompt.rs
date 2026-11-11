@@ -61,9 +61,17 @@ async fn add_search_star_and_delete_round_trip(cx: &mut TestAppContext) {
         panic!("list");
     };
     assert_eq!(all[0].id, notes.id);
-    op(Op::SavedPrompt(SavedPromptOp::Delete { id: other.id }), cx)
-        .await
-        .unwrap();
+    let deleting = cx.update(|cx| {
+        crate::Workspace::dispatch(
+            Op::SavedPrompt(SavedPromptOp::Delete {
+                id: other.id.clone(),
+            }),
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    approve_delete(cx).await;
+    deleting.await.unwrap();
     let missing = op(
         Op::SavedPrompt(SavedPromptOp::Delete {
             id: SavedPromptId("svp_missing".into()),
@@ -174,4 +182,68 @@ async fn edit_changes_the_title_and_text_and_keeps_the_star(cx: &mut TestAppCont
     .await
     .unwrap_err();
     assert!(matches!(empty, OpError::Invalid(_)), "{empty}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn deleting_a_saved_prompt_waits_for_the_person(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    let notes = added("Notes", "text", cx).await;
+    let deleting = cx.update(|cx| {
+        crate::Workspace::dispatch(
+            Op::SavedPrompt(SavedPromptOp::Delete {
+                id: notes.id.clone(),
+            }),
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    assert!(
+        prompt_listed(&notes.id, cx).await,
+        "nothing is deleted before the person answers"
+    );
+    let approval = cx.read(|cx| {
+        crate::Workspace::global(cx)
+            .read(cx)
+            .approvals()
+            .next()
+            .unwrap()
+            .id
+            .clone()
+    });
+    cx.update(|cx| crate::Workspace::answer_standalone(approval, "approve".into(), cx))
+        .await
+        .unwrap();
+    deleting.await.unwrap();
+    assert!(!prompt_listed(&notes.id, cx).await);
+}
+
+async fn approve_delete(cx: &mut TestAppContext) {
+    let approval = cx.read(|cx| {
+        crate::Workspace::global(cx)
+            .read(cx)
+            .approvals()
+            .next()
+            .unwrap()
+            .id
+            .clone()
+    });
+    cx.update(|cx| crate::Workspace::answer_standalone(approval, "approve".into(), cx))
+        .await
+        .unwrap();
+}
+
+#[cfg(unix)]
+async fn prompt_listed(id: &SavedPromptId, cx: &mut TestAppContext) -> bool {
+    let OpResult::SavedPrompts(all) = op(
+        Op::SavedPrompt(SavedPromptOp::Search {
+            text: String::new(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("list");
+    };
+    all.iter().any(|prompt| &prompt.id == id)
 }

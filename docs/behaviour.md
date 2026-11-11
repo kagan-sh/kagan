@@ -498,7 +498,7 @@ A section is a user-named group that threads can be filed under in the sidebar [
 
 ## Saved prompt
 
-A saved prompt is stored text the person can send, with a title, a body, and a starred flag. It is not a question waiting for an answer [CONTEXT] [decision 234]. Rows live in SQLite. Add, edit, star, and delete are serialized. Search and send are not, and send follows `ThreadOp::Send` [decision 234].
+A saved prompt is stored text the person can send, with a title, a body, and a starred flag. It is not a question waiting for an answer [CONTEXT] [decision 234]. Rows live in SQLite. Add, edit, and star are serialized. Search and send are not, and send follows `ThreadOp::Send` [decision 234]. Delete waits for the person's approval, so it is not serialized [decision 248].
 
 ### `Add`
 
@@ -525,8 +525,9 @@ A saved prompt is stored text the person can send, with a title, a body, and a s
 
 ### `Delete`
 
-- **Changes**: removes the saved prompt [decision 234].
-- **Refused when**: a missing id — `not-found`. An id that is not a plain identifier — `invalid` [op/].
+- **Allowed when**: the saved prompt exists, and the person approves the delete in the app [decision 248].
+- **Changes**: removes the saved prompt once the person approves. Nothing is removed before that [decision 248].
+- **Refused when**: a missing id — `not-found`, before any question. An id that is not a plain identifier — `invalid` [op/]. A declined question — `invalid`, `declined: …` [op/].
 
 ### `Send`
 

@@ -53,6 +53,22 @@ fn new_key() -> &'static str {
     chords()[1]
 }
 
+// Deleting a saved prompt asks the person first, so the test answers the question.
+fn approve_delete(cx: &mut TestAppContext) {
+    let id = cx
+        .read(|cx| {
+            Workspace::global(cx)
+                .read(cx)
+                .approvals()
+                .next()
+                .map(|a| a.id.clone())
+        })
+        .expect("the delete is waiting for the person");
+    let answer = cx.update(|cx| Workspace::answer_standalone(id, "approve".into(), cx));
+    cx.foreground_executor().block_test(answer).unwrap();
+    cx.run_until_parked();
+}
+
 fn delete_key() -> &'static str {
     chords()[2]
 }
@@ -93,6 +109,7 @@ fn the_command_list_opens_saved_prompts_and_can_search_star_delete_and_add(
     );
     click(cx, window, &format!("saved-prompt-delete-{}", other.id.0));
     cx.run_until_parked();
+    approve_delete(cx);
     assert!(!shows(cx, window, &row(&other.id)));
     query(cx, window, &kagan, "");
     click(cx, window, "saved-prompt-new");
@@ -129,6 +146,7 @@ fn star_and_delete_act_on_the_selected_row_from_the_keyboard(cx: &mut TestAppCon
     );
     cx.simulate_keystrokes(window, delete_key());
     cx.run_until_parked();
+    approve_delete(cx);
     assert!(!shows(cx, window, &row(&notes.id)));
     assert!(cx.update(|cx| commands_state(kagan.read(cx))).is_some());
 }

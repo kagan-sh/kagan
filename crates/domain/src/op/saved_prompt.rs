@@ -27,7 +27,7 @@ pub enum SavedPromptOp {
         #[arg(action = clap::ArgAction::Set)]
         starred: bool,
     },
-    /// Delete a saved prompt
+    /// Delete a saved prompt after the person approves it in kagan
     Delete { id: SavedPromptId },
     /// Type a saved prompt into a thread and press Enter
     Send {

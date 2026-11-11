@@ -121,7 +121,7 @@ pub(crate) async fn execute(
         Op::Thread(op) => dispatch_thread(this, database, op, requester, cx).await,
         Op::Automation(op) => crate::automation::run(this, database, op, requester, cx).await,
         Op::Section(op) => section(this, database, op, cx).await,
-        Op::SavedPrompt(op) => crate::saved_prompt::run(this, database, op, cx).await,
+        Op::SavedPrompt(op) => crate::saved_prompt::run(this, database, op, requester, cx).await,
         Op::Plugin(kg_domain::PluginOp::Start) => {
             announce(this, crate::WorkspaceEvent::NewPlugin, cx)
         }
@@ -225,7 +225,7 @@ fn saved_program_change(op: &ProgramOp) -> bool {
 }
 
 /// `Workspace::handle` awaits it before the loop reads the next envelope. An op that asks
-/// (`ProjectOp::Remove`, `ThreadOp::Delete`, `AutomationOp::Delete`, `ProgramOp::Remove`, and the plugin ops that approve powers or a
+/// (`ProjectOp::Remove`, `ThreadOp::Delete`, `AutomationOp::Delete`, `ProgramOp::Remove`, `SavedPromptOp::Delete`, and the plugin ops that approve powers or a
 /// removal) is detached, and a detached handler submits its request only after the person
 /// answers. `UiOp::Snapshot` is serialized because a window job never submits a request.
 pub(crate) fn serialized(op: &Op) -> bool {
@@ -257,7 +257,9 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Browser(_)
         | Op::Update(_)
         | Op::SavedPrompt(
-            kg_domain::SavedPromptOp::Search { .. } | kg_domain::SavedPromptOp::Send { .. },
+            kg_domain::SavedPromptOp::Search { .. }
+            | kg_domain::SavedPromptOp::Send { .. }
+            | kg_domain::SavedPromptOp::Delete { .. },
         ) => false,
         Op::Project(
             ProjectOp::Add { .. } | ProjectOp::Reorder { .. } | ProjectOp::SetProgram { .. },
@@ -278,8 +280,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::SavedPrompt(
             kg_domain::SavedPromptOp::Add { .. }
             | kg_domain::SavedPromptOp::Edit { .. }
-            | kg_domain::SavedPromptOp::Star { .. }
-            | kg_domain::SavedPromptOp::Delete { .. },
+            | kg_domain::SavedPromptOp::Star { .. },
         )
         | Op::Ui(_) => true,
         Op::Program(op) => saved_program_change(op),
