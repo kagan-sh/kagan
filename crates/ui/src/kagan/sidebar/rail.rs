@@ -1,5 +1,5 @@
 use super::{
-    ActivateRow, EnterRow, HideRailIcon, ManagePlugins, NewPlugin, Threads, surface_event,
+    ActivateRow, EnterRow, ManagePlugins, NewPlugin, OpenRailMenu, Threads, surface_event,
 };
 use crate::kagan::OpenSkills;
 use crate::kagan::plugin_actions::set_rail;
@@ -12,9 +12,9 @@ use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, ElementId, FocusHandle, InteractiveElement as _, IntoElement,
-    ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
-    div, px,
+    Anchor, AnyElement, Context, DismissEvent, ElementId, Entity, FocusHandle, Focusable as _,
+    InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, anchored, deferred, div, px,
 };
 use kg_domain::{PluginId, RailAction, Thread};
 
@@ -122,6 +122,13 @@ pub(super) fn rail_tool(
     sidebar.row_focus.insert(id.clone(), focus.clone());
     let page = item.page;
     let plugin = item.plugin.clone();
+    let list = sidebar.focus().clone();
+    let menu = sidebar
+        .rail_menu
+        .as_ref()
+        .filter(|(_, _, row)| row == &id)
+        .map(|(menu, _, _)| menu.clone());
+    let row = id.clone();
     let selected = if page {
         shows
             .page
@@ -149,8 +156,9 @@ pub(super) fn rail_tool(
     div()
         .id(ElementId::Name(id.into()))
         .flex_shrink_0()
+        .relative()
         .track_focus(&focus)
-        .key_context("SidebarRow")
+        .key_context("SidebarRow RailIcon")
         .on_action({
             let keyboard = keyboard.clone();
             cx.listener(move |_, _: &ActivateRow, _, cx| {
@@ -162,10 +170,8 @@ pub(super) fn rail_tool(
         }))
         .on_action({
             let plugin = plugin.clone();
-            cx.listener(move |this, _: &HideRailIcon, window, cx| {
-                // The icon is about to leave the rail, so the keyboard moves to the list.
-                window.focus(&this.focus, cx);
-                set_rail(plugin.clone(), RailAction::Hide, cx);
+            cx.listener(move |this, _: &OpenRailMenu, window, cx| {
+                this.open_rail_menu(row.clone(), plugin.clone(), window, cx);
             })
         })
         .ui_observe_as(Facts {
@@ -190,11 +196,52 @@ pub(super) fn rail_tool(
                 cx.emit(surface_event(page, selected, &action));
             })),
         )
-        .context_menu(move |menu, _, _| rail_menu(menu, plugin.clone()))
+        .when_some(menu, |row, menu| row.child(popup(menu)))
+        .context_menu(move |menu, _, _| rail_menu(menu, plugin.clone(), list.clone()))
         .into_any_element()
 }
 
-fn rail_menu(menu: PopupMenu, plugin: PluginId) -> PopupMenu {
+impl Sidebar {
+    // The keyboard's menu. It opens over the icon, takes focus, and returns focus to the icon when
+    // closed, unless the item hid the icon, in which case focus stays on the list.
+    fn open_rail_menu(
+        &mut self,
+        row: String,
+        plugin: PluginId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.rail_menu.is_some() {
+            return;
+        }
+        let list = self.focus.clone();
+        let menu = PopupMenu::build(window, cx, |menu, _, _| {
+            rail_menu(menu, plugin.clone(), list.clone())
+        });
+        let icon = self.row_focus.get(&row).cloned();
+        let dismiss = cx.subscribe_in(
+            &menu,
+            window,
+            move |this, menu, _: &DismissEvent, window, cx| {
+                this.rail_menu = None;
+                let kept = menu.read(cx).focus_handle(cx).contains_focused(window, cx);
+                if let Some(icon) = icon
+                    .as_ref()
+                    .filter(|_| kept || window.focused(cx).is_none())
+                {
+                    window.focus(icon, cx);
+                }
+                cx.notify();
+            },
+        );
+        menu.read(cx).focus_handle(cx).focus(window, cx);
+        self.rail_menu = Some((menu, dismiss, row));
+        cx.notify();
+    }
+}
+
+// One item builder for both menus. Hiding moves focus to the list first, because the icon leaves.
+fn rail_menu(menu: PopupMenu, plugin: PluginId, list: FocusHandle) -> PopupMenu {
     menu.item(
         PopupMenuItem::element(|_, _| {
             div()
@@ -205,8 +252,30 @@ fn rail_menu(menu: PopupMenu, plugin: PluginId) -> PopupMenu {
                 })
                 .child("Hide from rail")
         })
-        .on_click(move |_, _, cx| set_rail(plugin.clone(), RailAction::Hide, cx)),
+        .on_click(move |_, window, cx| {
+            window.focus(&list, cx);
+            set_rail(plugin.clone(), RailAction::Hide, cx);
+        }),
     )
+}
+
+// The menu opens beside the icon, at the rail's right edge.
+fn popup(menu: Entity<PopupMenu>) -> impl IntoElement {
+    div().absolute().top_0().right_0().size_0().child(deferred(
+        anchored().anchor(Anchor::TopLeft).child(
+            div()
+                .id("rail-menu-layer")
+                .on_click(|_, _, cx| cx.stop_propagation())
+                .child(control(
+                    "rail-menu-popup",
+                    Facts {
+                        role: Role::Menu,
+                        ..Facts::button("Rail icon")
+                    },
+                    menu,
+                )),
+        ),
+    ))
 }
 
 fn skills_row(active: bool, focus: &FocusHandle, cx: &mut Context<Sidebar>) -> impl IntoElement {

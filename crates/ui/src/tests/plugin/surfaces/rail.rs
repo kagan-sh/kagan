@@ -230,6 +230,8 @@ fn a_hidden_rail_icon_is_not_drawn_but_its_tool_still_opens(cx: &mut TestAppCont
     assert!(shows(cx, window, &tool));
     set_rail(cx, ALPHA, RailAction::Hide);
     wait_until(cx, |cx| !shows(cx, window, &tool));
+    assert!(shows(cx, window, "skills-rail"));
+    assert!(shows(cx, window, "threads-home"));
     open_surface(cx, ALPHA, "tool").unwrap();
     assert!(
         item(&surfaces(cx), ALPHA, "tool").open,
@@ -266,14 +268,39 @@ fn right_click_on_a_rail_icon_offers_hide_from_rail(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn shift_f10_hides_the_focused_icon_and_moves_focus_to_the_list(cx: &mut TestAppContext) {
+fn shift_f10_opens_the_rail_menu_and_enter_hides_the_icon(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
     wide(cx, window);
     let tool = format!("surface-item-{ALPHA}-tool");
     tab_to(cx, window, &tool);
-    assert_eq!(focused_of(cx, window, &tool), Some(true));
     press_key(cx, window, "shift-f10");
+    wait_until(cx, |cx| shows(cx, window, "rail-hide"));
+    press_key(cx, window, "down");
+    press_key(cx, window, "enter");
     wait_until(cx, |cx| !shows(cx, window, &tool));
-    let focused = cx.update_window(window, |_, window, cx| window.focused(cx).is_some());
-    assert_eq!(focused.ok(), Some(true), "focus was lost with the icon");
+    assert_eq!(focused_of(cx, window, "sidebar-pane"), Some(true));
+}
+
+#[gpui_kit::test]
+fn escape_closes_the_rail_menu_and_returns_to_the_icon(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
+    wide(cx, window);
+    let tool = format!("surface-item-{ALPHA}-tool");
+    tab_to(cx, window, &tool);
+    press_key(cx, window, "shift-f10");
+    wait_until(cx, |cx| shows(cx, window, "rail-hide"));
+    press_key(cx, window, "escape");
+    wait_until(cx, |cx| !shows(cx, window, "rail-hide"));
+    assert!(shows(cx, window, &tool));
+    assert_eq!(focused_of(cx, window, &tool), Some(true));
+}
+
+#[gpui_kit::test]
+fn the_menu_key_opens_the_rail_menu_too(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
+    wide(cx, window);
+    let tool = format!("surface-item-{ALPHA}-tool");
+    tab_to(cx, window, &tool);
+    press_key(cx, window, "menu");
+    wait_until(cx, |cx| shows(cx, window, "rail-hide"));
 }

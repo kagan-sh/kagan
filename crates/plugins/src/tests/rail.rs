@@ -5,7 +5,7 @@ use kg_core::Workspace;
 use kg_domain::{Op, OpError, OpResult, PluginId, PluginOp, PreferenceOp, RailAction, prefs};
 use serde_json::{Value, json};
 
-use super::{answer_standalone, installed_at, open, plugin_op, write_plugin};
+use super::{answer_standalone, installed_at, open, open_kept, plugin_op, records, write_plugin};
 
 const RAIL: &str = "dev.test.rail";
 
@@ -101,4 +101,53 @@ fn removing_a_plugin_drops_its_rail_entry(cx: &mut TestAppContext) {
     answer_standalone(cx, "approve");
     cx.foreground_executor().block_test(removed).unwrap();
     assert_eq!(hidden(cx), json!([]), "remove left the rail entry");
+}
+
+#[gpui_kit::test]
+fn showing_an_id_whose_plugin_is_gone_clears_it(cx: &mut TestAppContext) {
+    open(cx, &[]);
+    let set = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Preference(PreferenceOp::Set {
+                key: prefs::RAIL_HIDDEN.into(),
+                value: json!(["dev.gone.plugin"]),
+            }),
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(set).unwrap();
+    assert_eq!(
+        rail(cx, "dev.gone.plugin", RailAction::Show),
+        Ok(OpResult::Setting(json!([])))
+    );
+    assert_eq!(hidden(cx), json!([]));
+}
+
+#[gpui_kit::test]
+fn removing_a_plugin_survives_a_rail_setting_it_cannot_read(cx: &mut TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    plugin(dir.path());
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    {
+        let store = kg_store::Store::open(path.join("kagan.sqlite3")).unwrap();
+        store.set_setting(prefs::RAIL_HIDDEN, &json!("x")).unwrap();
+    }
+    open_kept(cx, &path, data, &[installed_at(dir.path())]);
+
+    let id = PluginId(RAIL.into());
+    let removed = plugin_op(
+        cx,
+        PluginOp::Remove {
+            id,
+            thread_id: None,
+        },
+    );
+    answer_standalone(cx, "approve");
+    let outcome = cx.foreground_executor().block_test(removed);
+    assert!(
+        matches!(&outcome, Ok(OpResult::Warnings(text)) if text.iter().any(|line| line.contains("rail"))),
+        "{outcome:?}"
+    );
+    assert!(records(cx).is_empty(), "the plugin was not removed");
 }

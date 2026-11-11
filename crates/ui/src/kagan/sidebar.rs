@@ -36,7 +36,7 @@ actions!(
         Threads,
         ManagePlugins,
         NewPlugin,
-        HideRailIcon
+        OpenRailMenu
     ]
 );
 
@@ -48,8 +48,8 @@ pub(super) fn bindings() -> Vec<KeyBinding> {
         KeyBinding::new("down", FocusNextRow, Some("SidebarRow")),
         KeyBinding::new("left", Collapse, Some("SidebarRow")),
         KeyBinding::new("right", Expand, Some("SidebarRow")),
-        KeyBinding::new("shift-f10", HideRailIcon, Some("SidebarRow")),
-        KeyBinding::new("menu", HideRailIcon, Some("SidebarRow")),
+        KeyBinding::new("shift-f10", OpenRailMenu, Some("RailIcon")),
+        KeyBinding::new("menu", OpenRailMenu, Some("RailIcon")),
     ]
 }
 
@@ -121,6 +121,8 @@ pub(super) struct Sidebar {
     options: ListOptions,
     // Plugins whose rail icons are hidden. Read from the saved preference.
     pub(super) hidden_rail: BTreeSet<PluginId>,
+    // The rail icon's menu that is open, the row it belongs to, and its dismiss subscription.
+    pub(super) rail_menu: Option<(Entity<PopupMenu>, Subscription, String)>,
     list_focus: FocusHandle,
     list_menu: Option<(Entity<PopupMenu>, Subscription)>,
     brand_focus: FocusHandle,
@@ -149,6 +151,7 @@ impl Sidebar {
             row_menu: None,
             options: ListOptions::default(),
             hidden_rail: BTreeSet::new(),
+            rail_menu: None,
             list_focus: cx.focus_handle().tab_stop(true),
             list_menu: None,
             brand_focus: cx.focus_handle().tab_stop(true),

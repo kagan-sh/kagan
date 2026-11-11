@@ -6,18 +6,21 @@ use serde_json::Value;
 use super::record;
 use crate::{PluginHost, Result};
 
-// Hiding only moves an icon, and undoing it is one command, so no person is asked.
+// Hiding only moves an icon, and undoing it is one command, so no person is asked. Only hiding
+// needs the plugin installed; showing always clears the id, even one whose plugin was deleted.
 pub(in crate::runtime::ops) async fn rail(
     host: &Entity<PluginHost>,
     id: PluginId,
     action: RailAction,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    record(host, &id, cx)?;
+    if action == RailAction::Hide {
+        record(host, &id, cx)?;
+    }
     edit(&id, action, cx).await
 }
 
-// Uninstalling drops the entry. The plugin is already gone by then, so nothing is checked here.
+// Uninstalling drops the entry. Its caller calls this after the plugin is removed.
 pub(in crate::runtime::ops) async fn forget(id: &PluginId, cx: &mut AsyncApp) -> Result<()> {
     edit(id, RailAction::Show, cx).await.map(drop)
 }

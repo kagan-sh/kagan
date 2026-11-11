@@ -416,7 +416,7 @@ Not in `kg plugin` [book:cli]. It runs a command the plugin declares under `cli`
 ### `Rail`
 
 - **Changes**: `hide` adds the plugin's id to the preference `rail-hidden`, a list of plugin ids, and `show` takes it out. While listed, the rail draws none of the plugin's icons: its left tool and each of its pages [decision 238] [book:window]. The plugin keeps running. Its panels, pages, commands and palette entries still open from menus, `kg` and the command palette. Nothing asks the person. Removing the plugin takes its id out of the list. Kagan's own rail items cannot be hidden [decision 238].
-- **Refused when**: a missing id — `not-found` [op/].
+- **Refused when**: `hide` for a missing id — `not-found` [op/]. `show` always succeeds, so a stale id left in the list can always be cleared [decision 238].
 
 ## Skill
 
