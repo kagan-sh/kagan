@@ -278,6 +278,11 @@ fn error_wire() {
         serde_json::from_value::<OpError>(changed_wire).unwrap(),
         changed
     );
+    let full = OpError::Full("the program is not reading its input".into());
+    let full_wire =
+        json!({ "error": { "kind": "full", "message": "the program is not reading its input" } });
+    assert_eq!(serde_json::to_value(&full).unwrap(), full_wire);
+    assert_eq!(serde_json::from_value::<OpError>(full_wire).unwrap(), full);
     assert!(
         serde_json::from_value::<OpError>(json!({ "error": { "kind": "odd", "message": "" } }))
             .is_err()
@@ -1126,6 +1131,29 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
         metadata: None,
     }));
     assert_eq!(crate::check(&run), Ok(()));
+}
+
+#[test]
+fn input_and_report_stop_at_the_text_cap() {
+    let id = ThreadId("thread".into());
+    let input = |text: String| {
+        crate::check(&Op::Thread(ThreadOp::Input {
+            id: id.clone(),
+            text,
+            terminal: None,
+        }))
+    };
+    let report = |bytes: usize| {
+        crate::check(&Op::Thread(ThreadOp::Report {
+            id: id.clone(),
+            terminal: None,
+            bytes: vec![0; bytes],
+        }))
+    };
+    assert_eq!(input("x".repeat(crate::TEXT_MAX)), Ok(()));
+    assert!(input("x".repeat(crate::TEXT_MAX + 1)).is_err());
+    assert_eq!(report(crate::TEXT_MAX), Ok(()));
+    assert!(report(crate::TEXT_MAX + 1).is_err());
 }
 
 #[test]
