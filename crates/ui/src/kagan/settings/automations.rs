@@ -210,6 +210,9 @@ fn when(automation: &Automation) -> String {
 }
 
 fn runs(automation: &Automation) -> String {
+    if let Some(error) = &automation.last_error {
+        return format!("Last start failed: {error}");
+    }
     match automation.threads.len() {
         0 => "No run yet".into(),
         1 => "1 run".into(),

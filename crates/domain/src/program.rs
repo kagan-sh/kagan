@@ -72,8 +72,8 @@ pub fn saved_name(name: &str) -> Result<String, String> {
             "A saved program name is at most {SAVED_NAME_MAX} characters."
         ));
     }
-    if name.chars().any(char::is_control) {
-        return Err("A saved program name has no control characters.".into());
+    if name.chars().any(crate::unsafe_char) {
+        return Err("A saved program name has no control or bidi characters.".into());
     }
     Ok(name.to_owned())
 }

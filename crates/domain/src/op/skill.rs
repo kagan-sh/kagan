@@ -144,7 +144,7 @@ impl Skill {
         if header.name != name
             || !valid
             || header.description.trim().is_empty()
-            || header.description.chars().any(char::is_control)
+            || header.description.chars().any(crate::unsafe_char)
         {
             return Err(OpError::Invalid("skill name must match its lowercase hyphenated folder; description must be one nonempty line".into()));
         }
@@ -154,7 +154,7 @@ impl Skill {
             .filter(|hint| !hint.is_empty());
         if hint
             .as_ref()
-            .is_some_and(|hint| hint.chars().any(char::is_control))
+            .is_some_and(|hint| hint.chars().any(crate::unsafe_char))
         {
             return Err(OpError::Invalid("argument-hint must be one line".into()));
         }

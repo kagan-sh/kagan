@@ -225,6 +225,7 @@ CREATE TABLE saved_programs (
 ) WITHOUT ROWID;
 ",
     ),
+    Migration::Sql("ALTER TABLE automations ADD COLUMN last_error TEXT;"),
 ];
 
 pub struct Store {

@@ -9,8 +9,8 @@ impl super::Store {
     pub fn insert_automation(&self, automation: &Automation) -> Result<()> {
         self.conn.execute(
             "INSERT INTO automations
-             (id, project_id, name, body, program, minutes, at, paused, next_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+             (id, project_id, name, body, program, minutes, at, paused, next_at, last_error)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 Text(&automation.id),
                 Text(&automation.project_id),
@@ -21,6 +21,7 @@ impl super::Store {
                 automation.at.map(|time| time.0),
                 automation.paused,
                 automation.next_at.map(|time| time.0),
+                automation.last_error,
             ],
         )?;
         Ok(())
@@ -28,7 +29,7 @@ impl super::Store {
 
     pub fn automations(&self, project: Option<&ProjectId>) -> Result<Vec<Automation>> {
         let mut statement = self.conn.prepare(
-            "SELECT id, project_id, name, body, program, minutes, at, paused, next_at
+            "SELECT id, project_id, name, body, program, minutes, at, paused, next_at, last_error
              FROM automations
              WHERE project_id = coalesce(?1, project_id)
              ORDER BY name, id",
@@ -44,7 +45,7 @@ impl super::Store {
 
     pub fn due_automations(&self, now: Timestamp) -> Result<Vec<Automation>> {
         let mut statement = self.conn.prepare(
-            "SELECT id, project_id, name, body, program, minutes, at, paused, next_at
+            "SELECT id, project_id, name, body, program, minutes, at, paused, next_at, last_error
              FROM automations
              WHERE paused = 0 AND next_at <= ?1
              ORDER BY next_at, id",
@@ -62,7 +63,7 @@ impl super::Store {
         let mut automation = self
             .conn
             .query_row(
-                "SELECT id, project_id, name, body, program, minutes, at, paused, next_at
+                "SELECT id, project_id, name, body, program, minutes, at, paused, next_at, last_error
                  FROM automations WHERE id = ?1",
                 [Text(id)],
                 automation_row,
@@ -82,10 +83,16 @@ impl super::Store {
         found(changed, "automation", id)
     }
 
-    pub fn set_automation_next(&self, id: &AutomationId, next_at: Option<Timestamp>) -> Result<()> {
+    /// Moves the next run and keeps why the last one could not start.
+    pub fn postpone_automation(
+        &self,
+        id: &AutomationId,
+        next_at: Timestamp,
+        error: &str,
+    ) -> Result<()> {
         let changed = self.conn.execute(
-            "UPDATE automations SET next_at = ?2 WHERE id = ?1",
-            params![Text(id), next_at.map(|time| time.0)],
+            "UPDATE automations SET next_at = ?2, last_error = ?3 WHERE id = ?1",
+            params![Text(id), next_at.0, error],
         )?;
         found(changed, "automation", id)
     }
@@ -99,7 +106,7 @@ impl super::Store {
     ) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
         let changed = tx.execute(
-            "UPDATE automations SET next_at = ?2 WHERE id = ?1",
+            "UPDATE automations SET next_at = ?2, last_error = NULL WHERE id = ?1",
             params![Text(id), next_at.map(|time| time.0)],
         )?;
         if changed == 0 {
@@ -144,6 +151,7 @@ fn automation_row(row: &Row<'_>) -> rusqlite::Result<Automation> {
         at: row.get::<_, Option<i64>>("at")?.map(Timestamp),
         paused: row.get("paused")?,
         next_at: row.get::<_, Option<i64>>("next_at")?.map(Timestamp),
+        last_error: row.get("last_error")?,
         threads: Vec::new(),
     })
 }
