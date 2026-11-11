@@ -75,8 +75,11 @@ pub(super) fn valid(op: &AutomationOp) -> Result<(), String> {
         return Ok(());
     };
     let name = name.trim();
-    if name.is_empty() || name.chars().any(char::is_control) {
+    if name.is_empty() {
         return Err("an automation needs a name".into());
+    }
+    if name.chars().any(char::is_control) {
+        return Err("an automation name cannot hold a control character".into());
     }
     if name.chars().count() > NAME_MAX {
         return Err(format!("a name is over {NAME_MAX} characters"));

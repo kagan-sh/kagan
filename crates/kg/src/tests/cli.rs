@@ -949,3 +949,34 @@ fn cli_browser_text_omits_an_empty_title_and_text() {
         "https://example.com/login\n[2] textbox \"Email\" value=\"ada@example.com\"\n"
     );
 }
+
+#[test]
+fn ui_scroll_takes_a_negative_pixel_count_without_a_separator() {
+    assert_eq!(
+        parse(&["ui", "scroll", "list", "-300"]),
+        Op::Ui(kg_domain::UiOp::Scroll {
+            element_id: "list".into(),
+            dy: -300.,
+            within: None,
+            window: 0,
+        })
+    );
+}
+
+#[test]
+fn env_set_given_a_value_argument_says_the_value_comes_on_stdin() {
+    let argv: Vec<String> = ["kg", "env", "set", "NAME", "value"]
+        .map(String::from)
+        .into();
+    let error = Cli::try_parse_from(&argv)
+        .err()
+        .expect("a value argument is unexpected");
+    let hint = crate::hint(&error, &argv).expect("a hint for the value");
+    assert!(hint.contains("stdin"), "{hint}");
+}
+
+#[test]
+fn text_output_ends_with_one_newline() {
+    assert_eq!(crate::cli::terminated("rules"), "rules\n");
+    assert_eq!(crate::cli::terminated("rules\n"), "rules\n");
+}

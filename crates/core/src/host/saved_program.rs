@@ -44,7 +44,7 @@ pub(crate) async fn rename(database: Database, name: String, to: String) -> Resu
     match outcome {
         Renamed::Missing(from) => Err(missing("saved program", &from)),
         Renamed::Taken => Err(OpError::Invalid(format!(
-            "a saved program named {to} already exists"
+            "A saved program named {to} already exists."
         ))),
         Renamed::Done => Ok(OpResult::Done),
     }

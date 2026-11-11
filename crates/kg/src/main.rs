@@ -124,10 +124,30 @@ fn named_command(argv: &[String]) -> clap::Command {
     command
 }
 
+// `kg env set NAME` reads the value from stdin, so a value given after the name is explained.
+fn value_hint(error: &clap::Error, argv: &[String]) -> Option<String> {
+    if error.kind() != ErrorKind::UnknownArgument {
+        return None;
+    }
+    let words: Vec<&str> = argv
+        .iter()
+        .skip(1)
+        .filter(|word| !word.starts_with('-'))
+        .map(String::as_str)
+        .take(2)
+        .collect();
+    (words == ["env", "set"])
+        .then(|| "the value is read from stdin: echo value | kg env set NAME".into())
+}
+
+fn hint(error: &clap::Error, argv: &[String]) -> Option<String> {
+    id_hint(error, argv).or_else(|| value_hint(error, argv))
+}
+
 fn json_error(error: &clap::Error, argv: &[String]) -> String {
     invalid_json(
         &error.to_string(),
-        id_hint(error, argv).as_deref().unwrap_or(""),
+        hint(error, argv).as_deref().unwrap_or(""),
     )
 }
 
@@ -150,6 +170,9 @@ fn main() -> ExitCode {
                 println!("{}", json_error(&error, &argv));
             } else {
                 eprint!("{error}");
+                if let Some(note) = hint(&error, &std::env::args().collect::<Vec<_>>()) {
+                    eprintln!("{note}");
+                }
                 if error.kind() == ErrorKind::MissingRequiredArgument
                     && std::env::args().skip(1).collect::<Vec<_>>() == ["plugin", "new"]
                 {

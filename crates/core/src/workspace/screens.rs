@@ -35,7 +35,7 @@ impl Workspace {
             .shown(id)
             .map(|shown| shown.view().clone());
         match lines {
-            None => Task::ready(Err(missing("terminal", id))),
+            None => Task::ready(Err(missing("thread", id))),
             Some(lines) => cx.background_spawn(async move { Ok(lines.tail(cap)) }),
         }
     }
