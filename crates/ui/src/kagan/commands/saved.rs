@@ -246,6 +246,8 @@ impl Kagan {
     fn delete_saved(&mut self, id: SavedPromptId, window: &mut Window, cx: &mut Context<Self>) {
         let task = Workspace::dispatch(Op::SavedPrompt(SavedPromptOp::Delete { id }), cx);
         self.after_saved(task, window, cx);
+        // The question about the delete is in the Questions panel, which the open list would cover.
+        _ = self.close_commands(window, cx);
     }
 
     fn after_saved(
