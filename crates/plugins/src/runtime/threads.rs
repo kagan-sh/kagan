@@ -397,6 +397,7 @@ impl<'a> From<&'a kg_domain::Sidebar> for PluginSidebar<'a> {
 mod tests {
     use gpui_shell::HostArguments;
     use kg_domain::PluginId;
+    use serde_json::json;
 
     use super::CALLS;
 
@@ -413,6 +414,50 @@ mod tests {
                 .iter()
                 .all(|(name, _)| !["answer", "output"].contains(name))
         );
+    }
+
+    #[test]
+    fn an_ask_has_the_fields_it_is_given_and_none_for_null() {
+        let options = json!([{ "id": "yes", "label": "Yes" }]);
+        let field = json!([{ "type": "boolean", "id": "ok", "label": "OK" }]);
+        let given = build(
+            "ask",
+            vec!["thr_1".into(), "Ship?".into(), options.clone(), field],
+        );
+        assert!(matches!(
+            given,
+            kg_domain::Op::Thread(kg_domain::ThreadOp::Ask { fields: Some(ref fields), .. }) if fields.len() == 1
+        ));
+        let none = build(
+            "ask",
+            vec!["thr_1".into(), "Ship?".into(), options, json!(null)],
+        );
+        assert!(matches!(
+            none,
+            kg_domain::Op::Thread(kg_domain::ThreadOp::Ask { fields: Some(ref fields), .. }) if fields.is_empty()
+        ));
+    }
+
+    #[test]
+    fn a_list_takes_the_options_it_is_given_and_its_defaults_otherwise() {
+        let given = build("list", vec![json!({ "archived": true, "limit": 5 })]);
+        assert!(matches!(
+            given,
+            kg_domain::Op::Thread(kg_domain::ThreadOp::List {
+                archived: Some(true),
+                limit: Some(5),
+                ..
+            })
+        ));
+        let bare = build("list", vec![]);
+        assert!(matches!(
+            bare,
+            kg_domain::Op::Thread(kg_domain::ThreadOp::List {
+                archived: None,
+                limit: None,
+                ..
+            })
+        ));
     }
 
     #[test]
