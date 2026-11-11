@@ -1,5 +1,6 @@
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::Button;
+use gpui_kit::component::menu::DropdownMenu as _;
 use gpui_kit::component::{Sizable as _, h_flex};
 use gpui_kit::{
     AnyElement, Context, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -155,16 +156,28 @@ fn needs_part(needs: usize, focus: &FocusHandle, cx: &Context<Kagan>) -> Option<
 }
 
 fn update_part(focus: &FocusHandle, cx: &Context<Kagan>) -> Option<AnyElement> {
-    let available = {
+    let (available, progress) = {
         let updater = Updater::global(cx);
         let updater = updater.read(cx);
         match updater.state() {
-            UpdateState::Available { version, .. } => {
-                update::hidden(cx).as_deref() != Some(version.as_str())
-            }
-            _ => false,
+            UpdateState::Available { version, .. } => (
+                update::hidden(cx).as_deref() != Some(version.as_str()),
+                None,
+            ),
+            state => (false, update::progress_sentence(state)),
         }
     };
+    if let Some(text) = progress {
+        return Some(
+            div()
+                .id("activity-update")
+                .ui_container()
+                .type_small(cx)
+                .text_color(cx.theme().muted_foreground)
+                .child(text)
+                .into_any_element(),
+        );
+    }
     available.then(|| {
         control(
             "activity-update",
@@ -184,7 +197,7 @@ fn update_part(focus: &FocusHandle, cx: &Context<Kagan>) -> Option<AnyElement> {
                 .tooltip(update::primary_label(cx))
                 .text_color(cx.theme().muted_foreground)
                 .track_focus(focus)
-                .on_click(|_, window, cx| update::primary(window, cx)),
+                .dropdown_menu(|menu, _, cx| update::menu_items(menu, cx)),
         )
         .into_any_element()
     })

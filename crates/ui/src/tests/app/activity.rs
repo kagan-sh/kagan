@@ -370,6 +370,7 @@ fn a_busy_agent_shows_in_the_summary_and_as_a_log_line(cx: &mut TestAppContext) 
         terminal_focused(cx, window, &kagan),
         "an update moved the keyboard"
     );
+    click(cx, window, "activity-update");
     click(cx, window, "update-hide");
     assert!(
         !shows(cx, window, "activity-update"),

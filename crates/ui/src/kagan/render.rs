@@ -3,7 +3,7 @@ use super::{
     AddProject, CONTEXT, CloseActivityLog, DismissLeftOverlay, DismissRightOverlay, Kagan,
     NewTheme, OpenThemes, Shown, commands, settings, web_panel,
 };
-use super::{archived, layout, overlays, right, screen, surface, update};
+use super::{archived, layout, overlays, right, screen, surface};
 use crate::theme::{SpaceStep, TypeScale as _, space};
 
 use crate::ui_observe::UiObserveExt as _;
@@ -245,11 +245,6 @@ impl Kagan {
                             .map(|(_, text)| Self::plugin_prompt_notice(&text, cx)),
                     )
                     .child(main)
-                    .children(
-                        update::notice(cx).map(|notice| {
-                            div().absolute().top_0().left_0().right_0().child(notice)
-                        }),
-                    )
                     .children(overlays::render(self, cx))
                     .children(popup)
                     .when_some(self.toast.clone(), |main, toast| {
