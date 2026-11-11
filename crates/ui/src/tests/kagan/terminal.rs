@@ -21,7 +21,7 @@ use crate::kagan::{
 
 #[cfg(unix)]
 use super::wait_for_shell;
-use super::{click, grid_text, input, open, run_shell, shows, wait_until};
+use super::{click, grid_text, input, open, run_shell, shows, wait_for_screen};
 
 #[gpui_kit::test]
 fn a_program_that_ends_keeps_its_last_output_on_screen(cx: &mut TestAppContext) {
@@ -31,10 +31,10 @@ fn a_program_that_ends_keeps_its_last_output_on_screen(cx: &mut TestAppContext) 
     cx.update(|cx| {
         Workspace::dispatch(input(&id, &line(&split_command("ke", "yed"))), cx).detach();
     });
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("keyed"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("keyed"));
 
     cx.dispatch_action(window, StopThread);
-    wait_until(cx, |cx| !shows(cx, window, "stop"));
+    wait_for_screen(cx, &kagan, |cx| !shows(cx, window, "stop"));
     assert!(
         shows(cx, window, "terminal"),
         "the terminal left the window"
@@ -104,7 +104,7 @@ fn choosing_a_thread_shows_its_terminal(cx: &mut TestAppContext) {
     cx.update(|cx| {
         Workspace::dispatch(input(&id, &line(&split_command("shown", "-out"))), cx).detach();
     });
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("shown-out"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("shown-out"));
 }
 
 #[gpui_kit::test]
@@ -115,54 +115,12 @@ fn a_key_reaches_the_program(cx: &mut TestAppContext) {
 
     // The echo shows the split command, so "keyed" can only appear once Enter runs it.
     cx.simulate_input(window, &split_command("ke", "yed"));
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         grid_text(cx, &kagan).contains(&split_command("ke", "yed"))
     });
     assert!(!grid_text(cx, &kagan).contains("keyed"));
     cx.simulate_keystrokes(window, "enter");
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("keyed"));
-}
-
-// The window's keys must echo before Enter, in a thread titled like its program. Untitled threads
-// failed this on Windows CI; the title is given here so only the title differs from them.
-#[gpui_kit::test]
-fn a_typed_line_echoes_in_a_thread_titled_like_its_program(cx: &mut TestAppContext) {
-    let (kagan, window, _data) = open(cx);
-    let stem = if cfg!(windows) { "cmd" } else { "sh" };
-    let id = crate::tests::kagan::support::run_titled(cx, shell(), Some(stem));
-    click(cx, window, &format!("thread-{}", id.0));
-    cx.simulate_input(window, &split_command("ke", "yed"));
-    for _ in 0..200 {
-        cx.executor()
-            .advance_clock(std::time::Duration::from_millis(50));
-        cx.run_until_parked();
-        if grid_text(cx, &kagan).contains(&split_command("ke", "yed")) {
-            return;
-        }
-    }
-    let dump = cx.update(|cx| screen_read::terminal_grid(kagan.read(cx), cx));
-    let rows = dump.map_or_else(String::new, |grid| {
-        let cols = grid.lines.first().map_or(0, Vec::len);
-        let body = grid
-            .lines
-            .iter()
-            .enumerate()
-            .map(|(index, line)| {
-                let text: String = line.iter().map(|cell| cell.c).collect();
-                let wrapped = grid.wrapped.get(index).copied().unwrap_or(false);
-                format!(
-                    "[{index} len={} wrapped={wrapped}] {text:?}",
-                    text.chars().count()
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        format!("cols={cols} rows={}\n{body}", grid.lines.len())
-    });
-    panic!(
-        "DIAG marker {:?} not on screen\n{rows}",
-        split_command("ke", "yed")
-    );
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("keyed"));
 }
 
 #[gpui_kit::test]
@@ -173,7 +131,9 @@ fn paste_sends_the_clipboard_to_the_program(cx: &mut TestAppContext) {
 
     cx.write_to_clipboard(ClipboardItem::new_string("pasted-words".into()));
     cx.dispatch_action(window, crate::terminal::Paste);
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("pasted-words"));
+    wait_for_screen(cx, &kagan, |cx| {
+        grid_text(cx, &kagan).contains("pasted-words")
+    });
 }
 
 #[gpui_kit::test]
@@ -187,10 +147,10 @@ fn shift_page_up_scrolls_back_and_the_program_gets_no_keys(cx: &mut TestAppConte
         "for i in $(seq 1 200); do echo row$i; done"
     };
     cx.simulate_input(window, &line(rows));
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("row200"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("row200"));
 
     cx.simulate_keystrokes(window, "shift-pageup");
-    wait_until(cx, |cx| !grid_text(cx, &kagan).contains("row200"));
+    wait_for_screen(cx, &kagan, |cx| !grid_text(cx, &kagan).contains("row200"));
     assert!(!grid_text(cx, &kagan).contains("5;2~"));
 }
 
@@ -201,7 +161,7 @@ fn the_copy_key_copies_the_selected_word(cx: &mut TestAppContext) {
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, &split_command("pick", "ed"));
     cx.simulate_keystrokes(window, "enter");
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("picked"));
 
     let grid = cx
         .update(|cx| screen_read::terminal_grid(kagan.read(cx), cx))
@@ -237,7 +197,7 @@ fn the_copy_key_copies_the_selected_word(cx: &mut TestAppContext) {
         "ctrl-shift-c"
     };
     cx.simulate_keystrokes(window, copy);
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         cx.update(|cx| cx.read_from_clipboard())
             .and_then(|item| item.text())
             .is_some_and(|text| text == "picked")
@@ -251,7 +211,7 @@ fn a_double_click_selects_a_word_that_copies(cx: &mut TestAppContext) {
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, &split_command("pick", "ed"));
     cx.simulate_keystrokes(window, "enter");
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("picked"));
 
     let (row, _) = shown_row(cx, &kagan, "picked");
     let at = cell_point(cx, window, &kagan, row, 2);
@@ -266,7 +226,7 @@ fn a_double_click_selects_a_word_that_copies(cx: &mut TestAppContext) {
         "ctrl-shift-c"
     };
     cx.simulate_keystrokes(window, copy);
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         cx.update(|cx| cx.read_from_clipboard())
             .and_then(|item| item.text())
             .is_some_and(|text| text == "picked")
@@ -303,7 +263,7 @@ fn a_program_that_asks_for_mouse_gets_the_click_and_shift_selects_instead(cx: &m
     let dragged = cell_point(cx, window, &kagan, 6, 24);
     drag_to(cx, window, dragged);
     release(cx, window, dragged, 1, shift);
-    wait_until(cx, |cx| !selection(cx, &kagan).is_empty());
+    wait_for_screen(cx, &kagan, |cx| !selection(cx, &kagan).is_empty());
 }
 
 #[gpui_kit::test]
@@ -315,7 +275,7 @@ fn a_press_in_the_left_half_and_a_drag_into_the_right_half_selects_the_character
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, &split_command("pick", "ed"));
     cx.simulate_keystrokes(window, "enter");
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("picked"));
 
     // The character at column 2 of "picked" is "c".
     let (row, _) = shown_row(cx, &kagan, "picked");
@@ -324,7 +284,7 @@ fn a_press_in_the_left_half_and_a_drag_into_the_right_half_selects_the_character
     let right = cell_point_at(cx, window, &kagan, row, 2, 0.8);
     drag_to(cx, window, right);
     release(cx, window, right, 1, Modifiers::default());
-    wait_until(cx, |cx| !selection(cx, &kagan).is_empty());
+    wait_for_screen(cx, &kagan, |cx| !selection(cx, &kagan).is_empty());
     assert_eq!(selection(cx, &kagan), vec![(row, 2..3)]);
 }
 
@@ -335,7 +295,7 @@ fn the_release_is_where_a_selection_ends(cx: &mut TestAppContext) {
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, &split_command("pick", "ed"));
     cx.simulate_keystrokes(window, "enter");
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("picked"));
 
     let (row, _) = shown_row(cx, &kagan, "picked");
     let start = cell_point_at(cx, window, &kagan, row, 0, 0.3);
@@ -346,7 +306,7 @@ fn the_release_is_where_a_selection_ends(cx: &mut TestAppContext) {
     // selection ends with that character.
     let end = cell_point_at(cx, window, &kagan, row, 4, 0.8);
     release(cx, window, end, 1, Modifiers::default());
-    wait_until(cx, |cx| selection(cx, &kagan) == vec![(row, 0..5)]);
+    wait_for_screen(cx, &kagan, |cx| selection(cx, &kagan) == vec![(row, 0..5)]);
 }
 
 #[gpui_kit::test]
@@ -356,14 +316,16 @@ fn a_release_outside_the_terminal_ends_the_selection(cx: &mut TestAppContext) {
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, &split_command("one two", " three"));
     cx.simulate_keystrokes(window, "enter");
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("one two three"));
+    wait_for_screen(cx, &kagan, |cx| {
+        grid_text(cx, &kagan).contains("one two three")
+    });
 
     let (row, _) = shown_row(cx, &kagan, "one two three");
     let start = cell_point(cx, window, &kagan, row, 0);
     press(cx, window, start, 1, Modifiers::default());
     let end = cell_point(cx, window, &kagan, row, 4);
     drag_to(cx, window, end);
-    wait_until(cx, |cx| !selection(cx, &kagan).is_empty());
+    wait_for_screen(cx, &kagan, |cx| !selection(cx, &kagan).is_empty());
     let before = selection(cx, &kagan);
 
     // The release is lost, so the pointer comes back with no button down.
@@ -542,7 +504,7 @@ fn copy_on_select_copies_a_drag_only_while_the_switch_is_on(cx: &mut TestAppCont
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, &split_command("pick", "ed"));
     cx.simulate_keystrokes(window, "enter");
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("picked"));
     cx.update(|cx| cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("before".into())));
 
     let drag = |cx: &mut TestAppContext| {
@@ -560,7 +522,7 @@ fn copy_on_select_copies_a_drag_only_while_the_switch_is_on(cx: &mut TestAppCont
     };
 
     drag(cx);
-    wait_until(cx, |cx| clipboard(cx).as_deref() == Some("picke"));
+    wait_for_screen(cx, &kagan, |cx| clipboard(cx).as_deref() == Some("picke"));
 
     let off = Op::Preference(kg_domain::PreferenceOp::Set {
         key: kg_domain::prefs::TERMINAL_COPY_ON_SELECT.into(),
@@ -571,7 +533,7 @@ fn copy_on_select_copies_a_drag_only_while_the_switch_is_on(cx: &mut TestAppCont
     cx.run_until_parked();
     cx.update(|cx| cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("before".into())));
     drag(cx);
-    wait_until(cx, |cx| selection(cx, &kagan).len() == 1);
+    wait_for_screen(cx, &kagan, |cx| selection(cx, &kagan).len() == 1);
     cx.run_until_parked();
     assert_eq!(
         clipboard(cx).as_deref(),
@@ -587,7 +549,7 @@ fn copy_on_select_copies_a_drag_only_while_the_switch_is_on(cx: &mut TestAppCont
     cx.foreground_executor().block_test(task).unwrap();
     cx.run_until_parked();
     drag(cx);
-    wait_until(cx, |cx| clipboard(cx).as_deref() == Some("picke"));
+    wait_for_screen(cx, &kagan, |cx| clipboard(cx).as_deref() == Some("picke"));
 }
 
 #[cfg(unix)]
@@ -598,7 +560,7 @@ fn copy_on_select_skips_a_reported_release_and_copies_a_shift_drag(cx: &mut Test
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, &split_command("pick", "ed"));
     cx.simulate_keystrokes(window, "enter");
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("picked"));
     cx.simulate_input(window, "printf '\\033[?1000h\\033[?1006h'");
     cx.simulate_keystrokes(window, "enter");
     wait_for_shell(cx, |cx| {
@@ -637,7 +599,7 @@ fn copy_on_select_skips_a_reported_release_and_copies_a_shift_drag(cx: &mut Test
         ..Modifiers::default()
     };
     drag(cx, shift);
-    wait_until(cx, |cx| clipboard(cx).as_deref() == Some("picke"));
+    wait_for_screen(cx, &kagan, |cx| clipboard(cx).as_deref() == Some("picke"));
 }
 
 #[gpui_kit::test]
@@ -647,7 +609,7 @@ fn a_plain_click_with_copy_on_leaves_the_clipboard_alone(cx: &mut TestAppContext
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, &split_command("pick", "ed"));
     cx.simulate_keystrokes(window, "enter");
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("picked"));
     cx.update(|cx| cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("before".into())));
 
     let (row, _) = shown_row(cx, &kagan, "picked");
@@ -668,7 +630,7 @@ fn a_double_click_with_copy_on_copies_the_word(cx: &mut TestAppContext) {
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, &split_command("pick", "ed"));
     cx.simulate_keystrokes(window, "enter");
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("picked"));
     cx.update(|cx| cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("before".into())));
     let (row, _) = shown_row(cx, &kagan, "picked");
     let at = cell_point(cx, window, &kagan, row, 2);
@@ -676,7 +638,7 @@ fn a_double_click_with_copy_on_copies_the_word(cx: &mut TestAppContext) {
     release(cx, window, at, 1, Modifiers::default());
     press(cx, window, at, 2, Modifiers::default());
     release(cx, window, at, 2, Modifiers::default());
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         cx.update(|cx| cx.read_from_clipboard())
             .and_then(|item| item.text())
             .is_some_and(|text| text == "picked")

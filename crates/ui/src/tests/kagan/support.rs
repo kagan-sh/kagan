@@ -159,19 +159,10 @@ pub(crate) fn run_shell(cx: &mut TestAppContext) -> ThreadId {
 }
 
 pub(in crate::tests) fn run_program(cx: &mut TestAppContext, program: &str) -> ThreadId {
-    run_titled(cx, program, None)
-}
-
-// A run with a title given, or none so the program names the thread.
-pub(in crate::tests) fn run_titled(
-    cx: &mut TestAppContext,
-    program: &str,
-    title: Option<&str>,
-) -> ThreadId {
     let run = Run {
         project_id: ProjectId("prj_kagan".into()),
         program: program.into(),
-        title: title.map(str::to_owned),
+        title: None,
         environment: EnvironmentSpec::Personal,
         visibility: None,
         parent_thread_id: None,
@@ -304,7 +295,27 @@ pub(in crate::tests) fn thread_status(cx: &mut TestAppContext, id: &ThreadId) ->
 #[track_caller]
 pub(in crate::tests) fn wait_until(
     cx: &mut TestAppContext,
+    done: impl FnMut(&mut TestAppContext) -> bool,
+) {
+    wait_or_report(cx, done, |_| String::new());
+}
+
+// A wait on the terminal grid. A timeout prints the grid rows, their lengths, and whether each row
+// wraps, so a failure shows where the text went.
+#[track_caller]
+pub(in crate::tests) fn wait_for_screen(
+    cx: &mut TestAppContext,
+    kagan: &Entity<Kagan>,
+    done: impl FnMut(&mut TestAppContext) -> bool,
+) {
+    wait_or_report(cx, done, |cx| grid_report(cx, kagan));
+}
+
+#[track_caller]
+fn wait_or_report(
+    cx: &mut TestAppContext,
     mut done: impl FnMut(&mut TestAppContext) -> bool,
+    report: impl FnOnce(&mut TestAppContext) -> String,
 ) {
     let deadline = Instant::now() + Duration::from_secs(8);
     loop {
@@ -315,10 +326,33 @@ pub(in crate::tests) fn wait_until(
         }
         assert!(
             Instant::now() < deadline,
-            "timed out waiting for the screen"
+            "timed out waiting for the screen\n{}",
+            report(cx)
         );
         std::thread::sleep(Duration::from_millis(20));
     }
+}
+
+fn grid_report(cx: &mut TestAppContext, kagan: &Entity<Kagan>) -> String {
+    let grid = cx.update(|cx| screen_read::terminal_grid(kagan.read(cx), cx));
+    grid.map_or_else(String::new, |grid| {
+        let cols = grid.lines.first().map_or(0, Vec::len);
+        let rows = grid
+            .lines
+            .iter()
+            .enumerate()
+            .map(|(index, line)| {
+                let text: String = line.iter().map(|cell| cell.c).collect();
+                let wrapped = grid.wrapped.get(index).copied().unwrap_or(false);
+                format!(
+                    "[{index} len={} wrapped={wrapped}] {text:?}",
+                    text.chars().count()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("cols={cols} rows={}\n{rows}", grid.lines.len())
+    })
 }
 
 // The shell prints in real time, which the test clock cannot speed up, so this wait gets no short
