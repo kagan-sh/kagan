@@ -8,6 +8,7 @@ mod cli;
 #[cfg(target_os = "macos")]
 mod icon;
 mod mcp;
+mod out;
 #[cfg(windows)]
 mod pipe;
 mod socket;
@@ -147,7 +148,7 @@ fn main() -> ExitCode {
                 let argv: Vec<String> = std::env::args_os()
                     .map(|word| word.to_string_lossy().into_owned())
                     .collect();
-                println!("{}", json_error(&error, &argv));
+                let _ = out::line(json_error(&error, &argv));
             } else {
                 eprint!("{error}");
                 if error.kind() == ErrorKind::MissingRequiredArgument
@@ -200,7 +201,7 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             if cli.json {
-                println!("{}", serde_json::json!(error));
+                let _ = out::line(serde_json::json!(error));
             } else {
                 eprintln!("kg: {error}");
             }
