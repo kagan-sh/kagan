@@ -171,7 +171,7 @@ pub(super) fn rail_tool(
         .on_action({
             let plugin = plugin.clone();
             cx.listener(move |this, _: &OpenRailMenu, window, cx| {
-                this.open_rail_menu(row.clone(), plugin.clone(), window, cx);
+                this.open_rail_menu(row.clone(), &plugin, window, cx);
             })
         })
         .ui_observe_as(Facts {
@@ -197,7 +197,7 @@ pub(super) fn rail_tool(
             })),
         )
         .when_some(menu, |row, menu| row.child(popup(menu)))
-        .context_menu(move |menu, _, _| rail_menu(menu, plugin.clone(), list.clone()))
+        .context_menu(move |menu, _, _| rail_menu(menu, &plugin, &list))
         .into_any_element()
 }
 
@@ -207,7 +207,7 @@ impl Sidebar {
     fn open_rail_menu(
         &mut self,
         row: String,
-        plugin: PluginId,
+        plugin: &PluginId,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -215,9 +215,7 @@ impl Sidebar {
             return;
         }
         let list = self.focus.clone();
-        let menu = PopupMenu::build(window, cx, |menu, _, _| {
-            rail_menu(menu, plugin.clone(), list.clone())
-        });
+        let menu = PopupMenu::build(window, cx, |menu, _, _| rail_menu(menu, plugin, &list));
         let icon = self.row_focus.get(&row).cloned();
         let dismiss = cx.subscribe_in(
             &menu,
@@ -241,7 +239,8 @@ impl Sidebar {
 }
 
 // One item builder for both menus. Hiding moves focus to the list first, because the icon leaves.
-fn rail_menu(menu: PopupMenu, plugin: PluginId, list: FocusHandle) -> PopupMenu {
+fn rail_menu(menu: PopupMenu, plugin: &PluginId, list: &FocusHandle) -> PopupMenu {
+    let (plugin, list) = (plugin.clone(), list.clone());
     menu.item(
         PopupMenuItem::element(|_, _| {
             div()
