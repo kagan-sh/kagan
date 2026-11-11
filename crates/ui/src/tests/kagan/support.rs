@@ -159,10 +159,19 @@ pub(crate) fn run_shell(cx: &mut TestAppContext) -> ThreadId {
 }
 
 pub(in crate::tests) fn run_program(cx: &mut TestAppContext, program: &str) -> ThreadId {
+    run_titled(cx, program, None)
+}
+
+// A run with a title given, or none so the program names the thread.
+pub(in crate::tests) fn run_titled(
+    cx: &mut TestAppContext,
+    program: &str,
+    title: Option<&str>,
+) -> ThreadId {
     let run = Run {
         project_id: ProjectId("prj_kagan".into()),
         program: program.into(),
-        title: None,
+        title: title.map(str::to_owned),
         environment: EnvironmentSpec::Personal,
         visibility: None,
         parent_thread_id: None,

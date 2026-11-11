@@ -121,6 +121,20 @@ fn a_key_reaches_the_program(cx: &mut TestAppContext) {
     wait_until(cx, |cx| grid_text(cx, &kagan).contains("keyed"));
 }
 
+// The window's keys must echo before Enter, in a thread titled like its program. Untitled threads
+// failed this on Windows CI; the title is given here so only the title differs from them.
+#[gpui_kit::test]
+fn a_typed_line_echoes_in_a_thread_titled_like_its_program(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let stem = if cfg!(windows) { "cmd" } else { "sh" };
+    let id = crate::tests::kagan::support::run_titled(cx, shell(), Some(stem));
+    click(cx, window, &format!("thread-{}", id.0));
+    cx.simulate_input(window, &split_command("ke", "yed"));
+    wait_until(cx, |cx| {
+        grid_text(cx, &kagan).contains(&split_command("ke", "yed"))
+    });
+}
+
 #[gpui_kit::test]
 fn paste_sends_the_clipboard_to_the_program(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);
