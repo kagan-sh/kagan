@@ -88,6 +88,18 @@ pub(crate) async fn execute(
         Op::Program(ProgramOp::Discover { project_id }) => {
             crate::host::program::list(this, &database, false, project_id, cx).await
         }
+        Op::Program(ProgramOp::Save { name, line }) => {
+            crate::host::saved_program::save(database, name, line).await
+        }
+        Op::Program(ProgramOp::Rename { name, to }) => {
+            crate::host::saved_program::rename(database, name, to).await
+        }
+        Op::Program(ProgramOp::Remove { name }) => {
+            crate::host::saved_program::remove(database, name).await
+        }
+        Op::Program(ProgramOp::Pin { name, pinned }) => {
+            crate::host::saved_program::pin(database, name, pinned).await
+        }
         Op::Env(op) => crate::host::variables::run(this, op, cx).await,
         Op::Environment(EnvironmentOp::SetBase { id, base }) => {
             crate::host::git::set_base(this, &database, id, base, cx).await
@@ -189,6 +201,17 @@ fn announce(
 /// Whether `op` runs on the one-at-a-time request queue.
 ///
 /// A serialized handler must finish without waiting for a person or for another request:
+/// A saved program change is one database call, so it runs in turn with the other writes.
+fn saved_program_change(op: &ProgramOp) -> bool {
+    matches!(
+        op,
+        ProgramOp::Save { .. }
+            | ProgramOp::Rename { .. }
+            | ProgramOp::Remove { .. }
+            | ProgramOp::Pin { .. }
+    )
+}
+
 /// `Workspace::handle` awaits it before the loop reads the next envelope. An op that asks
 /// (`ProjectOp::Remove`, `ThreadOp::Delete`, `AutomationOp::Delete`, and the plugin ops that approve powers or a
 /// removal) is detached, and a detached handler submits its request only after the person
@@ -246,6 +269,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
             | kg_domain::SavedPromptOp::Delete { .. },
         )
         | Op::Ui(_) => true,
+        Op::Program(op) => saved_program_change(op),
         Op::Automation(op) => {
             !matches!(op, AutomationOp::List { .. } | AutomationOp::Delete { .. })
         }

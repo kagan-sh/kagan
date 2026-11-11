@@ -11,8 +11,8 @@ use super::{
     project_path,
 };
 use crate::kagan::{
-    Kagan, RetryBranches, RetryPrograms, Shown, ToggleCustomCommand, UseProjectFolder,
-    UseWorktreeFolder,
+    DeleteSavedProgram, Kagan, PinSavedProgram, RenameSavedProgram, RetryBranches, RetryPrograms,
+    SaveSavedProgram, Shown, ToggleCustomCommand, UseProjectFolder, UseWorktreeFolder,
 };
 impl Kagan {
     pub(in crate::kagan) fn load_branches(&mut self, project: ProjectId, cx: &mut Context<Self>) {
@@ -397,6 +397,46 @@ impl Kagan {
             let project = picker.project();
             picker.load(project, window, cx);
         });
+    }
+
+    pub(in crate::kagan) fn pin_saved_program(
+        &mut self,
+        _: &PinSavedProgram,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.picker
+            .update(cx, |picker, cx| picker.pin_selected(window, cx));
+    }
+
+    pub(in crate::kagan) fn rename_saved_program(
+        &mut self,
+        _: &RenameSavedProgram,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.picker
+            .update(cx, |picker, cx| picker.rename_selected(window, cx));
+    }
+
+    pub(in crate::kagan) fn delete_saved_program(
+        &mut self,
+        _: &DeleteSavedProgram,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.picker
+            .update(cx, |picker, cx| picker.delete_selected(window, cx));
+    }
+
+    pub(in crate::kagan) fn save_saved_program(
+        &mut self,
+        _: &SaveSavedProgram,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.picker
+            .update(cx, |picker, cx| picker.save_program(window, cx));
     }
 }
 

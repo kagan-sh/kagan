@@ -10,7 +10,7 @@ use gpui_kit::{
     InteractiveElement, IntoElement, Keystroke, ParentElement as _, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, anchored, deferred, div, px,
 };
-use kg_domain::PluginId;
+use kg_domain::{PluginId, Program, ProgramSource};
 
 use super::Kagan;
 use crate::theme::{SpaceStep, TypeScale as _, space};
@@ -176,6 +176,15 @@ pub(super) fn menu_popup(
                     )),
             ),
         ))
+}
+
+// The id part of a program's row or menu item. A saved program is keyed by its name, which is
+// unique, because one line can be saved under several names and a known command can equal a line.
+pub(crate) fn program_key(program: &Program) -> String {
+    match program.source {
+        ProgramSource::Saved => format!("saved-{}", program.label),
+        _ => program.command.clone(),
+    }
 }
 
 pub(super) fn dispatch(

@@ -92,6 +92,10 @@ _Avoid_: Prompt, dialog
 **Saved prompt**:
 Stored text the person can send. It has a title, a body, and a starred flag. It is not a question waiting for an answer.
 
+**Saved program**:
+A program line the person saved under a short name, such as "Claude, careful" for `claude --model claude-opus-5-5 --effort high`. It can be pinned, renamed, and deleted. Starting a thread from it runs its whole line [decision 240].
+_Avoid_: Preset, profile, alias
+
 ## Agents and extensions
 
 **Screen**:
