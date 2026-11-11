@@ -9,7 +9,7 @@ use super::picker::start_in_plain_folder;
 use crate::tests::kagan::shown;
 #[cfg(unix)]
 use crate::tests::kagan::thread_record;
-use crate::tests::kagan::{chord, click, label, open, shows, wait_until};
+use crate::tests::kagan::{chord, click, label, open, shows, value_of, wait_until};
 
 fn save(cx: &mut TestAppContext, name: &str, line: &str) {
     let task = cx.update(|cx| {
@@ -268,5 +268,24 @@ fn pinning_keeps_the_selected_row_in_place(cx: &mut TestAppContext) {
     assert!(
         label(cx, window, &row_id("Zulu")).contains("selected"),
         "the row the person picked stays selected after a pin"
+    );
+}
+
+#[gpui_kit::test]
+fn a_reopened_picker_starts_with_an_empty_search(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    save(cx, "Zulu", "codex --zulu");
+    let project = start_in_plain_folder(cx, window, data.path());
+    search(cx, window, "zulu");
+    wait_until(cx, |cx| {
+        value_of(cx, window, "program-search").as_deref() == Some("zulu")
+    });
+    click(cx, window, &format!("project-new-{}", project.0));
+    wait_until(cx, |cx| shows(cx, window, "program-list"));
+    cx.run_until_parked();
+    assert_eq!(
+        value_of(cx, window, "program-search").unwrap_or_default(),
+        "",
+        "a search from an earlier visit is cleared"
     );
 }

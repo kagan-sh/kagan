@@ -94,13 +94,16 @@ impl Picker {
 
     // Each opening of the screen starts with the program list, so a custom command stays closed.
     // The search is kept, as the docs say.
-    // Opening the picker: the list is replaced by a loading line until the programs arrive.
+    // Opening the picker: a search from an earlier visit is cleared, and the list is replaced by a
+    // loading line until the programs arrive.
     pub(crate) fn load(
         &mut self,
         project: Option<kg_domain::ProjectId>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.search
+            .update(cx, |state, cx| state.set_value("", window, cx));
         self.state = Programs::Loading;
         self.list
             .update(cx, |list, _| list.delegate_mut().loading = true);
