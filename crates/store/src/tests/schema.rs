@@ -1,6 +1,7 @@
 use kg_domain::ProjectId;
 
 use super::{id, store, thread};
+use crate::store::Migration;
 use crate::{Error, Store};
 
 #[test]
@@ -9,7 +10,10 @@ fn conflicting_schema_five_keeps_threads_and_accepts_new_ones() {
     let path = dir.path().join("kagan.sqlite3");
     let mut conn = rusqlite::Connection::open(&path).unwrap();
     let migrations = &crate::store::MIGRATIONS;
-    let initial = migrations[0]
+    let Migration::Sql(first) = migrations[0] else {
+        panic!("the first migration is SQL");
+    };
+    let initial = first
         .replace("model TEXT NOT NULL DEFAULT ''", "model TEXT NOT NULL")
         .replace(
             "reasoning_level TEXT NOT NULL DEFAULT ''",
@@ -18,7 +22,7 @@ fn conflicting_schema_five_keeps_threads_and_accepts_new_ones() {
     crate::migrate(
         &mut conn,
         [
-            initial.as_str(),
+            Migration::Sql(&initial),
             migrations[1],
             migrations[3],
             migrations[4],
@@ -231,7 +235,13 @@ fn a_failed_migration_leaves_the_previous_schema() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("kagan.sqlite3");
     let mut conn = rusqlite::Connection::open(&path).unwrap();
-    let error = crate::migrate(&mut conn, ["CREATE TABLE keep_me (id INTEGER);", "NOT SQL"]);
+    let error = crate::migrate(
+        &mut conn,
+        [
+            Migration::Sql("CREATE TABLE keep_me (id INTEGER);"),
+            Migration::Sql("NOT SQL"),
+        ],
+    );
     assert!(error.is_err());
     let version: i64 = conn
         .pragma_query_value(None, "user_version", |row| row.get(0))
@@ -254,7 +264,9 @@ fn an_old_notify_switch_becomes_a_level_and_threads_default() {
         let mut conn = rusqlite::Connection::open_in_memory().unwrap();
         let before = crate::store::MIGRATIONS
             .iter()
-            .position(|sql| sql.contains("ADD COLUMN notify"))
+            .position(|migration| {
+                matches!(migration, Migration::Sql(sql) if sql.contains("ADD COLUMN notify"))
+            })
             .unwrap();
         crate::migrate(
             &mut conn,

@@ -24,8 +24,22 @@ use crate::{Error, Result};
 // Marks a file this schema made, so a pre-release file is never mistaken for one (decision 106).
 pub(crate) const APPLICATION_ID: i32 = 0x6b67_6e31;
 
-pub(crate) const MIGRATIONS: &[&str] = &[
-    r"
+// `Guarded` skips its SQL when `column` already exists: a conflicting build may have added it.
+// `Step` runs code for a change that is more than one statement.
+#[derive(Clone, Copy)]
+pub(crate) enum Migration<'a> {
+    Sql(&'a str),
+    Guarded {
+        sql: &'a str,
+        table: &'static str,
+        column: &'static str,
+    },
+    Step(fn(&Connection) -> Result<()>),
+}
+
+pub(crate) const MIGRATIONS: &[Migration<'static>] = &[
+    Migration::Sql(
+        r"
 PRAGMA application_id = 1801940529;
 CREATE TABLE projects (
     id TEXT PRIMARY KEY,
@@ -137,9 +151,13 @@ CREATE TABLE plugin_values (
 ) WITHOUT ROWID;
 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
 ",
-    "ALTER TABLE threads ADD COLUMN conversation TEXT;",
-    "ALTER TABLE threads DROP COLUMN model; ALTER TABLE threads DROP COLUMN reasoning_level;",
-    r"
+    ),
+    Migration::Sql("ALTER TABLE threads ADD COLUMN conversation TEXT;"),
+    Migration::Sql(
+        "ALTER TABLE threads DROP COLUMN model; ALTER TABLE threads DROP COLUMN reasoning_level;",
+    ),
+    Migration::Guarded {
+        sql: r"
 ALTER TABLE projects ADD COLUMN sort INTEGER NOT NULL DEFAULT 0;
 UPDATE projects SET sort = (
     SELECT COUNT(*) FROM projects AS other
@@ -148,14 +166,24 @@ UPDATE projects SET sort = (
         OR (other.name = projects.name AND other.id < projects.id))
 );
 ",
-    "ALTER TABLE pending_interactions ADD COLUMN fields TEXT;",
-    REPAIR_THREAD_COLUMNS,
-    "ALTER TABLE plugins ADD COLUMN skills TEXT NOT NULL DEFAULT '[]';",
-    "ALTER TABLE threads ADD COLUMN quiet INTEGER NOT NULL DEFAULT 0;",
-    "ALTER TABLE threads ADD COLUMN notify TEXT NOT NULL DEFAULT 'default';",
-    "UPDATE settings SET value = CASE WHEN value = 'false' THEN '\"off\"' ELSE '\"all\"' END WHERE key = 'notify';",
-    "ALTER TABLE projects ADD COLUMN program TEXT;",
-    r"
+        table: "projects",
+        column: "sort",
+    },
+    Migration::Guarded {
+        sql: "ALTER TABLE pending_interactions ADD COLUMN fields TEXT;",
+        table: "pending_interactions",
+        column: "fields",
+    },
+    Migration::Step(repair_thread_columns),
+    Migration::Sql("ALTER TABLE plugins ADD COLUMN skills TEXT NOT NULL DEFAULT '[]';"),
+    Migration::Sql("ALTER TABLE threads ADD COLUMN quiet INTEGER NOT NULL DEFAULT 0;"),
+    Migration::Sql("ALTER TABLE threads ADD COLUMN notify TEXT NOT NULL DEFAULT 'default';"),
+    Migration::Sql(
+        "UPDATE settings SET value = CASE WHEN value = 'false' THEN '\"off\"' ELSE '\"all\"' END WHERE key = 'notify';",
+    ),
+    Migration::Sql("ALTER TABLE projects ADD COLUMN program TEXT;"),
+    Migration::Sql(
+        r"
 CREATE TABLE saved_prompts (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -163,7 +191,9 @@ CREATE TABLE saved_prompts (
     starred INTEGER NOT NULL
 ) WITHOUT ROWID;
 ",
-    r"
+    ),
+    Migration::Sql(
+        r"
 CREATE TABLE automations (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -185,19 +215,31 @@ CREATE TABLE automation_runs (
     PRIMARY KEY (automation_id, thread_id)
 );
 ",
-    r"
+    ),
+    Migration::Sql(
+        r"
 CREATE TABLE saved_programs (
     name TEXT PRIMARY KEY COLLATE NOCASE,
     line TEXT NOT NULL,
     pinned INTEGER NOT NULL DEFAULT 0
 ) WITHOUT ROWID;
 ",
+    ),
 ];
-
-pub(crate) const REPAIR_THREAD_COLUMNS: &str = "-- repair conflicting thread migrations";
 
 pub struct Store {
     pub(crate) conn: Connection,
+}
+
+// Two builds shipped different migrations at the same index. This drops the thread columns that
+// one of their histories left behind, and only the ones still present.
+fn repair_thread_columns(conn: &Connection) -> Result<()> {
+    for column in ["model", "reasoning_level"] {
+        if crate::has_column(conn, "threads", column)? {
+            conn.execute_batch(&format!("ALTER TABLE threads DROP COLUMN {column}"))?;
+        }
+    }
+    Ok(())
 }
 
 // Reads the SQLite file header, so a file that is not kagan's is refused before SQLite opens it.
