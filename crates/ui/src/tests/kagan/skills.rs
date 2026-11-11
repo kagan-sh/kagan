@@ -309,3 +309,17 @@ fn project_first_keeps_names_in_order_inside_each_source(cx: &mut TestAppContext
         Some("alpha-skill")
     );
 }
+
+#[gpui_kit::test]
+fn yours_with_no_skills_says_so_and_points_at_new_skill(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    show_skills(cx, &kagan, window);
+    click(cx, window, "skills-filter");
+    cx.run_until_parked();
+    click(cx, window, "skills-filter-3");
+    wait_until(cx, |cx| shows(cx, window, "skills-empty"));
+    assert_eq!(
+        label(cx, window, "skills-empty"),
+        "You have no skills yet. Make one with New skill."
+    );
+}

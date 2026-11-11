@@ -33,6 +33,13 @@ pub(super) fn render(page: &Page, window: &mut Window, cx: &mut Context<Page>) -
             cx.theme().muted_foreground,
             cx,
         )
+    } else if skills.is_empty() && page.query_is_empty(cx) && page.yours_is_empty(cx) {
+        note(
+            "skills-empty",
+            "You have no skills yet. Make one with New skill.",
+            cx.theme().muted_foreground,
+            cx,
+        )
     } else if skills.is_empty() {
         note(
             "skills-none-match",

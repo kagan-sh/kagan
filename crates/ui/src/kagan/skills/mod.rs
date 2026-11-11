@@ -360,6 +360,20 @@ impl Page {
         }));
     }
 
+    fn query_is_empty(&self, cx: &gpui_kit::App) -> bool {
+        self.query.read(cx).value().trim().is_empty()
+    }
+
+    /// Whether the filter is Yours and the person has made no skill of their own.
+    fn yours_is_empty(&self, _cx: &gpui_kit::App) -> bool {
+        self.filter == Some(SkillSource::User)
+            && self
+                .listing
+                .iter()
+                .flatten()
+                .all(|skill| skill.source != SkillSource::User)
+    }
+
     fn visible(&self, cx: &gpui_kit::App) -> Vec<Skill> {
         let query = self.query.read(cx).value().trim().to_lowercase();
         let mut skills: Vec<Skill> = self

@@ -240,6 +240,7 @@ fn editor_view(
                         .label("Cancel")
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.editor = None;
+                            this.notice = None;
                             cx.notify();
                         })),
                 )),
