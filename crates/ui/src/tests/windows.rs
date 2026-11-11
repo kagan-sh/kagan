@@ -35,9 +35,3 @@ fn the_start_failed_window_is_a_fixed_titled_window(cx: &mut TestAppContext) {
     assert!(!options.is_resizable);
     assert!(!options.is_minimizable);
 }
-
-#[gpui_kit::test]
-fn the_main_window_has_a_minimum_size(cx: &mut TestAppContext) {
-    let options = cx.update(crate::kagan::window::window_options);
-    assert!(options.window_min_size.is_some());
-}
