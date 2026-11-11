@@ -9,7 +9,9 @@ use gpui_kit::{
 };
 use kg_domain::{Program, split_program};
 
-use super::{Mode, Rows};
+use crate::kagan::controls::program_key;
+
+use super::{Mode, Picker, Rows};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -79,11 +81,12 @@ impl ListDelegate for Rows {
     ) -> Option<Self::Item> {
         let program = self.matches.get(ix.row)?.clone();
         Some(ProgramRow {
-            base: ListItem::new(format!("program-item-{}", program.command)),
+            base: ListItem::new(format!("program-item-{}", program_key(&program))),
             selected: self.mode == Mode::Catalog && self.selected == Some(ix.row),
             mode: self.mode,
             first: ix.row == 0,
             list: cx.entity().downgrade(),
+            picker: self.picker.clone(),
             program,
         })
     }
@@ -128,6 +131,7 @@ pub(crate) struct ProgramRow {
     pub(super) mode: Mode,
     pub(super) first: bool,
     pub(super) list: WeakEntity<ListState<Rows>>,
+    pub(super) picker: WeakEntity<Picker>,
 }
 
 impl Selectable for ProgramRow {

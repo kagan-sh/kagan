@@ -30,6 +30,9 @@ struct Cli {
     json: bool,
     #[arg(long, hide = true)]
     headless: bool,
+    /// Start with windows that are never shown, for `kg ui` to drive and capture
+    #[arg(long, hide = true, conflicts_with = "headless")]
+    offscreen: bool,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -156,8 +159,13 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    if cli.headless {
-        return match app::run() {
+    if cli.headless || cli.offscreen {
+        let presentation = if cli.offscreen {
+            kg_ui::Presentation::Offscreen
+        } else {
+            kg_ui::Presentation::Window
+        };
+        return match app::run(presentation) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("kg: {error:#}");

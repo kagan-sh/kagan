@@ -32,7 +32,7 @@ Commands:
   window        The application menu and the window
   surface       Plugin surfaces in the window
   keymap        Keyboard shortcuts: built-in ones and plugin commands
-  preference    Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+  preference    Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
   instructions  Agent rules: the global rules, or one project's, that a thread's program is told
   ui            Native window for QA and agents
   notify        System notifications
@@ -1454,8 +1454,12 @@ Programs a new thread can run, as the new-thread picker lists them
 Usage: kg program [OPTIONS] <COMMAND>
 
 Commands:
-  list  Programs found on the PATH, the shell, and the recent threads. The default is the project's program when it is installed, else the first installed one
-  help  Print this message or the help of the given subcommand(s)
+  list    Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed one
+  save    Save a program line under a name. A name already saved takes the new line and keeps its pin
+  rename  Give a saved program another name
+  remove  Delete a saved program. The project and threads that used its line keep the line
+  pin     Pin or unpin a saved program. Pinned ones are listed first among the saved programs
+  help    Print this message or the help of the given subcommand(s)
 
 Options:
       --json
@@ -1468,7 +1472,7 @@ Options:
 ## `kg program list`
 
 ```text
-Programs found on the PATH, the shell, and the recent threads. The default is the project's program when it is installed, else the first installed one
+Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed one
 
 Usage: kg program list [OPTIONS]
 
@@ -1476,6 +1480,79 @@ Options:
       --project <PROJECT_ID>
           
 
+  -h, --help
+          Print help
+```
+
+## `kg program save`
+
+```text
+Save a program line under a name. A name already saved takes the new line and keeps its pin
+
+Usage: kg program save <NAME> <LINE>
+
+Arguments:
+  <NAME>
+          
+
+  <LINE>
+          
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg program rename`
+
+```text
+Give a saved program another name
+
+Usage: kg program rename <NAME> <TO>
+
+Arguments:
+  <NAME>
+          
+
+  <TO>
+          
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg program remove`
+
+```text
+Delete a saved program. The project and threads that used its line keep the line
+
+Usage: kg program remove <NAME>
+
+Arguments:
+  <NAME>
+          
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg program pin`
+
+```text
+Pin or unpin a saved program. Pinned ones are listed first among the saved programs
+
+Usage: kg program pin <NAME> <PINNED>
+
+Arguments:
+  <NAME>
+          
+
+  <PINNED>
+          [possible values: true, false]
+
+Options:
   -h, --help
           Print help
 ```
@@ -1707,6 +1784,7 @@ Commands:
   search          Plugins the indexes list whose name or description holds the text
   enable          Enable a plugin
   disable         Disable a plugin
+  rail            Hide a plugin's icons from the rail, or show them again. The plugin keeps working
   config          Read or change a plugin setting
   use             Fill a slot with a plugin that offers it. `kagan` is the built-in
   help            Print this message or the help of the given subcommand(s)
@@ -2089,6 +2167,25 @@ Usage: kg plugin disable <ID>
 Arguments:
   <ID>
           
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg plugin rail`
+
+```text
+Hide a plugin's icons from the rail, or show them again. The plugin keeps working
+
+Usage: kg plugin rail <ID> <ACTION>
+
+Arguments:
+  <ID>
+          
+
+  <ACTION>
+          [possible values: hide, show]
 
 Options:
   -h, --help
@@ -3006,7 +3103,7 @@ Options:
 ## `kg preference`
 
 ```text
-Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
 
 Usage: kg preference [OPTIONS] <COMMAND>
 

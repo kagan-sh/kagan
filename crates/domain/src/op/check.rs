@@ -5,11 +5,11 @@ use super::browser::browser_check;
 use super::env::{shell_name, variable_name, variable_value};
 use super::saved_prompt::TITLE_MAX;
 use super::{
-    DiffOp, EnvOp, EnvironmentOp, Op, PluginOp, PreviewOp, ProjectOp, SEARCH_LIMIT,
+    DiffOp, EnvOp, EnvironmentOp, Op, PluginOp, PreviewOp, ProgramOp, ProjectOp, SEARCH_LIMIT,
     SEARCH_TEXT_MAX, SavedPromptOp, SectionOp, SurfaceOp, TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX,
     TerminalOp, ThreadOp, TurnOp, WindowOp,
 };
-use crate::split_program;
+use crate::{saved_name, split_program};
 
 /// Rejects an op a client must not send.
 ///
@@ -43,13 +43,26 @@ pub fn check(op: &Op) -> Result<(), String> {
         }) => split_program(program)
             .map(|_| ())
             .map_err(|error| error.to_string()),
+        Op::Program(ProgramOp::Save { name, line }) => {
+            saved_name(name)?;
+            split_program(line)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        }
+        Op::Program(ProgramOp::Rename { name, to }) => {
+            saved_name(name)?;
+            saved_name(to).map(|_| ())
+        }
+        Op::Program(ProgramOp::Remove { name } | ProgramOp::Pin { name, .. }) => {
+            saved_name(name).map(|_| ())
+        }
         Op::Plugin(op) => plain_opt(plugin_thread(op)),
         Op::Browser(op) => plain(op.thread()).and_then(|()| browser_check(op)),
         Op::Guide { .. }
         | Op::Skill(_)
         | Op::Open
         | Op::Project(_)
-        | Op::Program(_)
+        | Op::Program(ProgramOp::List { .. } | ProgramOp::Discover { .. })
         | Op::Theme(_)
         | Op::Keymap(_)
         | Op::Preference(_)
@@ -303,6 +316,7 @@ fn plugin_thread(op: &PluginOp) -> Option<&ThreadId> {
         | PluginOp::Index { .. }
         | PluginOp::Search { .. }
         | PluginOp::Enable { .. }
-        | PluginOp::Disable { .. } => None,
+        | PluginOp::Disable { .. }
+        | PluginOp::Rail { .. } => None,
     }
 }

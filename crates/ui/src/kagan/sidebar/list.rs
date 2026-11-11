@@ -45,7 +45,11 @@ pub(in crate::kagan) fn list(
         .id("sidebar-pane")
         .track_focus(sidebar.focus())
         .size_full()
-        .ui_container()
+        .ui_observe_as(Facts {
+            role: gpui_kit::Role::List,
+            focus: Some(sidebar.focus().clone()),
+            ..Facts::button("Threads")
+        })
         .child(
             v_flex()
                 .id("sidebar")

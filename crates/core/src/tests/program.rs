@@ -81,6 +81,7 @@ fn the_program_list_finds_known_agents_and_defaults_to_the_first_installed() {
         None,
         Some(std::ffi::OsStr::new("/bin/sh")),
         None,
+        &[],
         &[
             "codex --resume".into(),
             "claude".into(),
@@ -122,6 +123,7 @@ fn the_newest_installed_recent_program_is_the_default() {
         None,
         None,
         None,
+        &[],
         &["tool --fast".into(), "claude".into()],
     );
     assert_eq!(list.default.as_deref(), Some("tool --fast"));
@@ -138,6 +140,7 @@ fn only_installed_known_agents_get_a_version() {
         None,
         None,
         None,
+        &[],
         &["tool".into()],
     );
     crate::host::program::versions(&mut list);
@@ -195,6 +198,69 @@ async fn a_projects_installed_program_is_its_new_thread_default(cx: &mut TestApp
 }
 
 #[test]
+fn saved_programs_sit_after_the_shell_and_before_recent_ones_and_fold_a_repeat() {
+    // Nothing is installed on this PATH, so the order does not depend on the machine.
+    let dir = tempfile::tempdir().unwrap();
+    let saved = |name: &str, line: &str, pinned: bool| kg_domain::SavedProgram {
+        name: name.into(),
+        line: line.into(),
+        pinned,
+    };
+    let list = crate::host::program::discover(
+        Some(dir.path().as_os_str()),
+        None,
+        Some(std::ffi::OsStr::new("/bin/sh")),
+        None,
+        &[
+            saved("Pinned", "tool --pinned", true),
+            saved("Fast", "tool --fast", false),
+            saved("Missing", "kg-no-such-program", false),
+        ],
+        &["tool --fast".into(), "tool --recent".into()],
+    );
+    let order: Vec<_> = list
+        .programs
+        .iter()
+        .map(|program| (program.source, program.label.as_str()))
+        .collect();
+    let at = |source| {
+        order
+            .iter()
+            .position(|(found, _)| *found == source)
+            .unwrap()
+    };
+    assert!(at(kg_domain::ProgramSource::Shell) < at(kg_domain::ProgramSource::Saved));
+    assert_eq!(
+        order
+            .iter()
+            .filter(|(source, _)| *source == kg_domain::ProgramSource::Saved)
+            .map(|(_, label)| *label)
+            .collect::<Vec<_>>(),
+        ["Pinned", "Fast", "Missing"],
+        "saved programs keep the order the store gives them"
+    );
+    assert!(at(kg_domain::ProgramSource::Saved) < at(kg_domain::ProgramSource::Recent));
+    let fast: Vec<_> = list
+        .programs
+        .iter()
+        .filter(|program| program.command == "tool --fast")
+        .collect();
+    assert_eq!(
+        fast.len(),
+        1,
+        "a saved line that was also recent is one row"
+    );
+    assert_eq!(fast[0].label, "Fast");
+    let missing = list
+        .programs
+        .iter()
+        .find(|program| program.label == "Missing")
+        .unwrap();
+    assert!(!missing.installed());
+    assert!(list.programs.iter().any(|p| p.command == "tool --recent"));
+}
+
+#[test]
 fn a_recent_command_is_named_by_its_program_and_keeps_its_flags() {
     let dir = tempfile::tempdir().unwrap();
     let list = crate::host::program::discover(
@@ -202,6 +268,7 @@ fn a_recent_command_is_named_by_its_program_and_keeps_its_flags() {
         None,
         None,
         None,
+        &[],
         &[
             "cursor-agent --model grok-4.7-high --trust --force".into(),
             "/opt/tools/mytool --fast".into(),
@@ -231,7 +298,7 @@ fn a_known_program_in_its_install_folder_is_found_without_the_login_path() {
     let empty = dir.path().join("empty");
     std::fs::create_dir(&empty).unwrap();
     let installed = |home: Option<&std::path::Path>| {
-        crate::host::program::discover(Some(empty.as_os_str()), None, None, home, &[])
+        crate::host::program::discover(Some(empty.as_os_str()), None, None, home, &[], &[])
             .programs
             .into_iter()
             .find(|p| p.command == "opencode")
@@ -271,6 +338,7 @@ fn a_recent_command_with_an_exe_suffix_is_named_by_its_program() {
         None,
         None,
         None,
+        &[],
         &["claude.exe --fast".into()],
     );
     let label = list
@@ -330,7 +398,7 @@ fn more_documented_folders_find_cursor_goose_and_amp_without_the_login_path() {
         fake_program(&bin, command, "true");
     }
     let list =
-        crate::host::program::discover(Some(empty.as_os_str()), None, None, Some(&home), &[]);
+        crate::host::program::discover(Some(empty.as_os_str()), None, None, Some(&home), &[], &[]);
     for (command, folder) in folders {
         let found = list
             .programs
@@ -352,7 +420,7 @@ fn a_version_is_read_from_a_program_in_its_documented_folder() {
     let empty = dir.path().join("empty");
     std::fs::create_dir(&empty).unwrap();
     let mut list =
-        crate::host::program::discover(Some(empty.as_os_str()), None, None, Some(&home), &[]);
+        crate::host::program::discover(Some(empty.as_os_str()), None, None, Some(&home), &[], &[]);
     crate::host::program::versions(&mut list);
     let version = list
         .programs

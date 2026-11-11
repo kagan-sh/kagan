@@ -40,7 +40,42 @@ pub const LISTED_WHEN_MISSING: &[&str] = &["claude", "codex"];
 pub enum ProgramSource {
     Known,
     Shell,
+    Saved,
     Recent,
+}
+
+/// The longest name a saved program can have, in characters.
+pub const SAVED_NAME_MAX: usize = 40;
+
+/// A program line the person saved under a short name, such as "Claude, careful".
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedProgram {
+    pub name: String,
+    pub line: String,
+    pub pinned: bool,
+}
+
+/// The name a saved program is kept under: trimmed, not empty, at most [`SAVED_NAME_MAX`]
+/// characters, and free of control characters.
+///
+/// # Errors
+///
+/// The name is empty, longer than [`SAVED_NAME_MAX`], or holds a control character.
+pub fn saved_name(name: &str) -> Result<String, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("A saved program needs a name.".into());
+    }
+    if name.chars().count() > SAVED_NAME_MAX {
+        return Err(format!(
+            "A saved program name is at most {SAVED_NAME_MAX} characters."
+        ));
+    }
+    if name.chars().any(char::is_control) {
+        return Err("A saved program name has no control characters.".into());
+    }
+    Ok(name.to_owned())
 }
 
 /// A program a new thread can run. `command` is the text `--program` takes.
@@ -52,6 +87,9 @@ pub struct Program {
     pub source: ProgramSource,
     pub path: Option<PathBuf>,
     pub version: Option<String>,
+    /// Only a saved program can be pinned. A pinned one is listed first among the saved ones.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
 }
 
 impl Program {
@@ -126,7 +164,22 @@ pub fn split_program(line: &str) -> Result<(String, Vec<String>), SplitProgramEr
 mod tests {
     use proptest::prelude::*;
 
-    use super::{KNOWN_PROGRAMS, PROGRAM_INSTALL_FOLDERS, SplitProgramError, split_program};
+    use super::{
+        KNOWN_PROGRAMS, PROGRAM_INSTALL_FOLDERS, SAVED_NAME_MAX, SplitProgramError, saved_name,
+        split_program,
+    };
+
+    #[test]
+    fn a_saved_name_is_trimmed_and_bounded() {
+        assert_eq!(
+            saved_name("  Claude, careful  "),
+            Ok("Claude, careful".into())
+        );
+        assert!(saved_name("   ").is_err());
+        assert!(saved_name("a\tb").is_err());
+        assert!(saved_name(&"x".repeat(SAVED_NAME_MAX)).is_ok());
+        assert!(saved_name(&"x".repeat(SAVED_NAME_MAX + 1)).is_err());
+    }
 
     #[test]
     fn every_install_folder_names_a_known_program() {

@@ -32,19 +32,20 @@ pub use op::{
     EnvOp, EnvironmentOp, EnvironmentSpec, ExtraTerminal, FOLDER_IN_USE, GuideChapter,
     INSTRUCTIONS_MAX, IndexOp, InstructionsOp, KeyPlatform, Keymap, KeymapAction, KeymapOp,
     Metadata, NotifyOp, Op, OpError, OpResult, Order, OutdatedPlugin, PinnedSetup, PluginOp,
-    PreferenceOp, ProgramOp, ProjectBranch, ProjectOp, Run, SCREEN_MAX_BYTES, SEARCH_DEFAULT,
-    SEARCH_LIMIT, SEARCH_TEXT_MAX, SHORTCUTS, SavedPromptOp, SectionOp, SelectMode, SettingsOp,
-    SetupFile, Shortcut, ShortcutGroup, ShortcutScope, ShortcutWhen, Skill, SkillOp, SkillSource,
-    SkillTemplate, Slot, SlotChoice, SlotChoiceError, SurfaceItem, SurfaceOp, SurfacePlacement,
-    TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThemeOp, ThemeSettings, ThreadOp, TurnOp,
-    UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,
-    UiSnapshot, UpdateTarget, WaitOutcome, WindowOp, branch_slug, check, default_chord,
-    expand_secondary, invalid_json, valid_branch, valid_theme_choice, valid_theme_id,
+    PreferenceOp, ProgramOp, ProjectBranch, ProjectOp, RailAction, Run, SCREEN_MAX_BYTES,
+    SEARCH_DEFAULT, SEARCH_LIMIT, SEARCH_TEXT_MAX, SHORTCUTS, SavedPromptOp, SectionOp, SelectMode,
+    SettingsOp, SetupFile, Shortcut, ShortcutGroup, ShortcutScope, ShortcutWhen, Skill, SkillOp,
+    SkillSource, SkillTemplate, Slot, SlotChoice, SlotChoiceError, SurfaceItem, SurfaceOp,
+    SurfacePlacement, TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThemeOp, ThemeSettings,
+    ThreadOp, TurnOp, UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds,
+    UiElement, UiOp, UiSnapshot, UpdateTarget, WaitOutcome, WindowOp, branch_slug, check,
+    default_chord, expand_secondary, invalid_json, valid_branch, valid_theme_choice,
+    valid_theme_id,
 };
 pub use preview::{PreviewCut, PreviewFile, PreviewImageFormat, PreviewKind, PreviewOp};
 pub use program::{
     KNOWN_PROGRAMS, LISTED_WHEN_MISSING, PROGRAM_INSTALL_FOLDERS, Program, ProgramList,
-    ProgramSource, SplitProgramError, split_program,
+    ProgramSource, SAVED_NAME_MAX, SavedProgram, SplitProgramError, saved_name, split_program,
 };
 pub use record::{
     ASK_TEXT_MAX_CHARS, AgentTool, AskField, Environment, EnvironmentProvider, EnvironmentStatus,

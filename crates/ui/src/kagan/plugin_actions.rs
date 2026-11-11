@@ -3,7 +3,7 @@ use gpui_kit::{
     AppContext as _, Context, Entity, KeyBinding, PathPromptOptions, Task, Window, actions,
 };
 use kg_core::Workspace;
-use kg_domain::{Listing, Op, OpError, OpResult, OutdatedPlugin, PluginId, PluginOp};
+use kg_domain::{Listing, Op, OpError, OpResult, OutdatedPlugin, PluginId, PluginOp, RailAction};
 use kg_plugins::PluginHost;
 
 use super::Kagan;
@@ -40,6 +40,12 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
         KeyBinding::new("enter", AddIndex, Some("PluginIndex")),
         KeyBinding::new("enter", SearchIndexes, Some("PluginSearch")),
     ]
+}
+
+// Hiding and showing move a plugin's rail icons only. The plugin keeps running, and its surfaces
+// still open from menus, kg and the command palette.
+pub(crate) fn set_rail(plugin: PluginId, action: RailAction, cx: &mut gpui_kit::App) {
+    crate::kagan::dispatch::logged(Op::Plugin(PluginOp::Rail { id: plugin, action }), cx);
 }
 
 pub(super) struct Updates {

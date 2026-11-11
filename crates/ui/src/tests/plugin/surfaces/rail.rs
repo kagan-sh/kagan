@@ -1,13 +1,13 @@
 use gpui_kit::{AppContext as _, TestAppContext, px, size};
-use kg_domain::{Op, SettingsOp, SurfaceOp};
+use kg_domain::{Op, PluginId, PluginOp, RailAction, SettingsOp, SurfaceOp};
 
 use super::{
     install_many, install_pair, item, narrow, open_surface, origin_x, origin_y, run, surfaces,
     tab_to, wide, width_of,
 };
 use crate::tests::kagan::{
-    click, focused_of, label, open_with_plugins_then, press_key, run_shell, selected_of, shows,
-    wait_until,
+    click, focused_of, label, open_with_plugins_then, press_key, right_click, run_shell,
+    selected_of, shows, wait_until,
 };
 
 const ALPHA: &str = "dev.test.alpha";
@@ -210,3 +210,97 @@ export class Cover extends View {
   render() { throw new Error("boom in the overlay"); }
 }
 "#;
+
+fn set_rail(cx: &mut TestAppContext, plugin: &str, action: RailAction) {
+    run(
+        cx,
+        Op::Plugin(PluginOp::Rail {
+            id: PluginId(plugin.into()),
+            action,
+        }),
+    )
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn a_hidden_rail_icon_is_not_drawn_but_its_tool_still_opens(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
+    wide(cx, window);
+    let tool = format!("surface-item-{ALPHA}-tool");
+    assert!(shows(cx, window, &tool));
+    set_rail(cx, ALPHA, RailAction::Hide);
+    wait_until(cx, |cx| !shows(cx, window, &tool));
+    assert!(shows(cx, window, "skills-rail"));
+    assert!(shows(cx, window, "threads-home"));
+    open_surface(cx, ALPHA, "tool").unwrap();
+    assert!(
+        item(&surfaces(cx), ALPHA, "tool").open,
+        "{:?}",
+        surfaces(cx)
+    );
+    wait_until(cx, |cx| shows(cx, window, "alpha-tool"));
+}
+
+#[gpui_kit::test]
+fn settings_shows_a_hidden_icon_again(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
+    wide(cx, window);
+    let tool = format!("surface-item-{ALPHA}-tool");
+    set_rail(cx, ALPHA, RailAction::Hide);
+    wait_until(cx, |cx| !shows(cx, window, &tool));
+    run(cx, Op::Settings(SettingsOp::Plugins)).unwrap();
+    wait_until(cx, |cx| {
+        shows(cx, window, &format!("setting-row-rail-hidden-{ALPHA}"))
+    });
+    click(cx, window, &format!("rail-show-{ALPHA}"));
+    wait_until(cx, |cx| shows(cx, window, &tool));
+}
+
+#[gpui_kit::test]
+fn right_click_on_a_rail_icon_offers_hide_from_rail(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
+    wide(cx, window);
+    let tool = format!("surface-item-{ALPHA}-tool");
+    right_click(cx, window, &tool);
+    wait_until(cx, |cx| shows(cx, window, "rail-hide"));
+    click(cx, window, "rail-hide");
+    wait_until(cx, |cx| !shows(cx, window, &tool));
+}
+
+#[gpui_kit::test]
+fn shift_f10_opens_the_rail_menu_and_enter_hides_the_icon(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
+    wide(cx, window);
+    let tool = format!("surface-item-{ALPHA}-tool");
+    tab_to(cx, window, &tool);
+    press_key(cx, window, "shift-f10");
+    wait_until(cx, |cx| shows(cx, window, "rail-hide"));
+    press_key(cx, window, "down");
+    press_key(cx, window, "enter");
+    wait_until(cx, |cx| !shows(cx, window, &tool));
+    assert_eq!(focused_of(cx, window, "sidebar-pane"), Some(true));
+}
+
+#[gpui_kit::test]
+fn escape_closes_the_rail_menu_and_returns_to_the_icon(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
+    wide(cx, window);
+    let tool = format!("surface-item-{ALPHA}-tool");
+    tab_to(cx, window, &tool);
+    press_key(cx, window, "shift-f10");
+    wait_until(cx, |cx| shows(cx, window, "rail-hide"));
+    press_key(cx, window, "escape");
+    wait_until(cx, |cx| !shows(cx, window, "rail-hide"));
+    assert!(shows(cx, window, &tool));
+    assert_eq!(focused_of(cx, window, &tool), Some(true));
+}
+
+#[gpui_kit::test]
+fn the_menu_key_opens_the_rail_menu_too(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
+    wide(cx, window);
+    let tool = format!("surface-item-{ALPHA}-tool");
+    tab_to(cx, window, &tool);
+    press_key(cx, window, "menu");
+    wait_until(cx, |cx| shows(cx, window, "rail-hide"));
+}

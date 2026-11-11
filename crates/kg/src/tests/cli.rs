@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use kg_domain::{
     AutomationId, AutomationOp, ConfigOp, DiffOp, DiffQuery, DiffScope, EnvironmentSpec, Metadata,
-    Op, OpResult, PluginId, PluginOp, ProjectId, SectionId, SectionOp, SkillOp, TerminalOp,
-    ThreadId, ThreadOp, Timestamp,
+    Op, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, SectionId, SectionOp, SkillOp,
+    TerminalOp, ThreadId, ThreadOp, Timestamp,
 };
 use serde_json::{Value, json};
 
@@ -34,6 +34,26 @@ fn kg_update_checks_and_reads_status_but_cannot_install() {
         Op::Update(kg_domain::UpdateOp::Status)
     );
     assert!(Cli::try_parse_from(["kg", "update", "install"]).is_err());
+}
+
+#[test]
+fn cli_program_keeps_a_line_with_its_flags_as_one_name_and_one_line() {
+    let line = "claude --model claude-opus-5-5 --effort high";
+    assert_eq!(
+        parse(&["program", "save", "Claude, careful", line]),
+        Op::Program(ProgramOp::Save {
+            name: "Claude, careful".into(),
+            line: line.into(),
+        })
+    );
+    assert_eq!(
+        parse(&["program", "pin", "Claude, careful", "true"]),
+        Op::Program(ProgramOp::Pin {
+            name: "Claude, careful".into(),
+            pinned: true,
+        })
+    );
+    assert!(Cli::try_parse_from(["kg", "program", "pin", "Claude, careful"]).is_err());
 }
 
 #[test]

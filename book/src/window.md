@@ -38,6 +38,8 @@ From top to bottom: the kagan mark (About kagan and Settings…), **Threads**, p
 
 A plugin icon opens its tool below the threads, or its page in the center. Click the icon again, or **Close**, to return. **New plugin…** starts a Personal thread with your first installed agent and a prompt to make a plugin.
 
+To take a plugin's icons off the rail, right-click one and choose **Hide from rail**, or press Shift+F10 (or the Menu key) on its focused icon, then Enter. The plugin keeps working, and its tool and pages still open from menus, `kg` and the command palette. **Settings → Installed** lists hidden icons with **Show** to bring them back. Threads, Skills, Settings and the other kagan icons stay on the rail.
+
 ## Activity strip
 
 One line at the bottom of the window, under the sidebars and the center. It is closed by default.

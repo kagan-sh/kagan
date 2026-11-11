@@ -15,8 +15,10 @@ use gpui_kit::{
 use kg_domain::{ProgramSource, split_program};
 
 use super::list::{ProgramRow, Version, version_of};
+use super::saved;
 use super::{CONTEXT, Close, LIST_ROWS, Mode, Picker, Programs, Rows};
 use super::{CloseCustomCommand, RetryPrograms, ToggleCustomCommand};
+use crate::kagan::controls::program_key;
 use crate::kagan::controls::{control, dispatch, note};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -27,7 +29,7 @@ impl RenderOnce for ProgramRow {
         let card = self.program.source == ProgramSource::Known && self.program.installed();
         let detail = match self.program.source {
             ProgramSource::Known => None,
-            ProgramSource::Shell => Some(self.program.command.clone()),
+            ProgramSource::Shell | ProgramSource::Saved => Some(self.program.command.clone()),
             ProgramSource::Recent => split_program(&self.program.command)
                 .ok()
                 .map(|(_, arguments)| arguments.join(" "))
@@ -38,7 +40,7 @@ impl RenderOnce for ProgramRow {
             full: full_version,
         } = version_of(&self.program);
         let tooltip = match self.program.source {
-            ProgramSource::Recent => Some(self.program.command.clone()),
+            ProgramSource::Recent | ProgramSource::Saved => Some(self.program.command.clone()),
             _ => full_version,
         };
         // The selected row says so in words too, not only by its fill.
@@ -49,6 +51,8 @@ impl RenderOnce for ProgramRow {
         };
         let mark = mark_slot(&self.program.label, card, cx);
         let (list, first) = (self.list, self.first);
+        let actions = saved::row_actions(&self.program, &self.picker);
+        let key = program_key(&self.program);
         div()
             .on_children_prepainted(move |bounds, window, cx| {
                 if let Some(row) = bounds.first().filter(|_| first) {
@@ -57,7 +61,7 @@ impl RenderOnce for ProgramRow {
             })
             .child(
                 div()
-                    .id(format!("program-{}", self.program.command))
+                    .id(format!("program-{key}"))
                     .when_some(tooltip, |row, tip| {
                         row.tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
                     })
@@ -82,7 +86,7 @@ impl RenderOnce for ProgramRow {
                                     .child(mark)
                                     .child(
                                         div()
-                                            .id(format!("program-name-{}", self.program.command))
+                                            .id(format!("program-name-{key}"))
                                             .ui_container()
                                             .min_w_0()
                                             .type_body(cx)
@@ -94,10 +98,7 @@ impl RenderOnce for ProgramRow {
                                     .child(div().flex_1().min_w_0().children(detail.map(
                                         |detail| {
                                             div()
-                                                .id(format!(
-                                                    "program-command-{}",
-                                                    self.program.command
-                                                ))
+                                                .id(format!("program-command-{key}"))
                                                 .ui_container()
                                                 .type_small(cx)
                                                 .text_color(muted)
@@ -109,7 +110,7 @@ impl RenderOnce for ProgramRow {
                                     )))
                                     .child(
                                         div()
-                                            .id(format!("program-version-{}", self.program.command))
+                                            .id(format!("program-version-{key}"))
                                             .flex_shrink_0()
                                             .type_caption(cx)
                                             .text_color(muted)
@@ -117,7 +118,8 @@ impl RenderOnce for ProgramRow {
                                             .ui_container()
                                             .aria_label(version.clone())
                                             .child(version),
-                                    ),
+                                    )
+                                    .children(actions),
                             ),
                     ),
             )
@@ -360,6 +362,9 @@ impl Render for Picker {
             })
             .when_some(reason, |this, reason| {
                 this.child(note("program-reason", reason, muted, cx))
+            })
+            .when_some(self.notice.clone(), |this, text| {
+                this.child(saved::notice(text, cx))
             })
             .child(custom_toggle(toggle, custom, cx))
             .when(custom, |this| this.child(self.render_custom(cx)))

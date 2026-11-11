@@ -69,6 +69,7 @@ enum Kind {
     Density,
     FontName,
     SidebarOrder,
+    PluginIds,
 }
 
 const PREFERENCES: &[(&str, Kind)] = &[
@@ -91,6 +92,7 @@ const PREFERENCES: &[(&str, Kind)] = &[
     (Slot::Threads.preference(), Kind::Slot),
     (Slot::Review.preference(), Kind::Slot),
     (prefs::REVIEW_VIEWED, Kind::Map),
+    (prefs::RAIL_HIDDEN, Kind::PluginIds),
 ];
 const LAYOUT: &[(&str, Kind)] = &[
     (prefs::LEFT_SIDEBAR, Kind::Flag),
@@ -174,6 +176,11 @@ fn accepts(kind: Kind, key: &str, value: &serde_json::Value) -> Result<()> {
                 .map(|_| ())
                 .map_err(|_| OpError::Invalid(format!("{key} must be a map")))
         }
+        Kind::PluginIds => serde_json::from_value::<Vec<kg_domain::PluginId>>(value.clone())
+            .ok()
+            .filter(|ids| ids.iter().all(kg_domain::PluginId::valid))
+            .map(|_| ())
+            .ok_or_else(|| OpError::Invalid(format!("{key} must be a list of plugin ids"))),
     }
 }
 

@@ -10,6 +10,7 @@ mod events;
 mod interactions;
 mod plugins;
 mod projects;
+mod saved_programs;
 mod saved_prompts;
 mod schema;
 mod screens;

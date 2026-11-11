@@ -10,6 +10,7 @@ mod event;
 mod interaction;
 mod plugin;
 mod project;
+mod saved_program;
 mod saved_prompt;
 mod screen;
 mod section;
@@ -183,6 +184,13 @@ CREATE TABLE automation_runs (
     started_at INTEGER NOT NULL,
     PRIMARY KEY (automation_id, thread_id)
 );
+",
+    r"
+CREATE TABLE saved_programs (
+    name TEXT PRIMARY KEY COLLATE NOCASE,
+    line TEXT NOT NULL,
+    pinned INTEGER NOT NULL DEFAULT 0
+) WITHOUT ROWID;
 ",
 ];
 

@@ -16,13 +16,13 @@ automation: `kg automation add`, `kg automation pause`, `kg automation resume`, 
 
 project: `kg project list`, `kg project get`, `kg project add`, `kg project remove`, `kg project reorder`, `kg project set-program`.
 
-program: `kg program list`, with `--project` for a project's default.
+program: `kg program list`, with `--project` for a project's default. Save a program line under a name with `kg program save`, giving the name and the line, such as "Claude, careful" and `claude --model claude-opus-5-5 --effort high`; saving a taken name changes its line. `kg program rename` gives one another name, `kg program remove` deletes it, and `kg program pin` pins it with `true` or unpins it with `false`. A saved program is listed by its name, pinned ones first, and starts its line.
 
 env: `kg env list`, `kg env set`, `kg env remove`. A variable is set for every program kagan starts, or for one project with `--project`; a value comes from stdin, and `kg` never prints one.
 
 environment: `kg environment get`, `kg environment restore`, `kg environment branches`, `kg environment setup`, `kg environment set-base`, `kg environment remove`.
 
-plugin: `kg plugin cancel-install`, `kg plugin start`, `kg plugin command`, `kg plugin new`, `kg plugin check`, `kg plugin share`, `kg plugin reload`, `kg plugin dev`, `kg plugin logs`, `kg plugin types`, `kg plugin list`, `kg plugin remove`, `kg plugin install`, `kg plugin update`, `kg plugin outdated`, `kg plugin index add`, `kg plugin index list`, `kg plugin index remove`, `kg plugin search`, `kg plugin enable`, `kg plugin disable`, `kg plugin config get`, `kg plugin config set`, `kg plugin config clear`, `kg plugin use`.
+plugin: `kg plugin cancel-install`, `kg plugin start`, `kg plugin command`, `kg plugin new`, `kg plugin check`, `kg plugin share`, `kg plugin reload`, `kg plugin dev`, `kg plugin logs`, `kg plugin types`, `kg plugin list`, `kg plugin remove`, `kg plugin install`, `kg plugin update`, `kg plugin outdated`, `kg plugin index add`, `kg plugin index list`, `kg plugin index remove`, `kg plugin search`, `kg plugin enable`, `kg plugin disable`, `kg plugin config get`, `kg plugin config set`, `kg plugin config clear`, `kg plugin use`, `kg plugin rail`.
 
 sidebar: `kg sidebar`.
 

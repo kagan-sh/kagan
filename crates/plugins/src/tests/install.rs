@@ -1440,7 +1440,7 @@ fn update_all_reports_a_plugin_that_needs_approval_and_leaves_it(cx: &mut TestAp
 }
 
 #[gpui_kit::test]
-async fn an_uninstalled_plugins_held_store_is_deleted_by_the_retry(cx: &mut TestAppContext) {
+fn an_uninstalled_plugins_held_store_is_deleted_by_the_retry(cx: &mut TestAppContext) {
     let dir = tempfile::tempdir().unwrap();
     let orphan = PluginId("gone.plugin".into());
     let data = kg_core::plugin_data_dir(dir.path(), &orphan);

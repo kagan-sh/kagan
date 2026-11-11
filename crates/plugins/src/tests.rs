@@ -9,6 +9,7 @@ mod install;
 mod jobs;
 mod manifest;
 mod page;
+mod rail;
 mod runtime;
 mod schedule;
 mod script;

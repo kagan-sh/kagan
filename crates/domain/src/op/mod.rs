@@ -59,7 +59,7 @@ pub use keymap::{
     ShortcutScope, ShortcutWhen, default_chord, expand_secondary,
 };
 pub use notify::NotifyOp;
-pub use plugin::{OutdatedPlugin, PluginOp, UpdateTarget};
+pub use plugin::{OutdatedPlugin, PluginOp, RailAction, UpdateTarget};
 pub use preference::PreferenceOp;
 pub use program::ProgramOp;
 pub use project::ProjectOp;
@@ -145,7 +145,7 @@ pub enum Op {
     /// Keyboard shortcuts: built-in ones and plugin commands
     #[command(subcommand)]
     Keymap(KeymapOp),
-    /// Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+    /// Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
     #[command(subcommand)]
     Preference(PreferenceOp),
     /// Agent rules: the global rules, or one project's, that a thread's program is told
