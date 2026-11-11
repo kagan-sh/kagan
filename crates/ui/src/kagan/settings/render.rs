@@ -147,7 +147,7 @@ pub(super) fn row_element(
             name: row.title.clone(),
             value: None,
             disabled: false,
-            selected: Some(marked),
+            selected: marked.then_some(true),
             focus: None,
             hint: None,
         })
@@ -155,7 +155,7 @@ pub(super) fn row_element(
         .px(px(space(SpaceStep::Lg, cx)))
         .py(px(space(SpaceStep::Md, cx)))
         .when(!last, |item| item.border_b_1().border_color(line))
-        .when(marked, |item| item.border_1().border_color(cx.theme().ring))
+        .when(marked, |item| item.bg(cx.theme().secondary))
         .child(body)
         .into_any_element();
     match alias {

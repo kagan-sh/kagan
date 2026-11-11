@@ -33,7 +33,7 @@ pub(super) fn render(page: &Page, window: &mut Window, cx: &mut Context<Page>) -
             cx.theme().muted_foreground,
             cx,
         )
-    } else if skills.is_empty() && page.query_is_empty(cx) && page.yours_is_empty(cx) {
+    } else if skills.is_empty() && page.query_is_empty(cx) && page.yours_is_empty() {
         note(
             "skills-empty",
             "You have no skills yet. Make one with New skill.",
@@ -305,7 +305,7 @@ fn create_row(
         .when(no_project, |column| {
             column.child(note(
                 "skills-scope-reason",
-                "Save in Project needs a project. Pick one from the project list, then open its New thread form.",
+                "Save in Project needs a project. Pick one in the project list.",
                 cx.theme().muted_foreground,
                 cx,
             ))

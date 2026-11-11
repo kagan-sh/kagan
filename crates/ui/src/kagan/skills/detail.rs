@@ -200,7 +200,7 @@ fn actions(page: &Page, shown: &Shown, editable: bool, cx: &mut Context<Page>) -
     if !ready {
         row = row.child(note(
             "skills-fork-reason",
-            "Fork needs a project. Open the project\u{2019}s New thread form to pick it, then Fork opens a new thread in it.",
+            "Fork needs a project. Pick one in the project list, then Fork opens a new thread in it.",
             cx.theme().muted_foreground,
             cx,
         ));

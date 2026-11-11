@@ -178,8 +178,6 @@ fn write(path: &Path, text: &str) -> Result<(), OpError> {
     Ok(written?)
 }
 
-/// Refuses a write when the file no longer holds `expected`, the text the editor read. A missing
-/// file reads as empty.
 fn unchanged(path: &Path, expected: Option<&str>) -> Result<(), OpError> {
     match expected {
         Some(expected) if read_text(path)? != expected => Err(OpError::Changed(

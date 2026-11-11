@@ -200,7 +200,6 @@ impl ThemeState {
                 .background_spawn(async move {
                     text.all_font_names()
                         .into_iter()
-                        .filter(|name| !name.starts_with('.'))
                         .filter_map(|name| {
                             let id = text.resolve_font(&gpui_kit::font(name.clone()));
                             let kind = face_kind(|ch| {
@@ -477,10 +476,6 @@ fn text_of(result: Result<OpResult, OpError>) -> String {
     }
 }
 
-// The families the system has, without the hidden system faces (their names start with a dot).
-// Read off the main thread: the platform walks every font, which takes tens of milliseconds.
-/// What a face can show, from its glyph advances: `None` when it lacks a Latin letter (a symbol,
-/// braille or emoji face), otherwise whether its letters share one width.
 fn face_kind(advance: impl Fn(char) -> Option<f32>) -> Option<bool> {
     for ch in "aeinostAE".chars() {
         advance(ch)?;
@@ -492,6 +487,7 @@ fn face_kind(advance: impl Fn(char) -> Option<f32>) -> Option<bool> {
     Some(widths.iter().all(|width| (width - widths[0]).abs() < 0.5))
 }
 
+// The families the system has, without the hidden system faces (their names start with a dot).
 fn sorted_families(all: Vec<String>) -> Vec<String> {
     let mut names: Vec<String> = all
         .into_iter()

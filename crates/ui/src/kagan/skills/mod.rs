@@ -373,8 +373,7 @@ impl Page {
         self.query.read(cx).value().trim().is_empty()
     }
 
-    /// Whether the filter is Yours and the person has made no skill of their own.
-    fn yours_is_empty(&self, _cx: &gpui_kit::App) -> bool {
+    fn yours_is_empty(&self) -> bool {
         self.filter == Some(SkillSource::User)
             && self
                 .listing

@@ -66,7 +66,6 @@ pub(super) struct Plugins {
     pub(super) logs: Option<(PluginId, String)>,
     pub(super) focus: Option<PluginId>,
     pub(super) index: Entity<InputState>,
-    /// Why the last Add an index failed, shown beside its field until the field changes.
     pub(super) index_error: Option<String>,
     pub(super) query: Entity<InputState>,
     pub(super) found: Option<(Vec<Listing>, Vec<String>)>,
