@@ -114,3 +114,33 @@ async fn diff_revision_changes_for_binary_large_and_truncated_files(cx: &mut Tes
         }
     }
 }
+
+#[gpui_kit::test]
+async fn a_text_file_view_counts_its_lines_and_carries_its_hunks_and_text(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let root = fixture.dir.path();
+    git_in(root, &["init", "-b", "main"]);
+    std::fs::write(root.join("notes.txt"), "one\ntwo\nthree\n").unwrap();
+    git_in(root, &["add", "notes.txt"]);
+    commit(root, &["commit", "-m", "base"]);
+    let OpResult::Thread(started) = op(fixture.run(program()), cx).await.unwrap() else {
+        panic!("thread")
+    };
+    std::fs::write(root.join("notes.txt"), "one\nTWO\nthree\nfour\n").unwrap();
+    let show = Op::Diff(DiffOp::Show {
+        query: DiffQuery {
+            thread_id: started.id.clone(),
+            scope: DiffScope::Uncommitted,
+            base: None,
+            rev: None,
+        },
+        path: "notes.txt".to_owned(),
+    });
+    let OpResult::DiffFile(view) = op(show, cx).await.unwrap() else {
+        panic!("file")
+    };
+    assert_eq!((view.added, view.removed), (2, 1));
+    assert!(!view.hunks.is_empty());
+    assert!(!view.binary && !view.truncated && !view.too_large);
+    assert_eq!(view.file.as_deref(), Some("one\nTWO\nthree\nfour\n"));
+}
