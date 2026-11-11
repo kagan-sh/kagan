@@ -130,7 +130,7 @@ fn an_undecided_run_opens_on_the_spinner_and_keeps_title_as_its_source() {
 fn a_submit_then_output_opens_a_quiet_turn() {
     let (state, changes) = run(
         Source::Undecided,
-        &[(Signal::Submit, 0.0), (Signal::Output, 1.0)],
+        &[(Signal::Submit { screen: 0 }, 0.0), (Signal::Output, 1.0)],
     );
     assert_eq!(changes, [None, Some(Change::Opened)]);
     assert_eq!(state.source(), Source::Quiet);
@@ -141,7 +141,7 @@ fn a_submit_with_no_output_opens_nothing() {
     let (state, changes) = run(
         Source::Undecided,
         &[
-            (Signal::Submit, 0.0),
+            (Signal::Submit { screen: 0 }, 0.0),
             (Signal::Tick, 1.0),
             (Signal::Output, 4.0),
         ],
@@ -155,7 +155,7 @@ fn an_answer_after_the_submit_window_opens_nothing() {
     let late = SUBMIT_WINDOW.as_secs_f64() + 1.0;
     let (state, changes) = run(
         Source::Quiet,
-        &[(Signal::Submit, 0.0), (Signal::Output, late)],
+        &[(Signal::Submit { screen: 0 }, 0.0), (Signal::Output, late)],
     );
     assert_eq!(changes, [None, None]);
     assert!(!state.open());
@@ -166,15 +166,15 @@ fn a_submit_while_open_or_on_a_hook_run_does_nothing() {
     let (_, changes) = run(
         Source::Undecided,
         &[
-            (Signal::Submit, 0.0),
+            (Signal::Submit { screen: 0 }, 0.0),
             (Signal::Output, 0.5),
-            (Signal::Submit, 1.0),
+            (Signal::Submit { screen: 0 }, 1.0),
         ],
     );
     assert_eq!(changes, [None, Some(Change::Opened), None]);
     let (_, changes) = run(
         Source::Hook,
-        &[(Signal::Submit, 0.0), (Signal::Output, 0.5)],
+        &[(Signal::Submit { screen: 0 }, 0.0), (Signal::Output, 0.5)],
     );
     assert_eq!(changes, [None, None]);
 }
@@ -184,7 +184,7 @@ fn a_spinner_takes_over_an_open_quiet_turn_without_a_new_event() {
     let (state, changes) = run(
         Source::Undecided,
         &[
-            (Signal::Submit, 0.0),
+            (Signal::Submit { screen: 0 }, 0.0),
             (Signal::Output, 0.5),
             (Signal::Title { busy: true }, 1.0),
         ],
@@ -198,7 +198,7 @@ fn a_hook_takes_over_an_open_quiet_turn_without_a_new_event() {
     let (state, changes) = run(
         Source::Undecided,
         &[
-            (Signal::Submit, 0.0),
+            (Signal::Submit { screen: 0 }, 0.0),
             (Signal::Output, 0.5),
             (Signal::HookStart, 1.0),
         ],
@@ -213,7 +213,7 @@ fn quiet_output_closes_a_quiet_turn_only_after_its_limit() {
     let (state, changes) = run(
         Source::Undecided,
         &[
-            (Signal::Submit, 0.0),
+            (Signal::Submit { screen: 0 }, 0.0),
             (Signal::Output, 0.5),
             (Signal::Tick, 0.5 + just_under),
             (Signal::Tick, 0.5 + QUIET_OUTPUT.as_secs_f64()),
@@ -231,7 +231,7 @@ fn a_screen_that_only_repaints_the_same_text_does_not_keep_a_quiet_turn_open() {
     let (state, changes) = run(
         Source::Undecided,
         &[
-            (Signal::Submit, 0.0),
+            (Signal::Submit { screen: 0 }, 0.0),
             (Signal::Screen(7), 0.5),
             (Signal::Screen(7), 10.0),
             (Signal::Screen(7), 20.0),
@@ -254,7 +254,7 @@ fn a_screen_with_new_text_keeps_a_quiet_turn_open() {
     let (state, changes) = run(
         Source::Undecided,
         &[
-            (Signal::Submit, 0.0),
+            (Signal::Submit { screen: 0 }, 0.0),
             (Signal::Screen(7), 0.5),
             (Signal::Screen(8), 10.0),
             (Signal::Tick, 20.0),
@@ -270,7 +270,7 @@ fn text_is_wanted_only_while_a_quiet_turn_is_open_or_a_submit_waits() {
     let base = Instant::now();
     let mut state = TurnState::new(Source::Undecided);
     assert!(!state.wants_text());
-    state.apply(Signal::Submit, base);
+    state.apply(Signal::Submit { screen: 0 }, base);
     assert!(state.wants_text());
     state.apply(Signal::Output, base);
     assert!(state.wants_text());
@@ -331,5 +331,18 @@ fn a_hook_end_closes_a_turn_the_title_opened() {
         &[(Signal::Title { busy: true }, 0.0), (Signal::HookEnd, 1.0)],
     );
     assert_eq!(changes[1], Some(Change::Closed));
+    assert!(!state.open());
+}
+
+#[test]
+fn a_redraw_right_after_a_submit_is_not_output_when_the_text_did_not_change() {
+    let (state, changes) = run(
+        Source::Undecided,
+        &[
+            (Signal::Submit { screen: 7 }, 0.0),
+            (Signal::Screen(7), 0.5),
+        ],
+    );
+    assert_eq!(changes, [None, None], "an unchanged screen opened a turn");
     assert!(!state.open());
 }

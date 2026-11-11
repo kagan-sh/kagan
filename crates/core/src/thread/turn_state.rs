@@ -25,8 +25,11 @@ pub(crate) enum Signal {
     Title {
         busy: bool,
     },
-    /// The person sent a line to a known agent.
-    Submit,
+    /// The person sent a line to a known agent. `screen` is the visible text just before it, so
+    /// the program's first redraw is compared with what was on screen when the line went in.
+    Submit {
+        screen: u64,
+    },
     /// The program's output changed.
     Output,
     /// The visible text hashes to this value. Only a change in it counts as output.
@@ -104,9 +107,10 @@ impl TurnState {
             Signal::HookEnd | Signal::Ended => self.close(),
             Signal::Title { busy: true } => self.spinner(now),
             Signal::Title { busy: false } => self.plain(now),
-            Signal::Submit => {
+            Signal::Submit { screen } => {
                 if !self.open && matches!(self.source, Source::Undecided | Source::Quiet) {
                     self.submitted_at = Some(now);
+                    self.screen = Some(screen);
                 }
                 None
             }
