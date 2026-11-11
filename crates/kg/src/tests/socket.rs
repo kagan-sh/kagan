@@ -613,3 +613,21 @@ fn a_question_is_announced_then_the_reply_says_how_it_ended() {
         "the question is still announced"
     );
 }
+
+#[test]
+fn a_full_pipe_path_names_the_same_pipe_as_its_bare_name() {
+    use std::ffi::OsStr;
+
+    assert_eq!(
+        socket::pipe_leaf(OsStr::new(r"\\.\pipe\kagan-a")),
+        OsStr::new("kagan-a")
+    );
+    assert_eq!(
+        socket::pipe_leaf(OsStr::new(r"\\.\PIPE\kagan-a")),
+        OsStr::new("kagan-a")
+    );
+    assert_eq!(
+        socket::pipe_leaf(OsStr::new("kagan-a")),
+        OsStr::new("kagan-a")
+    );
+}

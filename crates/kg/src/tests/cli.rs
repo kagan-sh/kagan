@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use kg_domain::{
     AutomationId, AutomationOp, ConfigOp, DiffOp, DiffQuery, DiffScope, EnvironmentSpec, Metadata,
-    Op, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, SectionId, SectionOp, SkillOp,
+    Op, OpError, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, SectionId, SectionOp, SkillOp,
     TerminalOp, ThreadId, ThreadOp, Timestamp,
 };
 use serde_json::{Value, json};
@@ -997,4 +997,48 @@ fn a_word_that_is_not_utf8_becomes_lossy_text_instead_of_a_panic() {
         std::ffi::OsString::from_vec(vec![0xff, b'a']),
     ]);
     assert_eq!(words, ["kg", "\u{fffd}a"]);
+}
+
+#[test]
+fn keymap_reset_needs_no_key_but_setting_a_chord_does() {
+    assert_eq!(
+        parse(&["keymap", "set", "NewThread", "--reset"]),
+        Op::Keymap(kg_domain::KeymapOp::Set {
+            action: "NewThread".into(),
+            key: String::new(),
+            reset: true,
+        })
+    );
+}
+
+#[test]
+fn setting_a_chord_without_a_key_is_refused_before_the_app_is_asked() {
+    let op = parse(&["keymap", "set", "NewThread"]);
+    assert!(
+        matches!(crate::cli::run(op, false), Err(OpError::Invalid(text)) if text == "a KEY is needed unless --reset is given")
+    );
+}
+
+#[test]
+fn a_taken_chord_is_a_failure_on_the_command_line() {
+    let op = parse(&["keymap", "set", "ToggleSidebar", "secondary-j"]);
+    let taken = OpResult::Setting(json!({ "ok": false, "conflict": "NewThread" }));
+    let error = crate::cli::refuse_conflict(&op, &taken).unwrap_err();
+    assert!(
+        matches!(&error, OpError::Invalid(text) if text == "secondary-j is already bound to NewThread"),
+        "{error:?}"
+    );
+    let saved = OpResult::Setting(json!({ "ok": true }));
+    assert!(crate::cli::refuse_conflict(&op, &saved).is_ok());
+}
+
+#[test]
+fn an_unknown_word_says_it_is_not_a_command() {
+    let Err(OpError::Invalid(text)) = crate::plugin_cli(vec!["nosuch".into()]) else {
+        panic!("expected an invalid-command error");
+    };
+    assert_eq!(
+        text,
+        "kg nosuch needs a command after it, or is not a kg command. Run kg --help."
+    );
 }

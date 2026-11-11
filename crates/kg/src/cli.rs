@@ -4,14 +4,16 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use kg_domain::{
-    BrowserOp, BrowserSnapshot, ConfigOp, EnvOp, InstructionsOp, Op, OpError, OpResult, PluginOp,
-    PreviewKind, SavedPromptOp, TEXT_MAX, ThreadOp, UiSnapshot, is_git_source,
+    BrowserOp, BrowserSnapshot, ConfigOp, EnvOp, InstructionsOp, KeymapOp, Op, OpError, OpResult,
+    PluginOp, PreviewKind, SavedPromptOp, TEXT_MAX, ThreadOp, UiSnapshot, is_git_source,
 };
+use serde_json::Value;
 
 use crate::out;
 use crate::socket::Client;
 
 pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
+    refuse_bare_key(&op)?;
     if let Op::Thread(ThreadOp::Turn(_)) = &op {
         turn_hook(&op);
         return Ok(());
@@ -109,8 +111,34 @@ pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
                 eprintln!("{notice}. kagan may ask for your OK in its window.");
             }
             let result = client.call(&op)?;
+            refuse_conflict(&op, &result)?;
             print_result(&result, next, json)
         }
+    }
+}
+
+// Setting a chord needs its key; only `--reset` may leave it out.
+fn refuse_bare_key(op: &Op) -> Result<(), OpError> {
+    match op {
+        Op::Keymap(KeymapOp::Set {
+            key, reset: false, ..
+        }) if key.is_empty() => Err(OpError::Invalid(
+            "a KEY is needed unless --reset is given".into(),
+        )),
+        _ => Ok(()),
+    }
+}
+
+// The app answers a taken chord with `ok: false`, which the window reads. On the command line it is a failure.
+pub(crate) fn refuse_conflict(op: &Op, result: &OpResult) -> Result<(), OpError> {
+    let (Op::Keymap(KeymapOp::Set { key, .. }), OpResult::Setting(value)) = (op, result) else {
+        return Ok(());
+    };
+    match value.get("conflict").and_then(Value::as_str) {
+        Some(conflict) if value["ok"] == false => Err(OpError::Invalid(format!(
+            "{key} is already bound to {conflict}"
+        ))),
+        _ => Ok(()),
     }
 }
 

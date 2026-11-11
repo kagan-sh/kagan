@@ -143,7 +143,25 @@ pub(crate) fn location() -> io::Result<std::ffi::OsString> {
 pub(crate) fn name(location: &std::ffi::OsStr) -> io::Result<Name<'static>> {
     use interprocess::local_socket::{GenericNamespaced, ToNsName};
 
-    location.to_os_string().to_ns_name::<GenericNamespaced>()
+    pipe_leaf(location)
+        .to_os_string()
+        .to_ns_name::<GenericNamespaced>()
+}
+
+// A pipe is `\\.\pipe\<name>`, but the namespaced name is only `<name>`: the prefix is added
+// for us, so a `KG_SOCKET` written as the full path must lose it.
+#[cfg(any(windows, test))]
+pub(crate) fn pipe_leaf(location: &std::ffi::OsStr) -> &std::ffi::OsStr {
+    const PREFIX: &str = r"\\.\pipe\";
+    let Some(text) = location.to_str() else {
+        return location;
+    };
+    match text.get(..PREFIX.len()) {
+        Some(head) if head.eq_ignore_ascii_case(PREFIX) => {
+            std::ffi::OsStr::new(&text[PREFIX.len()..])
+        }
+        _ => location,
+    }
 }
 
 /// Checks a `/tmp/kagan-<id>` folder before a client connects to it.
@@ -564,6 +582,7 @@ fn start_headless(location: &std::ffi::OsStr) -> io::Result<()> {
     #[cfg(windows)]
     {
         use windows_sys::Win32::System::Threading::{CREATE_NO_WINDOW, DETACHED_PROCESS};
+        crate::pipe::stop_inheriting_std_handles();
         std::os::windows::process::CommandExt::creation_flags(
             &mut command,
             DETACHED_PROCESS | CREATE_NO_WINDOW,

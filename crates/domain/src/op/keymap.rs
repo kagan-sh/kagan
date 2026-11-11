@@ -166,6 +166,7 @@ pub enum KeymapOp {
         /// Action name, such as `ToggleSidebar`, or `<plugin-id>:<command>` for a plugin's command
         action: String,
         /// Chord to record. Empty with `--reset`.
+        #[arg(default_value = "")]
         key: String,
         /// Drop the saved chord and use the default key
         #[arg(long)]
