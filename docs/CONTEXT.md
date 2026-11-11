@@ -120,7 +120,7 @@ A plugin's timer. Kagan runs one of its jobs every so many minutes while kagan i
 _Avoid_: cron job, cron, background job, service
 
 **Automation**:
-A named text, a program line, and a time, that starts a thread in one project. The time is an interval of 1 to 1440 whole minutes, or one time to run once. While kagan is open, a due automation starts a thread and sends the text once the program is running. A paused automation does not start another thread. A thread it already started is left alone. It does not run while kagan is quit [decision 231].
+A named text, a program line, and a time, that starts a thread in one project. The time is an interval of 1 to 1440 whole minutes, or one time to run once. While kagan is open, a due automation starts a thread and sends the text once the program is running. A paused automation does not start another thread. A thread it already started is left alone. It does not run while kagan is quit [decision 232].
 _Avoid_: schedule, background job
 
 **Skill**:
