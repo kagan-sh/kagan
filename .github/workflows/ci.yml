@@ -138,8 +138,7 @@ jobs:
   linux-clippy:
     needs: [scope, checks]
     if: needs.scope.outputs.skip != 'true'
-    # Pinned: ubuntu-latest moved to resolute, and its runners could not reach the Ubuntu mirrors (run 43046349109).
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=mold
@@ -163,8 +162,7 @@ jobs:
   linux-tests:
     needs: [scope, checks]
     if: needs.scope.outputs.skip != 'true'
-    # Pinned: ubuntu-latest moved to resolute, and its runners could not reach the Ubuntu mirrors (run 43046349109).
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=mold
