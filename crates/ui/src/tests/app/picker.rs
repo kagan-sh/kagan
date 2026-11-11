@@ -907,6 +907,24 @@ fn a_version_written_with_a_v_shows_its_number(cx: &mut TestAppContext) {
 
 #[cfg(unix)]
 #[gpui_kit::test]
+fn a_version_stays_clear_of_the_list_scrollbar(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    fixture_programs(cx, data.path(), &["codex"]);
+    start_in_plain_folder(cx, window, data.path());
+    wait_until(cx, |cx| {
+        label(cx, window, "program-version-codex") == "1.2.3"
+    });
+    let (version_x, _, version_w, _) = bounds(cx, window, "program-version-codex").unwrap();
+    let (list_x, _, list_w, _) = bounds(cx, window, "program-list").unwrap();
+    assert!(
+        version_x + version_w <= list_x + list_w - 12.0,
+        "the version ends {} before the list's edge; the scrollbar needs about 12",
+        list_x + list_w - (version_x + version_w)
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
 fn the_custom_command_label_starts_on_the_program_names(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
     fixture_programs(cx, data.path(), &["codex"]);

@@ -51,7 +51,9 @@ impl RenderOnce for ProgramRow {
         } else {
             self.program.label.clone()
         };
-        let mark = mark_slot(&self.program.label, card, cx);
+        // A saved program is marked by its letter too, as the built-in ones are.
+        let marked = card || self.program.source == ProgramSource::Saved;
+        let mark = mark_slot(&self.program.label, marked, cx);
         let (list, first) = (self.list, self.first);
         let key = program_key(&self.program);
         let row_group = format!("program-row-{key}");
@@ -77,7 +79,9 @@ impl RenderOnce for ProgramRow {
                         self.base
                             .group(row_group)
                             .when(self.selected, |row| row.bg(cx.theme().secondary))
-                            .px_2()
+                            .pl_2()
+                            // The right gutter keeps the list scrollbar off the version.
+                            .pr_4()
                             .h_7()
                             .rounded(cx.theme().radius)
                             .relative()

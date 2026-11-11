@@ -331,3 +331,15 @@ fn a_saved_row_shows_its_buttons_only_while_it_is_selected(cx: &mut TestAppConte
         "a row that is not selected or under the pointer shows none"
     );
 }
+
+#[gpui_kit::test]
+fn a_saved_program_has_a_letter_mark_like_a_built_in_one(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    save(cx, "Alpha", "codex --alpha");
+    start_in_plain_folder(cx, window, data.path());
+    search(cx, window, "Alpha");
+    assert!(
+        shows(cx, window, "program-mark-Alpha"),
+        "the saved row has its letter mark"
+    );
+}
