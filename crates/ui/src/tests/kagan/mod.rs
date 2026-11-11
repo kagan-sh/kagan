@@ -71,9 +71,10 @@ pub(in crate::tests) use surfaces::{
     click_through_driver, install_overlay, install_twin, observed_label, open_surface,
     overlay_source, run_op,
 };
+#[cfg(unix)]
+pub(in crate::tests) use terminal::{cell_point, selection, shown_row};
 pub(in crate::tests) use terminal::{
-    cell_point, drag_to, hover_to, line, press, release, selection, send, shell, shown_row,
-    split_command,
+    drag_to, hover_to, line, press, release, send, shell, split_command,
 };
 #[cfg(unix)]
 pub(in crate::tests) use worktree::threads_in;
