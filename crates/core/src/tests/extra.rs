@@ -123,7 +123,7 @@ async fn live_containments_names_each_terminal_and_what_ends_it(cx: &mut TestApp
     let fixture = shell_fixture(cx).await;
     let (id, _reap) = started(&fixture, "/bin/sh", cx).await;
     let number = open(&id, cx).await;
-    let expected = if cfg!(windows) { "job" } else { "tree" };
+    let expected = "tree";
     let live = fixture
         .workspace
         .read_with(cx, |workspace, _| workspace.live_containments());

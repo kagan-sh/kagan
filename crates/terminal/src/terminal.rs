@@ -46,7 +46,7 @@ pub enum Containment {
     /// A Job Object: closing or terminating it ends the program and what it started.
     #[cfg(windows)]
     Job(kg_process::Job),
-    /// The job could not be made or assigned, so only the program is ended. The text is the OS error.
+    /// The job could not be made or assigned, so only the program is ended. Holds the OS error.
     #[cfg(windows)]
     Unavailable(io::Error),
 }
@@ -338,8 +338,8 @@ fn contain_program(_process_id: u32) -> Containment {
     Containment::Tree
 }
 
-// The pty starts the program, so it runs briefly before it joins the job. Without a job,
-// closing the console still ends the programs attached to it.
+// The pty starts the program, so it runs briefly before it joins the job. Closing the pty's
+// console also ends the programs on that console, but not one with its own console.
 #[cfg(windows)]
 fn contain_program(process_id: u32) -> Containment {
     contain(process_id, kg_process::Job::assign)
