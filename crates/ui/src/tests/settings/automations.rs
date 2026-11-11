@@ -1,4 +1,4 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use gpui_kit::TestAppContext;
 use kg_core::Workspace;
@@ -147,4 +147,33 @@ fn an_empty_program_uses_the_project_default(cx: &mut TestAppContext) {
     click(cx, window, "automation-add");
     wait_until(cx, |cx| !rows(cx).is_empty());
     assert_eq!(rows(cx).remove(0).program, program());
+}
+
+#[gpui_kit::test]
+fn a_failed_start_reaches_the_open_project_page_without_a_reopen(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    cx.run_until_parked();
+    cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Automation(AutomationOp::Add {
+                name: "Missing".into(),
+                body: "ping".into(),
+                project_id: ProjectId("prj_kagan".into()),
+                program: "kg-no-such-program".into(),
+                minutes: Some(1),
+                at: None,
+            }),
+            cx,
+        )
+    })
+    .detach();
+    cx.run_until_parked();
+    open_project_page(cx);
+    let row = rows(cx).remove(0);
+    let threads = format!("automation-threads-{}", row.id);
+    cx.executor().advance_clock(Duration::from_mins(2));
+    cx.run_until_parked();
+    wait_until(cx, |cx| {
+        label(cx, window, &threads).starts_with("Last start failed")
+    });
 }

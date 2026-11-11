@@ -15,6 +15,7 @@ use crate::workspace::{self, Workspace, id, missing, time};
 
 const MINUTE_MS: i64 = 60_000;
 const RETRY_MINUTES: u16 = 1;
+const REASON_MAX: usize = 200;
 
 pub(crate) fn watch(cx: &mut Context<Workspace>) -> Task<()> {
     cx.spawn(async move |this, cx| {
@@ -259,10 +260,22 @@ async fn postpone(
 ) -> Result<()> {
     let next = later(time(this, cx)?, minutes);
     let id = id.clone();
-    let reason = reason.to_owned();
+    let reason = one_line(reason);
     database
         .call(move |store| store.postpone_automation(&id, next, &reason))
-        .await
+        .await?;
+    Workspace::refresh(this, cx).await
+}
+
+// The reason is shown on one row, so only its first line, cut to a short length, is kept.
+pub(crate) fn one_line(reason: &str) -> String {
+    reason
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .chars()
+        .take(REASON_MAX)
+        .collect()
 }
 
 fn later(now: Timestamp, minutes: u16) -> Timestamp {

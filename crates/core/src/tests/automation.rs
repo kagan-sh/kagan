@@ -369,3 +369,15 @@ async fn a_person_question_is_reported_to_the_requester_by_title(cx: &mut TestAp
     deleting.await.unwrap();
     drop(gone_sender);
 }
+
+#[test]
+fn a_failure_reason_is_one_short_line() {
+    assert_eq!(crate::automation::one_line("first\nsecond"), "first");
+    assert_eq!(crate::automation::one_line(""), "");
+    assert_eq!(
+        crate::automation::one_line(&"x".repeat(500))
+            .chars()
+            .count(),
+        200
+    );
+}
