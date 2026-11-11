@@ -9,6 +9,7 @@ pub(super) fn chord(action: &str) -> String {
 
 mod agent_rules;
 mod approvals;
+mod browser_tab;
 mod commands;
 mod ended;
 mod keys;
