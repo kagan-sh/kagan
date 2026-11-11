@@ -18,7 +18,7 @@ use super::automations::List;
 use super::group_block;
 use super::row::{Group, Row, group, row};
 use crate::kagan::Kagan;
-use crate::kagan::controls::{choice_item, choice_trigger};
+use crate::kagan::controls::{choice_item, choice_trigger, program_key};
 use crate::kagan::rules::RulesEditor;
 use crate::kagan::screen::{Center, FocusReturn};
 use crate::kagan::variables::Variables;
@@ -242,20 +242,31 @@ impl Page {
     }
 }
 
+// The row a stored line marks. A line can be saved under several names, so only the first row that
+// runs it is marked, the same row the trigger's label names.
+pub(crate) fn marked_program(programs: &[Program], current: Option<&String>) -> Option<usize> {
+    current.and_then(|stored| {
+        programs
+            .iter()
+            .position(|program| &program.command == stored)
+    })
+}
+
 fn program_menu(
     menu: PopupMenu,
     page: &WeakEntity<Page>,
     current: Option<&String>,
     programs: &[Program],
 ) -> PopupMenu {
+    let marked = marked_program(programs, current);
     let menu = programs
         .iter()
-        .fold(menu.scrollable(true), |menu, program| {
-            let selected = current.is_some_and(|stored| stored == &program.command);
+        .enumerate()
+        .fold(menu.scrollable(true), |menu, (index, program)| {
             let item = choice_item(
-                format!("project-program-menu-{}", program.command),
+                format!("project-program-menu-{}", program_key(program)),
                 program.label.clone(),
-                selected,
+                marked == Some(index),
             );
             let pick = program.command.clone();
             let page = page.clone();
@@ -365,3 +376,7 @@ impl Kagan {
         cx.notify();
     }
 }
+
+#[cfg(test)]
+#[path = "project_test.rs"]
+mod tests;

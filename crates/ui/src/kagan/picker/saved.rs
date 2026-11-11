@@ -5,23 +5,24 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{Sizable as _, h_flex};
 use gpui_kit::{
-    AnyElement, ClickEvent, Context, Focusable as _, InteractiveElement as _, IntoElement,
+    AnyElement, App, Context, Focusable as _, InteractiveElement as _, IntoElement,
     ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, Task,
     WeakEntity, Window, div,
 };
 use kg_core::Workspace;
 use kg_domain::{Op, OpError, OpResult, Program, ProgramOp, ProgramSource};
 
-use super::list::{self, custom_command};
+use super::list::custom_command;
 use super::{Mode, Picker};
-use crate::kagan::controls::control;
+use crate::kagan::SaveSavedProgram;
+use crate::kagan::controls::{control, dispatch, program_key};
 use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 impl Picker {
     // Saves the custom command under the typed name, or renames the saved program being edited.
-    pub(super) fn save_program(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn save_program(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.mode != Mode::Custom {
             return;
         }
@@ -55,6 +56,35 @@ impl Picker {
             .update(cx, |state, cx| state.set_value(name, window, cx));
         window.focus(&self.name.focus_handle(cx), cx);
         cx.notify();
+    }
+
+    // The keyboard path to the buttons: each acts on the selected row, and only a saved program has
+    // one.
+    pub(crate) fn pin_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(program) = self.selected_saved(cx) {
+            self.set_pinned(program.label, !program.pinned, window, cx);
+        }
+    }
+
+    pub(crate) fn rename_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(program) = self.selected_saved(cx) {
+            self.begin_rename(&program.label, window, cx);
+        }
+    }
+
+    pub(crate) fn delete_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(program) = self.selected_saved(cx) {
+            self.remove_saved(program.label, window, cx);
+        }
+    }
+
+    fn selected_saved(&self, cx: &App) -> Option<Program> {
+        self.list
+            .read(cx)
+            .delegate()
+            .selected()
+            .filter(|program| program.source == ProgramSource::Saved)
+            .cloned()
     }
 
     pub(super) fn set_pinned(
@@ -108,8 +138,8 @@ impl Picker {
     }
 }
 
-// Save, or Rename while a saved program is being renamed.
-pub(super) fn save_control(editing: bool, cx: &mut Context<Picker>) -> impl IntoElement {
+// Save, or Rename while a saved program is being renamed. Its key is the same action.
+pub(super) fn save_control(editing: bool) -> impl IntoElement {
     let label = if editing { "Rename" } else { "Save program" };
     control(
         "saved-program-save",
@@ -118,9 +148,7 @@ pub(super) fn save_control(editing: bool, cx: &mut Context<Picker>) -> impl Into
             .small()
             .outline()
             .label(label)
-            .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
-                this.save_program(window, cx);
-            })),
+            .on_click(dispatch(SaveSavedProgram)),
     )
 }
 
@@ -135,15 +163,12 @@ pub(super) fn notice(text: SharedString, cx: &gpui_kit::App) -> impl IntoElement
 }
 
 // A saved program's row buttons: pin or unpin, rename, and delete. Other rows have none.
-pub(super) fn row_actions(
-    program: &Program,
-    picker: Option<&WeakEntity<Picker>>,
-) -> Option<AnyElement> {
+pub(super) fn row_actions(program: &Program, picker: &WeakEntity<Picker>) -> Option<AnyElement> {
     if program.source != ProgramSource::Saved {
         return None;
     }
-    let picker = picker?.clone();
-    let key = list::key(program);
+    let picker = picker.clone();
+    let key = program_key(program);
     let name = program.label.clone();
     let (pin_label, pinned) = if program.pinned {
         ("Unpin", false)

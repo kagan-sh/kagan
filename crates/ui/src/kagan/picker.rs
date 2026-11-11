@@ -32,7 +32,6 @@ enum Mode {
     Custom,
 }
 
-#[derive(Default)]
 pub(super) struct Rows {
     all: Vec<Program>,
     matches: Vec<Program>,
@@ -42,10 +41,23 @@ pub(super) struct Rows {
     mode: Mode,
     row_height: Option<Pixels>,
     // The picker that owns these rows, for a saved program's pin, rename and delete buttons.
-    picker: Option<WeakEntity<Picker>>,
+    picker: WeakEntity<Picker>,
 }
 
 impl Rows {
+    fn new(picker: WeakEntity<Picker>) -> Self {
+        Self {
+            all: Vec::new(),
+            matches: Vec::new(),
+            selected: None,
+            query: String::new(),
+            loading: false,
+            mode: Mode::Catalog,
+            row_height: None,
+            picker,
+        }
+    }
+
     fn search(&mut self, query: &str) {
         // A change to the same text keeps the selection the person has made.
         if query == self.query {
@@ -98,7 +110,7 @@ mod list;
 
 use list::{Field, custom_command, custom_field};
 mod render;
-mod saved;
+pub(crate) mod saved;
 mod state;
 impl Picker {
     fn render_custom(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -114,7 +126,7 @@ impl Picker {
                     muted,
                     cx,
                 ))
-                .child(saved::save_control(true, cx))
+                .child(saved::save_control(true))
                 .into_any_element();
         }
         let (program_note, arguments_note) = match custom_command(
@@ -161,7 +173,7 @@ impl Picker {
                 muted,
                 cx,
             ))
-            .child(saved::save_control(false, cx))
+            .child(saved::save_control(false))
             .into_any_element()
     }
 }

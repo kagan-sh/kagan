@@ -197,3 +197,30 @@ async fn a_project_can_default_to_a_saved_program(cx: &mut TestAppContext) {
     assert_eq!(rows[0].label, "Fast tool");
     assert!(rows[0].installed());
 }
+
+#[gpui_kit::test]
+async fn renaming_a_missing_name_is_not_found_even_when_the_new_name_is_taken(
+    cx: &mut TestAppContext,
+) {
+    let _fixture = Fixture::new(cx).await;
+    op(save("Beta", "codex"), cx).await.unwrap();
+    let missing = op(
+        Op::Program(ProgramOp::Rename {
+            name: "Ghost".into(),
+            to: "Beta".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(missing, OpError::NotFound(_)), "{missing}");
+}
+
+#[gpui_kit::test]
+async fn a_saved_line_is_stored_trimmed_so_it_matches_a_recent_one(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    op(save("Padded", "  claude  "), cx).await.unwrap();
+    let saved = saved_list(cx).await;
+    assert_eq!(saved.len(), 1);
+    assert_eq!(saved[0].command, "claude");
+}

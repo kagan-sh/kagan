@@ -187,8 +187,9 @@ fn cancel_leaves_the_new_thread_screen(cx: &mut TestAppContext) {
 }
 
 // The form's controls in the order Tab reaches them, after the program search.
-const FORM_STOPS: [&str; 6] = [
+const FORM_STOPS: [&str; 7] = [
     "custom-command-toggle-button",
+    "saved-program-save-button",
     "folder-project-button",
     "folder-worktree-button",
     "branch-from-button",
@@ -200,10 +201,10 @@ const FORM_STOPS: [&str; 6] = [
 fn tab_visits_each_control_of_the_form_in_order_then_escape_leaves(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open_git_form(cx);
     click(cx, window, "program-search");
-    // Shell is a custom command, so its text fields, the saved program name and its Save sit
-    // between the toggle and the folder.
+    // Shell is a custom command, so its three text fields (program, arguments, name) sit between
+    // the toggle and its Save button, and Save sits before the folder.
     let mut order = Vec::new();
-    for _ in 0..FORM_STOPS.len() + 4 {
+    for _ in 0..FORM_STOPS.len() + 3 {
         press_key(cx, window, "tab");
         order.extend(
             FORM_STOPS

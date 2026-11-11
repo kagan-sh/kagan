@@ -197,11 +197,10 @@ async fn a_projects_installed_program_is_its_new_thread_default(cx: &mut TestApp
     assert!(matches!(missing, OpError::NotFound(_)), "{missing}");
 }
 
-#[cfg(unix)]
 #[test]
 fn saved_programs_sit_after_the_shell_and_before_recent_ones_and_fold_a_repeat() {
+    // Nothing is installed on this PATH, so the order does not depend on the machine.
     let dir = tempfile::tempdir().unwrap();
-    fake_program(dir.path(), "tool", "true");
     let saved = |name: &str, line: &str, pinned: bool| kg_domain::SavedProgram {
         name: name.into(),
         line: line.into(),

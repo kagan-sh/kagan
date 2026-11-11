@@ -14,10 +14,11 @@ use gpui_kit::{
 };
 use kg_domain::{ProgramSource, split_program};
 
-use super::list::{ProgramRow, Version, key, version_of};
+use super::list::{ProgramRow, Version, version_of};
 use super::saved;
 use super::{CONTEXT, Close, LIST_ROWS, Mode, Picker, Programs, Rows};
 use super::{CloseCustomCommand, RetryPrograms, ToggleCustomCommand};
+use crate::kagan::controls::program_key;
 use crate::kagan::controls::{control, dispatch, note};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -50,8 +51,8 @@ impl RenderOnce for ProgramRow {
         };
         let mark = mark_slot(&self.program.label, card, cx);
         let (list, first) = (self.list, self.first);
-        let actions = saved::row_actions(&self.program, self.picker.as_ref());
-        let key = key(&self.program);
+        let actions = saved::row_actions(&self.program, &self.picker);
+        let key = program_key(&self.program);
         div()
             .on_children_prepainted(move |bounds, window, cx| {
                 if let Some(row) = bounds.first().filter(|_| first) {

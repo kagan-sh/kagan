@@ -201,6 +201,17 @@ fn announce(
 /// Whether `op` runs on the one-at-a-time request queue.
 ///
 /// A serialized handler must finish without waiting for a person or for another request:
+/// A saved program change is one database call, so it runs in turn with the other writes.
+fn saved_program_change(op: &ProgramOp) -> bool {
+    matches!(
+        op,
+        ProgramOp::Save { .. }
+            | ProgramOp::Rename { .. }
+            | ProgramOp::Remove { .. }
+            | ProgramOp::Pin { .. }
+    )
+}
+
 /// `Workspace::handle` awaits it before the loop reads the next envelope. An op that asks
 /// (`ProjectOp::Remove`, `ThreadOp::Delete`, `AutomationOp::Delete`, and the plugin ops that approve powers or a
 /// removal) is detached, and a detached handler submits its request only after the person
@@ -257,13 +268,8 @@ pub(crate) fn serialized(op: &Op) -> bool {
             | kg_domain::SavedPromptOp::Star { .. }
             | kg_domain::SavedPromptOp::Delete { .. },
         )
-        | Op::Program(
-            ProgramOp::Save { .. }
-            | ProgramOp::Rename { .. }
-            | ProgramOp::Remove { .. }
-            | ProgramOp::Pin { .. },
-        )
         | Op::Ui(_) => true,
+        Op::Program(op) => saved_program_change(op),
         Op::Automation(op) => {
             !matches!(op, AutomationOp::List { .. } | AutomationOp::Delete { .. })
         }

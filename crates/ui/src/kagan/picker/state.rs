@@ -10,7 +10,8 @@ use super::{Mode, Picker, Programs, Rows, Start};
 
 impl Picker {
     pub(crate) fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let list = cx.new(|cx| ListState::new(Rows::default(), window, cx));
+        let picker = cx.weak_entity();
+        let list = cx.new(|cx| ListState::new(Rows::new(picker), window, cx));
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search programs"));
         let program =
             cx.new(|cx| InputState::new(window, cx).placeholder("Program, such as claude"));
@@ -54,6 +55,15 @@ impl Picker {
                 }
             })
         }));
+        // A refusal says what to change, so it goes once the person starts changing a field.
+        subscriptions.extend([&program, &arguments, &name].map(|field| {
+            cx.subscribe_in(field, window, |this, _, event, _, cx| {
+                if let InputEvent::Change = event {
+                    this.notice = None;
+                    cx.notify();
+                }
+            })
+        }));
         subscriptions.push(
             cx.subscribe_in(&name, window, |this, _, event, window, cx| {
                 if let InputEvent::PressEnter { .. } = event {
@@ -93,12 +103,8 @@ impl Picker {
         self.set_mode(Mode::Catalog, cx);
         self.notice = None;
         self.state = Programs::Loading;
-        let picker = cx.entity().downgrade();
-        self.list.update(cx, |list, _| {
-            let rows = list.delegate_mut();
-            rows.loading = true;
-            rows.picker = Some(picker);
-        });
+        self.list
+            .update(cx, |list, _| list.delegate_mut().loading = true);
         let task = Workspace::dispatch(
             Op::Program(ProgramOp::Discover {
                 project_id: project.clone(),
