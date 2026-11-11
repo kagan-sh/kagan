@@ -31,6 +31,7 @@ ids!(
     SectionId,
     PendingInteractionId,
     PluginId,
+    AutomationId,
     SavedPromptId
 );
 

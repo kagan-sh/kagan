@@ -4,6 +4,7 @@ use kg_domain::{
 
 use crate::Store;
 
+mod automations;
 mod environments;
 mod events;
 mod interactions;

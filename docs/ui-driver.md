@@ -17,7 +17,7 @@ QA and agents drive the native kagan window without OS mouse or keyboard. Input 
 
 ## Offscreen windows
 
-`kg --offscreen` starts the app with the same socket, data folder and commands as `kg --headless`, but its windows are never shown or brought forward, so a run takes no focus and is not tiled. Its windows are created with `show` and `focus` off. `kg ui screenshot` renders the window's own scene to a PNG on macOS, with no present and no frame wait. On other platforms it fails with the typed screenshot-unavailable error. The capture is always `current`. Browser pages, web panels and VSCodium are native views outside the scene, so they do not appear in it [decision 236]. `scripts/smoke.sh` runs offscreen by default; `--visible` runs the window the person sees.
+`kg --offscreen` starts the app with the same socket, data folder and commands as `kg --headless`, but its windows are never shown or brought forward, so a run takes no focus and is not tiled. Its windows are created with `show` and `focus` off. `kg ui screenshot` renders the window's own scene to a PNG on macOS, with no present and no frame wait. On other platforms it fails with the typed screenshot-unavailable error. The capture is always `current`. Browser pages, web panels and VSCodium are native views outside the scene, so they do not appear in it [decision 237]. `scripts/smoke.sh` runs offscreen by default; `--visible` runs the window the person sees.
 
 `kg ui` does not drive page content. A Browser page is driven with `kg browser`.
 

@@ -185,6 +185,41 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - **Shows**: threads whose title, or whose kept terminal lines, hold the text, ignoring case: threads that are not archived first, then archived ones when `--archived` is given, each marked `archived`. Hidden threads are left out. Each has its project's name and, when a kept line matched, the last such line, cut around the match, and the lines to scroll back to show it. At most `--limit`, 50 when left out [decision 107]. Kept lines are the running program's scrollback, or the screen kept after it ended; an archived thread's screen is released when its grace ends, so then only its title is searched [decision 107] [decision 26].
 - **Refused when**: blank text, text longer than 256 characters, or a limit outside 1 to 200 — `invalid` [op/].
 
+## Automation
+
+An automation is a named text, a program line, and a time, that starts a thread in one project [CONTEXT] [decision 236]. The time is an interval of 1 to 1440 whole minutes, or one time to run once. It does not run while kagan is quit. The project page lists each automation and the thread each run started [decision 236].
+
+### `Add`
+
+- **Allowed when**: the project exists, the program line parses, and the time is either whole minutes from 1 to 1440 or one non-negative time [op/] [decision 236].
+- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A one-time automation is due at its time. The thread runs in the project folder [decision 236].
+- **Shows**: the automation [book:cli].
+- **Refused when**: an empty name, a name of only control characters, a name over 120 characters, empty text, text over 1 MiB, an empty program, an unfinished quote, minutes outside 1 to 1440, a negative time, both an interval and a time, or neither — `invalid` [op/]. A missing project — `not-found` [op/].
+
+### `Pause`, `Resume`
+
+- **Allowed when**: the automation exists [book:cli].
+- **Changes**: a paused automation does not start another thread. A thread it already started keeps running. Resume lets a due automation start a thread again at once, so a pause longer than one interval starts one thread, not one for each missed interval [decision 236].
+- **Shows**: the automation [book:cli].
+- **Refused when**: a missing automation — `not-found` [op/].
+
+### `Delete`
+
+- **Allowed when**: the person approves the question in the app. Nothing is removed before that [decision 236].
+- **Changes**: removes the automation. A thread it already started keeps running [decision 236].
+- **Refused when**: a missing automation — `not-found` [op/]. A declined question — `invalid`, `declined: …` [op/].
+
+### `List`
+
+- **Allowed when**: always [book:cli]. One project when a project is set.
+- **Shows**: each automation, and the thread each run started, oldest first. An interval that has not run yet has no thread [decision 236]. The window shows the run count and opens the last run; it does not list every run's title.
+
+### Due run (no operation)
+
+- **Allowed when**: kagan is open, the automation is not paused, its time is due, and no thread it started still has a running program [decision 236].
+- **Changes**: starts a thread in that project with that program line, then sends the body through the same path as `ThreadOp::Send` once the program has started. Runs of one automation do not overlap. A thread already running is left alone. After a start, the next interval is one interval from that start, so time spent quit does not start a run for every missed interval. A one-time automation does not start another thread after one has been started. A run that does not start, or fails before its thread is saved, waits one more interval, or one minute for a one-time automation, and then tries again. A store read error is reported, and the next tick tries again. Opening kagan starts one run that became due while it was quit [decision 236].
+- **Shows**: the thread on the automation, once a run has started [decision 236].
+
 ## Diagnostics
 
 `kg diagnostics export` writes one new local file. Omit `--path` and it goes under the data directory, in `diagnostics/`. A given path is refused when the parent folder is missing or the file already exists. Each plugin's warn and error counts come from the plugin host, which reads the last 64 KiB of its log; without a plugin host the line says `not read, no plugin host`.
@@ -545,8 +580,8 @@ One file, read-only, in the Preview tab of the right sidebar [docs:look] [decisi
 
 ### `Screenshot`
 
-- **Shows**: a PNG at the given path, without focusing the window [docs:ui-driver] [book:cli]. A covered window captures the last presented buffer [docs:ui-driver]. An offscreen window renders its own scene, so the capture is current [decision 236].
-- **Refused when**: a platform without capture — `failed` [docs:ui-driver] [op/]. An offscreen window on a platform without offscreen capture — `failed`, `screenshot unavailable` [decision 236]. No window — `failed` [docs:ui-driver] [op/].
+- **Shows**: a PNG at the given path, without focusing the window [docs:ui-driver] [book:cli]. A covered window captures the last presented buffer [docs:ui-driver]. An offscreen window renders its own scene, so the capture is current [decision 237].
+- **Refused when**: a platform without capture — `failed` [docs:ui-driver] [op/]. An offscreen window on a platform without offscreen capture — `failed`, `screenshot unavailable` [decision 237]. No window — `failed` [docs:ui-driver] [op/].
 
 ## Browser
 
@@ -749,7 +784,7 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 ### `SettingsOp::Project`
 
 - **Allowed when**: the id is a live project [op/] [decision 221].
-- **Changes**: shows that project's page, with its environment variables, its default program, and its agent rules, opening the window if it is closed [decision 221]. Escape or Close leaves the page [decision 221]. The sidebar's "Project settings…" menu item sends this op.
+- **Changes**: shows that project's page, with its environment variables, its default program, its agent rules, and its automations, opening the window if it is closed [decision 221] [decision 236]. Escape or Close leaves the page [decision 221]. The sidebar's "Project settings…" menu item sends this op. The automations list shows each one and the thread each run started, and can add, pause, resume, and delete [decision 236].
 - **Refused when**: a missing id — `not-found` [op/].
 
 ### `Hide`, `HideOthers`, `ShowAll`
