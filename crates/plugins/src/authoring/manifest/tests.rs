@@ -3,6 +3,14 @@ use serde_json::{Value, json};
 use super::fetch::Fetch;
 use super::*;
 
+#[test]
+fn every_area_names_its_own_power() {
+    let phrases = [Area::Threads, Area::Database, Area::Process, Area::Browser].map(Area::phrase);
+    assert!(phrases.iter().all(|phrase| !phrase.is_empty()));
+    let unique: std::collections::BTreeSet<_> = phrases.iter().collect();
+    assert_eq!(unique.len(), phrases.len());
+}
+
 fn parsed(extra: &Value) -> Manifest {
     let mut value = json!({
         "id": "dev.test",

@@ -83,12 +83,94 @@ async fn a_crash_while_a_program_runs_keeps_no_screen(cx: &mut TestAppContext) {
             .read_with(cx, |workspace, _| workspace.screen_note(&id))
             .is_none()
     );
+    assert!(
+        !fixture
+            .workspace
+            .read_with(cx, |workspace, _| workspace.program_ended(&id))
+    );
+    assert!(
+        !fixture
+            .workspace
+            .read_with(cx, |workspace, _| workspace.recovery(&id))
+    );
     let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
     let replay = store.screen_replay(&id).unwrap().unwrap_or_default();
     assert!(
         !String::from_utf8_lossy(&replay).contains("CRASH-MARKER"),
         "the screen from the crashed run was kept"
     );
+    drop(fixture);
+}
+
+#[gpui_kit::test]
+async fn a_quit_returns_once_the_screen_is_saved(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (id, _reap) = started(&fixture, program(), cx).await;
+    #[cfg(unix)]
+    type_in(&id, "printf SAVED-MARKER\n", cx).await;
+    #[cfg(windows)]
+    type_in(&id, "echo SAVED-MARKER\r\n", cx).await;
+    assert!(
+        screen_with(&id, "SAVED-MARKER", cx)
+            .await
+            .contains("SAVED-MARKER")
+    );
+    let stopping = cx.update(Workspace::stop_for_quit);
+    let started = std::time::Instant::now();
+    while !stopping.is_ready() {
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(8),
+            "the quit did not finish"
+        );
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(10));
+        cx.run_until_parked();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(saved_screen(fixture.dir.path(), &id).is_some_and(|row| row.screen_kept));
+    stopping.await.unwrap();
+    drop(fixture);
+}
+
+#[gpui_kit::test]
+async fn a_held_screen_save_keeps_the_quit_waiting(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (id, _reap) = started(&fixture, program(), cx).await;
+    #[cfg(unix)]
+    type_in(&id, "printf HELD-MARKER\n", cx).await;
+    #[cfg(windows)]
+    type_in(&id, "echo HELD-MARKER\r\n", cx).await;
+    assert!(
+        screen_with(&id, "HELD-MARKER", cx)
+            .await
+            .contains("HELD-MARKER")
+    );
+    let (release, hold) = async_channel::bounded::<()>(1);
+    cx.update(|cx| {
+        Workspace::global(cx).update(cx, |workspace, _| workspace.hold_screen_save(hold));
+    });
+    let stopping = cx.update(Workspace::stop_for_quit);
+    for _ in 0..20 {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(50));
+        cx.run_until_parked();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(saved_screen(fixture.dir.path(), &id).is_none());
+    drop(release);
+    let started = std::time::Instant::now();
+    while !stopping.is_ready() {
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(8),
+            "the quit did not finish"
+        );
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(10));
+        cx.run_until_parked();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(saved_screen(fixture.dir.path(), &id).is_some_and(|row| row.screen_kept));
+    stopping.await.unwrap();
     drop(fixture);
 }
 
@@ -122,6 +204,17 @@ async fn a_finished_program_keeps_its_screen_and_its_cause(cx: &mut TestAppConte
             .workspace
             .read_with(cx, |workspace, _| workspace.program_ended(&started.id))
     );
+    assert!(
+        !fixture
+            .workspace
+            .read_with(cx, |workspace, _| workspace.recovery(&started.id))
+    );
+    let bound = cx.update(|cx| {
+        Workspace::global(cx).update(cx, |workspace, _| {
+            workspace.set_snapshot_bound(&started.id, 1)
+        })
+    });
+    assert!(!bound);
     drop(fixture);
 }
 
@@ -300,13 +393,7 @@ async fn an_omission_is_announced_when_the_screen_settles(cx: &mut TestAppContex
     let bound = std::time::Instant::now() + std::time::Duration::from_secs(2);
     loop {
         let set = cx.update(|cx| {
-            Workspace::global(cx).update(cx, |workspace, _| {
-                let Some(crate::thread::Shown::Running(terminal)) = workspace.shown(&id) else {
-                    return false;
-                };
-                terminal.set_snapshot_bound(1);
-                true
-            })
+            Workspace::global(cx).update(cx, |workspace, _| workspace.set_snapshot_bound(&id, 1))
         });
         if set {
             break;
@@ -334,6 +421,11 @@ async fn an_omission_is_announced_when_the_screen_settles(cx: &mut TestAppContex
             .workspace
             .read_with(cx, |workspace, _| workspace.screen_note(&id)),
         Some(note)
+    );
+    assert!(
+        fixture
+            .workspace
+            .read_with(cx, |workspace, _| workspace.recovery(&id))
     );
     cx.update(|cx| {
         Workspace::global(cx).update(cx, |workspace, cx| {

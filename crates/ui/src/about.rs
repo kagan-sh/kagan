@@ -58,7 +58,7 @@ pub(crate) fn show(cx: &mut App) {
     }
 }
 
-fn options(cx: &mut App) -> WindowOptions {
+pub(crate) fn options(cx: &mut App) -> WindowOptions {
     crate::prepare_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::centered(

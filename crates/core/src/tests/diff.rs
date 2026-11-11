@@ -114,3 +114,92 @@ async fn diff_revision_changes_for_binary_large_and_truncated_files(cx: &mut Tes
         }
     }
 }
+
+#[gpui_kit::test]
+async fn a_text_file_view_counts_its_lines_and_carries_its_hunks_and_text(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let root = fixture.dir.path();
+    git_in(root, &["init", "-b", "main"]);
+    std::fs::write(root.join("notes.txt"), "one\ntwo\nthree\n").unwrap();
+    git_in(root, &["add", "notes.txt"]);
+    commit(root, &["commit", "-m", "base"]);
+    let OpResult::Thread(started) = op(fixture.run(program()), cx).await.unwrap() else {
+        panic!("thread")
+    };
+    std::fs::write(root.join("notes.txt"), "one\nTWO\nthree\nfour\n").unwrap();
+    let show = Op::Diff(DiffOp::Show {
+        query: DiffQuery {
+            thread_id: started.id.clone(),
+            scope: DiffScope::Uncommitted,
+            base: None,
+            rev: None,
+        },
+        path: "notes.txt".to_owned(),
+    });
+    let OpResult::DiffFile(view) = op(show, cx).await.unwrap() else {
+        panic!("file")
+    };
+    assert_eq!((view.added, view.removed), (2, 1));
+    assert!(!view.hunks.is_empty());
+    assert!(!view.binary && !view.truncated && !view.too_large);
+    assert_eq!(view.file.as_deref(), Some("one\nTWO\nthree\nfour\n"));
+}
+
+#[gpui_kit::test]
+async fn a_committed_file_that_is_binary_or_too_large_says_so(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let root = fixture.dir.path();
+    git_in(root, &["init", "-b", "main"]);
+    let late = vec![b'a'; 9_000];
+    let mut big = "x".repeat(99);
+    big.push('\n');
+    let big = big.repeat(11_000);
+    std::fs::write(root.join("blob.bin"), [0, 1, 2]).unwrap();
+    std::fs::write(root.join("late.txt"), &late).unwrap();
+    std::fs::write(root.join("large.txt"), &big).unwrap();
+    git_in(root, &["add", "."]);
+    commit(root, &["commit", "-m", "base"]);
+    std::fs::write(root.join("blob.bin"), [0, 1, 3]).unwrap();
+    let mut nul = late;
+    nul[8_500] = 0;
+    std::fs::write(root.join("late.txt"), nul).unwrap();
+    std::fs::write(root.join("large.txt"), big.replacen('x', "y", 1)).unwrap();
+    git_in(root, &["add", "."]);
+    commit(root, &["commit", "-m", "change"]);
+    let OpResult::Thread(started) = op(fixture.run(program()), cx).await.unwrap() else {
+        panic!("thread")
+    };
+    let show = |path: &str| {
+        Op::Diff(DiffOp::Show {
+            query: DiffQuery {
+                thread_id: started.id.clone(),
+                scope: DiffScope::Commit,
+                base: None,
+                rev: Some("HEAD".to_owned()),
+            },
+            path: path.to_owned(),
+        })
+    };
+    let OpResult::DiffFile(binary) = op(show("blob.bin"), cx).await.unwrap() else {
+        panic!("file")
+    };
+    assert!(binary.binary, "{binary:?}");
+    assert!(
+        binary.hunks.is_empty() && binary.file.is_none(),
+        "{binary:?}"
+    );
+    assert_eq!((binary.added, binary.removed), (0, 0), "{binary:?}");
+
+    let OpResult::DiffFile(late) = op(show("late.txt"), cx).await.unwrap() else {
+        panic!("file")
+    };
+    assert!(late.binary, "{late:?}");
+    assert!(late.hunks.is_empty() && late.file.is_none(), "{late:?}");
+
+    let OpResult::DiffFile(large) = op(show("large.txt"), cx).await.unwrap() else {
+        panic!("file")
+    };
+    assert!(large.too_large, "{large:?}");
+    assert!(!large.binary && !large.truncated, "{large:?}");
+    assert!(large.file.is_none(), "{large:?}");
+}
