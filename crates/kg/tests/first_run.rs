@@ -73,30 +73,44 @@ fn offscreen_app_answers_ui_commands_and_captures_its_window() {
     let home = data.parent().unwrap();
     let mut server = Server::start(home, Some(&data), &socket, &log, "--offscreen");
     server.wait_until_listening();
-    let open = kg(&["open".into()], home, Some(&data), &socket);
+    let open = kg(&["kg".into(), "open".into()], home, Some(&data), &socket);
     assert!(
         open.status.success(),
         "{}",
         server.failure("kg open failed")
     );
 
-    let snapshot = kg(
-        &["ui".into(), "snapshot".into(), "--json".into()],
-        home,
-        Some(&data),
-        &socket,
-    );
-    let text = String::from_utf8_lossy(&snapshot.stdout);
+    // The window builds after `kg open` returns, so poll the snapshot as the smoke script does.
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let (snapshot, text) = loop {
+        let snapshot = kg(
+            &["kg".into(), "ui".into(), "snapshot".into(), "--json".into()],
+            home,
+            Some(&data),
+            &socket,
+        );
+        let text = String::from_utf8_lossy(&snapshot.stdout).into_owned();
+        if (snapshot.status.success() && text.contains("sidebar-new-thread"))
+            || Instant::now() > deadline
+        {
+            break (snapshot, text);
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    };
     assert!(
         snapshot.status.success() && text.contains("sidebar-new-thread"),
         "{}",
-        server.failure(&text)
+        server.failure(&format!(
+            "{text}{}",
+            String::from_utf8_lossy(&snapshot.stderr)
+        ))
     );
 
     if cfg!(target_os = "macos") {
         let image = dir.path().join("offscreen.png");
         let shot = kg(
             &[
+                "kg".into(),
                 "ui".into(),
                 "screenshot".into(),
                 image.display().to_string(),
