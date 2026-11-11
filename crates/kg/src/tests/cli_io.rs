@@ -390,6 +390,7 @@ fn instructions_set_reads_a_file_or_stdin_and_sends_the_text() {
             text: None,
             file: Some(path),
             project: None,
+            expected: None,
         }),
         std::io::empty(),
     )
@@ -398,6 +399,7 @@ fn instructions_set_reads_a_file_or_stdin_and_sends_the_text() {
         text: Some(body.into()),
         file: None,
         project: None,
+        expected: None,
     });
     assert_eq!(from_file, sent);
     assert_eq!(
@@ -406,6 +408,7 @@ fn instructions_set_reads_a_file_or_stdin_and_sends_the_text() {
                 text: None,
                 file: Some("-".into()),
                 project: None,
+                expected: None,
             }),
             std::io::Cursor::new(body),
         )
@@ -418,6 +421,7 @@ fn instructions_set_reads_a_file_or_stdin_and_sends_the_text() {
             text: Some("Call me Ada.".into()),
             file: None,
             project: Some(kg_domain::ProjectId("prj_1".into())),
+            expected: None,
         })
     );
     assert!(Cli::try_parse_from(["kg", "instructions", "set"]).is_err());

@@ -200,7 +200,7 @@ fn actions(page: &Page, shown: &Shown, editable: bool, cx: &mut Context<Page>) -
     if !ready {
         row = row.child(note(
             "skills-fork-reason",
-            "Pick a project first. Fork opens a new thread in it.",
+            "Fork needs a project. Pick one in the project list, then Fork opens a new thread in it.",
             cx.theme().muted_foreground,
             cx,
         ));
@@ -240,6 +240,7 @@ fn editor_view(
                         .label("Cancel")
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.editor = None;
+                            this.notice = None;
                             cx.notify();
                         })),
                 )),

@@ -109,7 +109,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Rename`
 
 - **Allowed when**: the thread exists, including one that is archived [book:cli].
-- **Changes**: a rename in the window stores the trimmed title, with bidi marks and control characters removed [book:cli] [decision 245]. A rename from the socket stores it once; a later one leaves the locked title as it is [record.rs]. The program, the environment, and the branch stay. It writes no event.
+- **Changes**: a rename in the window stores the trimmed title, with bidi marks and control characters removed [book:cli] [decision 248]. A rename from the socket stores it once; a later one leaves the locked title as it is [record.rs]. The program, the environment, and the branch stay. It writes no event.
 - **Shows**: the thread, with that title, when the title changed [book:cli].
 - **Refused when**: a blank title — `invalid` [op/]. A locked title renamed from the socket — `invalid`, and the title stays [record.rs]. A missing thread — `not-found` [op/].
 
@@ -463,7 +463,7 @@ A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matche
 
 - **Allowed when**: the skill is a user or project skill [decision 203].
 - **Changes**: replaces the whole `SKILL.md` with the text given, frontmatter included. The file is written as-is, unless it has changed since the window read it: then nothing is written and the call is refused [decision 206]. `kg skill update` does not send that check [decision 206].
-- **Refused when**: an unknown name — `not-found` [op/]. A bundled or plugin skill — `invalid`; or text whose frontmatter does not parse, or names another skill — `invalid` [decision 203]; or a description or hint with a control or bidi mark — `invalid` [decision 245]; or the file changed since the window read it — `invalid` [decision 206].
+- **Refused when**: an unknown name — `not-found` [op/]. A bundled or plugin skill — `invalid`; or text whose frontmatter does not parse, or names another skill — `invalid` [decision 203]; or a description or hint with a control or bidi mark — `invalid` [decision 248]; or the file changed since the window read it — `invalid` [decision 206].
 
 ### `Remove`
 
@@ -478,12 +478,12 @@ A section is a user-named group that threads can be filed under in the sidebar [
 ### `Create`
 
 - **Changes**: creates a section, and files the given thread under it when a thread id is passed [book:cli].
-- **Refused when**: an empty name, a name with a control or bidi mark [decision 245], or a name that already exists — `invalid` [person 2026-10-08] [op/].
+- **Refused when**: an empty name, a name with a control or bidi mark [decision 248], or a name that already exists — `invalid` [person 2026-10-08] [op/].
 
 ### `Rename`
 
 - **Changes**: renames the section [book:cli].
-- **Refused when**: a missing section — `not-found` [op/]. An empty name, or a name with a control or bidi mark [decision 245] — `invalid` [person 2026-10-08] [op/].
+- **Refused when**: a missing section — `not-found` [op/]. An empty name, or a name with a control or bidi mark [decision 248] — `invalid` [person 2026-10-08] [op/].
 
 ### `Delete`
 
@@ -692,7 +692,7 @@ The app starts on `fjord`, in system mode, so it follows the operating system's 
 
 - **Allowed when**: the id is lowercase letters, digits, and dashes, and the mode is `light`, `dark` or `system` [book:themes] [docs:look]. `fjord`, `ember` and `grey` ship with the app [book:themes].
 - **Changes**: selects that theme and mode for every open window [docs:look] [book:cli]. A custom theme is `<dataDir>/themes/<id>.json` [book:themes]. A well-formed id with no file yet stays selected; the window shows an error and uses the default palette for the mode [book:themes] [docs:look]. Saving a file updates the list; a missing or invalid selected file does the same and keeps the id [book:themes] [docs:look].
-- **Refused when**: an id with any other character, a path, a dot, or traversal — `invalid` [docs:look] [op/]. A theme file whose name has a control or bidi mark — `invalid` [decision 245].
+- **Refused when**: an id with any other character, a path, a dot, or traversal — `invalid` [docs:look] [op/]. A theme file whose name has a control or bidi mark — `invalid` [decision 248].
 
 ## Keymap
 
@@ -744,14 +744,14 @@ The agent rules are text a thread's program is told when it starts: the global f
 ### `Set`
 
 - **Changes**: writes the file and creates its folder. The text comes from the argument, or from `--file` (`-` for stdin) [book:cli].
-- **Refused when**: more than 16 KiB — `invalid`, and nothing is written [decision 211]. No text — `invalid`. An unknown project — `not-found` [op/]. A project whose folder is gone — `invalid`, and no folder is made [decision 211].
+- **Refused when**: more than 16 KiB — `invalid`, and nothing is written [decision 211]. No text — `invalid`. An unknown project — `not-found` [op/]. A project whose folder is gone — `invalid`, and no folder is made [decision 211]. The window sends the text it last read, and the file holds other text now — `changed`, and nothing is written [decision 241].
 - **Writes**: through a temp file renamed into place, so a start never reads half a file [decision 211].
 - **Applies**: a start reads the files then. A running thread keeps the text it started with. Codex's `kg mcp` server reads them when it lists tools [decision 211].
 
 ### `Clear`
 
 - **Changes**: deletes the file. Clearing a missing file succeeds.
-- **Refused when**: an unknown project — `not-found` [op/].
+- **Refused when**: an unknown project — `not-found` [op/]. The window's text no longer matches the file — `changed`, and the file stays [decision 241].
 
 ## Config
 
@@ -827,7 +827,7 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 The strip is the host's. Its one `Op` is `WindowOp::ToggleActivityLog` [decision 196]; the rest the window reads from state it already has [decision 148]. A plugin adds one approved status item to it, which may be a button that runs one of its declared commands [decision 157] [decision 197].
 
 - **Shows**: closed, one 28 px line across the bottom of the window. `1 agent working` or `N agents working` for threads whose program is busy, or `Quiet`; `N needs you` for the threads `NextThreadNeedingYou` can reach, which is every thread other than the one on screen that is unread or asking; `Update available` when a check found a newer kagan that Not now has not put off; `Installing <source>` while a plugin install runs [CONTEXT] [decision 148]. At the right of that summary row, after install, it draws at most four plugin items in plugin-id order, one per plugin whose manifest declares `ui.status` and whose `setStatus` sets a line: the approved title in `muted_foreground`, then the text in the tone's color, both `type_small`, shortened with an ellipsis and bounded to about 200 px. They show only while the `plugin-status` preference is on and the window is at least 720 px wide; a narrower window keeps the host summary and hides them [decision 157]. The needs-you count, `Update available`, `Installing <source>` and a plugin item that names a command are buttons; the summary text is not a control, and a click elsewhere on the strip does nothing. The log toggle is the `Op` `WindowOp::ToggleActivityLog`, bound to Cmd+Shift+E, which shows or hides the log [decision 196]. It draws only what the workspace, the attention list, the updater, the plugin host and the plugin strip entity already report.
-- **Changes**: `ToggleActivityLog`, from its button or Cmd+Shift+E, opens the last seven rows of an in-memory log, newest last: a turn started or ended, a thread other than the one on screen that needs the person, an update found, downloading or ready, a plugin install starting, and a plugin command the window ran. The same key, or the button again, closes it, and Escape closes it while focus is in the strip. The needs-you button runs `NextThreadNeedingYou`; the shown thread is not counted in either place, because that action skips it. `Update available` runs the update notice's main action for this install, and `Installing <source>` opens Settings → Installed. Each of these, and the log button, is its own Tab stop. A status item with a command is a button that runs that command; one without takes no click or focus [decision 196] [decision 197]. It keeps 100 rows in memory and saves none. It never takes the keyboard on its own [decision 148].
+- **Changes**: `ToggleActivityLog`, from its button or Cmd+Shift+E, opens the last seven rows of an in-memory log, newest last: a turn started or ended, a thread other than the one on screen that needs the person, an update found, downloading or ready, a plugin install starting, and a plugin command the window ran. The same key, or the button again, closes it, and Escape closes it while focus is in the strip. The needs-you button runs `NextThreadNeedingYou`; the shown thread is not counted in either place, because that action skips it. `Update available`, or `Update ready` once a download waits, opens the Update menu for this install (Release notes, the install action, and Not now while only offered) [decision 243]; `Installing <source>` opens Settings → Installed. Each of these, and the log button, is its own Tab stop. A status item with a command is a button that runs that command; one without takes no click or focus [decision 196] [decision 197]. It keeps 100 rows in memory and saves none. It never takes the keyboard on its own [decision 148].
 - **Refused when**: nothing. A panel placed `bottom` stays refused [decision 56] [decision 59], and a plugin gets one text item, not a drawn strip [decision 157].
 
 ## Update

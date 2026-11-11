@@ -21,7 +21,7 @@ pub(crate) async fn run(
     let project = match &op {
         InstructionsOp::Get { project }
         | InstructionsOp::Set { project, .. }
-        | InstructionsOp::Clear { project } => project.clone(),
+        | InstructionsOp::Clear { project, .. } => project.clone(),
     };
     let path = file_for(this, project.as_ref(), cx)?;
     match op {
@@ -29,7 +29,7 @@ pub(crate) async fn run(
             let text = cx.background_spawn(async move { read_text(&path) }).await?;
             Ok(OpResult::Text(text))
         }
-        InstructionsOp::Set { text, .. } => {
+        InstructionsOp::Set { text, expected, .. } => {
             let Some(text) = text else {
                 return Err(OpError::Invalid("give the rules text, or --file".into()));
             };
@@ -39,12 +39,21 @@ pub(crate) async fn run(
                     text.len()
                 )));
             }
-            cx.background_spawn(async move { write(&path, &text) })
-                .await?;
+            cx.background_spawn(async move {
+                unchanged(&path, expected.as_deref())?;
+                write(&path, &text)
+            })
+            .await?;
+            crate::workspace::changed(this, cx)?;
             Ok(OpResult::Done)
         }
-        InstructionsOp::Clear { .. } => {
-            cx.background_spawn(async move { remove(&path) }).await?;
+        InstructionsOp::Clear { expected, .. } => {
+            cx.background_spawn(async move {
+                unchanged(&path, expected.as_deref())?;
+                remove(&path)
+            })
+            .await?;
+            crate::workspace::changed(this, cx)?;
             Ok(OpResult::Done)
         }
     }
@@ -167,6 +176,15 @@ fn write(path: &Path, text: &str) -> Result<(), OpError> {
         _ = std::fs::remove_file(&temp);
     }
     Ok(written?)
+}
+
+fn unchanged(path: &Path, expected: Option<&str>) -> Result<(), OpError> {
+    match expected {
+        Some(expected) if read_text(path)? != expected => Err(OpError::Changed(
+            "the rules changed since they were read".into(),
+        )),
+        _ => Ok(()),
+    }
 }
 
 fn remove(path: &Path) -> Result<(), OpError> {

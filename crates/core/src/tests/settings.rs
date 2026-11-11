@@ -318,6 +318,12 @@ async fn branch_prefix_must_start_a_git_branch(cx: &mut TestAppContext) {
             matches!(refused, OpError::Invalid(_)),
             "{bad:?} gave {refused}"
         );
+        assert!(
+            refused
+                .to_string()
+                .contains(kg_domain::prefs::BRANCH_PREFIX_RULE),
+            "{bad:?} gave {refused}"
+        );
     }
     let OpResult::Setting(value) = op(
         Op::Preference(PreferenceOp::Get {

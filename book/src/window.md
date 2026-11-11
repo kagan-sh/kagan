@@ -46,7 +46,7 @@ One line at the bottom of the window, under the sidebars and the center. It is c
 
 - **Quiet** means no program is busy with a reply. **1 agent working** means one thread is. **2 agents working** means two.
 - **2 needs you** means other threads want you. Click it, or press Option+Cmd+J, to open the next one. The thread you are viewing is not counted.
-- **Update available** means a check found a newer kagan. **Not now** on the update notice hides it here too.
+- **Update available** means a check found a newer kagan. **Not now** in the Update menu hides it here too.
 - **Installing /home/me/plugins/kagan-tools** or **Installing git:github.com/acme/tools@main** means a plugin install is running. The words are the source.
 
 Press the Activity log button at the right of the line, or click it, to see the last seven things: turns started and ended, other threads that need you, updates, and plugin installs. A new row is added at the bottom. Press the button again, or press Escape while focus is on it, to close it. The button is also Cmd+Shift+E.

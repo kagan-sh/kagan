@@ -62,7 +62,6 @@ impl Page {
         let variables = cx.new(|cx| Variables::new(Some(scope.clone()), window, cx));
         let rules = cx.new(|cx| RulesEditor::new(Some(scope), window, cx));
         let automations = cx.new(|cx| List::new(project.clone(), window, cx));
-        variables.update(cx, Variables::reload);
         let mut page = Self {
             project,
             name: SharedString::default(),
