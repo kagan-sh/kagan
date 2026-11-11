@@ -106,6 +106,9 @@ pub(crate) async fn run(
 fn due(minutes: Option<u16>, at: Option<Timestamp>, now: Timestamp) -> Result<Timestamp> {
     match (minutes, at) {
         (Some(minutes), None) => Ok(later(now, minutes)),
+        (None, Some(at)) if at.0 <= now.0 => Err(OpError::Invalid(
+            "a one-time automation needs a time in the future".into(),
+        )),
         (None, Some(at)) => Ok(at),
         _ => Err(OpError::Invalid(
             "an automation needs minutes from 1 to 1440, or one time".into(),
