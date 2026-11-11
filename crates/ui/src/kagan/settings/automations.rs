@@ -14,7 +14,6 @@ use gpui_kit::{
 use kg_core::{Workspace, WorkspaceEvent};
 use kg_domain::{
     Automation, AutomationId, AutomationOp, FAILED_RUNS_LIMIT, Op, OpResult, ProjectId, ProjectOp,
-    Timestamp,
 };
 
 use crate::kagan::controls::control;
@@ -99,8 +98,8 @@ impl List {
                 return;
             }
         };
-        let at = match parse_once(&once) {
-            Ok(at) => at,
+        let in_minutes = match parse_minutes(&once) {
+            Ok(in_minutes) => in_minutes,
             Err(error) => {
                 self.note = Some(error.into());
                 cx.notify();
@@ -119,7 +118,7 @@ impl List {
             project_id: self.project.clone(),
             program,
             minutes,
-            at,
+            in_minutes,
         });
         self.send(op, true, window, cx);
     }
@@ -187,20 +186,6 @@ fn parse_minutes(text: &str) -> Result<Option<u16>, &'static str> {
         .filter(|minutes| (1..=1440).contains(minutes))
         .map(Some)
         .ok_or("minutes must be a whole number from 1 to 1440")
-}
-
-fn parse_once(text: &str) -> Result<Option<Timestamp>, &'static str> {
-    let Some(minutes) = parse_minutes(text)? else {
-        return Ok(None);
-    };
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| {
-            i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)
-        });
-    Ok(Some(Timestamp(now.saturating_add(
-        i64::from(minutes).saturating_mul(60_000),
-    ))))
 }
 
 fn when(automation: &Automation) -> String {

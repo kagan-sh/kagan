@@ -6,14 +6,14 @@ use kg_domain::*;
 use super::{Fixture, events, op, program};
 use crate::Workspace;
 
-fn add(project: &ProjectId, minutes: Option<u16>, at: Option<Timestamp>) -> Op {
+fn add(project: &ProjectId, minutes: Option<u16>, in_minutes: Option<u16>) -> Op {
     Op::Automation(AutomationOp::Add {
         name: "Morning".into(),
         body: "ping".into(),
         project_id: project.clone(),
         program: program().into(),
         minutes,
-        at,
+        in_minutes,
     })
 }
 
@@ -99,7 +99,7 @@ async fn add_refuses_a_missing_time_and_a_missing_project(cx: &mut TestAppContex
         matches!(neither, OpError::Invalid(ref message) if message.contains("needs minutes")),
         "{neither}"
     );
-    let both = op(add(&fixture.project, Some(1), Some(Timestamp(1))), cx)
+    let both = op(add(&fixture.project, Some(1), Some(1)), cx)
         .await
         .unwrap_err();
     assert!(matches!(both, OpError::Invalid(_)), "{both}");
@@ -177,10 +177,8 @@ async fn a_running_thread_is_left_alone_when_the_automation_is_due_again(cx: &mu
 #[gpui_kit::test]
 async fn one_time_runs_once(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
-    op(add(&fixture.project, None, Some(Timestamp(1))), cx)
-        .await
-        .unwrap();
-    cx.executor().advance_clock(Duration::from_secs(1));
+    op(add(&fixture.project, None, Some(1)), cx).await.unwrap();
+    cx.executor().advance_clock(Duration::from_mins(1));
     let id = drive_until_sent(cx).await;
     cx.executor().advance_clock(Duration::from_mins(5));
     cx.run_until_parked();
@@ -194,13 +192,11 @@ async fn deleting_an_automation_leaves_a_running_thread_and_starts_no_other(
     cx: &mut TestAppContext,
 ) {
     let fixture = Fixture::new(cx).await;
-    let OpResult::Automation(saved) = op(add(&fixture.project, None, Some(Timestamp(1))), cx)
-        .await
-        .unwrap()
+    let OpResult::Automation(saved) = op(add(&fixture.project, None, Some(1)), cx).await.unwrap()
     else {
         panic!("add")
     };
-    cx.executor().advance_clock(Duration::from_secs(1));
+    cx.executor().advance_clock(Duration::from_mins(1));
     let id = drive_until_sent(cx).await;
     let deleting = delete(&saved.id, cx);
     cx.run_until_parked();
@@ -222,19 +218,22 @@ async fn a_one_time_automation_that_cannot_start_waits_before_it_retries(cx: &mu
             project_id: fixture.project.clone(),
             program: "kg-no-such-program".into(),
             minutes: None,
-            at: Some(Timestamp(1)),
+            in_minutes: Some(1),
         }),
         cx,
     )
     .await
     .unwrap();
-    cx.executor().advance_clock(Duration::from_secs(5));
+    let due = automations(cx).await[0].next_at;
+    cx.executor()
+        .advance_clock(Duration::from_mins(1) + Duration::from_secs(1));
     cx.run_until_parked();
     let row = automations(cx).await.remove(0);
     assert!(row.threads.is_empty());
     assert_eq!(thread_count(cx).await, 0);
     assert!(
-        row.next_at.is_some_and(|next| next.0 > 1),
+        row.next_at
+            .is_some_and(|next| due.is_some_and(|due| next > due)),
         "a failed start must wait, not retry every second: {:?}",
         row.next_at
     );
@@ -255,19 +254,22 @@ async fn a_start_that_fails_before_its_thread_is_saved_is_not_a_run(cx: &mut Tes
             project_id: fixture.project.clone(),
             program: program().into(),
             minutes: None,
-            at: Some(Timestamp(1)),
+            in_minutes: Some(1),
         }),
         cx,
     )
     .await
     .unwrap();
-    cx.executor().advance_clock(Duration::from_secs(5));
+    let due = automations(cx).await[0].next_at;
+    cx.executor()
+        .advance_clock(Duration::from_mins(1) + Duration::from_secs(1));
     cx.run_until_parked();
     let row = automations(cx).await.remove(0);
     assert!(row.threads.is_empty(), "{:?}", row.threads);
     assert_eq!(thread_count(cx).await, 0);
     assert!(
-        row.next_at.is_some_and(|next| next.0 > 1),
+        row.next_at
+            .is_some_and(|next| due.is_some_and(|due| next > due)),
         "a start that saved no thread must be retried, not kept as a run: {:?}",
         row.next_at
     );
@@ -348,7 +350,7 @@ async fn three_failed_runs_in_a_row_pause_the_automation(cx: &mut TestAppContext
             project_id: fixture.project.clone(),
             program: "/bin/sh -c 'exit 3'".into(),
             minutes: Some(1),
-            at: None,
+            in_minutes: None,
         }),
         cx,
     )

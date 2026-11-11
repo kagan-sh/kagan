@@ -1254,8 +1254,8 @@ Options:
       --minutes <MINUTES>
           Whole minutes between runs, from 1 to 1440
 
-      --at <AT>
-          When to run once, as milliseconds since the Unix epoch
+      --in <IN_MINUTES>
+          Run once, this many minutes from now, from 1 to 1440
 
   -h, --help
           Print help

@@ -191,10 +191,10 @@ An automation is a named text, a program line, and a time, that starts a thread 
 
 ### `Add`
 
-- **Allowed when**: the project exists, the program line parses, and the time is either whole minutes from 1 to 1440 or one non-negative time [op/] [decision 236].
-- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A one-time automation is due at its time. The thread runs in the project folder [decision 236]. A due interval whose last three runs in a row all ended in an error does not start a thread: it pauses instead [decision 246].
+- **Allowed when**: the project exists, the program line parses, and the time is either whole minutes between runs, from 1 to 1440, or one run that many whole minutes from now, from 1 to 1440 [op/] [decision 236] [decision 249].
+- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A one-time automation is due that many minutes after it is saved [decision 249]. The thread runs in the project folder [decision 236]. A due interval whose last three runs in a row all ended in an error does not start a thread: it pauses instead [decision 246].
 - **Shows**: the automation [book:cli].
-- **Refused when**: an empty name, a name of only control characters, a name over 120 characters, empty text, text over 1 MiB, an empty program, an unfinished quote, minutes outside 1 to 1440, a negative time, both an interval and a time, or neither — `invalid` [op/]. A missing project — `not-found` [op/].
+- **Refused when**: an empty name, a name of only control characters, a name over 120 characters, empty text, text over 1 MiB, an empty program, an unfinished quote, minutes outside 1 to 1440, one-time minutes outside 1 to 1440, both an interval and a time, or neither — `invalid` [op/]. A missing project — `not-found` [op/].
 
 ### `Pause`, `Resume`
 

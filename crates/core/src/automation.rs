@@ -42,14 +42,14 @@ pub(crate) async fn run(
             project_id,
             program,
             minutes,
-            at,
+            in_minutes,
         } => {
             let lookup = project_id.clone();
             database
                 .call(move |store| store.project(&lookup))
                 .await?
                 .ok_or_else(|| missing("project", &project_id))?;
-            let next_at = due(minutes, at, time(this, cx)?)?;
+            let next_at = due(minutes.or(in_minutes), time(this, cx)?)?;
             let automation = Automation {
                 id: AutomationId(id("auto")),
                 project_id,
@@ -57,7 +57,7 @@ pub(crate) async fn run(
                 body,
                 program: program.trim().to_owned(),
                 minutes,
-                at,
+                at: in_minutes.map(|_| next_at),
                 paused: false,
                 next_at: Some(next_at),
                 threads: Vec::new(),
@@ -104,11 +104,11 @@ pub(crate) async fn run(
     Ok(result)
 }
 
-fn due(minutes: Option<u16>, at: Option<Timestamp>, now: Timestamp) -> Result<Timestamp> {
-    match (minutes, at) {
-        (Some(minutes), None) => Ok(later(now, minutes)),
-        (None, Some(at)) => Ok(at),
-        _ => Err(OpError::Invalid(
+// The first run is due one interval after the save, or after the one-time minutes.
+fn due(minutes: Option<u16>, now: Timestamp) -> Result<Timestamp> {
+    match minutes {
+        Some(minutes) => Ok(later(now, minutes)),
+        None => Err(OpError::Invalid(
             "an automation needs minutes from 1 to 1440, or one time".into(),
         )),
     }

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use kg_domain::{
     AutomationId, AutomationOp, ConfigOp, DiffOp, DiffQuery, DiffScope, EnvironmentSpec, Metadata,
     Op, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, SectionId, SectionOp, SkillOp,
-    TerminalOp, ThreadId, ThreadOp, Timestamp,
+    TerminalOp, ThreadId, ThreadOp,
 };
 use serde_json::{Value, json};
 
@@ -655,7 +655,7 @@ fn cli_automations_parse_next_to_thread() {
             project_id: project,
             program: "claude".into(),
             minutes: Some(15),
-            at: None,
+            in_minutes: None,
         })
     );
     assert_eq!(
@@ -682,7 +682,7 @@ fn cli_automations_parse_next_to_thread() {
             "ping",
             "--program",
             "codex",
-            "--at",
+            "--in",
             "5",
             "--project-id",
             "prj_1"
@@ -693,8 +693,25 @@ fn cli_automations_parse_next_to_thread() {
             project_id: ProjectId("prj_1".into()),
             program: "codex".into(),
             minutes: None,
-            at: Some(Timestamp(5)),
+            in_minutes: Some(5),
         })
+    );
+    // One unit for a one-time run: minutes from now, as the window has it.
+    assert!(
+        Cli::try_parse_from([
+            "kg",
+            "automation",
+            "add",
+            "Once",
+            "ping",
+            "--program",
+            "codex",
+            "--at",
+            "1000",
+            "--project-id",
+            "prj_1"
+        ])
+        .is_err()
     );
 }
 

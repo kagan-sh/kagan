@@ -1,4 +1,4 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use gpui_kit::TestAppContext;
 use kg_core::Workspace;
@@ -66,12 +66,14 @@ fn the_project_page_counts_the_runs_an_automation_started(cx: &mut TestAppContex
                 project_id: ProjectId("prj_kagan".into()),
                 program: program().into(),
                 minutes: None,
-                at: Some(Timestamp(1)),
+                in_minutes: Some(1),
             }),
             cx,
         )
     })
     .detach();
+    cx.run_until_parked();
+    cx.executor().advance_clock(Duration::from_mins(1));
     wait_until(cx, |cx| {
         rows(cx).first().is_some_and(|row| !row.threads.is_empty())
     });
@@ -120,8 +122,9 @@ fn once_in_saves_a_one_time_automation_that_is_due_in_that_many_minutes(cx: &mut
     let row = rows(cx).remove(0);
     assert_eq!(row.minutes, None);
     let due = row.at.expect("a one-time run").0;
+    // The core reads the test executor's clock, which can run a second behind the wall clock.
     assert!(
-        (before + 60_000..=after + 60_000).contains(&due),
+        (before + 59_000..=after + 60_000).contains(&due),
         "due at {due}, expected one minute after {before}..{after}"
     );
 }
