@@ -545,8 +545,8 @@ One file, read-only, in the Preview tab of the right sidebar [docs:look] [decisi
 
 ### `Screenshot`
 
-- **Shows**: a PNG at the given path, without focusing the window [docs:ui-driver] [book:cli]. A covered window captures the last presented buffer [docs:ui-driver].
-- **Refused when**: a platform without capture — `failed` [docs:ui-driver] [op/]. No window — `failed` [docs:ui-driver] [op/].
+- **Shows**: a PNG at the given path, without focusing the window [docs:ui-driver] [book:cli]. A covered window captures the last presented buffer [docs:ui-driver]. An offscreen window renders its own scene, so the capture is current [decision 236].
+- **Refused when**: a platform without capture — `failed` [docs:ui-driver] [op/]. An offscreen window on a platform without offscreen capture — `failed`, `screenshot unavailable` [decision 236]. No window — `failed` [docs:ui-driver] [op/].
 
 ## Browser
 
