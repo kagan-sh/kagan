@@ -1,7 +1,7 @@
 use gpui_kit::component::button::{Button, Toggle};
 use gpui_kit::component::h_flex;
 use gpui_kit::component::kbd::Kbd;
-use gpui_kit::component::menu::PopupMenu;
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -49,6 +49,42 @@ pub(super) fn menu_item(id: &'static str, label: &'static str) -> impl IntoEleme
         },
         label,
     )
+}
+
+// One choice in a dropdown menu. Its check mark is the current choice.
+pub(super) fn choice_item(id: String, label: String, selected: bool) -> PopupMenuItem {
+    PopupMenuItem::element(move |_, _| {
+        div()
+            .id(ElementId::Name(id.clone().into()))
+            .ui_observe_as(Facts {
+                role: Role::MenuItem,
+                selected: Some(selected),
+                ..Facts::button(label.clone())
+            })
+            .child(label.clone())
+    })
+    .checked(selected)
+}
+
+// A button that opens a menu of choices. Its label is the current choice, and so is its value.
+pub(super) fn choice_trigger(
+    id: &str,
+    shown: String,
+    menu: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+) -> AnyElement {
+    control(
+        id.to_owned(),
+        Facts {
+            value: Some(shown.clone().into()),
+            ..Facts::button(shown.clone())
+        },
+        Button::new(ElementId::Name(format!("button-{id}").into()))
+            .small()
+            .outline()
+            .label(shown)
+            .dropdown_menu(menu),
+    )
+    .into_any_element()
 }
 
 pub(super) fn control(

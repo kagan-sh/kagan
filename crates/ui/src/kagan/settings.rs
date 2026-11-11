@@ -199,7 +199,7 @@ pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
         notify: NotifyLevel::default(),
         plugin_status: true,
         update_check: false,
-        copy_on_select: false,
+        copy_on_select: true,
         links_in_tab: false,
         setup_guide: None,
         agent_ready: None,
@@ -380,9 +380,20 @@ impl Kagan {
         let fonts = font_items(cx);
         let window = self.window;
         let setup = super::layout::read::<bool>(kg_domain::prefs::SETUP_GUIDE, cx);
+        let list_order = super::layout::read::<String>(kg_domain::prefs::SIDEBAR_ORDER, cx);
+        let hide_empty =
+            super::layout::read::<bool>(kg_domain::prefs::SIDEBAR_HIDE_EMPTY_PROJECTS, cx);
+        let unread = super::layout::read::<bool>(kg_domain::prefs::SIDEBAR_UNREAD_FIRST, cx);
+        let sidebar = self.sidebar.clone();
         let kagan = cx.weak_entity();
         let prefs = self.prefs.clone();
         cx.spawn(async move |_, cx| {
+            let list_order = list_order.await.ok().flatten();
+            let hide_empty_projects = hide_empty.await.ok().flatten().unwrap_or(false);
+            let unread_first = unread.await.ok().flatten().unwrap_or(false);
+            sidebar.update(cx, |sidebar, cx| {
+                sidebar.apply_options(list_order.as_deref(), hide_empty_projects, unread_first, cx);
+            });
             let branch_prefix = branch.await.ok().flatten().unwrap_or_default();
             let ui_name = ui_name.await.ok().flatten().unwrap_or_default();
             let terminal_name = terminal_name.await.ok().flatten().unwrap_or_default();
@@ -402,7 +413,7 @@ impl Kagan {
             let status = plugin_status.await.ok().flatten().unwrap_or(true);
             let update_check = update.await.ok().flatten().unwrap_or(false);
             let confirm_archive = confirm.await.ok().flatten().unwrap_or(false);
-            let copy_on_select = copy.await.ok().flatten().unwrap_or(false);
+            let copy_on_select = copy.await.ok().flatten().unwrap_or(true);
             let links_in_tab = links.await.ok().flatten().unwrap_or(false);
             let setup_guide = setup.await.ok().flatten();
             prefs.update(cx, |prefs, cx| {
