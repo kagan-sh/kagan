@@ -28,8 +28,8 @@ use gpui_kit::component::{ActiveTheme as _, StyledExt as _};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _,
-    IntoElement, KeyBinding, ParentElement as _, ScrollHandle, StatefulInteractiveElement as _,
-    Styled as _, Subscription, Window, actions, div, px, rems,
+    IntoElement, KeyBinding, ParentElement as _, ScrollHandle, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Window, actions, div, px, rems,
 };
 use kg_core::{Approval, Workspace};
 use kg_domain::{NotifyLevel, PluginId};
@@ -100,6 +100,8 @@ pub(super) struct Prefs {
 
 pub(super) struct SettingsState {
     pub(super) scroll: ScrollHandle,
+    // The row a search result jumped to, until the search or the section changes.
+    pub(super) marked: Option<SharedString>,
     pub(super) approvals: usize,
     pub(super) drafts: Drafts,
     pub(super) keyboard: Recorder,
@@ -123,6 +125,7 @@ impl SettingsState {
         // A new query starts at the first result; an empty one puts the cursor back on the section.
         let watch = cx.subscribe(&query, |this, query, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
+                this.settings.marked = None;
                 this.settings.cursor = if query.read(cx).value().trim().is_empty() {
                     nav::section_position(&this.settings.section, cx)
                 } else {
@@ -180,6 +183,7 @@ impl SettingsState {
             drafts: Drafts::default(),
             keyboard: Recorder::default(),
             section: Category::default(),
+            marked: None,
             cursor: 0,
             query,
             _query_watch: watch,
@@ -438,8 +442,13 @@ impl Kagan {
 }
 
 pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) -> AnyElement {
-    let groups = pages::groups(kagan, window, cx);
+    let mut groups = pages::groups(kagan, window, cx);
     let entries = nav::entries(kagan, &groups, cx);
+    if let Some(marked) = &kagan.settings.marked {
+        for row in groups.iter_mut().flat_map(|group| group.rows.iter_mut()) {
+            row.marked = row.id == *marked;
+        }
+    }
     let sidebar = nav::sidebar(kagan, &entries, window, cx);
     let approvals: Vec<Approval> = Workspace::global(cx)
         .read(cx)

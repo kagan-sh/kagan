@@ -341,3 +341,18 @@ fn the_settings_list_and_search_report_their_roles(cx: &mut TestAppContext) {
         .unwrap();
     assert_eq!(role, Some(gpui_kit::Role::List));
 }
+
+#[gpui_kit::test]
+fn the_row_a_search_result_opens_is_marked(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    tab_to(cx, window, "settings-search");
+    cx.simulate_input(window, "text size");
+    cx.run_until_parked();
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(
+        selected_of(cx, window, "setting-row-terminal-font-size"),
+        Some(true)
+    );
+}

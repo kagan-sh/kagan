@@ -56,6 +56,7 @@ pub(super) enum Entry {
     Result {
         section: Category,
         group: SharedString,
+        row: SharedString,
         at: usize,
         title: SharedString,
         section_label: SharedString,
@@ -122,6 +123,7 @@ pub(super) fn entries(kagan: &Kagan, groups: &[Group], cx: &App) -> Vec<Entry> {
                 out.push(Entry::Result {
                     section: group.section.clone(),
                     group: group.key.clone(),
+                    row: row.id.clone(),
                     at,
                     title,
                     section_label: section_label.clone(),
@@ -157,6 +159,7 @@ impl Kagan {
     ) {
         self.settings.cursor = section_position(&section, cx);
         self.settings.section = section;
+        self.settings.marked = None;
         self.plugins.index_error = None;
         ThemeState::global(cx).update(cx, ThemeState::end_preview);
         self.settings
@@ -174,8 +177,11 @@ impl Kagan {
     ) {
         match entry {
             Entry::Category(listed) => self.select_section(listed.section, window, cx),
-            Entry::Result { section, at, .. } => {
+            Entry::Result {
+                section, at, row, ..
+            } => {
                 self.select_section(section, window, cx);
+                self.settings.marked = Some(row);
                 // Questions, when it is shown, is child 0 of the content column.
                 let questions =
                     usize::from(Workspace::global(cx).read(cx).approvals().next().is_some());
