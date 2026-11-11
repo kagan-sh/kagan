@@ -259,7 +259,7 @@ A project is a named body of work, usually one repository, with one folder on th
 
 ### `List`, `Discover`
 
-- **Allowed when**: always. With `--project`, the project's program is read as the first recent program, so it is the default when it is installed [decision 221].
+- **Allowed when**: always. The default is the project's program when `--project` names one and it is installed, else the first installed known agent [decision 221] [decision 52]. A recent program, a failed one, or one an automation started never changes the default [decision 52 amended].
 - **Shows**: the known programs, the shell, the saved programs with pinned ones first and then by name, and the recent programs, with the default marked [book:cli]. An installed known program is a card with a letter mark, its short name and its version; a missing one is a plain row marked Not installed, never a card. A recent command is a row named by its program's short name, with its arguments under it; the whole command is its tooltip. The shell is a row with its path and no mark [decision 237]. A saved program is listed by its name, its line is the command, and it is installed when its first word is found on the same PATH as a recent program [decision 240].
 - **Refused when**: `--project` names no live project — `not-found` [op/].
 

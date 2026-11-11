@@ -87,6 +87,7 @@ fn the_program_list_finds_known_agents_and_defaults_to_the_first_installed() {
             "claude".into(),
             "'unfinished".into(),
         ],
+        None,
     );
     let claude = list
         .programs
@@ -114,7 +115,7 @@ fn the_program_list_finds_known_agents_and_defaults_to_the_first_installed() {
 
 #[cfg(unix)]
 #[test]
-fn the_newest_installed_recent_program_is_the_default() {
+fn a_recent_program_never_becomes_the_default() {
     let dir = tempfile::tempdir().unwrap();
     fake_program(dir.path(), "claude", "true");
     fake_program(dir.path(), "tool", "true");
@@ -125,8 +126,31 @@ fn the_newest_installed_recent_program_is_the_default() {
         None,
         &[],
         &["tool --fast".into(), "claude".into()],
+        None,
     );
-    assert_eq!(list.default.as_deref(), Some("tool --fast"));
+    assert_eq!(list.default.as_deref(), Some("claude"));
+}
+
+#[cfg(unix)]
+#[test]
+fn the_default_is_the_project_program_only_while_it_is_installed() {
+    let dir = tempfile::tempdir().unwrap();
+    fake_program(dir.path(), "claude", "true");
+    fake_program(dir.path(), "tool", "true");
+    let default_for = |project: &str| {
+        crate::host::program::discover(
+            Some(dir.path().as_os_str()),
+            None,
+            None,
+            None,
+            &[],
+            &[project.to_owned()],
+            Some(project),
+        )
+        .default
+    };
+    assert_eq!(default_for("tool --fast").as_deref(), Some("tool --fast"));
+    assert_eq!(default_for("gone --fast").as_deref(), Some("claude"));
 }
 
 #[cfg(unix)]
@@ -142,6 +166,7 @@ fn only_installed_known_agents_get_a_version() {
         None,
         &[],
         &["tool".into()],
+        None,
     );
     crate::host::program::versions(&mut list);
     let version = |command: &str| {
@@ -217,6 +242,7 @@ fn saved_programs_sit_after_the_shell_and_before_recent_ones_and_fold_a_repeat()
             saved("Missing", "kg-no-such-program", false),
         ],
         &["tool --fast".into(), "tool --recent".into()],
+        None,
     );
     let order: Vec<_> = list
         .programs
@@ -273,6 +299,7 @@ fn a_recent_command_is_named_by_its_program_and_keeps_its_flags() {
             "cursor-agent --model grok-4.7-high --trust --force".into(),
             "/opt/tools/mytool --fast".into(),
         ],
+        None,
     );
     let label = |command: &str| {
         list.programs
@@ -298,7 +325,7 @@ fn a_known_program_in_its_install_folder_is_found_without_the_login_path() {
     let empty = dir.path().join("empty");
     std::fs::create_dir(&empty).unwrap();
     let installed = |home: Option<&std::path::Path>| {
-        crate::host::program::discover(Some(empty.as_os_str()), None, None, home, &[], &[])
+        crate::host::program::discover(Some(empty.as_os_str()), None, None, home, &[], &[], None)
             .programs
             .into_iter()
             .find(|p| p.command == "opencode")
@@ -340,6 +367,7 @@ fn a_recent_command_with_an_exe_suffix_is_named_by_its_program() {
         None,
         &[],
         &["claude.exe --fast".into()],
+        None,
     );
     let label = list
         .programs
@@ -397,8 +425,15 @@ fn more_documented_folders_find_cursor_goose_and_amp_without_the_login_path() {
         std::fs::create_dir_all(&bin).unwrap();
         fake_program(&bin, command, "true");
     }
-    let list =
-        crate::host::program::discover(Some(empty.as_os_str()), None, None, Some(&home), &[], &[]);
+    let list = crate::host::program::discover(
+        Some(empty.as_os_str()),
+        None,
+        None,
+        Some(&home),
+        &[],
+        &[],
+        None,
+    );
     for (command, folder) in folders {
         let found = list
             .programs
@@ -419,8 +454,15 @@ fn a_version_is_read_from_a_program_in_its_documented_folder() {
     fake_program(&bin, "opencode", "echo 'opencode 1.4.2'");
     let empty = dir.path().join("empty");
     std::fs::create_dir(&empty).unwrap();
-    let mut list =
-        crate::host::program::discover(Some(empty.as_os_str()), None, None, Some(&home), &[], &[]);
+    let mut list = crate::host::program::discover(
+        Some(empty.as_os_str()),
+        None,
+        None,
+        Some(&home),
+        &[],
+        &[],
+        None,
+    );
     crate::host::program::versions(&mut list);
     let version = list
         .programs
