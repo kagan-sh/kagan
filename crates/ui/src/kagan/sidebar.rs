@@ -35,7 +35,8 @@ actions!(
         Expand,
         Threads,
         ManagePlugins,
-        NewPlugin
+        NewPlugin,
+        HideRailIcon
     ]
 );
 
@@ -47,6 +48,8 @@ pub(super) fn bindings() -> Vec<KeyBinding> {
         KeyBinding::new("down", FocusNextRow, Some("SidebarRow")),
         KeyBinding::new("left", Collapse, Some("SidebarRow")),
         KeyBinding::new("right", Expand, Some("SidebarRow")),
+        KeyBinding::new("shift-f10", HideRailIcon, Some("SidebarRow")),
+        KeyBinding::new("menu", HideRailIcon, Some("SidebarRow")),
     ]
 }
 
@@ -116,6 +119,8 @@ pub(super) struct Sidebar {
     row_focus: BTreeMap<String, FocusHandle>,
     row_menu: Option<(Entity<PopupMenu>, Subscription, ThreadId)>,
     options: ListOptions,
+    // Plugins whose rail icons are hidden. Read from the saved preference.
+    pub(super) hidden_rail: BTreeSet<PluginId>,
     list_focus: FocusHandle,
     list_menu: Option<(Entity<PopupMenu>, Subscription)>,
     brand_focus: FocusHandle,
@@ -143,6 +148,7 @@ impl Sidebar {
             row_focus: BTreeMap::new(),
             row_menu: None,
             options: ListOptions::default(),
+            hidden_rail: BTreeSet::new(),
             list_focus: cx.focus_handle().tab_stop(true),
             list_menu: None,
             brand_focus: cx.focus_handle().tab_stop(true),
@@ -219,6 +225,14 @@ impl Sidebar {
         let next = ListOptions::from_saved(order, hide_empty_projects, unread_first);
         if self.options != next {
             self.options = next;
+            cx.notify();
+        }
+    }
+
+    pub(super) fn apply_hidden_rail(&mut self, hidden: Vec<PluginId>, cx: &mut Context<Self>) {
+        let next: BTreeSet<PluginId> = hidden.into_iter().collect();
+        if self.hidden_rail != next {
+            self.hidden_rail = next;
             cx.notify();
         }
     }

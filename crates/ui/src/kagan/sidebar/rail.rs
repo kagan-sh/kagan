@@ -1,10 +1,14 @@
-use super::{ActivateRow, EnterRow, ManagePlugins, NewPlugin, Threads, surface_event};
+use super::{
+    ActivateRow, EnterRow, HideRailIcon, ManagePlugins, NewPlugin, Threads, surface_event,
+};
 use crate::kagan::OpenSkills;
+use crate::kagan::plugin_actions::set_rail;
 use crate::theme::TypeScale as _;
 use std::collections::BTreeSet;
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -12,7 +16,7 @@ use gpui_kit::{
     ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
     div, px,
 };
-use kg_domain::Thread;
+use kg_domain::{PluginId, RailAction, Thread};
 
 use crate::kagan::surface::{self, OpenSurface};
 
@@ -40,6 +44,7 @@ pub(in crate::kagan) fn rail(
     let mut plugins = BTreeSet::new();
     let (pages, tools): (Vec<_>, Vec<_>) = surface::nav_items(cx)
         .into_iter()
+        .filter(|item| !sidebar.hidden_rail.contains(&item.plugin))
         .partition(|item| item.page);
     let tools: Vec<_> = tools
         .into_iter()
@@ -116,6 +121,7 @@ pub(super) fn rail_tool(
     let focus = crate::kagan::tab_stop(window, cx, SharedString::from(id.clone()));
     sidebar.row_focus.insert(id.clone(), focus.clone());
     let page = item.page;
+    let plugin = item.plugin.clone();
     let selected = if page {
         shows
             .page
@@ -154,6 +160,14 @@ pub(super) fn rail_tool(
         .on_action(cx.listener(move |_, _: &EnterRow, _, cx| {
             cx.emit(surface_event(page, selected, &keyboard));
         }))
+        .on_action({
+            let plugin = plugin.clone();
+            cx.listener(move |this, _: &HideRailIcon, window, cx| {
+                // The icon is about to leave the rail, so the keyboard moves to the list.
+                window.focus(&this.focus, cx);
+                set_rail(plugin.clone(), RailAction::Hide, cx);
+            })
+        })
         .ui_observe_as(Facts {
             selected: Some(selected),
             focus: Some(focus),
@@ -176,7 +190,23 @@ pub(super) fn rail_tool(
                 cx.emit(surface_event(page, selected, &action));
             })),
         )
+        .context_menu(move |menu, _, _| rail_menu(menu, plugin.clone()))
         .into_any_element()
+}
+
+fn rail_menu(menu: PopupMenu, plugin: PluginId) -> PopupMenu {
+    menu.item(
+        PopupMenuItem::element(|_, _| {
+            div()
+                .id("rail-hide")
+                .ui_observe_as(Facts {
+                    role: Role::MenuItem,
+                    ..Facts::button("Hide from rail")
+                })
+                .child("Hide from rail")
+        })
+        .on_click(move |_, _, cx| set_rail(plugin.clone(), RailAction::Hide, cx)),
+    )
 }
 
 fn skills_row(active: bool, focus: &FocusHandle, cx: &mut Context<Sidebar>) -> impl IntoElement {

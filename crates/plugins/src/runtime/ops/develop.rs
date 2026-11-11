@@ -150,6 +150,7 @@ pub(in crate::runtime::ops) async fn remove(
     )
     .await?;
     record(host, &id, cx)?;
+    super::rail::forget(&id, cx).await?;
     let declared = host.read_with(cx, |host, _| {
         host.active
             .get(&id)

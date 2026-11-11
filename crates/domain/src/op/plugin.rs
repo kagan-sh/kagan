@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::Subcommand;
+use clap::{Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 
 use crate::{PluginId, ProjectId, ThreadId};
@@ -120,6 +120,12 @@ pub enum PluginOp {
     Enable { id: PluginId },
     /// Disable a plugin
     Disable { id: PluginId },
+    /// Hide a plugin's icons from the rail, or show them again. The plugin keeps working.
+    Rail {
+        id: PluginId,
+        #[arg(value_enum)]
+        action: RailAction,
+    },
     /// Read or change a plugin setting
     Config {
         id: PluginId,
@@ -140,6 +146,14 @@ pub enum PluginOp {
         #[serde(default)]
         thread_id: Option<ThreadId>,
     },
+}
+
+/// Whether a plugin's rail icons are drawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum RailAction {
+    Hide,
+    Show,
 }
 
 /// What an update covers: one plugin, or every git plugin that can move.
