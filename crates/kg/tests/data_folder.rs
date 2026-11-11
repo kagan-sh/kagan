@@ -153,8 +153,10 @@ fn a_reader_that_leaves_early_does_not_crash_kg() {
     let socket = dir.path().join("first.sock");
     wait_for_app(&data, &socket);
 
-    // The reply is larger than a pipe buffer, so the write meets a closed reader.
-    let body = "q".repeat(150_000);
+    // The reply is larger than a pipe buffer, so the write meets a closed reader. The body is
+    // one command-line argument, and Linux caps one argument at 128 KiB (MAX_ARG_STRLEN), so
+    // it stays under that.
+    let body = "q".repeat(100_000);
     let mut child = kg(&data, &socket)
         .env("KG_NO_START", "1")
         .args(["saved-prompt", "add", "big", &body])
