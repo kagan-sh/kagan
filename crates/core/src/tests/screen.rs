@@ -116,9 +116,19 @@ async fn a_quit_returns_once_the_screen_is_saved(cx: &mut TestAppContext) {
             .contains("SAVED-MARKER")
     );
     let stopping = cx.update(Workspace::stop_for_quit);
-    cx.run_until_parked();
-    stopping.await.unwrap();
+    let started = std::time::Instant::now();
+    while !stopping.is_ready() {
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(8),
+            "the quit did not finish"
+        );
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(10));
+        cx.run_until_parked();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
     assert!(saved_screen(fixture.dir.path(), &id).is_some_and(|row| row.screen_kept));
+    stopping.await.unwrap();
     drop(fixture);
 }
 
