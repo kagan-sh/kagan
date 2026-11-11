@@ -1550,6 +1550,8 @@ Arguments:
           
 
   <PINNED>
+          true to pin, false to unpin
+          
           [possible values: true, false]
 
 Options:
@@ -2182,7 +2184,7 @@ Usage: kg plugin rail <ID> <ACTION>
 
 Arguments:
   <ID>
-          
+          The plugin id, then hide or show
 
   <ACTION>
           [possible values: hide, show]

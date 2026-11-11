@@ -69,11 +69,11 @@ pub fn saved_name(name: &str) -> Result<String, String> {
     }
     if name.chars().count() > SAVED_NAME_MAX {
         return Err(format!(
-            "A saved program name is at most {SAVED_NAME_MAX} characters."
+            "a saved program name is at most {SAVED_NAME_MAX} characters"
         ));
     }
     if name.chars().any(char::is_control) {
-        return Err("A saved program name has no control characters.".into());
+        return Err("a saved program name has no control characters".into());
     }
     Ok(name.to_owned())
 }

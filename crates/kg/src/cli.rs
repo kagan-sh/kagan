@@ -155,7 +155,8 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
                 exit_with(*exit_code);
                 return Ok(());
             }
-            OpResult::Text(text) | OpResult::Logs { text, .. } => return print_text(text),
+            OpResult::Text(text) => return print_text(text),
+            OpResult::Logs { text, .. } => return print_logs(text),
             OpResult::Wait(outcome) => {
                 println!("{outcome}");
                 return Ok(());
@@ -237,6 +238,13 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
     if let OpResult::Cli { exit_code, .. } = result {
         exit_with(*exit_code);
     }
+    Ok(())
+}
+
+// Logs arrive in chunks while following, so they are written as they are, with no newline added.
+fn print_logs(text: &str) -> Result<(), OpError> {
+    use std::io::Write as _;
+    std::io::stdout().write_all(text.as_bytes())?;
     Ok(())
 }
 
