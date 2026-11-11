@@ -119,7 +119,7 @@ pub(crate) fn begin_run(workspace: &Workspace, id: &ThreadId, hooks: bool, cx: &
     });
 }
 
-/// Only a known agent's line can start a quiet turn, so a shell never reports one.
+// Only a known agent's line can start a quiet turn, so a shell never reports one.
 pub(crate) fn note_submit(workspace: &Workspace, id: &ThreadId, now: Instant, cx: &mut App) {
     let Some(thread) = workspace.threads.get(id) else {
         return;
