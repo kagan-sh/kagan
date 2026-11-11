@@ -1,4 +1,4 @@
-use gpui_kit::{AnyWindowHandle, TestAppContext};
+use gpui_kit::{AnyWindowHandle, AppContext as _, TestAppContext};
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, Program, ProgramOp, ProgramSource};
 
@@ -343,5 +343,53 @@ fn a_saved_program_has_a_letter_mark_like_a_built_in_one(cx: &mut TestAppContext
     assert!(
         shows(cx, window, "program-mark-Alpha"),
         "the saved row has its letter mark"
+    );
+}
+
+// Whether an element lies inside the picker list, top and bottom.
+fn inside_list(cx: &mut TestAppContext, window: AnyWindowHandle, row: &str) -> bool {
+    cx.update_window(window, |_, window, _| {
+        let within = crate::ui_registry::find(
+            window,
+            &gpui_kit::ElementId::Name("program-list".to_owned().into()),
+        )
+        .expect("the program list");
+        let element =
+            crate::ui_registry::find(window, &gpui_kit::ElementId::Name(row.to_owned().into()))
+                .expect("the row");
+        element.bounds.top() >= within.bounds.top()
+            && element.bounds.bottom() <= within.bounds.bottom()
+    })
+    .unwrap()
+}
+
+// A long list scrolls. Pinning the picked row with the keyboard moves it to the top and reloads the
+// list, and the row stays selected and on screen.
+#[cfg(unix)]
+#[gpui_kit::test]
+fn pinning_the_picked_row_keeps_it_selected_and_on_screen(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    // An installed agent is the default, so a reload that picks the default would show it.
+    fixture_programs(cx, data.path(), &["codex"]);
+    for n in 0..12 {
+        save(cx, &format!("Prog{n:02}"), &format!("codex --p{n:02}"));
+    }
+    start_in_plain_folder(cx, window, data.path());
+    search(cx, window, "codex");
+    for _ in 0..40 {
+        if label(cx, window, &row_id("Prog10")).contains("selected") {
+            break;
+        }
+        cx.simulate_keystrokes(window, "down");
+    }
+    cx.run_until_parked();
+    assert!(label(cx, window, &row_id("Prog10")).contains("selected"));
+    cx.simulate_keystrokes(window, &chord("PinSavedProgram"));
+    wait_until(cx, |cx| pinned(cx, "Prog10"));
+    cx.run_until_parked();
+    assert!(label(cx, window, &row_id("Prog10")).contains("selected"));
+    assert!(
+        inside_list(cx, window, &row_id("Prog10")),
+        "the picked row is still in the visible list"
     );
 }
