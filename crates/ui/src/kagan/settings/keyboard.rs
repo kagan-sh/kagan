@@ -15,7 +15,7 @@ use kg_domain::{KeymapAction, KeymapOp, Op, OpResult, PluginId, SHORTCUTS, Short
 use kg_plugins::{CommandContribution, PluginHost};
 
 use super::Kagan;
-use super::row::{Group, GroupStyle, Row, group, row, save};
+use super::row::{Group, Row, group, row, save};
 use crate::kagan::keys::chord_for;
 use crate::plugins::{Refused, Why, refused};
 use crate::ui_observe::UiObserveExt as _;
@@ -78,12 +78,7 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
                 .iter()
                 .map(|shortcut| shortcut_row(kagan, shortcut, &refused, &labels, window, cx))
                 .collect();
-            let style = if at == 0 {
-                GroupStyle::FirstShortcuts
-            } else {
-                GroupStyle::Shortcuts
-            };
-            shortcut_group(group(key, title, rows), style)
+            shortcut_group(group(key, title, rows), at == 0)
         })
         .collect();
     for (plugin, name, commands) in plugin_commands(cx) {
@@ -112,15 +107,15 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
             .collect();
         out.push(shortcut_group(
             group(format!("shortcuts-plugin-{}", plugin.0), name, rows),
-            GroupStyle::Shortcuts,
+            false,
         ));
     }
     out
 }
 
-fn shortcut_group(mut group: Group, style: GroupStyle) -> Group {
+fn shortcut_group(mut group: Group, anchored: bool) -> Group {
     group.headed = true;
-    group.style = style;
+    group.anchored = anchored;
     group
 }
 

@@ -18,7 +18,7 @@ pub(super) fn group_block(group: row::Group, cx: &App) -> AnyElement {
     let card = cx.theme().group_box;
     let muted = cx.theme().muted_foreground;
     let rows = group.rows.len();
-    let first_shortcut = group.style == row::GroupStyle::FirstShortcuts;
+    let anchored = group.anchored;
     let title = group.title.clone();
     let block = v_flex()
         .flex_shrink_0()
@@ -57,7 +57,7 @@ pub(super) fn group_block(group: row::Group, cx: &App) -> AnyElement {
                 ),
         )
         .into_any_element();
-    if first_shortcut {
+    if anchored {
         div()
             .flex_shrink_0()
             .id("settings-group-shortcuts")
