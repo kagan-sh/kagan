@@ -1,8 +1,8 @@
-use gpui_kit::TestAppContext;
+use gpui_kit::{Role, TestAppContext};
 use kg_core::Workspace;
 use kg_domain::{EnvOp, Op, OpResult, ProjectId, ProjectOp, SettingsOp};
 
-use crate::tests::kagan::{click, open, present, wait_until};
+use crate::tests::kagan::{click, label, open, present, role_of, selected_of, shows, wait_until};
 
 fn names(cx: &mut TestAppContext, project: Option<&str>) -> Vec<String> {
     let task = cx.update(|cx| {
@@ -115,4 +115,81 @@ fn a_stored_program_that_is_not_installed_is_named_on_the_page(cx: &mut TestAppC
     cx.foreground_executor().block_test(set).unwrap();
     open_project_page(cx);
     assert!(present(cx, window, "project-program-missing"));
+    assert_eq!(
+        label(cx, window, "project-program-choice"),
+        "gone-tool --fast"
+    );
+    assert!(
+        !present(cx, window, "project-program-menu-first"),
+        "the choices stay in the menu until it opens"
+    );
+    click(cx, window, "project-program-choice");
+    wait_until(cx, |cx| present(cx, window, "project-program-menu-first"));
+    assert_eq!(
+        selected_of(cx, window, "project-program-menu-first"),
+        Some(false),
+        "First installed clears the stored program, so it is not the current choice"
+    );
+    click(cx, window, "project-program-menu-first");
+    wait_until(cx, |cx| !present(cx, window, "project-program-missing"));
+    assert_eq!(
+        label(cx, window, "project-program-choice"),
+        "First installed"
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn the_program_menu_shows_the_choice_and_first_installed_clears_it(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    crate::tests::app::picker::fixture_programs(cx, data.path(), &["codex", "gemini"]);
+    open_project_page(cx);
+    assert_eq!(
+        label(cx, window, "project-program-choice"),
+        "First installed"
+    );
+    assert!(!present(cx, window, "project-program-menu-codex"));
+    click(cx, window, "project-program-choice");
+    wait_until(cx, |cx| shows(cx, window, "project-program-menu-codex"));
+    assert!(shows(cx, window, "project-program-menu-gemini"));
+    assert_eq!(
+        role_of(cx, window, "project-program-menu-codex"),
+        Some(Role::MenuItem)
+    );
+    assert_eq!(
+        selected_of(cx, window, "project-program-menu-first"),
+        Some(true)
+    );
+    click(cx, window, "project-program-menu-codex");
+    wait_until(cx, |cx| stored_program(cx).as_deref() == Some("codex"));
+    assert_eq!(label(cx, window, "project-program-choice"), "Codex");
+    assert!(!present(cx, window, "project-program-menu-codex"));
+    click(cx, window, "project-program-choice");
+    wait_until(cx, |cx| shows(cx, window, "project-program-menu-first"));
+    assert_eq!(
+        selected_of(cx, window, "project-program-menu-codex"),
+        Some(true)
+    );
+    click(cx, window, "project-program-menu-first");
+    wait_until(cx, |cx| stored_program(cx).is_none());
+    assert_eq!(
+        label(cx, window, "project-program-choice"),
+        "First installed"
+    );
+}
+
+#[cfg(unix)]
+fn stored_program(cx: &mut TestAppContext) -> Option<String> {
+    let task = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Project(ProjectOp::Get {
+                id: ProjectId("prj_kagan".into()),
+            }),
+            cx,
+        )
+    });
+    match cx.foreground_executor().block_test(task).unwrap() {
+        OpResult::Project(project) => project.program,
+        other => panic!("{other:?}"),
+    }
 }

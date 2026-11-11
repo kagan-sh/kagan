@@ -25,6 +25,7 @@ Commands:
   plugin        Plugins
   sidebar       Projects, sections and threads as the sidebar shows them
   section       Named groups threads are filed under
+  saved-prompt  Saved prompts: stored text the person can send
   theme         Read or change appearance
   settings      The settings page in the window
   window        The application menu and the window
@@ -2187,6 +2188,118 @@ Options:
           Print help
 ```
 
+## `kg saved-prompt`
+
+```text
+Saved prompts: stored text the person can send
+
+Usage: kg saved-prompt [OPTIONS] <COMMAND>
+
+Commands:
+  add     Save text the person can send later
+  search  Saved prompts whose title or body contains this text. An empty search lists them all
+  star    Star or unstar a saved prompt
+  delete  Delete a saved prompt
+  send    Type a saved prompt into a thread and press Enter
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Print compact JSON; failures print the error envelope
+
+  -h, --help
+          Print help
+```
+
+## `kg saved-prompt add`
+
+```text
+Save text the person can send later
+
+Usage: kg saved-prompt add <TITLE> <BODY>
+
+Arguments:
+  <TITLE>
+          
+
+  <BODY>
+          
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg saved-prompt search`
+
+```text
+Saved prompts whose title or body contains this text. An empty search lists them all
+
+Usage: kg saved-prompt search [TEXT]
+
+Arguments:
+  [TEXT]
+          [default: ""]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg saved-prompt star`
+
+```text
+Star or unstar a saved prompt
+
+Usage: kg saved-prompt star <ID> <STARRED>
+
+Arguments:
+  <ID>
+          
+
+  <STARRED>
+          [possible values: true, false]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg saved-prompt delete`
+
+```text
+Delete a saved prompt
+
+Usage: kg saved-prompt delete <ID>
+
+Arguments:
+  <ID>
+          
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg saved-prompt send`
+
+```text
+Type a saved prompt into a thread and press Enter
+
+Usage: kg saved-prompt send <ID> <THREAD_ID>
+
+Arguments:
+  <ID>
+          
+
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
 ## `kg theme`
 
 ```text
@@ -2359,6 +2472,7 @@ Commands:
   toggle-activity-log      Show or hide the activity log at the bottom of the window
   command-list             Open the command list
   search-threads           Open the command list on thread search
+  saved-prompts            Open the command list on saved prompts
   next-terminal            Move the keyboard to the shown thread's next terminal
   previous-terminal        Move the keyboard to the shown thread's previous terminal
   open-local-link          Open the newest local link the shown thread printed, such as `localhost:3000`, in the system browser
@@ -2562,6 +2676,18 @@ Options:
 Open the command list on thread search
 
 Usage: kg window search-threads
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg window saved-prompts`
+
+```text
+Open the command list on saved prompts
+
+Usage: kg window saved-prompts
 
 Options:
   -h, --help

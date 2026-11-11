@@ -30,7 +30,8 @@ ids!(
     ThreadId,
     SectionId,
     PendingInteractionId,
-    PluginId
+    PluginId,
+    SavedPromptId
 );
 
 impl ProjectId {
@@ -59,6 +60,13 @@ impl PluginId {
 }
 
 impl ThreadId {
+    #[must_use]
+    pub fn plain(&self) -> bool {
+        plain_identifier(&self.0)
+    }
+}
+
+impl SavedPromptId {
     #[must_use]
     pub fn plain(&self) -> bool {
         plain_identifier(&self.0)

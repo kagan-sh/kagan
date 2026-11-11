@@ -89,6 +89,9 @@ _Avoid_: Idle (for a running thread)
 A question that waits for a person to answer, raised by an agent or a plugin, such as a permission request or a form.
 _Avoid_: Prompt, dialog
 
+**Saved prompt**:
+Stored text the person can send. It has a title, a body, and a starred flag. It is not a question waiting for an answer.
+
 ## Agents and extensions
 
 **Screen**:

@@ -107,6 +107,8 @@ Type to filter. Each row shows its key. Enter runs the selected command. A comma
 
 **Search threads…** (Cmd+Alt+F) finds threads by title and terminal text. Enter opens the thread at the matching line. After an archived thread's 10 seconds end, search finds it only by title. `kg thread search` gives the same results.
 
+**Saved prompts** (Cmd+Shift+I) lists stored text the person can send. The field searches the title and the body. Cmd+D stars the selected row and Cmd+Alt+Backspace deletes it (Ctrl+Shift off macOS). Enter sends its body into the shown thread and presses Enter. **New saved prompt** (Cmd+Alt+N) writes one in the same list; Cmd+Alt+S saves it and Escape drops it. `kg saved-prompt` does the same.
+
 ## Settings
 
 Press Cmd+, or click the gear at the bottom of the rail. Settings has Appearance, Agents, Updates, Keyboard, and Plugins. Updates shows the version, **Check now**, what the last check found, and **Check automatically**, which is off until you turn it on. Escape or **Close** leaves Settings.

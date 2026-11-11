@@ -176,6 +176,7 @@ pub(in crate::tests) fn install_plugins(data: &Path) {
                     "options": ["comfortable", "compact"],
                     "default": "comfortable"
                 },
+                "tier": {"type": "select", "title": "Tier", "options": ["gold", "silver"]},
                 "label": {"type": "string", "title": "Label", "default": "hi"},
                 "log": {"type": "string", "title": "Log", "multiline": true},
                 "board": {"type": "project", "title": "Board"},

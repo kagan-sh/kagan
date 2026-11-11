@@ -112,6 +112,7 @@ pub(crate) async fn execute(
         Op::Update(op) => crate::update::run(&database, op, cx).await,
         Op::Thread(op) => dispatch_thread(this, database, op, requester, cx).await,
         Op::Section(op) => section(this, database, op, cx).await,
+        Op::SavedPrompt(op) => crate::saved_prompt::run(this, database, op, cx).await,
         Op::Plugin(kg_domain::PluginOp::Start) => {
             announce(this, crate::WorkspaceEvent::NewPlugin, cx)
         }
@@ -217,7 +218,10 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Preview(_)
         | Op::Diagnostics(_)
         | Op::Browser(_)
-        | Op::Update(_) => false,
+        | Op::Update(_)
+        | Op::SavedPrompt(
+            kg_domain::SavedPromptOp::Search { .. } | kg_domain::SavedPromptOp::Send { .. },
+        ) => false,
         Op::Project(
             ProjectOp::Add { .. } | ProjectOp::Reorder { .. } | ProjectOp::SetProgram { .. },
         )
@@ -234,6 +238,11 @@ pub(crate) fn serialized(op: &Op) -> bool {
             kg_domain::InstructionsOp::Set { .. } | kg_domain::InstructionsOp::Clear { .. },
         )
         | Op::Section(_)
+        | Op::SavedPrompt(
+            kg_domain::SavedPromptOp::Add { .. }
+            | kg_domain::SavedPromptOp::Star { .. }
+            | kg_domain::SavedPromptOp::Delete { .. },
+        )
         | Op::Ui(_) => true,
         Op::Surface(op) => !matches!(op, kg_domain::SurfaceOp::List),
         Op::Thread(op) => match op {

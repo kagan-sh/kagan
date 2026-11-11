@@ -11,7 +11,7 @@ use super::{
 };
 use crate::tests::kagan::{
     add_project, click, label, open, open_with_plugins_then, present, selected_of, set_preference,
-    shows, wait_until,
+    shows, value_of, wait_until,
 };
 
 const PREFS: &str = "dev.test.prefs";
@@ -78,8 +78,31 @@ fn a_plugin_setting_saves_from_its_page(cx: &mut TestAppContext) {
     click(cx, window, "plugin-dev.test.prefs/sounds");
     assert_eq!(plugin_config(cx, "sounds"), json!(false));
 
+    let select = "setting-select-dev.test.prefs/density";
+    assert_eq!(label(cx, window, select), "comfortable");
+    assert_eq!(value_of(cx, window, select).as_deref(), Some("comfortable"));
+    assert!(
+        !shows(cx, window, "option-dev.test.prefs/density/compact"),
+        "the choices stay in the menu until it opens"
+    );
+    click(cx, window, select);
+    wait_until(cx, |cx| {
+        shows(cx, window, "option-dev.test.prefs/density/compact")
+    });
     click(cx, window, "option-dev.test.prefs/density/compact");
     assert_eq!(plugin_config(cx, "density"), json!("compact"));
+    wait_until(cx, |cx| label(cx, window, select) == "compact");
+}
+
+#[gpui_kit::test]
+fn a_select_with_no_default_or_saved_value_says_not_chosen(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
+    cx.run_until_parked();
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-plugin-dev.test.prefs");
+    let select = "setting-select-dev.test.prefs/tier";
+    assert_eq!(label(cx, window, select), "Not chosen");
+    assert_eq!(value_of(cx, window, select).as_deref(), Some("Not chosen"));
 }
 
 #[gpui_kit::test]

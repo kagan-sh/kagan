@@ -545,8 +545,17 @@ fn settings_picks_the_review_and_the_key_takes_it_back(cx: &mut TestAppContext) 
             && note.contains("offers a replaceable review"),
         "{note}"
     );
-    click(cx, window, &format!("slot-review-{SWAP}"));
+    assert_eq!(label(cx, window, "slot-review"), "Built-in");
+    let choice = format!("slot-review-{SWAP}");
+    assert!(
+        !shows(cx, window, &choice),
+        "the choices stay in the menu until it opens"
+    );
+    click(cx, window, "slot-review");
+    wait_until(cx, |cx| shows(cx, window, &choice));
+    click(cx, window, &choice);
     wait_until(cx, |cx| saved(cx, Slot::Review) == json!(SWAP));
+    wait_until(cx, |cx| label(cx, window, "slot-review") == "Swap");
     wait_until(cx, |cx| filled(cx, &kagan, Slot::Review));
     click(cx, window, "settings-gear");
     wait_until(cx, |cx| shows(cx, window, "change-notes.txt"));
@@ -982,13 +991,14 @@ fn a_slot_button_clicked_by_kg_ui_needs_a_person(cx: &mut TestAppContext) {
     let (kagan, window, _data) = opened(cx, LIST);
     click(cx, window, "settings-gear");
     click(cx, window, "settings-section-installed");
-    wait_until(cx, |cx| {
-        present(cx, window, &format!("slot-threads-{SWAP}"))
-    });
+    wait_until(cx, |cx| present(cx, window, "slot-threads"));
+    click(cx, window, "slot-threads");
+    let choice = format!("slot-threads-{SWAP}");
+    wait_until(cx, |cx| shows(cx, window, &choice));
     let clicked = run(
         cx,
         Op::Ui(kg_domain::UiOp::Click {
-            element_id: format!("slot-threads-{SWAP}"),
+            element_id: choice,
             within: None,
             window: 0,
         }),

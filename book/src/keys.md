@@ -34,6 +34,7 @@ Quit (Cmd+Q) and Close (Cmd+W) are only on macOS. On Linux and Windows, Ctrl+Shi
 | Cmd+Shift+E | Show or hide the activity log at the bottom of the window |
 | Cmd+Shift+A | Command list |
 | Cmd+Alt+F | Search threads |
+| Cmd+Shift+I | Saved prompts |
 | Cmd+Enter | Send review |
 | Cmd+F | Find in diff |
 | Alt+] and Alt+[ | Next change, previous change |
@@ -44,6 +45,8 @@ Quit (Cmd+Q) and Close (Cmd+W) are only on macOS. On Linux and Windows, Ctrl+Shi
 | Cmd+0 | Actual terminal text size |
 | Cmd+Alt+B | Use the built-in thread list |
 | Cmd+Alt+V | Use the built-in review |
+
+In the saved prompts list, Cmd+D stars the selected row, Cmd+Alt+Backspace deletes it, Cmd+Alt+N starts a new one, and Cmd+Alt+S saves a draft. Escape drops a draft before it closes the list. Ctrl+Shift replaces Cmd off macOS.
 
 In the left sidebar, Up and Down move between rows. Enter or Space opens a thread. In the terminal, Up and Down go to the program.
 

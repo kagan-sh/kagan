@@ -16,6 +16,7 @@ mod plugin;
 mod preference;
 mod program;
 mod project;
+mod saved_prompt;
 mod section;
 mod settings;
 mod skill;
@@ -34,8 +35,8 @@ use serde_json::Value;
 
 use crate::{
     AgentTool, Environment, EnvironmentId, Event, IndexEntry, Listing, PendingInteraction, Plugin,
-    PluginCommand, PluginId, PluginLog, PreviewOp, ProgramList, Project, ProjectId, Sidebar,
-    Thread, ThreadId,
+    PluginCommand, PluginId, PluginLog, PreviewOp, ProgramList, Project, ProjectId, SavedPrompt,
+    Sidebar, Thread, ThreadId,
 };
 
 pub use browser::{BrowserControl, BrowserOp, BrowserSnapshot, BrowserView};
@@ -60,6 +61,7 @@ pub use plugin::{OutdatedPlugin, PluginOp, UpdateTarget};
 pub use preference::PreferenceOp;
 pub use program::ProgramOp;
 pub use project::ProjectOp;
+pub use saved_prompt::SavedPromptOp;
 pub use section::SectionOp;
 pub use settings::SettingsOp;
 pub use skill::{Skill, SkillOp, SkillSource, SkillTemplate};
@@ -120,6 +122,9 @@ pub enum Op {
     /// Named groups threads are filed under
     #[command(subcommand)]
     Section(SectionOp),
+    /// Saved prompts: stored text the person can send
+    #[command(subcommand)]
+    SavedPrompt(SavedPromptOp),
     /// Read or change appearance
     #[command(subcommand)]
     Theme(ThemeOp),
@@ -245,6 +250,8 @@ pub enum OpResult {
     Events(Vec<Event>),
     Event(Option<Event>),
     Sidebar(Sidebar),
+    SavedPrompt(SavedPrompt),
+    SavedPrompts(Vec<SavedPrompt>),
     Project(Project),
     Projects(Vec<Project>),
     Programs(ProgramList),

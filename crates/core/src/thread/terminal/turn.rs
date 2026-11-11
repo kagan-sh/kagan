@@ -124,14 +124,15 @@ pub(crate) fn note_submit(workspace: &Workspace, id: &ThreadId, now: Instant, cx
     let Some(thread) = workspace.threads.get(id) else {
         return;
     };
+    if !known_agent(&thread.read(cx).record.provider) {
+        return;
+    }
     let screen = workspace
         .shown(id)
         .and_then(|shown| shown.running())
         .map_or(0, |terminal| screen_hash(&terminal.view().grid()));
     thread.update(cx, |thread, _| {
-        if known_agent(&thread.record.provider) {
-            thread.turn.apply(Signal::Submit { screen }, now);
-        }
+        thread.turn.apply(Signal::Submit { screen }, now);
     });
 }
 

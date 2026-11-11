@@ -32,19 +32,19 @@ fn clicking_a_setting_out_of_view_scrolls_to_it(cx: &mut TestAppContext) {
     click(cx, window, "settings-gear");
     click(cx, window, "settings-section-installed");
     assert!(
-        !shows(cx, window, "slot-review-kagan"),
+        !shows(cx, window, "slot-review"),
         "the target starts below the window"
     );
     run_op(
         cx,
         Op::Ui(UiOp::Click {
-            element_id: "slot-review-kagan".into(),
+            element_id: "slot-review".into(),
             within: None,
             window: 0,
         }),
     );
     cx.run_until_parked();
-    assert!(shows(cx, window, "slot-review-kagan"));
+    assert!(shows(cx, window, "slot-review"));
 }
 
 #[gpui_kit::test]
@@ -55,19 +55,19 @@ fn scrolling_an_element_out_of_view_first_brings_it_into_view(cx: &mut TestAppCo
     click(cx, window, "settings-gear");
     click(cx, window, "settings-section-installed");
     assert!(
-        !shows(cx, window, "slot-review-kagan"),
+        !shows(cx, window, "slot-review"),
         "the target starts below the window"
     );
     run_op(
         cx,
         Op::Ui(UiOp::Scroll {
-            element_id: "slot-review-kagan".into(),
+            element_id: "slot-review".into(),
             within: None,
             dy: 0.,
             window: 0,
         }),
     );
-    assert!(shows(cx, window, "slot-review-kagan"));
+    assert!(shows(cx, window, "slot-review"));
 }
 
 #[gpui_kit::test]
