@@ -358,6 +358,18 @@ async fn three_failed_runs_in_a_row_pause_the_automation(cx: &mut TestAppContext
     .unwrap() else {
         panic!("automation")
     };
+    let told = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let workspace = fixture.workspace.clone();
+    let _subscription = cx.update({
+        let told = told.clone();
+        move |cx| {
+            cx.subscribe(&workspace, move |_, event: &crate::WorkspaceEvent, _| {
+                if let crate::WorkspaceEvent::AutomationPaused(name, reason) = event {
+                    told.borrow_mut().push((name.clone(), reason.clone()));
+                }
+            })
+        }
+    });
     for run in 1..=3 {
         cx.executor().advance_clock(Duration::from_secs(60));
         assert!(
@@ -376,6 +388,11 @@ async fn three_failed_runs_in_a_row_pause_the_automation(cx: &mut TestAppContext
     }
     let row = automations(cx).await.remove(0);
     assert!(row.paused, "the due run pauses instead of starting");
+    assert_eq!(
+        *told.borrow(),
+        [("Failing".to_owned(), "3 runs failed in a row".to_owned())],
+        "the activity log hears about the pause once"
+    );
     assert!(row.failing);
     assert_eq!(row.threads.len(), 3, "no fourth thread was started");
     assert_eq!(thread_count(cx).await, 3);

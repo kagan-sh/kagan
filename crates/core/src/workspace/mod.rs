@@ -186,6 +186,8 @@ pub enum WorkspaceEvent {
     Notice(ThreadId, kg_domain::NotifyReason),
     /// `kg notify test`: post one test system notification
     NotifyTest,
+    /// An automation paused itself: its name, and why
+    AutomationPaused(String, String),
 }
 impl EventEmitter<WorkspaceEvent> for Workspace {}
 

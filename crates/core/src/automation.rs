@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use gpui_kit::{AsyncApp, Context, Task, WeakEntity};
 use kg_domain::{
-    Automation, AutomationId, AutomationOp, EnvironmentSpec, OpError, OpResult, Run, ThreadId,
-    ThreadOp, Timestamp,
+    Automation, AutomationId, AutomationOp, EnvironmentSpec, FAILED_RUNS_LIMIT, OpError, OpResult,
+    Run, ThreadId, ThreadOp, Timestamp,
 };
 
 use crate::Requester;
@@ -146,7 +146,7 @@ async fn tick(this: &WeakEntity<Workspace>, cx: &mut AsyncApp) -> Option<()> {
     };
     for automation in due {
         if automation.failing {
-            report(halt(this, &database, &automation.id, cx).await);
+            report(halt(this, &database, &automation, cx).await);
             continue;
         }
         if running(this, &automation, cx)? {
@@ -157,19 +157,26 @@ async fn tick(this: &WeakEntity<Workspace>, cx: &mut AsyncApp) -> Option<()> {
     Some(())
 }
 
-// A run that keeps failing is not started again: the automation pauses, and its row says why.
+// A run that keeps failing is not started again: the automation pauses, its row says why, and the
+// activity log hears about it.
 async fn halt(
     this: &WeakEntity<Workspace>,
     database: &Database,
-    id: &AutomationId,
+    automation: &Automation,
     cx: &mut AsyncApp,
 ) -> Result<()> {
     let at = time(this, cx)?;
-    let id = id.clone();
+    let id = automation.id.clone();
     database
         .call(move |store| store.set_automation_paused(&id, true, at))
         .await?;
-    Workspace::refresh(this, cx).await
+    Workspace::refresh(this, cx).await?;
+    let reason = format!("{FAILED_RUNS_LIMIT} runs failed in a row");
+    let name = automation.name.clone();
+    this.update(cx, |_, cx| {
+        cx.emit(crate::WorkspaceEvent::AutomationPaused(name, reason));
+    })
+    .map_err(crate::workspace::closed)
 }
 
 fn running(
