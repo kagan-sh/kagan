@@ -54,6 +54,14 @@ fn an_index_lists_git_sources_and_local_paths_inside_its_folder() {
 }
 
 #[test]
+fn a_description_of_exactly_the_limit_is_kept() {
+    let text = index(
+        &json!([{ "name": "a", "description": "x".repeat(300), "source": "git:https://e.com/p@v1" }]),
+    );
+    assert!(parse(&text, None).is_ok());
+}
+
+#[test]
 fn a_bad_index_is_refused_with_the_reason() {
     let git =
         |name: &str| json!({ "name": name, "description": "", "source": "git:https://e.com/p@v1" });
