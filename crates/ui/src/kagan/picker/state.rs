@@ -94,7 +94,22 @@ impl Picker {
 
     // Each opening of the screen starts with the program list, so a custom command stays closed.
     // The search is kept, as the docs say.
+    // Opening the picker: the list is replaced by a loading line until the programs arrive.
     pub(crate) fn load(
+        &mut self,
+        project: Option<kg_domain::ProjectId>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.state = Programs::Loading;
+        self.list
+            .update(cx, |list, _| list.delegate_mut().loading = true);
+        self.reload(project, window, cx);
+    }
+
+    // A change to the saved programs: the list stays on screen, with its scroll and the row the
+    // person had selected, if that row is still there.
+    pub(super) fn reload(
         &mut self,
         project: Option<kg_domain::ProjectId>,
         window: &mut Window,
@@ -103,9 +118,6 @@ impl Picker {
         self.project.clone_from(&project);
         self.set_mode(Mode::Catalog, cx);
         self.notice = None;
-        self.state = Programs::Loading;
-        self.list
-            .update(cx, |list, _| list.delegate_mut().loading = true);
         let task = Workspace::dispatch(
             Op::Program(ProgramOp::Discover {
                 project_id: project.clone(),
@@ -198,13 +210,24 @@ impl Picker {
     }
 
     fn show(&mut self, list: ProgramList, window: &mut Window, cx: &mut Context<Self>) {
+        let reloading = matches!(self.state, Programs::Loaded);
         self.state = Programs::Loaded;
         self.list.update(cx, |state, cx| {
             let rows = state.delegate_mut();
+            let kept = reloading
+                .then(|| rows.selected().map(|p| (p.command.clone(), p.source)))
+                .flatten();
             rows.loading = false;
             rows.all = list.programs;
             rows.filter();
-            if let Some(default) = &list.default
+            let place = kept.and_then(|(command, source)| {
+                rows.matches
+                    .iter()
+                    .position(|p| p.command == command && p.source == source)
+            });
+            if let Some(row) = place {
+                rows.selected = Some(row);
+            } else if let Some(default) = &list.default
                 && let Some(row) = rows.matches.iter().position(|p| &p.command == default)
             {
                 rows.selected = Some(row);

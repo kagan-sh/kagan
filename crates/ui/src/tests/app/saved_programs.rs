@@ -245,3 +245,28 @@ fn enter_in_the_rename_box_renames_once_and_leaves_no_error(cx: &mut TestAppCont
     );
     assert!(!shows(cx, window, "custom-name"), "the rename box closes");
 }
+
+#[gpui_kit::test]
+fn pinning_keeps_the_selected_row_in_place(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    save(cx, "Alpha", "codex --alpha");
+    save(cx, "Mid", "codex --mid");
+    save(cx, "Zulu", "codex --zulu");
+    start_in_plain_folder(cx, window, data.path());
+    search(cx, window, "codex");
+    for _ in 0..10 {
+        if label(cx, window, &row_id("Zulu")).contains("selected") {
+            break;
+        }
+        cx.simulate_keystrokes(window, "down");
+    }
+    assert!(label(cx, window, &row_id("Zulu")).contains("selected"));
+
+    click(cx, window, "program-pin-saved-Alpha");
+    wait_until(cx, |cx| pinned(cx, "Alpha"));
+    cx.run_until_parked();
+    assert!(
+        label(cx, window, &row_id("Zulu")).contains("selected"),
+        "the row the person picked stays selected after a pin"
+    );
+}

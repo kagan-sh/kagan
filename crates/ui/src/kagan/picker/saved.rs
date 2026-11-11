@@ -127,7 +127,7 @@ impl Picker {
                         this.name
                             .update(cx, |state, cx| state.set_value("", window, cx));
                         let project = this.project.clone();
-                        this.load(project, window, cx);
+                        this.reload(project, window, cx);
                     }
                     Err(error) => this.fail(error.to_string(), cx),
                 }
