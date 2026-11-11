@@ -570,3 +570,46 @@ fn a_recent_known_agent_does_not_become_the_default_either() {
     );
     assert_eq!(list.default.as_deref(), Some("claude"));
 }
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_thread_from_a_saved_program_takes_its_saved_name_and_stays_renamable(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let path = fixture.dir.path().join("codex");
+    fake_program(fixture.dir.path(), "codex", "true");
+    let line = format!("{} --fast", path.display());
+    op(
+        Op::Program(ProgramOp::Save {
+            name: "Zed".into(),
+            line: line.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let OpResult::Thread(started) = op(
+        Op::Thread(kg_domain::ThreadOp::Run(kg_domain::Run {
+            project_id: fixture.project.clone(),
+            program: line,
+            title: None,
+            environment: kg_domain::EnvironmentSpec::ProjectDefault,
+            visibility: None,
+            parent_thread_id: None,
+            quiet: true,
+            lifecycle_owner_thread_id: None,
+            metadata: None,
+        })),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("thread")
+    };
+    assert_eq!(started.title, "Zed");
+    assert!(
+        !started.title_locked,
+        "a thread the program named can still be renamed"
+    );
+}
