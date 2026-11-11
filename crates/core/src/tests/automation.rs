@@ -241,6 +241,44 @@ async fn a_one_time_automation_that_cannot_start_waits_before_it_retries(cx: &mu
 }
 
 #[gpui_kit::test]
+async fn a_start_that_fails_before_its_thread_is_saved_is_not_a_run(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let raw = rusqlite::Connection::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    raw.execute_batch(
+        "CREATE TRIGGER no_threads BEFORE INSERT ON threads BEGIN SELECT RAISE(ABORT, 'blocked'); END;",
+    )
+    .unwrap();
+    op(
+        Op::Automation(AutomationOp::Add {
+            name: "Once".into(),
+            body: "ping".into(),
+            project_id: fixture.project.clone(),
+            program: program().into(),
+            minutes: None,
+            at: Some(Timestamp(1)),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    cx.executor().advance_clock(Duration::from_secs(5));
+    cx.run_until_parked();
+    let row = automations(cx).await.remove(0);
+    assert!(row.threads.is_empty(), "{:?}", row.threads);
+    assert_eq!(thread_count(cx).await, 0);
+    assert!(
+        row.next_at.is_some_and(|next| next.0 > 1),
+        "a start that saved no thread must be retried, not kept as a run: {:?}",
+        row.next_at
+    );
+
+    raw.execute_batch("DROP TRIGGER no_threads").unwrap();
+    cx.executor().advance_clock(Duration::from_mins(2));
+    let id = drive_until_sent(cx).await;
+    assert_eq!(automations(cx).await[0].threads, vec![id]);
+}
+
+#[gpui_kit::test]
 async fn a_store_read_error_does_not_stop_the_automation_loop(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     op(add(&fixture.project, Some(1), None), cx).await.unwrap();

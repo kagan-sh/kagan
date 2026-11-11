@@ -509,7 +509,6 @@ fn shown_preview(
     })
 }
 
-// Runs work that the caller's task cannot cancel by being dropped.
 /// A run's result, and the thread it made. The thread is known once the run has been prepared,
 /// so a run that then fails still names the thread it left behind.
 pub(crate) type RunOutcome = (Option<kg_domain::ThreadId>, Result<OpResult>);
@@ -554,6 +553,7 @@ impl Workspace {
     }
 }
 
+// Runs work that the caller's task cannot cancel by being dropped.
 fn detached(
     cx: &mut App,
     work: impl AsyncFnOnce(&mut AsyncApp) -> Result<OpResult> + 'static,

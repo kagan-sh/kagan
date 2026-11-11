@@ -14,7 +14,6 @@ use crate::thread::dispatch_thread;
 use crate::workspace::{self, Workspace, id, missing, time};
 
 const MINUTE_MS: i64 = 60_000;
-/// How long a one-time automation waits before it tries to start again.
 const RETRY_MINUTES: u16 = 1;
 
 pub(crate) fn watch(cx: &mut Context<Workspace>) -> Task<()> {
@@ -127,8 +126,8 @@ async fn set_paused(database: &Database, id: AutomationId, paused: bool) -> Resu
     Ok(OpResult::Automation(automation))
 }
 
-/// `None` once the workspace is gone, which ends the watch loop. A store error is reported and
-/// the loop goes on, so one failed read does not stop every automation until kagan restarts.
+// `None` once the workspace is gone, which ends the watch loop. A store error is reported and
+// the loop goes on, so one failed read does not stop every automation until kagan restarts.
 async fn tick(this: &WeakEntity<Workspace>, cx: &mut AsyncApp) -> Option<()> {
     let database = workspace::database(this, cx).ok()?;
     let now = time(this, cx).ok()?;
@@ -187,7 +186,15 @@ async fn fire(
         Ok(started) => started.await,
         Err(error) => (None, Err(error)),
     };
-    let (Some(thread), result) = outcome else {
+    let (named, result) = outcome;
+    let saved = match &named {
+        Some(id) => thread_saved(database, id).await.unwrap_or_else(|error| {
+            report::<()>(Err(error));
+            false
+        }),
+        None => false,
+    };
+    let Some(thread) = named.filter(|_| saved) else {
         let minutes = automation.minutes.unwrap_or(RETRY_MINUTES);
         report(postpone(this, database, &automation.id, minutes, cx).await);
         return Some(());
@@ -224,6 +231,14 @@ async fn remember(
         .call(move |store| store.record_automation_run(&id, &thread_id, now, next))
         .await?;
     Workspace::refresh(this, cx).await
+}
+
+async fn thread_saved(database: &Database, id: &ThreadId) -> Result<bool> {
+    let lookup = id.clone();
+    Ok(database
+        .call(move |store| store.thread(&lookup))
+        .await?
+        .is_some())
 }
 
 async fn postpone(

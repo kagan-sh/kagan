@@ -188,7 +188,6 @@ fn parse_minutes(text: &str) -> Result<Option<u16>, &'static str> {
         .ok_or("minutes must be a whole number from 1 to 1440")
 }
 
-/// A run once, the given minutes from now.
 fn parse_once(text: &str) -> Result<Option<Timestamp>, &'static str> {
     let Some(minutes) = parse_minutes(text)? else {
         return Ok(None);
