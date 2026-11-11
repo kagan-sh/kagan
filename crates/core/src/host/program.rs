@@ -6,8 +6,8 @@ use gpui_kit::{AsyncApp, WeakEntity};
 
 use crate::Workspace;
 use kg_domain::{
-    KNOWN_PROGRAMS, LISTED_WHEN_MISSING, OpError, OpResult, Program, ProgramList, ProgramSource,
-    ProjectId, Visibility, split_program,
+    KNOWN_PROGRAMS, LISTED_WHEN_MISSING, OpError, OpResult, PROGRAM_INSTALL_FOLDERS, Program,
+    ProgramList, ProgramSource, ProjectId, Visibility, split_program,
 };
 use kg_process::{find_program, pathext, user_path};
 
@@ -26,6 +26,7 @@ pub(crate) async fn list(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     let environment = program_environment_of(this, cx);
+    let home = program_home_of(this, cx);
     if let Some(environment) = &environment
         && !Path::new(&environment.shell).is_file()
     {
@@ -67,6 +68,7 @@ pub(crate) async fn list(
                 path.as_deref(),
                 pathext.as_deref(),
                 shell.as_deref(),
+                home.as_deref(),
                 &recent,
             );
             if include_versions {
@@ -78,17 +80,18 @@ pub(crate) async fn list(
     Ok(OpResult::Programs(programs))
 }
 
-/// The programs found with `path` and `pathext`, the `shell`, and the `recent` commands, newest
-/// first. Versions are filled in separately, so this reads nothing but the filesystem.
+/// The programs found with `path`, `pathext` and `home`, the `shell`, and the `recent` commands,
+/// newest first. Versions are filled in separately, so this reads nothing but the filesystem.
 pub(crate) fn discover(
     path: Option<&OsStr>,
     pathext: Option<&OsStr>,
     shell: Option<&OsStr>,
+    home: Option<&Path>,
     recent: &[String],
 ) -> ProgramList {
     let mut programs = Vec::new();
     for (command, label) in KNOWN_PROGRAMS {
-        let found = find_program(Path::new(command), path, pathext);
+        let found = locate(Path::new(command), path, pathext, home);
         if found.is_none() && !LISTED_WHEN_MISSING.contains(command) {
             continue;
         }
@@ -125,9 +128,9 @@ pub(crate) fn discover(
         };
         programs.push(Program {
             command: command.clone(),
-            label: command.clone(),
+            label: label_of(&name),
             source: ProgramSource::Recent,
-            path: find_program(Path::new(&name), path, pathext),
+            path: locate(Path::new(&name), path, pathext, home),
             version: None,
         });
     }
@@ -145,6 +148,32 @@ pub(crate) fn discover(
         })
         .map(|program| program.command.clone());
     ProgramList { programs, default }
+}
+
+fn label_of(name: &str) -> String {
+    let base = Path::new(name)
+        .file_stem()
+        .map_or_else(|| name.into(), |file| file.to_string_lossy().into_owned());
+    KNOWN_PROGRAMS
+        .iter()
+        .find(|(command, _)| *command == base)
+        .map_or(base, |(_, label)| (*label).into())
+}
+
+pub(crate) fn locate(
+    name: &Path,
+    path: Option<&OsStr>,
+    pathext: Option<&OsStr>,
+    home: Option<&Path>,
+) -> Option<PathBuf> {
+    find_program(name, path, pathext).or_else(|| {
+        let command = name.to_str().filter(|_| name.components().count() == 1)?;
+        let home = home?;
+        PROGRAM_INSTALL_FOLDERS
+            .iter()
+            .filter(|(known, _)| *known == command)
+            .find_map(|(_, folder)| find_program(&home.join(folder).join(command), None, pathext))
+    })
 }
 
 pub(crate) fn versions(list: &mut ProgramList) {
@@ -220,6 +249,16 @@ fn read_environment(
     }
 }
 
+pub(crate) fn program_home_of(this: &WeakEntity<Workspace>, cx: &mut AsyncApp) -> Option<PathBuf> {
+    this.read_with(cx, |workspace, _| workspace.home_set(home_variable()))
+        .ok()
+        .flatten()
+}
+
+pub(crate) fn home_variable() -> &'static str {
+    if cfg!(windows) { "USERPROFILE" } else { "HOME" }
+}
+
 /// The folder `variable` names, when it is set and not empty.
 pub(crate) fn home_set(variable: &str) -> Option<PathBuf> {
     std::env::var_os(variable)
@@ -228,7 +267,7 @@ pub(crate) fn home_set(variable: &str) -> Option<PathBuf> {
 }
 
 pub(crate) fn user_home() -> Option<PathBuf> {
-    std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from)
+    std::env::var_os(home_variable()).map(PathBuf::from)
 }
 
 impl Workspace {

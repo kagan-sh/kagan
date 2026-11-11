@@ -392,6 +392,11 @@ impl Workspace {
             shell: shell.as_os_str().to_owned(),
         });
     }
+    #[cfg(any(test, feature = "test"))]
+    pub fn use_program_home(&mut self, home: &std::path::Path) {
+        self.homes
+            .insert(crate::host::program::home_variable(), home.to_owned());
+    }
     pub fn rename_once(id: ThreadId, title: String, cx: &mut App) -> Task<Result<OpResult>> {
         let op = Op::Thread(kg_domain::ThreadOp::Rename {
             id: id.clone(),
