@@ -388,6 +388,7 @@ impl Workspace {
         self.program_environment = Some(crate::host::program::ProgramEnvironment {
             path: path.as_os_str().to_owned(),
             shell: shell.as_os_str().to_owned(),
+            home: None,
         });
     }
     pub fn rename_once(id: ThreadId, title: String, cx: &mut App) -> Task<Result<OpResult>> {

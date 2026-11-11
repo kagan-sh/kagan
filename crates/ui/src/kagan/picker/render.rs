@@ -12,7 +12,7 @@ use gpui_kit::{
     Pixels, Render, RenderOnce, Role, StatefulInteractiveElement as _, Styled as _, WeakEntity,
     Window, div,
 };
-use kg_domain::ProgramSource;
+use kg_domain::{ProgramSource, split_program};
 
 use super::list::{ProgramRow, Version, version_of};
 use super::{CONTEXT, Close, LIST_ROWS, Mode, Picker, Programs, Rows};
@@ -24,19 +24,32 @@ use crate::ui_registry::Facts;
 impl RenderOnce for ProgramRow {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
-        // A known agent's command is implied by its name, so only a shell or a recent program shows it.
-        let command = (!matches!(self.program.source, ProgramSource::Known))
-            .then(|| self.program.command.clone());
+        // An installed known agent is a card with its letter mark. Shell and recent rows have none.
+        let card = self.program.source == ProgramSource::Known && self.program.installed();
+        // A recent command shows its arguments; the whole command is its tooltip.
+        let detail = match self.program.source {
+            ProgramSource::Known => None,
+            ProgramSource::Shell => Some(self.program.command.clone()),
+            ProgramSource::Recent => split_program(&self.program.command)
+                .ok()
+                .map(|(_, arguments)| arguments.join(" "))
+                .filter(|arguments| !arguments.is_empty()),
+        };
         let Version {
             shown: version,
             full: full_version,
         } = version_of(&self.program);
+        let tooltip = match self.program.source {
+            ProgramSource::Recent => Some(self.program.command.clone()),
+            _ => full_version,
+        };
         // The selected row says so in words too, not only by its fill.
         let name = if self.selected {
             format!("{}, selected", self.program.label)
         } else {
             self.program.label.clone()
         };
+        let mark = mark_slot(&self.program.label, card, cx);
         let (list, first) = (self.list, self.first);
         div()
             .on_children_prepainted(move |bounds, window, cx| {
@@ -47,8 +60,8 @@ impl RenderOnce for ProgramRow {
             .child(
                 div()
                     .id(format!("program-{}", self.program.command))
-                    .when_some(full_version, |row, full| {
-                        row.tooltip(move |window, cx| Tooltip::new(full.clone()).build(window, cx))
+                    .when_some(tooltip, |row, tip| {
+                        row.tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
                     })
                     .ui_observe_as(Facts {
                         role: Role::ListBoxOption,
@@ -61,10 +74,17 @@ impl RenderOnce for ProgramRow {
                             .px_2()
                             .h_7()
                             .rounded(cx.theme().radius)
+                            .when(card, |row| row.border_1().border_color(cx.theme().border))
+                            .when(!card, |row| {
+                                // Every row has the border, so the names line up on the same x.
+                                row.border_1().border_color(Hsla::transparent_black())
+                            })
                             .child(
                                 h_flex()
                                     .items_center()
                                     .gap_2()
+                                    .h_full()
+                                    .child(mark)
                                     .child(
                                         div()
                                             .id(format!("program-name-{}", self.program.command))
@@ -76,17 +96,20 @@ impl RenderOnce for ProgramRow {
                                             .aria_label(name)
                                             .child(self.program.label),
                                     )
-                                    .child(div().flex_1().min_w_0().children(command.map(
-                                        |command| {
+                                    .child(div().flex_1().min_w_0().children(detail.map(
+                                        |detail| {
                                             div()
-                                                .id(format!("program-command-{command}"))
+                                                .id(format!(
+                                                    "program-command-{}",
+                                                    self.program.command
+                                                ))
                                                 .ui_container()
                                                 .type_small(cx)
                                                 .text_color(muted)
                                                 .whitespace_nowrap()
                                                 .text_ellipsis()
-                                                .aria_label(command.clone())
-                                                .child(command)
+                                                .aria_label(detail.clone())
+                                                .child(detail)
                                         },
                                     )))
                                     .child(
@@ -104,6 +127,42 @@ impl RenderOnce for ProgramRow {
                     ),
             )
     }
+}
+
+// The mark's width, and the gap after it: every row reserves this slot, so names line up.
+const MARK_SLOT: f32 = 20.;
+const MARK_GAP: f32 = 8.;
+
+// The first letter of the name, on a tile, for an installed agent. Other rows keep an empty slot
+// of the same width. The letter stands in for a logo, which kagan does not ship.
+fn mark_slot(label: &str, card: bool, cx: &App) -> AnyElement {
+    let slot = div().flex_shrink_0().size(gpui_kit::px(MARK_SLOT));
+    if !card {
+        return slot.into_any_element();
+    }
+    let letter = label
+        .chars()
+        .next()
+        .map(|letter| letter.to_uppercase().to_string())
+        .unwrap_or_default();
+    slot.id(format!("program-mark-{label}"))
+        .ui_container()
+        .aria_label(letter.clone())
+        .rounded(cx.theme().radius)
+        .bg(cx.theme().muted)
+        .flex()
+        .items_center()
+        .justify_center()
+        .type_small(cx)
+        .text_color(cx.theme().foreground)
+        .child(letter)
+        .into_any_element()
+}
+
+// The custom command's label starts where the program names start: past the mark slot, the gap,
+// and the row's border.
+fn name_inset() -> gpui_kit::Pixels {
+    gpui_kit::px(MARK_SLOT + MARK_GAP + 1.)
 }
 
 // The first row's height is every row's height, so the list's cap is read in rows.
@@ -163,6 +222,7 @@ fn custom_toggle(toggle: &'static str, custom: bool, cx: &App) -> AnyElement {
                     .child(
                         div()
                             .id("custom-command-label")
+                            .pl(name_inset())
                             .ui_container()
                             .type_body(cx)
                             .aria_label(toggle)

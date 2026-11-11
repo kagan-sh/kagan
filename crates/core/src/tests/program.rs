@@ -79,6 +79,7 @@ fn the_program_list_finds_known_agents_and_defaults_to_the_first_installed() {
         Some(dir.path().as_os_str()),
         None,
         Some(std::ffi::OsStr::new("/bin/sh")),
+        None,
         &[
             "codex --resume".into(),
             "claude".into(),
@@ -119,6 +120,7 @@ fn the_newest_installed_recent_program_is_the_default() {
         Some(dir.path().as_os_str()),
         None,
         None,
+        None,
         &["tool --fast".into(), "claude".into()],
     );
     assert_eq!(list.default.as_deref(), Some("tool --fast"));
@@ -130,8 +132,13 @@ fn only_installed_known_agents_get_a_version() {
     let dir = tempfile::tempdir().unwrap();
     fake_program(dir.path(), "claude", "echo 'claude 9.9.9 (test)'");
     fake_program(dir.path(), "tool", "echo 'tool 1.0'");
-    let mut list =
-        crate::host::program::discover(Some(dir.path().as_os_str()), None, None, &["tool".into()]);
+    let mut list = crate::host::program::discover(
+        Some(dir.path().as_os_str()),
+        None,
+        None,
+        None,
+        &["tool".into()],
+    );
     crate::host::program::versions(&mut list);
     let version = |command: &str| {
         list.programs
@@ -184,4 +191,75 @@ async fn a_projects_installed_program_is_its_new_thread_default(cx: &mut TestApp
     .await
     .unwrap_err();
     assert!(matches!(missing, OpError::NotFound(_)), "{missing}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_recent_command_is_named_by_its_program_and_keeps_its_flags() {
+    let dir = tempfile::tempdir().unwrap();
+    let list = crate::host::program::discover(
+        Some(dir.path().as_os_str()),
+        None,
+        None,
+        None,
+        &[
+            "cursor-agent --model grok-4.7-high --trust --force".into(),
+            "/opt/tools/mytool --fast".into(),
+        ],
+    );
+    let label = |command: &str| {
+        list.programs
+            .iter()
+            .find(|p| p.command == command)
+            .map(|p| p.label.clone())
+    };
+    assert_eq!(
+        label("cursor-agent --model grok-4.7-high --trust --force").as_deref(),
+        Some("Cursor Agent")
+    );
+    assert_eq!(label("/opt/tools/mytool --fast").as_deref(), Some("mytool"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_known_program_in_its_install_folder_is_found_without_the_login_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("home");
+    let bin = home.join(".opencode/bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    fake_program(&bin, "opencode", "true");
+    let empty = dir.path().join("empty");
+    std::fs::create_dir(&empty).unwrap();
+    let installed = |home: Option<&std::path::Path>| {
+        crate::host::program::discover(Some(empty.as_os_str()), None, None, home, &[])
+            .programs
+            .into_iter()
+            .find(|p| p.command == "opencode")
+            .and_then(|p| p.path)
+    };
+    assert_eq!(installed(Some(&home)), Some(bin.join("opencode")));
+    assert_eq!(installed(None), None);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_run_finds_a_known_program_in_its_install_folder() {
+    use crate::host::program::ProgramEnvironment;
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("home");
+    let bin = home.join(".opencode/bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    fake_program(&bin, "opencode", "true");
+    let empty = dir.path().join("empty");
+    std::fs::create_dir(&empty).unwrap();
+    let environment = |home: Option<std::path::PathBuf>| ProgramEnvironment {
+        path: empty.as_os_str().to_owned(),
+        shell: "/bin/sh".into(),
+        home,
+    };
+    let found =
+        crate::thread::resolve_program("opencode --model x", Some(&environment(Some(home))))
+            .unwrap();
+    assert_eq!(found.path, bin.join("opencode"));
+    assert!(crate::thread::resolve_program("opencode", Some(&environment(None))).is_err());
 }

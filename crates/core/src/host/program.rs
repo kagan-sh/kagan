@@ -62,11 +62,12 @@ pub(crate) async fn list(
     let programs = cx
         .background_executor()
         .spawn(async move {
-            let (path, pathext, shell) = read_environment(environment);
+            let (path, pathext, shell, home) = read_environment(environment);
             let mut list = discover(
                 path.as_deref(),
                 pathext.as_deref(),
                 shell.as_deref(),
+                home.as_deref(),
                 &recent,
             );
             if include_versions {
@@ -78,17 +79,18 @@ pub(crate) async fn list(
     Ok(OpResult::Programs(programs))
 }
 
-/// The programs found with `path` and `pathext`, the `shell`, and the `recent` commands, newest
-/// first. Versions are filled in separately, so this reads nothing but the filesystem.
+/// The programs found with `path`, `pathext` and `home`, the `shell`, and the `recent` commands,
+/// newest first. Versions are filled in separately, so this reads nothing but the filesystem.
 pub(crate) fn discover(
     path: Option<&OsStr>,
     pathext: Option<&OsStr>,
     shell: Option<&OsStr>,
+    home: Option<&Path>,
     recent: &[String],
 ) -> ProgramList {
     let mut programs = Vec::new();
     for (command, label) in KNOWN_PROGRAMS {
-        let found = find_program(Path::new(command), path, pathext);
+        let found = locate(Path::new(command), path, pathext, home);
         if found.is_none() && !LISTED_WHEN_MISSING.contains(command) {
             continue;
         }
@@ -125,9 +127,9 @@ pub(crate) fn discover(
         };
         programs.push(Program {
             command: command.clone(),
-            label: command.clone(),
+            label: label_of(&name),
             source: ProgramSource::Recent,
-            path: find_program(Path::new(&name), path, pathext),
+            path: locate(Path::new(&name), path, pathext, home),
             version: None,
         });
     }
@@ -145,6 +147,40 @@ pub(crate) fn discover(
         })
         .map(|program| program.command.clone());
     ProgramList { programs, default }
+}
+
+/// The short name a recent command is shown by: the known program's label when its program is
+/// one kagan knows, else the program's file name. The arguments stay in the command.
+fn label_of(name: &str) -> String {
+    let base = Path::new(name)
+        .file_name()
+        .map_or_else(|| name.into(), |file| file.to_string_lossy().into_owned());
+    KNOWN_PROGRAMS
+        .iter()
+        .find(|(command, _)| *command == base)
+        .map_or(base, |(_, label)| (*label).into())
+}
+
+/// The install folder, under the user's home, that a known program's installer documents. A
+/// program there is found even when that folder is not on the login `PATH`.
+const INSTALL_FOLDERS: &[(&str, &str)] = &[("opencode", ".opencode/bin")];
+
+/// Finds `name` on `path`, else in its documented install folder under `home`. Only a bare name
+/// of a known program has such a folder.
+pub(crate) fn locate(
+    name: &Path,
+    path: Option<&OsStr>,
+    pathext: Option<&OsStr>,
+    home: Option<&Path>,
+) -> Option<PathBuf> {
+    find_program(name, path, pathext).or_else(|| {
+        let command = name.to_str().filter(|_| name.components().count() == 1)?;
+        let folder = INSTALL_FOLDERS
+            .iter()
+            .find(|(known, _)| *known == command)?
+            .1;
+        find_program(&home?.join(folder).join(command), None, pathext)
+    })
 }
 
 pub(crate) fn versions(list: &mut ProgramList) {
@@ -182,6 +218,7 @@ pub(crate) fn login_shell(environment: Option<&ProgramEnvironment>) -> OsString 
 pub(crate) struct ProgramEnvironment {
     pub(crate) path: OsString,
     pub(crate) shell: OsString,
+    pub(crate) home: Option<PathBuf>,
 }
 
 /// The PATH `environment` names, or the login PATH when it names none.
@@ -209,15 +246,31 @@ pub(crate) fn program_environment_of(
 
 fn read_environment(
     environment: Option<ProgramEnvironment>,
-) -> (Option<OsString>, Option<OsString>, Option<OsString>) {
+) -> (
+    Option<OsString>,
+    Option<OsString>,
+    Option<OsString>,
+    Option<PathBuf>,
+) {
     match environment {
-        Some(environment) => (Some(environment.path), pathext(), Some(environment.shell)),
+        Some(environment) => (
+            Some(environment.path),
+            pathext(),
+            Some(environment.shell),
+            environment.home,
+        ),
         None => (
             search_path(None),
             pathext(),
             std::env::var_os(shell_variable()),
+            user_home(),
         ),
     }
+}
+
+/// The home folder install folders hang off: the environment's, else the user's.
+pub(crate) fn home_of(environment: Option<&ProgramEnvironment>) -> Option<PathBuf> {
+    environment.map_or_else(user_home, |environment| environment.home.clone())
 }
 
 /// The folder `variable` names, when it is set and not empty.

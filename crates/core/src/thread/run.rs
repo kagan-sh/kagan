@@ -3,11 +3,12 @@ use std::path::{Path, PathBuf};
 
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{EventKind, NoticeSeverity, OpError, OpResult, Run, ThreadId, ThreadStatus};
-use kg_process::{find_program, pathext};
+use kg_process::pathext;
 
 use super::clean_title;
 use crate::Workspace;
 use crate::host::database::Result;
+use crate::host::program::locate;
 use crate::workspace::{id, missing, time};
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -34,10 +35,11 @@ pub(crate) fn resolve_program(
     environment: Option<&crate::host::program::ProgramEnvironment>,
 ) -> std::result::Result<ResolvedProgram, ResolveError> {
     let (name, args) = kg_domain::split_program(line).map_err(ResolveError::Line)?;
-    let found = find_program(
+    let found = locate(
         Path::new(&name),
         crate::host::program::search_path(environment).as_deref(),
         pathext().as_deref(),
+        crate::host::program::home_of(environment).as_deref(),
     )
     .ok_or(ResolveError::NotFound(name))?;
     Ok(ResolvedProgram {

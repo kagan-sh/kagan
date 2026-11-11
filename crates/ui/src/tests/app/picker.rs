@@ -1120,3 +1120,51 @@ fn enter_in_the_search_starts_the_selected_program_not_the_custom_command(cx: &m
     let started = shown(cx, &kagan).unwrap();
     assert_eq!(thread_record(cx, &started).provider, "gemini");
 }
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn an_installed_agent_is_a_card_with_its_letter_mark_and_a_missing_one_has_none(
+    cx: &mut TestAppContext,
+) {
+    let (_kagan, window, data) = open(cx);
+    fixture_programs(cx, data.path(), &["claude"]);
+    start_in_plain_folder(cx, window, data.path());
+    wait_until(cx, |cx| {
+        label(cx, window, "program-version-claude") == "1.2.3"
+    });
+    assert!(shows(cx, window, "program-mark-Claude Code"));
+    // Codex is listed as a row while it is missing, so it has no card and no mark.
+    assert!(!shows(cx, window, "program-mark-Codex"));
+    assert!(!shows(cx, window, "program-mark-Shell"));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_recent_command_is_named_by_its_program_with_its_flags_under_it(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let data = data.path().to_path_buf();
+    fixture_programs(cx, &data, &["codex"]);
+    let run = Run {
+        project_id: ProjectId("personal".into()),
+        program: "codex --model fast".into(),
+        title: None,
+        environment: EnvironmentSpec::Personal,
+        visibility: None,
+        parent_thread_id: None,
+        quiet: false,
+        lifecycle_owner_thread_id: None,
+        metadata: None,
+    };
+    let started = cx.update(|cx| Workspace::dispatch(Op::Thread(ThreadOp::Run(run)), cx));
+    cx.foreground_executor().block_test(started).unwrap();
+    cx.run_until_parked();
+    start_in_plain_folder(cx, window, &data);
+    wait_until(cx, |cx| {
+        label(cx, window, "program-command-codex --model fast") == "--model fast"
+    });
+    // The default row is selected, so its name says so in words.
+    assert_eq!(
+        label(cx, window, "program-name-codex --model fast"),
+        "Codex, selected"
+    );
+}
