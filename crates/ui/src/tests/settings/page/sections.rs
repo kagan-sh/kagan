@@ -6,7 +6,9 @@ use kg_domain::{Op, PluginId, PluginOp};
 use kg_plugins::PluginHost;
 
 use super::{install_plugins, run_op, saved, tab_to};
-use crate::tests::kagan::{click, open, open_with_plugins_then, present, selected_of, shows};
+use crate::tests::kagan::{
+    click, open, open_with_plugins_then, present, selected_of, shows, value_of,
+};
 
 #[gpui_kit::test]
 fn picking_a_section_shows_only_its_rows(cx: &mut TestAppContext) {
@@ -114,6 +116,19 @@ fn the_ask_before_archiving_switch_saves_the_preference(cx: &mut TestAppContext)
     assert_eq!(saved(cx, "confirm-archive"), json!(true));
     click(cx, window, "confirm-archive");
     assert_eq!(saved(cx, "confirm-archive"), json!(false));
+}
+
+#[gpui_kit::test]
+fn the_copy_on_select_switch_starts_on_when_nothing_is_saved(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    click(cx, window, "settings-gear");
+    click(cx, window, "settings-section-general");
+    cx.run_until_parked();
+    assert_eq!(saved(cx, "terminal-copy-on-select"), json!(null));
+    assert_eq!(
+        value_of(cx, window, "copy-on-select").as_deref(),
+        Some("on")
+    );
 }
 
 #[gpui_kit::test]
