@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use kg_domain::{
     AutomationId, AutomationOp, ConfigOp, DiffOp, DiffQuery, DiffScope, EnvironmentSpec, Metadata,
-    Op, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, SectionId, SectionOp, SkillOp,
-    TerminalOp, ThreadId, ThreadOp,
+    Op, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, SavedPromptId, SavedPromptOp,
+    SectionId, SectionOp, SkillOp, TerminalOp, ThreadId, ThreadOp,
 };
 use serde_json::{Value, json};
 
@@ -964,5 +964,17 @@ fn cli_browser_text_omits_an_empty_title_and_text() {
     assert_eq!(
         crate::cli::format_browser_snapshot(&snapshot),
         "https://example.com/login\n[2] textbox \"Email\" value=\"ada@example.com\"\n"
+    );
+}
+
+#[test]
+fn cli_saved_prompt_edit_takes_the_id_then_the_title_and_text() {
+    assert_eq!(
+        parse(&["saved-prompt", "edit", "svp_1", "Plans", "new text"]),
+        Op::SavedPrompt(SavedPromptOp::Edit {
+            id: SavedPromptId("svp_1".into()),
+            title: "Plans".into(),
+            body: "new text".into(),
+        })
     );
 }

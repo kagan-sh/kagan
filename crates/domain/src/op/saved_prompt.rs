@@ -10,6 +10,12 @@ pub(crate) const TITLE_MAX: usize = 200;
 pub enum SavedPromptOp {
     /// Save text the person can send later
     Add { title: String, body: String },
+    /// Change a saved prompt's title and text. Its star stays
+    Edit {
+        id: SavedPromptId,
+        title: String,
+        body: String,
+    },
     /// Saved prompts whose title or body contains this text. An empty search lists them all
     Search {
         #[arg(default_value = "")]

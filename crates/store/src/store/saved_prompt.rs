@@ -45,6 +45,18 @@ impl super::Store {
         Ok(prompts)
     }
 
+    pub fn update_saved_prompt(&self, id: &SavedPromptId, title: &str, body: &str) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE saved_prompts SET title = :title, body = :body WHERE id = :id",
+            named_params! {
+                ":id": Text(id),
+                ":title": title,
+                ":body": body,
+            },
+        )?;
+        found(changed, "saved prompt", id)
+    }
+
     pub fn set_saved_prompt_starred(&self, id: &SavedPromptId, starred: bool) -> Result<()> {
         let changed = self.conn.execute(
             "UPDATE saved_prompts SET starred = :starred WHERE id = :id",

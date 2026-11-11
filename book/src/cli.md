@@ -2412,6 +2412,7 @@ Usage: kg saved-prompt [OPTIONS] <COMMAND>
 
 Commands:
   add     Save text the person can send later
+  edit    Change a saved prompt's title and text. Its star stays
   search  Saved prompts whose title or body contains this text. An empty search lists them all
   star    Star or unstar a saved prompt
   delete  Delete a saved prompt
@@ -2434,6 +2435,28 @@ Save text the person can send later
 Usage: kg saved-prompt add <TITLE> <BODY>
 
 Arguments:
+  <TITLE>
+          
+
+  <BODY>
+          
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg saved-prompt edit`
+
+```text
+Change a saved prompt's title and text. Its star stays
+
+Usage: kg saved-prompt edit <ID> <TITLE> <BODY>
+
+Arguments:
+  <ID>
+          
+
   <TITLE>
           
 

@@ -498,13 +498,20 @@ A section is a user-named group that threads can be filed under in the sidebar [
 
 ## Saved prompt
 
-A saved prompt is stored text the person can send, with a title, a body, and a starred flag. It is not a question waiting for an answer [CONTEXT] [decision 234]. Rows live in SQLite. Add, star, and delete are serialized. Search and send are not, and send follows `ThreadOp::Send` [decision 234].
+A saved prompt is stored text the person can send, with a title, a body, and a starred flag. It is not a question waiting for an answer [CONTEXT] [decision 234]. Rows live in SQLite. Add, edit, star, and delete are serialized. Search and send are not, and send follows `ThreadOp::Send` [decision 234].
 
 ### `Add`
 
 - **Allowed when**: the title trims to at most 200 characters with no control character, and the body has text other than control characters and is at most 1 MiB [op/].
 - **Changes**: stores the trimmed title, the body as given, and starred off. The id starts with `svp_` [decision 234].
 - **Refused when**: an empty title or body, a body of only control characters, a longer title, a control character in the title, or a body over 1 MiB — `invalid` [op/].
+
+### `Edit`
+
+- **Allowed when**: the saved prompt exists, and the title and text pass `Add`'s checks [op/] [decision 250].
+- **Changes**: stores the trimmed title and the body as given. The star and the id stay [decision 250].
+- **Refused when**: a missing id — `not-found`. An id that is not a plain identifier, an empty title, or a body with no text — `invalid` [op/].
+- **Shows**: the saved prompt. The window's row Edit button opens the same form as New, with the prompt's title and text in it, and its Save sends `Edit` [decision 250].
 
 ### `Search`
 

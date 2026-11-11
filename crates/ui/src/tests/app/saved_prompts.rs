@@ -221,3 +221,39 @@ fn screen(cx: &mut TestAppContext, id: &kg_domain::ThreadId) -> String {
         other => panic!("{other:?}"),
     }
 }
+
+#[gpui_kit::test]
+fn edit_opens_the_form_with_the_prompt_and_saves_the_change(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let notes = add(cx, "Notes", "remember this");
+    dispatch(cx, Op::Window(WindowOp::SavedPrompts));
+    cx.run_until_parked();
+    assert!(shows(cx, window, &row(&notes.id)), "the row is listed");
+    click(cx, window, &format!("saved-prompt-edit-{}", notes.id.0));
+    assert_eq!(
+        value_of(cx, window, "saved-prompt-title").as_deref(),
+        Some("Notes"),
+        "the form opens with the saved title"
+    );
+    assert!(has_value(cx, window, "remember this"));
+    click(cx, window, "saved-prompt-title");
+    cx.simulate_keystrokes(window, "cmd-a");
+    cx.simulate_input(window, "Plans");
+    click(cx, window, "saved-prompt-save");
+    cx.run_until_parked();
+    let OpResult::SavedPrompts(found) = dispatch(
+        cx,
+        Op::SavedPrompt(SavedPromptOp::Search {
+            text: "Plans".into(),
+        }),
+    ) else {
+        panic!("search");
+    };
+    assert_eq!(found.len(), 1, "the edit replaced the title");
+    assert_eq!(found[0].id, notes.id);
+    assert_eq!(
+        found[0].body, "remember this",
+        "the text is kept when not changed"
+    );
+    assert!(!shows(cx, window, "saved-prompt-title"), "the form closes");
+}

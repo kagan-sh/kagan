@@ -25,6 +25,18 @@ pub(crate) async fn run(
                 .await?;
             Ok(OpResult::SavedPrompt(prompt))
         }
+        SavedPromptOp::Edit { id, title, body } => {
+            let title = title.trim().to_owned();
+            let shown = id.clone();
+            let prompt = database
+                .call(move |store| {
+                    store.update_saved_prompt(&id, &title, &body)?;
+                    store.saved_prompt(&id)
+                })
+                .await?
+                .ok_or_else(|| missing("saved prompt", &shown))?;
+            Ok(OpResult::SavedPrompt(prompt))
+        }
         SavedPromptOp::Search { text } => {
             let text = text.trim().to_owned();
             let prompts = database

@@ -237,6 +237,9 @@ fn env_check(op: &EnvOp) -> Result<(), String> {
 fn saved_prompt(op: &SavedPromptOp) -> Result<(), String> {
     match op {
         SavedPromptOp::Add { title, body } => prompt_title(title).and_then(|()| prompt_body(body)),
+        SavedPromptOp::Edit { id, title, body } => prompt_id(id)
+            .and_then(|()| prompt_title(title))
+            .and_then(|()| prompt_body(body)),
         SavedPromptOp::Search { text } if text.chars().count() > SEARCH_TEXT_MAX => Err(format!(
             "search text is longer than {SEARCH_TEXT_MAX} characters"
         )),

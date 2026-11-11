@@ -262,6 +262,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Section(_)
         | Op::SavedPrompt(
             kg_domain::SavedPromptOp::Add { .. }
+            | kg_domain::SavedPromptOp::Edit { .. }
             | kg_domain::SavedPromptOp::Star { .. }
             | kg_domain::SavedPromptOp::Delete { .. },
         )

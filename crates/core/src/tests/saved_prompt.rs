@@ -111,3 +111,67 @@ async fn send_uses_the_same_path_as_thread_send(cx: &mut TestAppContext) {
     assert!(frame.contains("got:hello"), "{frame}");
     assert_eq!(sent_text(&events(&id, cx).await), ["hello"]);
 }
+
+#[gpui_kit::test]
+async fn edit_changes_the_title_and_text_and_keeps_the_star(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    let notes = added("Notes", "old text", cx).await;
+    op(
+        Op::SavedPrompt(SavedPromptOp::Star {
+            id: notes.id.clone(),
+            starred: true,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let OpResult::SavedPrompt(edited) = op(
+        Op::SavedPrompt(SavedPromptOp::Edit {
+            id: notes.id.clone(),
+            title: "  Plans  ".into(),
+            body: "new text\nsecond line".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("edit");
+    };
+    assert_eq!(edited.id, notes.id);
+    assert_eq!(edited.title, "Plans");
+    assert_eq!(edited.body, "new text\nsecond line");
+    assert!(edited.starred, "an edit keeps the star");
+    let OpResult::SavedPrompts(found) = op(
+        Op::SavedPrompt(SavedPromptOp::Search {
+            text: "second line".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("search");
+    };
+    assert_eq!(found.len(), 1, "the new text is what search finds");
+    let missing = op(
+        Op::SavedPrompt(SavedPromptOp::Edit {
+            id: SavedPromptId("svp_missing".into()),
+            title: "Title".into(),
+            body: "text".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(missing, OpError::NotFound(_)), "{missing}");
+    let empty = op(
+        Op::SavedPrompt(SavedPromptOp::Edit {
+            id: notes.id,
+            title: "   ".into(),
+            body: "text".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(empty, OpError::Invalid(_)), "{empty}");
+}
