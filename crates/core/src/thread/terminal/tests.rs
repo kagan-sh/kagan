@@ -171,3 +171,9 @@ fn a_hook_turn_is_not_closed_by_a_plain_title_from_an_earlier_turn(
         assert!(thread.read(cx).turn.open());
     });
 }
+
+#[test]
+fn releasing_a_run_with_no_extra_terminal_ends_none() {
+    let mut run = super::Run::default();
+    assert!(!run.release());
+}

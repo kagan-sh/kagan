@@ -11,7 +11,18 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 pub(crate) fn show(message: SharedString, cx: &mut App) -> gpui_kit::Result<()> {
-    let options = crate::prepare_window(
+    gpui_kit::open_window(options(cx), cx, |_, cx| {
+        cx.new(|cx| StartFailed {
+            message,
+            _quit: cx.on_release(|_, cx| cx.quit()),
+        })
+    })?;
+    crate::presentation::activate(cx);
+    Ok(())
+}
+
+pub(crate) fn options(cx: &mut App) -> WindowOptions {
+    crate::prepare_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                 None,
@@ -27,15 +38,7 @@ pub(crate) fn show(message: SharedString, cx: &mut App) -> gpui_kit::Result<()> 
             ..WindowOptions::default()
         },
         cx,
-    );
-    gpui_kit::open_window(options, cx, |_, cx| {
-        cx.new(|cx| StartFailed {
-            message,
-            _quit: cx.on_release(|_, cx| cx.quit()),
-        })
-    })?;
-    crate::presentation::activate(cx);
-    Ok(())
+    )
 }
 
 struct StartFailed {

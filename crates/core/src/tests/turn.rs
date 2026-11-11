@@ -702,6 +702,17 @@ async fn an_unknown_answer_option_leaves_the_question_open(cx: &mut TestAppConte
 
 #[cfg(unix)]
 #[gpui_kit::test]
+async fn a_plugin_question_is_not_one_for_a_person(cx: &mut TestAppContext) {
+    let (fixture, id) = sleeping(cx).await;
+    let _asked = cx.update(|cx| Workspace::ask(&id, "Ship it?".into(), ask_options(), cx));
+    cx.run_until_parked();
+    let open = pending(&id, cx).await;
+    assert_eq!(open.len(), 1);
+    assert!(!cx.read(|cx| fixture.workspace.read(cx).needs_a_person(&open[0].id)));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
 async fn answering_the_same_question_twice_is_not_found(cx: &mut TestAppContext) {
     let (_fixture, id) = sleeping(cx).await;
     let OpResult::Text(first) = op(ask_op(id.clone(), "Ship it?", ask_options()), cx)

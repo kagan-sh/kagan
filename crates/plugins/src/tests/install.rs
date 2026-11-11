@@ -1438,3 +1438,23 @@ fn update_all_reports_a_plugin_that_needs_approval_and_leaves_it(cx: &mut TestAp
     );
     assert_eq!(records(cx)[0].commit.as_deref(), Some(first.as_str()));
 }
+
+#[gpui_kit::test]
+fn an_uninstalled_plugins_held_store_is_deleted_by_the_retry(cx: &mut TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let orphan = PluginId("gone.plugin".into());
+    let data = kg_core::plugin_data_dir(dir.path(), &orphan);
+    crate::keep_store(&data, "board").unwrap();
+    let store = crate::web_store::store_dir(&data, "board");
+    let _hook = crate::web_store::set_remove_hook(|_| crate::web_store::StoreAttempt::Removed);
+    let root = dir.path().to_path_buf();
+    cx.update(|cx| {
+        cx.spawn(async move |cx| {
+            crate::web_store::retry_orphan_stores(&root, &std::collections::BTreeSet::new(), cx)
+                .await;
+        })
+        .detach();
+    });
+    cx.run_until_parked();
+    assert!(!store.exists(), "{}", store.display());
+}
