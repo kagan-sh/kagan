@@ -92,11 +92,13 @@ fn keyboard_groups_shortcuts_by_where_they_apply(cx: &mut TestAppContext) {
             let element =
                 crate::ui_registry::find(window, &ElementId::Name(row.clone().into())).unwrap();
             let height = f32::from(element.bounds.size.height);
-            // These rows are not last in their group, so the bottom border adds
-            // a pixel. The terminal text size row is last in its group.
+            // These rows are not last in their group, so the bottom border adds a pixel.
+            // The reference is the terminal text size row, which is last in its group and
+            // has no note. Only that row in Appearance has a note-free small-button layout.
+            // If it stops being last or gains a note, this check must pick another reference.
             assert!(
                 (height - text_size - 1.).abs() < 0.5,
-                "{row} is {height} px and setting-row-terminal-font-size is {text_size} px"
+                "{row} is {height} px; expected the terminal text size row ({text_size} px) plus its 1 px border. The reference row must stay last with no note."
             );
             assert!(
                 element.path.iter().any(|id| *id
