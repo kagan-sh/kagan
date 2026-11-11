@@ -18,3 +18,47 @@ pub fn host_os() -> OperatingSystem {
 pub fn parse_key(key: &str) -> Result<Keystroke, InvalidKeystrokeError> {
     Keystroke::parse_with_os(key, host_os())
 }
+
+// The named keys GPUI spells; a single character is always a key.
+const NAMED_KEYS: [&str; 23] = [
+    "backspace",
+    "delete",
+    "left",
+    "right",
+    "up",
+    "down",
+    "pageup",
+    "pagedown",
+    "insert",
+    "home",
+    "end",
+    "back",
+    "forward",
+    "escape",
+    "enter",
+    "tab",
+    "space",
+    "capslock",
+    "shift",
+    "control",
+    "alt",
+    "platform",
+    "function",
+];
+
+/// Whether `key` names a key that can be pressed: one character, a named key such as `escape`,
+/// or a function key from `f1` to `f35`.
+#[must_use]
+pub fn is_known_key(key: &str) -> bool {
+    let mut chars = key.chars();
+    let one_character = chars.next().is_some() && chars.next().is_none();
+    let function_key = key
+        .strip_prefix('f')
+        .and_then(|number| number.parse::<u8>().ok())
+        .is_some_and(|number| (1..=35).contains(&number));
+    one_character || NAMED_KEYS.contains(&key) || function_key
+}
+
+#[cfg(test)]
+#[path = "keys_test.rs"]
+mod tests;
