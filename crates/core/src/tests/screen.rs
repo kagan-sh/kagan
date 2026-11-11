@@ -83,6 +83,16 @@ async fn a_crash_while_a_program_runs_keeps_no_screen(cx: &mut TestAppContext) {
             .read_with(cx, |workspace, _| workspace.screen_note(&id))
             .is_none()
     );
+    assert!(
+        !fixture
+            .workspace
+            .read_with(cx, |workspace, _| workspace.program_ended(&id))
+    );
+    assert!(
+        !fixture
+            .workspace
+            .read_with(cx, |workspace, _| workspace.recovery(&id))
+    );
     let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
     let replay = store.screen_replay(&id).unwrap().unwrap_or_default();
     assert!(
@@ -122,6 +132,17 @@ async fn a_finished_program_keeps_its_screen_and_its_cause(cx: &mut TestAppConte
             .workspace
             .read_with(cx, |workspace, _| workspace.program_ended(&started.id))
     );
+    assert!(
+        !fixture
+            .workspace
+            .read_with(cx, |workspace, _| workspace.recovery(&started.id))
+    );
+    let bound = cx.update(|cx| {
+        Workspace::global(cx).update(cx, |workspace, _| {
+            workspace.set_snapshot_bound(&started.id, 1)
+        })
+    });
+    assert!(!bound);
     drop(fixture);
 }
 
@@ -300,13 +321,7 @@ async fn an_omission_is_announced_when_the_screen_settles(cx: &mut TestAppContex
     let bound = std::time::Instant::now() + std::time::Duration::from_secs(2);
     loop {
         let set = cx.update(|cx| {
-            Workspace::global(cx).update(cx, |workspace, _| {
-                let Some(crate::thread::Shown::Running(terminal)) = workspace.shown(&id) else {
-                    return false;
-                };
-                terminal.set_snapshot_bound(1);
-                true
-            })
+            Workspace::global(cx).update(cx, |workspace, _| workspace.set_snapshot_bound(&id, 1))
         });
         if set {
             break;
@@ -334,6 +349,11 @@ async fn an_omission_is_announced_when_the_screen_settles(cx: &mut TestAppContex
             .workspace
             .read_with(cx, |workspace, _| workspace.screen_note(&id)),
         Some(note)
+    );
+    assert!(
+        fixture
+            .workspace
+            .read_with(cx, |workspace, _| workspace.recovery(&id))
     );
     cx.update(|cx| {
         Workspace::global(cx).update(cx, |workspace, cx| {
