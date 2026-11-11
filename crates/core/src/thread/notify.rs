@@ -123,7 +123,7 @@ fn sentence(report: &Report) -> String {
 
 // The line is typed into a parent's program, so only plain words of a title get through: letters,
 // digits, spaces and `-_.`, then at most 40 characters. The id always follows, for `kg thread`.
-const TITLE_WORDS_MAX: usize = 40;
+const TITLE_CHARS_MAX: usize = 40;
 
 fn named(child: &ThreadId, title: &str) -> String {
     let plain: String = title
@@ -131,7 +131,7 @@ fn named(child: &ThreadId, title: &str) -> String {
         .filter(|ch| ch.is_alphanumeric() || matches!(ch, ' ' | '-' | '_' | '.'))
         .collect();
     let words = plain.split_whitespace().collect::<Vec<_>>().join(" ");
-    let short: String = words.chars().take(TITLE_WORDS_MAX).collect();
+    let short: String = words.chars().take(TITLE_CHARS_MAX).collect();
     if short.is_empty() {
         child.to_string()
     } else {
