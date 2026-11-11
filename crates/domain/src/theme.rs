@@ -180,7 +180,7 @@ pub struct Look {
     pub type_sizes: TypeSizes,
     /// The height of a list row, such as a thread row, in pixels.
     pub row: u16,
-    /// The height of a compact row that holds controls, such as a settings row, in pixels.
+    /// The height of a compact control, such as a sidebar project row, in pixels.
     pub control: u16,
 }
 
