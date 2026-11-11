@@ -473,10 +473,9 @@ fn an_archived_program_is_not_the_default(cx: &mut TestAppContext) {
     cx.foreground_executor().block_test(reopened).unwrap();
     cx.run_until_parked();
     // The reopened app finds its own PATH, so only the archived program's absence is checked.
-    assert_ne!(
-        default_program(cx),
-        Some(bin.join("gemini").display().to_string())
-    );
+    let default = default_program(cx);
+    assert!(default.is_some(), "an installed agent is still the default");
+    assert_ne!(default, Some(bin.join("gemini").display().to_string()));
 }
 
 #[gpui_kit::test]

@@ -552,3 +552,21 @@ async fn saved_names(cx: &mut TestAppContext) -> Vec<String> {
         .map(|program| program.label)
         .collect()
 }
+
+#[cfg(unix)]
+#[test]
+fn a_recent_known_agent_does_not_become_the_default_either() {
+    let dir = tempfile::tempdir().unwrap();
+    fake_program(dir.path(), "claude", "true");
+    fake_program(dir.path(), "codex", "true");
+    let list = crate::host::program::discover(
+        Some(dir.path().as_os_str()),
+        None,
+        None,
+        None,
+        &[],
+        &["codex".into()],
+        None,
+    );
+    assert_eq!(list.default.as_deref(), Some("claude"));
+}

@@ -157,6 +157,20 @@ pub(crate) fn discover(
             pinned: false,
         });
     }
+    // The default is decided before the order below, so a recent run of a known agent cannot take
+    // the first known agent's place.
+    let default = project
+        .and_then(|project| {
+            programs
+                .iter()
+                .find(|program| program.command == project && program.installed())
+        })
+        .or_else(|| {
+            programs
+                .iter()
+                .find(|program| program.source == ProgramSource::Known && program.installed())
+        })
+        .map(|program| program.command.clone());
     // Pinned saved programs first, then the recent ones newest first, then the rest in the order
     // above. The window and `kg program list` both show this order.
     let mut ordered: Vec<(usize, Program)> = programs.into_iter().enumerate().collect();
@@ -173,18 +187,6 @@ pub(crate) fn discover(
         }
     });
     let programs: Vec<Program> = ordered.into_iter().map(|(_, program)| program).collect();
-    let default = project
-        .and_then(|project| {
-            programs
-                .iter()
-                .find(|program| program.command == project && program.installed())
-        })
-        .or_else(|| {
-            programs
-                .iter()
-                .find(|program| program.source == ProgramSource::Known && program.installed())
-        })
-        .map(|program| program.command.clone());
     ProgramList { programs, default }
 }
 

@@ -11,7 +11,7 @@ pub enum ProgramOp {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         project_id: Option<ProjectId>,
     },
-    /// Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed one
+    /// Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed known agent
     List {
         #[arg(long = "project")]
         #[serde(default, skip_serializing_if = "Option::is_none")]
