@@ -18,7 +18,7 @@ async fn preference_set_stores_a_boolean(cx: &mut TestAppContext) {
     .await
     .unwrap_err();
     assert!(
-        matches!(refused, OpError::Invalid(ref message) if message.contains("boolean")),
+        matches!(refused, OpError::Invalid(ref message) if message.contains("true or false")),
         "{refused}"
     );
     op(
@@ -80,7 +80,7 @@ async fn plugin_status_is_a_boolean(cx: &mut TestAppContext) {
     .await
     .unwrap_err();
     assert!(
-        matches!(refused, OpError::Invalid(ref message) if message.contains("boolean")),
+        matches!(refused, OpError::Invalid(ref message) if message.contains("true or false")),
         "{refused}"
     );
     op(

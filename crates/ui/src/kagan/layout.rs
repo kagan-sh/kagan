@@ -20,7 +20,7 @@ use crate::ui_registry::Facts;
 const WINDOW: &str = "main";
 
 const LEFT_DEFAULT: f32 = 256.;
-pub(super) const LEFT_RANGE: (f32, f32) = (200., 420.);
+pub(super) const LEFT_RANGE: (f32, f32) = kg_domain::prefs::LEFT_WIDTH_RANGE;
 
 pub(super) const CENTER_MIN: f32 = 480.;
 pub(super) const RAIL_WIDTH: f32 = 48.;
