@@ -39,6 +39,8 @@ pub enum WindowOp {
     CommandList,
     /// Open the command list on thread search
     SearchThreads,
+    /// Open the command list on saved prompts
+    SavedPrompts,
     /// Move the keyboard to the shown thread's next terminal
     NextTerminal,
     /// Move the keyboard to the shown thread's previous terminal

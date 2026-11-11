@@ -9,6 +9,7 @@ mod instructions;
 mod plugin_folder;
 mod preview;
 mod project;
+mod saved_prompt;
 mod settings;
 mod skill;
 #[cfg(test)]

@@ -17,6 +17,14 @@ const COPY: &str = if cfg!(target_os = "macos") {
 };
 pub(crate) const NAV_CONTEXT: &str = "ReviewNav";
 
+fn contextual_bindings() -> Vec<KeyBinding> {
+    terminal_bindings()
+        .into_iter()
+        .chain(tree_bindings())
+        .chain(super::commands::saved::bindings())
+        .collect()
+}
+
 fn terminal_bindings() -> Vec<KeyBinding> {
     let paste = if cfg!(target_os = "macos") {
         "cmd-v"
@@ -138,8 +146,7 @@ impl Global for ChordWatch {}
 pub(crate) fn install_keys(cx: &mut App) {
     super::menus::bind(cx);
     super::update::bind(cx);
-    cx.bind_keys(terminal_bindings());
-    cx.bind_keys(tree_bindings());
+    cx.bind_keys(contextual_bindings());
     cx.bind_keys(sidebar::bindings());
     cx.bind_keys(super::skills::bindings());
     cx.bind_keys(super::archived::bindings());

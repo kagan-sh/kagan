@@ -9,6 +9,7 @@ mod event;
 mod interaction;
 mod plugin;
 mod project;
+mod saved_prompt;
 mod screen;
 mod section;
 mod setting;
@@ -152,6 +153,14 @@ UPDATE projects SET sort = (
     "ALTER TABLE threads ADD COLUMN notify TEXT NOT NULL DEFAULT 'default';",
     "UPDATE settings SET value = CASE WHEN value = 'false' THEN '\"off\"' ELSE '\"all\"' END WHERE key = 'notify';",
     "ALTER TABLE projects ADD COLUMN program TEXT;",
+    r"
+CREATE TABLE saved_prompts (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    starred INTEGER NOT NULL
+) WITHOUT ROWID;
+",
 ];
 
 pub(crate) const REPAIR_THREAD_COLUMNS: &str = "-- repair conflicting thread migrations";
