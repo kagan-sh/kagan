@@ -104,11 +104,15 @@ fn save_refuses_rules_changed_elsewhere_and_keeps_the_draft(cx: &mut TestAppCont
     wait_until(cx, |cx| {
         aria_label(cx, window, "agent-rules-notice").is_some()
     });
+    let on_change = aria_label(cx, window, "agent-rules-notice").unwrap_or_default();
     cx.simulate_input(window, "!");
     click(cx, window, "agent-rules-save");
     wait_until(cx, |cx| {
         aria_label(cx, window, "agent-rules-notice").is_some()
     });
+    let refused = aria_label(cx, window, "agent-rules-notice").unwrap_or_default();
+    assert_ne!(refused, on_change, "the refused Save says what to do next");
+    assert!(refused.contains("Press Save again"), "{refused}");
     let stored = std::fs::read_to_string(data.path().join("instructions.md")).unwrap();
     assert_eq!(
         stored, "second",

@@ -21,7 +21,10 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 const CHANGED: &str =
-    "The rules changed elsewhere. Your text is kept. Press Save again to replace them.";
+    "The rules changed elsewhere. Your text is kept. Save will ask once before it replaces them.";
+const REFUSED: &str =
+    "Not saved: the rules changed elsewhere. Press Save again to replace them with your text.";
+const SHOWN: &str = "The rules changed elsewhere, so this shows them.";
 const PROGRAMS: &str =
     "Claude Code, Codex, Cursor Agent and Pi read these rules. Kimi and opencode do not.";
 
@@ -137,7 +140,7 @@ impl RulesEditor {
             Loaded::Ready { saved } if *saved != draft => {
                 // The box holds the person's own text, so it stays. Until a Save has been refused,
                 // the basis stays what they read, so the first Save is refused and says so.
-                self.notice = Some(CHANGED.into());
+                self.notice = Some(if after_conflict { REFUSED } else { CHANGED }.into());
                 if after_conflict {
                     self.state = Loaded::Ready { saved: stored };
                 }
@@ -146,7 +149,7 @@ impl RulesEditor {
                 self.text.update(cx, |state, cx| {
                     state.set_value(stored.clone(), window, cx);
                 });
-                self.notice = after_conflict.then(|| CHANGED.into());
+                self.notice = after_conflict.then(|| SHOWN.into());
                 self.state = Loaded::Ready { saved: stored };
             }
         }
