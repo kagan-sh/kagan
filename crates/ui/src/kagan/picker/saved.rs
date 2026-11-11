@@ -167,7 +167,14 @@ pub(super) fn notice(text: SharedString, cx: &gpui_kit::App) -> impl IntoElement
 }
 
 // A saved program's row buttons: pin or unpin, rename, and delete. Other rows have none.
-pub(super) fn row_actions(program: &Program, picker: &WeakEntity<Picker>) -> Option<AnyElement> {
+// The buttons show on a row the pointer is over, or on the selected row, so a list of names is not
+// a list of buttons.
+pub(super) fn row_actions(
+    program: &Program,
+    picker: &WeakEntity<Picker>,
+    row_group: &str,
+    selected: bool,
+) -> Option<AnyElement> {
     if program.source != ProgramSource::Saved {
         return None;
     }
@@ -180,10 +187,13 @@ pub(super) fn row_actions(program: &Program, picker: &WeakEntity<Picker>) -> Opt
         ("Pin", true)
     };
     let (pin_name, rename_name, delete_name) = (name.clone(), name.clone(), name.clone());
+    let shown = h_flex()
+        .gap_1()
+        .flex_shrink_0()
+        .invisible()
+        .group_hover(row_group.to_owned(), |this| this.visible());
     Some(
-        h_flex()
-            .gap_1()
-            .flex_shrink_0()
+        if selected { shown.visible() } else { shown }
             .child(row_button(
                 format!("program-pin-{key}"),
                 pin_label,

@@ -307,3 +307,27 @@ fn a_reopened_picker_starts_with_an_empty_search(cx: &mut TestAppContext) {
         "a search from an earlier visit is cleared"
     );
 }
+
+#[gpui_kit::test]
+fn a_saved_row_shows_its_buttons_only_while_it_is_selected(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    save(cx, "Alpha", "codex --alpha");
+    save(cx, "Zulu", "codex --zulu");
+    start_in_plain_folder(cx, window, data.path());
+    search(cx, window, "codex");
+    for _ in 0..10 {
+        if label(cx, window, &row_id("Zulu")).contains("selected") {
+            break;
+        }
+        cx.simulate_keystrokes(window, "down");
+    }
+    assert!(label(cx, window, &row_id("Zulu")).contains("selected"));
+    assert!(
+        shows(cx, window, "program-pin-saved-Zulu"),
+        "the selected row shows its buttons"
+    );
+    assert!(
+        !shows(cx, window, "program-pin-saved-Alpha"),
+        "a row that is not selected or under the pointer shows none"
+    );
+}

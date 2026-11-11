@@ -53,8 +53,9 @@ impl RenderOnce for ProgramRow {
         };
         let mark = mark_slot(&self.program.label, card, cx);
         let (list, first) = (self.list, self.first);
-        let actions = saved::row_actions(&self.program, &self.picker);
         let key = program_key(&self.program);
+        let row_group = format!("program-row-{key}");
+        let actions = saved::row_actions(&self.program, &self.picker, &row_group, self.selected);
         div()
             .on_children_prepainted(move |bounds, window, cx| {
                 if let Some(row) = bounds.first().filter(|_| first) {
@@ -74,6 +75,7 @@ impl RenderOnce for ProgramRow {
                     })
                     .child(
                         self.base
+                            .group(row_group)
                             .when(self.selected, |row| row.bg(cx.theme().secondary))
                             .px_2()
                             .h_7()

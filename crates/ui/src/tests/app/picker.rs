@@ -891,6 +891,22 @@ fn a_version_shows_its_number_without_its_build_suffix_or_full_stop(cx: &mut Tes
 
 #[cfg(unix)]
 #[gpui_kit::test]
+fn a_version_written_with_a_v_shows_its_number(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let bin = fixture_programs(cx, data.path(), &["opencode"]);
+    std::fs::write(
+        bin.join("opencode"),
+        "#!/bin/sh\necho \"opencode v2.2.5\"\n",
+    )
+    .unwrap();
+    start_in_plain_folder(cx, window, data.path());
+    wait_until(cx, |cx| {
+        label(cx, window, "program-version-opencode") == "2.2.5"
+    });
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
 fn the_custom_command_label_starts_on_the_program_names(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
     fixture_programs(cx, data.path(), &["codex"]);
