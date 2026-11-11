@@ -100,15 +100,15 @@ pub fn check(op: &Op) -> Result<(), String> {
     }
 }
 
-// Rules are text for a program to read, so a control character other than a line break or tab
-// has no place in them.
+// Rules are text for a program to read, so a control character other than a line break (LF or
+// CRLF, as Windows editors save it) or a tab has no place in them.
 fn instructions(op: &InstructionsOp) -> Result<(), String> {
     match op {
         InstructionsOp::Set {
             text: Some(text), ..
         } if text
             .chars()
-            .any(|c| c.is_control() && !matches!(c, '\n' | '\t')) =>
+            .any(|c| c.is_control() && !matches!(c, '\n' | '\r' | '\t')) =>
         {
             Err("the rules cannot hold a control character other than a line break or tab".into())
         }

@@ -28,7 +28,7 @@ pub(crate) async fn run(
                     // A title is one name, as a saved program's is, so the same title is refused.
                     if store.saved_prompt_titled(&stored.title)? {
                         return Err(kg_store::Error::Conflict(format!(
-                            "a saved prompt named {} already exists.",
+                            "a saved prompt named {} already exists",
                             stored.title
                         )));
                     }

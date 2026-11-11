@@ -976,7 +976,25 @@ fn env_set_given_a_value_argument_says_the_value_comes_on_stdin() {
 }
 
 #[test]
-fn text_output_ends_with_one_newline() {
-    assert_eq!(crate::cli::terminated("rules"), "rules\n");
-    assert_eq!(crate::cli::terminated("rules\n"), "rules\n");
+fn text_ends_with_one_newline_in_a_terminal_and_is_unchanged_in_a_pipe() {
+    let mut out = Vec::new();
+    crate::cli::write_text(&mut out, "rules", true).unwrap();
+    assert_eq!(out, b"rules\n");
+    out.clear();
+    crate::cli::write_text(&mut out, "rules\n", true).unwrap();
+    assert_eq!(out, b"rules\n");
+    out.clear();
+    crate::cli::write_text(&mut out, "rules", false).unwrap();
+    assert_eq!(out, b"rules");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_word_that_is_not_utf8_becomes_lossy_text_instead_of_a_panic() {
+    use std::os::unix::ffi::OsStringExt as _;
+    let words = crate::argv_words([
+        std::ffi::OsString::from("kg"),
+        std::ffi::OsString::from_vec(vec![0xff, b'a']),
+    ]);
+    assert_eq!(words, ["kg", "\u{fffd}a"]);
 }

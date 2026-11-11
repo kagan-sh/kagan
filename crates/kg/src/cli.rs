@@ -155,11 +155,7 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
                 exit_with(*exit_code);
                 return Ok(());
             }
-            OpResult::Text(text) | OpResult::Logs { text, .. } => {
-                use std::io::Write as _;
-                std::io::stdout().write_all(terminated(text).as_bytes())?;
-                return Ok(());
-            }
+            OpResult::Text(text) | OpResult::Logs { text, .. } => return print_text(text),
             OpResult::Wait(outcome) => {
                 println!("{outcome}");
                 return Ok(());
@@ -244,13 +240,25 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
     Ok(())
 }
 
-// Text a person reads ends with a newline, so the shell prompt starts on its own line.
-pub(crate) fn terminated(text: &str) -> std::borrow::Cow<'_, str> {
-    if text.ends_with('\n') {
-        text.into()
-    } else {
-        format!("{text}\n").into()
+fn print_text(text: &str) -> Result<(), OpError> {
+    use std::io::IsTerminal as _;
+    let terminal = std::io::stdout().is_terminal();
+    write_text(&mut std::io::stdout().lock(), text, terminal)?;
+    Ok(())
+}
+
+// In a terminal, text ends with a newline so the shell prompt starts on its own line. A pipe or
+// a file gets the text exactly as the command made it.
+pub(crate) fn write_text(
+    out: &mut impl std::io::Write,
+    text: &str,
+    terminal: bool,
+) -> std::io::Result<()> {
+    out.write_all(text.as_bytes())?;
+    if terminal && !text.ends_with('\n') {
+        out.write_all(b"\n")?;
     }
+    Ok(())
 }
 
 /// Reads the `--file` of a paste or a browser fill (`-` is stdin) and sends its text, so a

@@ -1,4 +1,4 @@
-use crate::ui_registry::snapshots;
+use crate::ui_registry::{ElementSnapshot, snapshots};
 use gpui_kit::{
     App, ElementId, InputEvent, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollDelta, ScrollEvent, Window,
@@ -209,7 +209,11 @@ pub(crate) fn snapshot(window: &Window, index: u32) -> kg_domain::UiSnapshot {
 }
 
 fn observed_elements(window: &Window) -> Vec<kg_domain::UiElement> {
-    let mut elements: Vec<_> = snapshots(window)
+    observed(&snapshots(window))
+}
+
+fn observed(elements: &[ElementSnapshot]) -> Vec<kg_domain::UiElement> {
+    let mut elements: Vec<_> = elements
         .iter()
         .map(|element| {
             let path = element.path.iter().map(|id| format!("{id:?}")).collect();

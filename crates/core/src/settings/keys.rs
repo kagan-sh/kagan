@@ -19,8 +19,10 @@ pub fn parse_key(key: &str) -> Result<Keystroke, InvalidKeystrokeError> {
     Keystroke::parse_with_os(key, host_os())
 }
 
-// The named keys GPUI spells; a single character is always a key.
-const NAMED_KEYS: [&str; 23] = [
+// The named keys GPUI spells, as `parse_key` reads them. Control, alt and platform are
+// modifiers and parse alone as nothing, so they are not keys here. A single character is always
+// a key.
+const NAMED_KEYS: [&str; 20] = [
     "backspace",
     "delete",
     "left",
@@ -40,9 +42,6 @@ const NAMED_KEYS: [&str; 23] = [
     "space",
     "capslock",
     "shift",
-    "control",
-    "alt",
-    "platform",
     "function",
 ];
 

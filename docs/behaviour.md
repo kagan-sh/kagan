@@ -267,7 +267,7 @@ A project is a named body of work, usually one repository, with one folder on th
 
 - **Allowed when**: always. A name is trimmed, at most 40 characters, and has no control characters. A line is split as a command line [op/] [decision 240].
 - **Changes**: `Save` stores the name and the line. A name already saved, in any case, takes the new line and keeps its pin. `Rename` gives a saved program another name, and its line and pin stay. `Remove` deletes the saved program. A project's default or a thread that already holds its line keeps that line and lists it as a plain program. `Pin` sets or clears the pin, and pinned saved programs are listed first. None of them starts a program or writes an event [decision 240]. The window's buttons and these keys act on the selected row, and only a saved program has them: `PinSavedProgram` pins or unpins it, `RenameSavedProgram` opens the rename form, `DeleteSavedProgram` deletes it, and `SaveSavedProgram` saves or renames from the custom command form [decision 240].
-- **Refused when**: an empty name — `A saved program needs a name.` — `invalid`. A name longer than 40 characters, or with a control character — `invalid`. A line that does not split, such as one with an unfinished quote — `invalid` [op/]. A `Rename` to a name another saved program already has, in any case — `a saved program named <name> already exists` — `invalid`. A name that is not saved — `saved program <name> not found` — `not-found`.
+- **Refused when**: an empty name — `a saved program needs a name` — `invalid`. A name longer than 40 characters, or with a control character — `invalid`. A line that does not split, such as one with an unfinished quote — `invalid` [op/]. A `Rename` to a name another saved program already has, in any case — `a saved program named <name> already exists` — `invalid`. A name that is not saved — `saved program <name> not found` — `not-found`.
 
 ## Env
 
@@ -734,7 +734,7 @@ The sidebar list reads `sidebar-order`, `sidebar-hide-empty-projects` and `sideb
 
 ## Agent rules
 
-The agent rules are text a thread's program is told when it starts. A control character other than a line break or tab is refused — `invalid`: the global file `<dataDir>/instructions.md`, and a project's `<project>/.kagan/instructions.md` [decision 211]. Each file holds at most 16 KiB (16,384 bytes) [decision 211]. They reach `claude`, `codex`, `cursor-agent` and `pi`, not `kimi` or `opencode` [decision 211] [docs:self-extend].
+The agent rules are text a thread's program is told when it starts: the global file `<dataDir>/instructions.md`, and a project's `<project>/.kagan/instructions.md` [decision 211]. Each file holds at most 16 KiB (16,384 bytes) [decision 211]. A control character other than a line break (LF or CRLF) or a tab is refused — `invalid` [decision 242]. They reach `claude`, `codex`, `cursor-agent` and `pi`, not `kimi` or `opencode` [decision 211] [docs:self-extend].
 
 ### `Get`
 

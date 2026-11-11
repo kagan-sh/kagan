@@ -1550,6 +1550,7 @@ fn rules_refuse_a_control_character_but_keep_line_breaks_and_tabs() {
         }))
     };
     assert_eq!(set("first line\n\tindented"), Ok(()));
+    assert_eq!(set("first line\r\nsecond line"), Ok(()));
     assert!(set("a\0b").is_err());
 }
 

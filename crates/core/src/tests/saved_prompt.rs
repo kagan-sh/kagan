@@ -120,6 +120,6 @@ async fn a_saved_prompt_title_is_refused_when_another_has_it(cx: &mut TestAppCon
     let error = op(add("review", "second"), cx).await.unwrap_err();
     assert_eq!(
         error.to_string(),
-        "a saved prompt named review already exists."
+        "a saved prompt named review already exists"
     );
 }

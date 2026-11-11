@@ -1,39 +1,35 @@
-use std::cmp::Ordering;
+use gpui_kit::{Bounds, ElementId, point, px, size};
 
-use kg_domain::{UiBounds, UiElement};
+use super::observed;
+use crate::ui_registry::ElementSnapshot;
 
-use super::reading_order;
-
-fn element(id: &str, x: f32, y: f32) -> UiElement {
-    UiElement {
-        id: id.into(),
-        path: vec![id.into()],
+fn element(id: &'static str, x: f32, y: f32) -> ElementSnapshot {
+    let bounds = Bounds::new(point(px(x), px(y)), size(px(10.), px(10.)));
+    ElementSnapshot {
         role: None,
-        label: None,
+        path: vec![ElementId::from(id)],
         value: None,
-        bounds: UiBounds {
-            x,
-            y,
-            width: 10.,
-            height: 10.,
-        },
+        bounds,
+        clipped: bounds,
+        visible: true,
         focused: None,
         disabled: None,
         selected: None,
-        visible: true,
+        label: None,
         hint: None,
     }
 }
 
 #[test]
-fn a_snapshot_lists_elements_top_to_bottom_then_left_to_right() {
-    let mut elements = [
+fn a_snapshot_lists_elements_top_to_bottom_then_left_to_right_whatever_order_they_came_in() {
+    let listed = observed(&[
         element("right", 50., 0.),
         element("lower", 0., 40.),
         element("left", 0., 0.),
-    ];
-    elements.sort_by(reading_order);
-    let ids: Vec<_> = elements.iter().map(|element| element.id.as_str()).collect();
-    assert_eq!(ids, ["left", "right", "lower"]);
-    assert_eq!(reading_order(&elements[0], &elements[0]), Ordering::Equal);
+    ]);
+    let at: Vec<_> = listed
+        .iter()
+        .map(|element| (element.bounds.y, element.bounds.x))
+        .collect();
+    assert_eq!(at, [(0., 0.), (0., 50.), (40., 0.)]);
 }

@@ -65,7 +65,7 @@ pub struct SavedProgram {
 pub fn saved_name(name: &str) -> Result<String, String> {
     let name = name.trim();
     if name.is_empty() {
-        return Err("A saved program needs a name.".into());
+        return Err("a saved program needs a name".into());
     }
     if name.chars().count() > SAVED_NAME_MAX {
         return Err(format!(

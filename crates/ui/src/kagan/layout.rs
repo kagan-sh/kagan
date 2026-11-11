@@ -157,3 +157,18 @@ mod chrome;
 mod fit;
 mod layer;
 mod panels;
+
+#[cfg(test)]
+mod clamp_tests {
+    use gpui_kit::px;
+
+    use super::{LEFT_RANGE, clamp_width};
+
+    // A width saved before the range was enforced is still drawn at the nearest edge.
+    #[test]
+    fn an_old_saved_width_is_drawn_at_the_range_edge() {
+        assert_eq!(f32::from(clamp_width(px(99_999_999.), LEFT_RANGE)), 420.);
+        assert_eq!(f32::from(clamp_width(px(10.), LEFT_RANGE)), 200.);
+        assert_eq!(f32::from(clamp_width(px(300.), LEFT_RANGE)), 300.);
+    }
+}
