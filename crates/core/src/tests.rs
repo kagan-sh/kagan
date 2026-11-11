@@ -5,6 +5,7 @@
 )]
 
 mod agent;
+mod automation;
 #[cfg(unix)]
 mod details;
 mod diagnostics;
