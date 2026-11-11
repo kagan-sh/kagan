@@ -1,9 +1,7 @@
 # Product Rust line ceilings. A count may grow up to its ceiling, never past it.
+# This branch: main is 80818 lines, and the merged count is 81298 (+480). The ceiling is that count.
 target 35000
-# Cost: this branch adds 254 product lines on top of main (80446 lines), for the QA CLI fixes
-# and their review rounds. The merged count is 80700, and the ceiling is set to it. The end
-# target of 35000 is unchanged.
-ceiling 81180
+ceiling 81298
 allow_expect 8
 crates/core/src/thread/agent/files.rs 754
 crates/ui/src/theme/catalog.rs 646

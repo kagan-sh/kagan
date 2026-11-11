@@ -305,6 +305,8 @@ pub enum OpError {
     SetupChanged(String),
     #[error("{0}")]
     Changed(String),
+    #[error("{0}")]
+    Full(String),
 }
 
 impl From<std::io::Error> for OpError {
@@ -332,6 +334,7 @@ enum Body {
     Failed(String),
     SetupChanged(String),
     Changed(String),
+    Full(String),
 }
 
 impl From<OpError> for Wire {
@@ -342,6 +345,7 @@ impl From<OpError> for Wire {
             OpError::Failed(message) => Body::Failed(message),
             OpError::SetupChanged(message) => Body::SetupChanged(message),
             OpError::Changed(message) => Body::Changed(message),
+            OpError::Full(message) => Body::Full(message),
         };
         Self { error }
     }
@@ -355,6 +359,7 @@ impl From<Wire> for OpError {
             Body::Failed(message) => Self::Failed(message),
             Body::SetupChanged(message) => Self::SetupChanged(message),
             Body::Changed(message) => Self::Changed(message),
+            Body::Full(message) => Self::Full(message),
         }
     }
 }

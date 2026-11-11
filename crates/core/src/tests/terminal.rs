@@ -4,8 +4,9 @@ use kg_domain::*;
 use crate::Workspace;
 
 use super::{
-    Fixture, Reap, alive, dispatch_delete, events, gone, kinds_of, op, pending_delete, pid_of,
-    program, screen, screen_of, screen_with, started, thread, type_in, wait_for_status,
+    Fixture, Reap, alive, dispatch_delete, environment_of, events, gone, kinds_of, op,
+    pending_delete, personal_run, pid_of, program, screen, screen_of, screen_with, started, thread,
+    type_in, wait_for_status,
 };
 #[cfg(unix)]
 use super::{dispatch_send, job_pid, screen_lines, script, sent_text, wait_until_busy};
@@ -708,6 +709,65 @@ async fn input_to_an_ended_program_is_refused(cx: &mut TestAppContext) {
 
 #[cfg(unix)]
 #[gpui_kit::test]
+async fn input_past_the_queue_budget_is_refused_as_full(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Thread(started) = op(fixture.run("/bin/sh -c \"stty raw -echo; sleep 30\""), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("thread")
+    };
+    let text = "a".repeat(1 << 20);
+    for _ in 0..4 {
+        op(
+            Op::Thread(ThreadOp::Input {
+                id: started.id.clone(),
+                text: text.clone(),
+                terminal: None,
+            }),
+            cx,
+        )
+        .await
+        .expect("input inside the budget is accepted");
+    }
+    let refused = op(
+        Op::Thread(ThreadOp::Input {
+            id: started.id.clone(),
+            text: "x".into(),
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(refused, OpError::Full(_)), "{refused}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn input_over_the_text_cap_is_invalid_even_to_an_idle_program(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Thread(started) = op(fixture.run("/bin/sh -c \"stty raw -echo; sleep 30\""), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("thread")
+    };
+    let refused = op(
+        Op::Thread(ThreadOp::Input {
+            id: started.id,
+            text: "a".repeat(5 << 20),
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(refused, OpError::Invalid(_)), "{refused}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
 async fn deleting_an_ended_thread_releases_its_screen(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let OpResult::Thread(started) = op(fixture.run("/bin/sh -c \"printf done; exit 0\""), cx)
@@ -1132,4 +1192,56 @@ async fn send_accepts_text_up_to_the_cap(cx: &mut TestAppContext) {
     .await
     .unwrap_err();
     assert!(matches!(error, OpError::NotFound(_)), "{error}");
+}
+
+// Typed text with no Enter must come back as an echo. Untitled Personal threads on Windows failed
+// this in kg-ui, so the probe is a Personal thread titled like its program, and the control has
+// another title. A miss reports what the screen showed, so "slow" and "never" can be told apart.
+async fn echo_after_typing(title: &str, cx: &mut TestAppContext) -> Option<String> {
+    let fixture = Fixture::personal(cx).await;
+    let OpResult::Thread(started) =
+        op(personal_run(&fixture, title, EnvironmentSpec::Personal), cx)
+            .await
+            .unwrap()
+    else {
+        panic!("thread")
+    };
+    let id = started.id.clone();
+    let begin = std::time::Instant::now();
+    type_in(&id, "typed-probe", cx).await;
+    loop {
+        let frame = screen(&id, cx).await.unwrap();
+        if frame.contains("typed-probe") {
+            return None;
+        }
+        if begin.elapsed() > std::time::Duration::from_secs(30) {
+            let status = thread(&id, cx).await.status;
+            let folder = environment_of(started.environment_id.as_ref().unwrap(), cx)
+                .await
+                .path;
+            return Some(format!(
+                "typed text never echoed after {:?}; status {status:?}; folder {}; screen:\n{frame}",
+                begin.elapsed(),
+                folder.display()
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+#[cfg(windows)]
+const PROGRAM_STEM: &str = "cmd";
+#[cfg(not(windows))]
+const PROGRAM_STEM: &str = "sh";
+
+#[gpui_kit::test]
+async fn the_probe_titled_like_its_program_echoes_typed_text(cx: &mut TestAppContext) {
+    let miss = echo_after_typing(PROGRAM_STEM, cx).await;
+    assert!(miss.is_none(), "{}", miss.unwrap_or_default());
+}
+
+#[gpui_kit::test]
+async fn the_control_titled_notes_echoes_typed_text(cx: &mut TestAppContext) {
+    let miss = echo_after_typing("notes", cx).await;
+    assert!(miss.is_none(), "{}", miss.unwrap_or_default());
 }
