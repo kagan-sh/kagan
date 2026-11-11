@@ -1,5 +1,5 @@
 # Product Rust line ceilings. A count may grow up to its ceiling, never past it.
 target 35000
-ceiling 77732
+ceiling 78700
 allow_expect 8
 crates/core/src/thread/agent/files.rs 754

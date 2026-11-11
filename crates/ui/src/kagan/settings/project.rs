@@ -13,6 +13,8 @@ use gpui_kit::{
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, Program, ProgramOp, ProjectId, ProjectOp};
 
+use super::automations::List;
+
 use super::group_block;
 use super::row::{Group, Row, group, row};
 use crate::kagan::Kagan;
@@ -41,6 +43,7 @@ pub(in crate::kagan) struct Page {
     focus: FocusHandle,
     variables: Entity<Variables>,
     rules: Entity<RulesEditor>,
+    automations: Entity<List>,
     kagan: WeakEntity<Kagan>,
     note: Option<SharedString>,
     // Each task is kept while it runs; dropping one cancels it.
@@ -58,6 +61,7 @@ impl Page {
         let scope = project.clone();
         let variables = cx.new(|cx| Variables::new(Some(scope.clone()), window, cx));
         let rules = cx.new(|cx| RulesEditor::new(Some(scope), window, cx));
+        let automations = cx.new(|cx| List::new(project.clone(), window, cx));
         variables.update(cx, Variables::reload);
         let mut page = Self {
             project,
@@ -68,6 +72,7 @@ impl Page {
             focus: cx.focus_handle(),
             variables,
             rules,
+            automations,
             kagan,
             note: None,
             load: None,
@@ -201,6 +206,13 @@ impl Page {
             self.rules.clone().into_any_element(),
         );
         rules.wide = true;
+        let mut automations = row(
+            "project-automations",
+            "Automations",
+            "A named text, a program, and a time. While kagan is open, a due one starts a thread and sends the text.",
+            self.automations.clone().into_any_element(),
+        );
+        automations.wide = true;
         vec![
             Group {
                 headed: true,
@@ -221,6 +233,10 @@ impl Page {
             Group {
                 headed: true,
                 ..group("project-rules", "Agent rules", vec![rules])
+            },
+            Group {
+                headed: true,
+                ..group("project-automations", "Automations", vec![automations])
             },
         ]
     }
