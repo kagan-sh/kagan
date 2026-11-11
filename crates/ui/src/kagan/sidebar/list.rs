@@ -210,8 +210,9 @@ pub(super) fn sidebar_rows(sidebar: &Sidebar, shows: &Shows, cx: &App) -> Vec<Ro
             .iter()
             .filter(|thread| thread.archived_at.is_none() && thread.project_id == project.id)
             .collect();
-        let chosen = sidebar.chosen() == Some(&project.id);
-        if threads.is_empty() && sidebar.options.hide_empty_projects && !chosen {
+        let kept =
+            sidebar.chosen() == Some(&project.id) || shows.project.as_ref() == Some(&project.id);
+        if threads.is_empty() && sidebar.options.hide_empty_projects && !kept {
             continue;
         }
         let open = !sidebar.closed.contains(&project.id);

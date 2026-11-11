@@ -77,6 +77,10 @@ impl Page {
         page
     }
 
+    pub(in crate::kagan) fn project(&self) -> &ProjectId {
+        &self.project
+    }
+
     fn reload(&mut self, cx: &mut Context<Self>) {
         let project = Workspace::dispatch(
             Op::Project(ProjectOp::Get {

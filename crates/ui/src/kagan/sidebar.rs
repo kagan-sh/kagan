@@ -83,6 +83,7 @@ pub(super) enum Event {
 pub(super) struct Shows {
     pub(super) thread: Option<ThreadId>,
     pub(super) page: Option<(PluginId, String)>,
+    pub(super) project: Option<ProjectId>,
     pub(super) tool: Option<PluginId>,
     pub(super) archived: bool,
     pub(super) skills: bool,
