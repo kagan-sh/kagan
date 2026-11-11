@@ -327,17 +327,22 @@ pub(super) fn threads_home(shows: &Shows, cx: &mut Context<Sidebar>) -> impl Int
             .text_color(Tone::Needs.color(cx))
             .child(count.to_string())
     });
+    let current =
+        shows.tool.is_none() && !shows.in_settings && !shows.skills && shows.page.is_none();
     div()
         .relative()
         .flex_shrink_0()
         .child(control(
             "threads-home",
-            Facts::button("Threads"),
+            Facts {
+                selected: Some(current),
+                ..Facts::button("Threads")
+            },
             Button::new("threads-home-button")
                 .small()
                 .rounded(px(radius_xs(cx)))
                 .ghost()
-                .selected(shows.tool.is_none() && !shows.in_settings && shows.page.is_none())
+                .selected(current)
                 .icon(gpui_kit::assets::IconName::House)
                 .accessibility_label("Threads")
                 .tooltip(tip("Threads", &Threads, cx))

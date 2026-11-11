@@ -2,7 +2,7 @@ use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, TestAppContext};
 
 use crate::kagan::Kagan;
 use crate::tests::kagan::{
-    chord, click, focused_of, grid_text, label, open, shell, shows, wait_until,
+    chord, click, focused_of, grid_text, label, open, selected_of, shell, shows, wait_until,
 };
 
 fn show_skills(cx: &mut TestAppContext, kagan: &Entity<Kagan>, window: AnyWindowHandle) {
@@ -322,4 +322,33 @@ fn yours_with_no_skills_says_so_and_points_at_new_skill(cx: &mut TestAppContext)
         label(cx, window, "skills-empty"),
         "You have no skills yet. Make one with New skill."
     );
+}
+
+#[gpui_kit::test]
+fn the_skills_page_highlights_only_the_skills_icon(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    show_skills(cx, &kagan, window);
+    assert_eq!(selected_of(cx, window, "threads-home"), Some(false));
+}
+
+#[gpui_kit::test]
+fn a_name_error_clears_once_the_person_types_again(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    show_skills(cx, &kagan, window);
+    click(cx, window, "skills-new");
+    cx.run_until_parked();
+    cx.simulate_input(window, "Bad Name!");
+    click(cx, window, "skills-create");
+    wait_until(cx, |cx| shows(cx, window, "skills-notice"));
+    click(cx, window, "skills-name");
+    cx.simulate_input(window, "x");
+    wait_until(cx, |cx| !shows(cx, window, "skills-notice"));
+}
+
+#[gpui_kit::test]
+fn save_in_project_says_why_it_is_unavailable_without_a_project(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    show_skills(cx, &kagan, window);
+    click(cx, window, "skills-new");
+    wait_until(cx, |cx| shows(cx, window, "skills-scope-reason"));
 }

@@ -43,6 +43,8 @@ pub(in crate::kagan) struct Page {
     // The SKILL.md text the editor was opened on; Save refuses if the file changed since.
     expected: String,
     creating: Option<Entity<InputState>>,
+    // Typing in the new-skill name clears the error from the last Create.
+    name_watch: Option<Subscription>,
     confirming: bool,
     list_task: Option<Task<()>>,
     detail_task: Option<Task<()>>,
@@ -109,6 +111,7 @@ impl Page {
             selected: None,
             editor: None,
             creating: None,
+            name_watch: None,
             confirming: false,
             list_task: None,
             detail_task: None,
@@ -325,6 +328,12 @@ impl Page {
         let input = cx.new(|cx| InputState::new(window, cx).placeholder("skill-name"));
         let focus = input.read(cx).focus_handle(cx);
         window.focus(&focus, cx);
+        self.name_watch = Some(cx.subscribe(&input, |this, _, event: &InputEvent, cx| {
+            if matches!(event, InputEvent::Change) {
+                this.notice = None;
+                cx.notify();
+            }
+        }));
         self.creating = Some(input);
         cx.notify();
     }
