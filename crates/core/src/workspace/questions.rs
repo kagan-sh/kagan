@@ -79,6 +79,9 @@ impl Workspace {
         options: Vec<InteractionOption>,
         cx: &mut App,
     ) -> Task<Result<String>> {
+        if let Some(requester) = &requester {
+            requester.waiting_for(&title);
+        }
         match thread_id {
             Some(thread_id) => Self::raise_question(thread_id, title, options, true, requester, cx),
             None => Self::standalone(title, options, requester, cx),

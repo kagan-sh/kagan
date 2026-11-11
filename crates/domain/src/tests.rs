@@ -1592,3 +1592,51 @@ fn terminal_ops_keep_their_exact_json() {
         assert_eq!(serde_json::to_string(&op).unwrap(), wire);
     }
 }
+
+#[test]
+fn bidi_overrides_are_refused_in_names_like_control_characters() {
+    use crate::{AutomationOp, ProjectId, SavedPromptOp, SectionId, SectionOp};
+    for mark in ['\u{202A}', '\u{202E}', '\u{2066}', '\u{2069}'] {
+        let reversed = format!("live {mark}evil");
+        assert!(crate::saved_name(&reversed).is_err(), "{mark:?}");
+        assert!(!crate::prefs::valid_font_name(&reversed), "{mark:?}");
+        assert!(
+            crate::check(&Op::SavedPrompt(SavedPromptOp::Add {
+                title: reversed.clone(),
+                body: "body".into(),
+            }))
+            .is_err(),
+            "{mark:?}"
+        );
+        assert!(
+            crate::check(&Op::Automation(AutomationOp::Add {
+                name: reversed.clone(),
+                body: "body".into(),
+                project_id: ProjectId::personal(),
+                program: "claude".into(),
+                minutes: Some(5),
+                at: None,
+            }))
+            .is_err(),
+            "{mark:?}"
+        );
+        assert!(
+            crate::check(&Op::Section(SectionOp::Create {
+                name: reversed.clone(),
+                thread_id: None,
+            }))
+            .is_err(),
+            "section create {mark:?}"
+        );
+        assert!(
+            crate::check(&Op::Section(SectionOp::Rename {
+                id: SectionId("sec_1".into()),
+                name: reversed,
+            }))
+            .is_err(),
+            "section rename {mark:?}"
+        );
+    }
+    assert!(crate::unsafe_char('\u{2069}'));
+    assert!(!crate::unsafe_char('é'));
+}

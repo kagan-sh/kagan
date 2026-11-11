@@ -4,7 +4,7 @@ What each `Op` does, one rule per line, for a reader who has the `Op` signatures
 
 Sources, in order: [CONTEXT], [decision N], [book:page], [docs:file], [op/] (the `crates/domain/src/op/` modules), [event.rs], [record.rs]. Help text is the CLI contract in [book:cli].
 
-A missing id is `not-found`. A bad argument is `invalid`. A pinned setup script that changed before Start is `setup-changed` [decision 192]. A write past a program's input budget is `full` [decision 244]. Every other refusal is `failed` [op/]. An `Op` request uses the kebab-case name and camelCase fields, like the `OpResult` reply.
+A missing id is `not-found`. A bad argument is `invalid`. A pinned setup script that changed before Start is `setup-changed` [decision 192]. A write past a program's input budget is `full` [decision 249]. Every other refusal is `failed` [op/]. An `Op` request uses the kebab-case name and camelCase fields, like the `OpResult` reply.
 
 ## Questions for the person
 
@@ -51,9 +51,9 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Input`, `Paste`, `Send`, `Report`, `Resize`, `Scroll`, `Select`, `Copy`, `Screen`
 
 - **Allowed when**: the thread's program is running in the host [decision 46].
-- **Changes**: `Input` writes text to the program's terminal and brings the view back to the bottom. `Paste` does the same, wrapped in bracketed-paste markers when the program asked for them; otherwise its newlines become carriage returns. A paste that names a path is `invalid` and sends nothing; `kg` reads `--file`, or stdin when the path is `-`, up to 1 MiB, and sends the text. Escape and the other control characters are removed from pasted text, so it cannot end a bracketed paste or type a command. `Send` types text the same way, then presses Enter, as one write, up to 1 MiB. It can run while the program is busy and appends to input already on the line. Without bracketed paste, embedded newlines become carriage returns inside that write. Empty text and text that is only control characters are `invalid`. A program that has ended, and a write that fails, are refused and write no `message`. The typed text is a user `message` only after the write succeeds [decision 136]. It does not queue. Input the writer has not yet handed to the program's pty counts against a 4 MiB budget for that program, and the budget comes back as the writer hands bytes over [decision 244]. Replies to the program's own queries, such as a cursor position, are never counted or refused. `Report` sends mouse-report bytes (decimal values, 0 to 255) to the program without that scroll reset, so a scrolled view stays where it is. `Resize` sets the program's size, from 2 to 1000 columns and 1 to 500 rows. The last client to resize sets it [decision 46]. `Scroll` moves the view by lines into the history, up when positive. Each program keeps 10,000 lines of history. `Select` starts a selection at a cell (`simple`, `word`, `line` or `block`), or moves the end of the one there is (`extend`). `Screen` changes nothing.
+- **Changes**: `Input` writes text to the program's terminal and brings the view back to the bottom. `Paste` does the same, wrapped in bracketed-paste markers when the program asked for them; otherwise its newlines become carriage returns. A paste that names a path is `invalid` and sends nothing; `kg` reads `--file`, or stdin when the path is `-`, up to 1 MiB, and sends the text. Escape and the other control characters are removed from pasted text, so it cannot end a bracketed paste or type a command. `Send` types text the same way, then presses Enter, as one write, up to 1 MiB. It can run while the program is busy and appends to input already on the line. Without bracketed paste, embedded newlines become carriage returns inside that write. Empty text and text that is only control characters are `invalid`. A program that has ended, and a write that fails, are refused and write no `message`. The typed text is a user `message` only after the write succeeds [decision 136]. It does not queue. Input the writer has not yet handed to the program's pty counts against a 4 MiB budget for that program, and the budget comes back as the writer hands bytes over [decision 249]. Replies to the program's own queries, such as a cursor position, are never counted or refused. `Report` sends mouse-report bytes (decimal values, 0 to 255) to the program without that scroll reset, so a scrolled view stays where it is. `Resize` sets the program's size, from 2 to 1000 columns and 1 to 500 rows. The last client to resize sets it [decision 46]. `Scroll` moves the view by lines into the history, up when positive. Each program keeps 10,000 lines of history. `Select` starts a selection at a cell (`simple`, `word`, `line` or `block`), or moves the end of the one there is (`extend`). `Screen` changes nothing.
 - **Shows**: `Screen` returns the visible rows as an ANSI redraw, with the modes that change what keys send [decision 46]. With `--scrollback` it returns every kept line as plain text. `--lines` is refused without `--scrollback`; with it, the count is from 1 to 10000 and the result is that many last rows of the same text, or the whole text when there are fewer. A plugin's `threads.output` is that scrollback plain text, newest 256 KiB [decision 128]. `Copy` returns the selected text, or nothing when no text is selected; a whole line copied has no newline at its end. `Input`, `Paste`, `Send`, `Report`, `Resize`, `Scroll` and `Select` return done. `WorkspaceEvent::Screen` follows a change, at most about 30 times a second [decision 46].
-- **Refused when**: the thread has no running program — `not-found` [op/]. A size outside those limits — `invalid` [op/]. `Input` text or `Report` bytes over 1 MiB — `invalid` [op/]. A write that would take the budget past 4 MiB — `full`; it writes nothing and leaves the view where it was [decision 244]. `--lines` without `--scrollback`, or a count outside 1 to 10000 — `invalid` [op/]. A settled screen is kept across a restart, at most 4 MiB for the whole snapshot [decision 62]. A crash while the program is still running leaves the reason and no screen. The thread says no output was saved for that run. An ended program whose screen was kept still answers `Screen` and `threads.output`.
+- **Refused when**: the thread has no running program — `not-found` [op/]. A size outside those limits — `invalid` [op/]. `Input` text or `Report` bytes over 1 MiB — `invalid` [op/]. A write that would take the budget past 4 MiB — `full`; it writes nothing and leaves the view where it was [decision 249]. `--lines` without `--scrollback`, or a count outside 1 to 10000 — `invalid` [op/]. A settled screen is kept across a restart, at most 4 MiB for the whole snapshot [decision 62]. A crash while the program is still running leaves the reason and no screen. The thread says no output was saved for that run. An ended program whose screen was kept still answers `Screen` and `threads.output`.
 
 ### `Terminal` (`New`, `List`, `Close`)
 
@@ -109,7 +109,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Rename`
 
 - **Allowed when**: the thread exists, including one that is archived [book:cli].
-- **Changes**: a rename in the window stores the trimmed title [book:cli]. A rename from the socket stores it once; a later one leaves the locked title as it is [record.rs]. The program, the environment, and the branch stay. It writes no event.
+- **Changes**: a rename in the window stores the trimmed title, with bidi marks and control characters removed [book:cli] [decision 248]. A rename from the socket stores it once; a later one leaves the locked title as it is [record.rs]. The program, the environment, and the branch stay. It writes no event.
 - **Shows**: the thread, with that title, when the title changed [book:cli].
 - **Refused when**: a blank title — `invalid` [op/]. A locked title renamed from the socket — `invalid`, and the title stays [record.rs]. A missing thread — `not-found` [op/].
 
@@ -191,10 +191,10 @@ An automation is a named text, a program line, and a time, that starts a thread 
 
 ### `Add`
 
-- **Allowed when**: the project exists, the program line parses, and the time is either whole minutes from 1 to 1440 or one non-negative time [op/] [decision 236].
-- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A one-time automation is due at its time. The thread runs in the project folder [decision 236].
+- **Allowed when**: the project exists, the program line parses, and the time is either whole minutes from 1 to 1440 or one time in the future [op/] [decision 236].
+- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A run that does not start keeps its reason as `lastError` on the automation, and its row says `Last start failed: <reason>`, until a run starts. A one-time automation is due at its time. The thread runs in the project folder [decision 236].
 - **Shows**: the automation [book:cli].
-- **Refused when**: an empty name, a name of only control characters, a name over 120 characters, empty text, text over 1 MiB, an empty program, an unfinished quote, minutes outside 1 to 1440, a negative time, both an interval and a time, or neither — `invalid` [op/]. A missing project — `not-found` [op/].
+- **Refused when**: an empty name, a name with a control or bidi character (a bidi override or isolate, which reverses the text drawn after it), a name over 120 characters, empty text, text over 1 MiB, an empty program, an unfinished quote, minutes outside 1 to 1440, a time that is not in the future, both an interval and a time, or neither — `invalid` [op/]. A missing project — `not-found` [op/].
 
 ### `Pause`, `Resume`
 
@@ -265,9 +265,9 @@ A project is a named body of work, usually one repository, with one folder on th
 
 ### `Save`, `Rename`, `Remove`, `Pin`
 
-- **Allowed when**: always. A name is trimmed, at most 40 characters, and has no control characters. A line is split as a command line [op/] [decision 240].
+- **Allowed when**: always. A name is trimmed, at most 40 characters, and has no control or bidi characters. A line is split as a command line [op/] [decision 240].
 - **Changes**: `Save` stores the name and the line. A name already saved, in any case, takes the new line and keeps its pin. `Rename` gives a saved program another name, and its line and pin stay. `Remove` deletes the saved program. A project's default or a thread that already holds its line keeps that line and lists it as a plain program. `Pin` sets or clears the pin, and pinned saved programs are listed first. None of them starts a program or writes an event [decision 240]. The window's buttons and these keys act on the selected row, and only a saved program has them: `PinSavedProgram` pins or unpins it, `RenameSavedProgram` opens the rename form, `DeleteSavedProgram` deletes it, and `SaveSavedProgram` saves or renames from the custom command form [decision 240].
-- **Refused when**: an empty name — `A saved program needs a name.` — `invalid`. A name longer than 40 characters, or with a control character — `invalid`. A line that does not split, such as one with an unfinished quote — `invalid` [op/]. A `Rename` to a name another saved program already has, in any case — `a saved program named <name> already exists` — `invalid`. A name that is not saved — `saved program <name> not found` — `not-found`.
+- **Refused when**: an empty name — `A saved program needs a name.` — `invalid`. A name longer than 40 characters, or with a control or bidi character — `invalid`. A line that does not split, such as one with an unfinished quote — `invalid` [op/]. A `Rename` to a name another saved program already has, in any case — `a saved program named <name> already exists` — `invalid`. A name that is not saved — `saved program <name> not found` — `not-found`.
 
 ## Env
 
@@ -463,7 +463,7 @@ A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matche
 
 - **Allowed when**: the skill is a user or project skill [decision 203].
 - **Changes**: replaces the whole `SKILL.md` with the text given, frontmatter included. The file is written as-is, unless it has changed since the window read it: then nothing is written and the call is refused [decision 206]. `kg skill update` does not send that check [decision 206].
-- **Refused when**: an unknown name — `not-found` [op/]. A bundled or plugin skill — `invalid`; or text whose frontmatter does not parse, or names another skill — `invalid` [decision 203]; or the file changed since the window read it — `invalid` [decision 206].
+- **Refused when**: an unknown name — `not-found` [op/]. A bundled or plugin skill — `invalid`; or text whose frontmatter does not parse, or names another skill — `invalid` [decision 203]; or a description or hint with a control or bidi mark — `invalid` [decision 248]; or the file changed since the window read it — `invalid` [decision 206].
 
 ### `Remove`
 
@@ -478,12 +478,12 @@ A section is a user-named group that threads can be filed under in the sidebar [
 ### `Create`
 
 - **Changes**: creates a section, and files the given thread under it when a thread id is passed [book:cli].
-- **Refused when**: an empty name, or a name that already exists — `invalid` [person 2026-10-08] [op/].
+- **Refused when**: an empty name, a name with a control or bidi mark [decision 248], or a name that already exists — `invalid` [person 2026-10-08] [op/].
 
 ### `Rename`
 
 - **Changes**: renames the section [book:cli].
-- **Refused when**: a missing section — `not-found` [op/]. An empty name — `invalid` [person 2026-10-08] [op/].
+- **Refused when**: a missing section — `not-found` [op/]. An empty name, or a name with a control or bidi mark [decision 248] — `invalid` [person 2026-10-08] [op/].
 
 ### `Delete`
 
@@ -502,9 +502,9 @@ A saved prompt is stored text the person can send, with a title, a body, and a s
 
 ### `Add`
 
-- **Allowed when**: the title trims to at most 200 characters with no control character, and the body has text other than control characters and is at most 1 MiB [op/].
+- **Allowed when**: the title trims to at most 200 characters with no control or bidi character, and the body has text other than control characters and is at most 1 MiB [op/].
 - **Changes**: stores the trimmed title, the body as given, and starred off. The id starts with `svp_` [decision 234].
-- **Refused when**: an empty title or body, a body of only control characters, a longer title, a control character in the title, or a body over 1 MiB — `invalid` [op/].
+- **Refused when**: an empty title or body, a body of only control characters, a longer title, a control or bidi character in the title, or a body over 1 MiB — `invalid` [op/].
 
 ### `Search`
 
@@ -692,7 +692,7 @@ The app starts on `fjord`, in system mode, so it follows the operating system's 
 
 - **Allowed when**: the id is lowercase letters, digits, and dashes, and the mode is `light`, `dark` or `system` [book:themes] [docs:look]. `fjord`, `ember` and `grey` ship with the app [book:themes].
 - **Changes**: selects that theme and mode for every open window [docs:look] [book:cli]. A custom theme is `<dataDir>/themes/<id>.json` [book:themes]. A well-formed id with no file yet stays selected; the window shows an error and uses the default palette for the mode [book:themes] [docs:look]. Saving a file updates the list; a missing or invalid selected file does the same and keeps the id [book:themes] [docs:look].
-- **Refused when**: an id with any other character, a path, a dot, or traversal — `invalid` [docs:look] [op/].
+- **Refused when**: an id with any other character, a path, a dot, or traversal — `invalid` [docs:look] [op/]. A theme file whose name has a control or bidi mark — `invalid` [decision 248].
 
 ## Keymap
 
