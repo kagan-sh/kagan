@@ -1,9 +1,13 @@
 use std::ffi::OsStr;
+#[cfg(unix)]
 use std::fs;
 use std::path::Path;
 
-use super::{find_program, pathext, user_path};
+#[cfg(not(windows))]
+use super::pathext;
+use super::{find_program, user_path};
 
+#[cfg(unix)]
 fn temp(name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("kg-path-{}-{name}", std::process::id()));
     fs::create_dir_all(&dir).expect("temp dir");

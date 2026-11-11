@@ -147,12 +147,9 @@ pub(crate) fn name(location: &std::ffi::OsStr) -> io::Result<Name<'static>> {
 }
 
 /// Checks a `/tmp/kagan-<id>` folder before a client connects to it.
+#[cfg(unix)]
 pub(crate) fn before_connect(location: &std::ffi::OsStr) -> io::Result<()> {
-    #[cfg(unix)]
-    trust_fallback(std::path::Path::new(location))?;
-    #[cfg(not(unix))]
-    let _ = location;
-    Ok(())
+    trust_fallback(std::path::Path::new(location))
 }
 
 /// Listens on `location`. A leftover socket file is removed only when it is a socket we own,
@@ -460,6 +457,7 @@ impl Client {
 
     /// Connects to the app listening at `location`, after checking a fallback folder there.
     pub(crate) fn open(location: &std::ffi::OsStr) -> io::Result<Self> {
+        #[cfg(unix)]
         before_connect(location)?;
         Self::connect(name(location)?)
     }

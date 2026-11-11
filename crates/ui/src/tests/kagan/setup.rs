@@ -2,13 +2,16 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, TestAppContext};
+#[cfg(unix)]
 use kg_core::Workspace;
 use kg_domain::EnvironmentStatus;
 
 use super::{
-    click, committed_repo, environment_of, git, head_commit, label, only_worktree, open,
-    set_program, shell, shown, shows, wait_until, worktree_dirs,
+    click, committed_repo, environment_of, git, head_commit, label, open, set_program, shell,
+    shown, shows, wait_until,
 };
+#[cfg(unix)]
+use super::{only_worktree, worktree_dirs};
 
 pub(in crate::tests) fn disabled(
     cx: &mut TestAppContext,

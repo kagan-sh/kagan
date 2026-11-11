@@ -267,9 +267,12 @@ fn v_stack(note: &str, cx: &mut Context<Kagan>) -> gpui_kit::Div {
 #[cfg(test)]
 mod tests {
     use std::path::Path;
+    #[cfg(unix)]
     use std::time::Duration;
 
-    use super::{Check, Located, PathCheck, Platform, install_command, locate, shown, within};
+    #[cfg(unix)]
+    use super::within;
+    use super::{Check, Located, PathCheck, Platform, install_command, locate, shown};
 
     #[test]
     fn the_macos_command_quotes_a_path_with_spaces_and_quotes() {

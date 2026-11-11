@@ -19,7 +19,9 @@ use crate::kagan::{
     UseWorktreeFolder, chord_for, is_chord,
 };
 
-use super::{click, grid_text, input, open, run_shell, shows, wait_for_shell, wait_until};
+#[cfg(unix)]
+use super::wait_for_shell;
+use super::{click, grid_text, input, open, run_shell, shows, wait_until};
 
 #[gpui_kit::test]
 fn a_program_that_ends_keeps_its_last_output_on_screen(cx: &mut TestAppContext) {

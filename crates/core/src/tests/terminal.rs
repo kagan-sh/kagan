@@ -4,9 +4,11 @@ use kg_domain::*;
 use crate::Workspace;
 
 use super::{
-    Fixture, Reap, alive, dispatch_delete, events, gone, kinds_of, op, pending_delete, pid_of,
-    program, screen, screen_of, screen_with, started, thread, type_in, wait_for_status,
+    Fixture, alive, events, gone, op, pid_of, program, screen, screen_with, started, thread,
+    type_in, wait_for_status,
 };
+#[cfg(unix)]
+use super::{Reap, dispatch_delete, kinds_of, pending_delete, screen_of};
 #[cfg(unix)]
 use super::{dispatch_send, job_pid, screen_lines, script, sent_text, wait_until_busy};
 

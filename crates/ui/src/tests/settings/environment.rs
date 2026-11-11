@@ -1,8 +1,12 @@
-use gpui_kit::{Role, TestAppContext};
+#[cfg(unix)]
+use gpui_kit::Role;
+use gpui_kit::TestAppContext;
 use kg_core::Workspace;
 use kg_domain::{EnvOp, Op, OpResult, ProjectId, ProjectOp, SettingsOp};
 
-use crate::tests::kagan::{click, label, open, present, role_of, selected_of, shows, wait_until};
+use crate::tests::kagan::{click, label, open, present, selected_of, wait_until};
+#[cfg(unix)]
+use crate::tests::kagan::{role_of, shows};
 
 fn names(cx: &mut TestAppContext, project: Option<&str>) -> Vec<String> {
     let task = cx.update(|cx| {

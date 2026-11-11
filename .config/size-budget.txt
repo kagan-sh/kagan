@@ -4,7 +4,7 @@ target 35000
 # and their review rounds. The merged count is 80700, and the ceiling is set to it. The end
 # target of 35000 is unchanged.
 # The terminal input cap adds 118 lines on top of that. The merged count is 80818, and the ceiling is set to it.
-ceiling 80818
+ceiling 80936
 allow_expect 8
 crates/core/src/thread/agent/files.rs 754
 crates/ui/src/theme/catalog.rs 646

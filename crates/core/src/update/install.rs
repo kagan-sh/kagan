@@ -121,6 +121,7 @@ impl Target {
             }
             InstallKind::AppImage | InstallKind::Installer => {
                 std::fs::write(&self.staged, bytes)?;
+                #[cfg(unix)]
                 executable(&self.staged)?;
                 Ok(self.staged.clone())
             }
@@ -262,11 +263,6 @@ fn swap(_: &Path, _: &Path) -> io::Result<()> {
 fn executable(path: &Path) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt as _;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
-}
-
-#[cfg(not(unix))]
-fn executable(_: &Path) -> io::Result<()> {
-    Ok(())
 }
 
 #[cfg(test)]

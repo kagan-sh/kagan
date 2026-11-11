@@ -21,16 +21,20 @@ pub(crate) async fn export(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     let DiagnosticsOp::Export { path } = op;
-    let (database, data_dir) = this
+    let (database, data_dir, terminals) = this
         .update(cx, |workspace, _| {
-            (workspace.database.clone(), workspace.data_dir.clone())
+            (
+                workspace.database.clone(),
+                workspace.data_dir.clone(),
+                workspace.live_containments(),
+            )
         })
         .map_err(closed)?;
     let facts = database.call(|store| Facts::read(store)).await?;
     let OpResult::PluginLogs(logs) = super::forward(this, PluginRequest::Logs, cx).await? else {
         return Err(OpError::Failed("plugin host returned no logs".into()));
     };
-    let text = render(&facts, &data_dir, &logs);
+    let text = render(&facts, &data_dir, &terminals, &logs);
     let path = cx
         .background_spawn(async move {
             let path = match path {
@@ -65,14 +69,20 @@ impl Facts {
     }
 }
 
-fn render(facts: &Facts, data_dir: &Path, logs: &[PluginLog]) -> String {
+fn render(
+    facts: &Facts,
+    data_dir: &Path,
+    terminals: &[(ThreadId, Option<u32>, String)],
+    logs: &[PluginLog],
+) -> String {
     let mut out = String::new();
     // Writing to a String cannot fail.
     let _ = std::fmt::Write::write_fmt(
         &mut out,
         format_args!(
             "kagan {version}\nschema {schema}\ndata {data}\n\n\
-             This file lists the kagan version, the schema, the data directory, each thread's id, status, and structured cause, whether a screen was kept and how much history was dropped, and each plugin's id, kind, version, and warn and error counts.\n\
+             This file lists the kagan version, the schema, the data directory, each thread's id, status, and structured cause, whether a screen was kept and how much history was dropped, each live terminal's thread and containment, and each plugin's id, kind, version, and warn and error counts.\n\
+             A containment is `tree` (the program's process tree), `job` (a Windows job object), or `unavailable` with the OS error when the job could not be made, so stopping ends only the program.\n\
              Titles, end text, plugin sources, and plugin log messages are omitted.\n\
              It has no environment variables and no terminal contents.\n\
              A program that was still running when kagan quit has no saved screen.\n\
@@ -110,6 +120,21 @@ fn render(facts: &Facts, data_dir: &Path, logs: &[PluginLog]) -> String {
             facts.screens.iter().find(|row| row.thread_id == thread.id),
         ));
         out.push('\n');
+    }
+    out.push_str("\nterminals\n");
+    if terminals.is_empty() {
+        out.push_str("none\n");
+    }
+    for (thread, number, containment) in terminals {
+        let which = match number {
+            None => "program".to_string(),
+            Some(number) => format!("terminal {number}"),
+        };
+        // Writing to a String cannot fail.
+        let _ = std::fmt::Write::write_fmt(
+            &mut out,
+            format_args!("{thread} {which} containment={containment}\n"),
+        );
     }
     out.push_str("\nplugins\n");
     if facts.plugins.is_empty() {

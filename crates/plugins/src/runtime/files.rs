@@ -337,7 +337,7 @@ fn file_key(file: &std::fs::File) -> std::io::Result<(u32, u64)> {
     // SAFETY: every field is a plain integer, so zero is a valid out-parameter.
     let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
     // SAFETY: `info` is initialized and the handle belongs to `file`.
-    let ok = unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) };
+    let ok = unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut info) };
     if ok == 0 {
         return Err(std::io::Error::last_os_error());
     }
@@ -387,9 +387,11 @@ mod tests {
     #[cfg(unix)]
     use std::path::Path;
 
-    use super::{Error, hold, list_dir, open_roots};
+    #[cfg(unix)]
+    use super::Error;
     #[cfg(unix)]
     use super::{accept, read_at, read_opened};
+    use super::{hold, list_dir, open_roots};
 
     #[cfg(unix)]
     fn unread(result: &Result<serde_json::Value, Error>, secret: &str) {

@@ -4,7 +4,9 @@ use crate::kagan::screen_read;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, TestAppContext, px, size};
 use gpui_kit::{InputEvent as _, Modifiers, MouseMoveEvent};
-use kg_core::{Color, Workspace, WorkspaceEvent};
+#[cfg(unix)]
+use kg_core::Color;
+use kg_core::{Workspace, WorkspaceEvent};
 use kg_domain::{Op, OpResult, PreferenceOp, ThreadId};
 
 use super::{

@@ -1,14 +1,15 @@
 use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, TestAppContext};
 use kg_core::Workspace;
-use kg_domain::{
-    Op, OpError, OpResult, SavedPrompt, SavedPromptId, SavedPromptOp, SettingsOp, ThreadOp,
-    WindowOp,
-};
+use kg_domain::{Op, OpError, OpResult, SavedPrompt, SavedPromptId, SavedPromptOp, WindowOp};
+#[cfg(unix)]
+use kg_domain::{SettingsOp, ThreadOp};
 
 use crate::kagan::Kagan;
 use crate::kagan::commands::saved::chords;
 use crate::kagan::commands::state as commands_state;
-use crate::tests::kagan::{click, open, run_shell, shows, value_of, wait_until};
+use crate::tests::kagan::{click, open, shows, value_of};
+#[cfg(unix)]
+use crate::tests::kagan::{run_shell, wait_until};
 
 fn dispatch(cx: &mut TestAppContext, op: Op) -> OpResult {
     outcome(cx, op).unwrap()
