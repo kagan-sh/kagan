@@ -133,6 +133,48 @@ async fn a_quit_returns_once_the_screen_is_saved(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+async fn a_held_screen_save_keeps_the_quit_waiting(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (id, _reap) = started(&fixture, program(), cx).await;
+    #[cfg(unix)]
+    type_in(&id, "printf HELD-MARKER\n", cx).await;
+    #[cfg(windows)]
+    type_in(&id, "echo HELD-MARKER\r\n", cx).await;
+    assert!(
+        screen_with(&id, "HELD-MARKER", cx)
+            .await
+            .contains("HELD-MARKER")
+    );
+    let (release, hold) = async_channel::bounded::<()>(1);
+    cx.update(|cx| {
+        Workspace::global(cx).update(cx, |workspace, _| workspace.hold_screen_save(hold));
+    });
+    let stopping = cx.update(Workspace::stop_for_quit);
+    for _ in 0..20 {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(50));
+        cx.run_until_parked();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(saved_screen(fixture.dir.path(), &id).is_none());
+    drop(release);
+    let started = std::time::Instant::now();
+    while !stopping.is_ready() {
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(8),
+            "the quit did not finish"
+        );
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(10));
+        cx.run_until_parked();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(saved_screen(fixture.dir.path(), &id).is_some_and(|row| row.screen_kept));
+    stopping.await.unwrap();
+    drop(fixture);
+}
+
+#[gpui_kit::test]
 async fn a_finished_program_keeps_its_screen_and_its_cause(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let line = if cfg!(windows) {
