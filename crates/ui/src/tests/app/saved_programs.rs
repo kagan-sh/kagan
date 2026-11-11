@@ -62,7 +62,8 @@ fn a_saved_program_is_listed_by_name_and_picking_it_starts_its_line(cx: &mut Tes
     fixture_programs(cx, data.path(), &["codex"]);
     save(cx, "Fast codex", "codex --fast");
     start_in_plain_folder(cx, window, data.path());
-    assert_eq!(label(cx, window, &row_id("Fast codex")), "Fast codex");
+    // The label also says ", selected" when the row is the selected one, so only the name is checked.
+    assert!(label(cx, window, &row_id("Fast codex")).starts_with("Fast codex"));
     click(cx, window, &row_id("Fast codex"));
     wait_until(cx, |cx| shown(cx, &kagan).is_some());
     let started = shown(cx, &kagan).unwrap();
@@ -85,7 +86,7 @@ fn a_custom_command_saved_under_a_name_is_listed_and_the_form_closes(cx: &mut Te
     // The machine's own agents can fill the list, so a saved program is found by its name.
     search(cx, window, "Gemini");
     wait_until(cx, |cx| shows(cx, window, &row_id("Gemini, yolo")));
-    assert_eq!(label(cx, window, &row_id("Gemini, yolo")), "Gemini, yolo");
+    assert!(label(cx, window, &row_id("Gemini, yolo")).starts_with("Gemini, yolo"));
     assert!(!shows(cx, window, "custom-program"));
     assert_eq!(saved(cx).len(), 1);
 }

@@ -292,6 +292,7 @@ pub(in crate::tests) fn thread_status(cx: &mut TestAppContext, id: &ThreadId) ->
     thread_record(cx, id).status
 }
 
+#[track_caller]
 pub(in crate::tests) fn wait_until(
     cx: &mut TestAppContext,
     mut done: impl FnMut(&mut TestAppContext) -> bool,

@@ -299,6 +299,9 @@ fn enter_on_the_form_itself_starts_one_thread(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn enter_in_the_branch_search_picks_a_branch_and_starts_nothing(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open_git_form(cx);
+    // The custom command's fields make the form taller than a short window, so the branch control
+    // is below the fold until the person scrolls to it.
+    scroll_form_to_end(cx, window);
     click(cx, window, "branch-from");
     wait_until(cx, |cx| shows(cx, window, "branch-search"));
     press_key(cx, window, "enter");
