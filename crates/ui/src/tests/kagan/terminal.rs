@@ -132,9 +132,37 @@ fn a_typed_line_echoes_in_a_thread_titled_like_its_program(cx: &mut TestAppConte
     let id = crate::tests::kagan::support::run_titled(cx, shell(), Some(stem));
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, &split_command("ke", "yed"));
-    wait_until(cx, |cx| {
-        grid_text(cx, &kagan).contains(&split_command("ke", "yed"))
+    for _ in 0..200 {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(50));
+        cx.run_until_parked();
+        if grid_text(cx, &kagan).contains(&split_command("ke", "yed")) {
+            return;
+        }
+    }
+    let dump = cx.update(|cx| screen_read::terminal_grid(kagan.read(cx), cx));
+    let rows = dump.map_or_else(String::new, |grid| {
+        let cols = grid.lines.first().map_or(0, Vec::len);
+        let body = grid
+            .lines
+            .iter()
+            .enumerate()
+            .map(|(index, line)| {
+                let text: String = line.iter().map(|cell| cell.c).collect();
+                let wrapped = grid.wrapped.get(index).copied().unwrap_or(false);
+                format!(
+                    "[{index} len={} wrapped={wrapped}] {text:?}",
+                    text.chars().count()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("cols={cols} rows={}\n{body}", grid.lines.len())
     });
+    panic!(
+        "DIAG marker {:?} not on screen\n{rows}",
+        split_command("ke", "yed")
+    );
 }
 
 #[gpui_kit::test]
