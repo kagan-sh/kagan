@@ -255,6 +255,10 @@ async fn a_one_time_automation_that_cannot_start_waits_before_it_retries(cx: &mu
     cx.executor().advance_clock(Duration::from_secs(5));
     cx.run_until_parked();
     let row = automations(cx).await.remove(0);
+    assert!(
+        row.last_error.is_some(),
+        "the failure must be kept on the row"
+    );
     assert!(row.threads.is_empty());
     assert_eq!(thread_count(cx).await, 0);
     assert!(

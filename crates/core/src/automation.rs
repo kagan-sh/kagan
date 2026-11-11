@@ -60,6 +60,7 @@ pub(crate) async fn run(
                 at,
                 paused: false,
                 next_at: Some(next_at),
+                last_error: None,
                 threads: Vec::new(),
             };
             let saved = automation.clone();
@@ -199,7 +200,11 @@ async fn fire(
     };
     let Some(thread) = named.filter(|_| saved) else {
         let minutes = automation.minutes.unwrap_or(RETRY_MINUTES);
-        report(postpone(this, database, &automation.id, minutes, cx).await);
+        let reason = match &result {
+            Err(error) => error.to_string(),
+            Ok(_) => "the thread was not saved".into(),
+        };
+        report(postpone(this, database, &automation.id, minutes, &reason, cx).await);
         return Some(());
     };
     if matches!(&result, Ok(OpResult::Thread(record)) if record.status.live()) {
@@ -249,12 +254,14 @@ async fn postpone(
     database: &Database,
     id: &AutomationId,
     minutes: u16,
+    reason: &str,
     cx: &mut AsyncApp,
 ) -> Result<()> {
     let next = later(time(this, cx)?, minutes);
     let id = id.clone();
+    let reason = reason.to_owned();
     database
-        .call(move |store| store.set_automation_next(&id, Some(next)))
+        .call(move |store| store.postpone_automation(&id, next, &reason))
         .await
 }
 

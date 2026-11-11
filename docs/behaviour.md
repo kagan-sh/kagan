@@ -192,7 +192,7 @@ An automation is a named text, a program line, and a time, that starts a thread 
 ### `Add`
 
 - **Allowed when**: the project exists, the program line parses, and the time is either whole minutes from 1 to 1440 or one non-negative time [op/] [decision 236].
-- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A one-time automation is due at its time. The thread runs in the project folder [decision 236].
+- **Changes**: saves the automation on that project. An interval is first due one interval after it is saved. A run that does not start keeps its reason as `lastError` on the automation, and its row says `Last start failed: <reason>`, until a run starts. A one-time automation is due at its time. The thread runs in the project folder [decision 236].
 - **Shows**: the automation [book:cli].
 - **Refused when**: an empty name, a name with a control or bidi character (a bidi override or isolate, which reverses the text drawn after it), a name over 120 characters, empty text, text over 1 MiB, an empty program, an unfinished quote, minutes outside 1 to 1440, a time that is not in the future, both an interval and a time, or neither — `invalid` [op/]. A missing project — `not-found` [op/].
 
