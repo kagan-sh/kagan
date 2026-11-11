@@ -154,8 +154,20 @@ pub(crate) async fn prepare(
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default();
     let branch = worktree_branch(&run.environment, &title, &thread_id, prefix)?;
+    let folder_title = if run.title.is_some() {
+        title.clone()
+    } else {
+        let mut chars = run.program.chars();
+        let mut program: String = chars.by_ref().take(80).collect();
+        if chars.next().is_some() {
+            program.pop();
+            program.push('…');
+        }
+        program
+    };
     let environment =
-        crate::environment::prepare(this, &project, run.environment, branch, &title, cx).await?;
+        crate::environment::prepare(this, &project, run.environment, branch, &folder_title, cx)
+            .await?;
     Ok(PreparedRun {
         thread_id,
         project,
