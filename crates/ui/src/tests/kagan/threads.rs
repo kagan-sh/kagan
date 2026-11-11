@@ -244,7 +244,7 @@ fn a_default_thread_title_is_the_program_name_not_its_arguments(cx: &mut TestApp
     cx.update_window(window, |_, window, _| {
         let row = crate::ui_registry::find(window, &ElementId::Name(format!("thread-{id}").into()))
             .expect("thread row");
-        assert!(row.label.is_some_and(|label| label.to_string() == name));
+        assert!(row.label.is_some_and(|label| label == name));
     })
     .unwrap();
 }
