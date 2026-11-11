@@ -95,7 +95,8 @@ async fn spawn(
     cx: &mut AsyncApp,
 ) -> Result<Terminal> {
     let environment = crate::host::program::program_environment_of(this, cx);
-    let program = resolve_program(&record.provider, environment.as_ref())
+    let home = crate::host::program::program_home_of(this, cx);
+    let program = resolve_program(&record.provider, environment.as_ref(), home.as_deref())
         .map_err(|error| OpError::Invalid(error.to_string()))?;
     let integration = agent::integrate(this, record, &program, &folder, start, cx).await?;
     this.update(cx, |workspace, cx| {

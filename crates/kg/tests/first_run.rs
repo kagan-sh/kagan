@@ -61,7 +61,7 @@ fn documented_first_run_commands_run() {
     let _ = std::fs::remove_file(&socket);
 }
 
-// macOS only until Linux and Windows offscreen are proven; see decision 237.
+// macOS only until Linux and Windows offscreen are proven; see decision 238.
 #[cfg(target_os = "macos")]
 #[test]
 fn offscreen_app_answers_ui_commands_and_captures_its_window() {
