@@ -4,10 +4,11 @@ use kg_domain::*;
 use crate::Workspace;
 
 use super::{
-    Fixture, SshRewrite, dispatch_delete, empty_repo, environment_of, git_in, hold_removal,
-    hold_run, op, pending_delete, program, repo_dir, started, started_personal, thread,
-    wait_for_status, worktree_run,
+    Fixture, SshRewrite, dispatch_delete, environment_of, git_in, hold_removal, op, pending_delete,
+    program, started, started_personal, thread,
 };
+#[cfg(unix)]
+use super::{empty_repo, hold_run, repo_dir, wait_for_status, worktree_run};
 #[cfg(unix)]
 use super::{stopped_worktree, wait_until_gone};
 

@@ -4,9 +4,11 @@ use kg_domain::*;
 use crate::Workspace;
 
 use super::{
-    Fixture, empty_repo, environment_branch, environment_of, events, kinds_of, op, pid_of,
-    plant_old_turn, program, socket_rename, started, thread, wait_for_status, worktree_run,
+    Fixture, empty_repo, environment_branch, events, kinds_of, op, pid_of, plant_old_turn, program,
+    socket_rename, started, thread, wait_for_status,
 };
+#[cfg(unix)]
+use super::{environment_of, worktree_run};
 #[cfg(unix)]
 use super::{script, stop_archive_and_settle};
 

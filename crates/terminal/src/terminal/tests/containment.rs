@@ -1,7 +1,12 @@
 use std::ffi::OsString;
 use std::io;
+
 use std::thread;
 use std::time::{Duration, Instant};
+use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
+};
 
 use super::{Reap, alive, quit_within, within};
 use crate::{Containment, Launch, Terminal};
@@ -9,11 +14,9 @@ use crate::{Containment, Launch, Terminal};
 const WAIT: Duration = Duration::from_secs(30);
 
 fn grandchild_launch() -> Launch {
-    let script = "$p = Start-Process -FilePath ping.exe -ArgumentList '-n 60 127.0.0.1' \
-                  -NoNewWindow -PassThru; Write-Output ('grandchild=' + $p.Id); Start-Sleep -Seconds 60";
     Launch {
-        program: OsString::from("powershell.exe"),
-        args: ["-NoProfile", "-Command", script]
+        program: OsString::from("cmd.exe"),
+        args: ["/C", "ping -n 60 127.0.0.1 >NUL"]
             .into_iter()
             .map(OsString::from)
             .collect(),
@@ -34,20 +37,47 @@ fn ping_launch() -> Launch {
     }
 }
 
-// The grandchild starts after PowerShell has started, well after the pty began the program.
+// The program is cmd.exe, so the grandchild is the ping it starts, a child of the program's pid.
 fn grandchild_pid(terminal: &Terminal) -> u32 {
     let deadline = Instant::now() + WAIT;
     loop {
-        let frame = terminal.view().screen();
-        if let Some(rest) = frame.split("grandchild=").nth(1) {
-            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
-            if let Ok(pid) = digits.parse() {
-                return pid;
-            }
+        let found = children_of(terminal.process_id())
+            .into_iter()
+            .find(|(_, name)| name.eq_ignore_ascii_case("PING.EXE"));
+        if let Some((pid, _)) = found {
+            return pid;
         }
-        assert!(Instant::now() < deadline, "no grandchild printed: {frame}");
+        assert!(Instant::now() < deadline, "no grandchild started");
         thread::sleep(Duration::from_millis(50));
     }
+}
+
+fn children_of(parent: u32) -> Vec<(u32, String)> {
+    let mut children = Vec::new();
+    // SAFETY: the snapshot handle is closed below; the entry is a writable buffer whose size is set first.
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snapshot == INVALID_HANDLE_VALUE {
+            return children;
+        }
+        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
+        entry.dwSize = u32::try_from(size_of::<PROCESSENTRY32W>()).unwrap_or(0);
+        let mut more = Process32FirstW(snapshot, &raw mut entry) != 0;
+        while more {
+            if entry.th32ParentProcessID == parent {
+                let end = entry
+                    .szExeFile
+                    .iter()
+                    .position(|&c| c == 0)
+                    .unwrap_or(entry.szExeFile.len());
+                let name = String::from_utf16_lossy(&entry.szExeFile[..end]);
+                children.push((entry.th32ProcessID, name));
+            }
+            more = Process32NextW(snapshot, &raw mut entry) != 0;
+        }
+        CloseHandle(snapshot);
+    }
+    children
 }
 
 fn wait_until_gone(pid: u32) {

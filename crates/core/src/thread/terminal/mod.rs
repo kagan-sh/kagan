@@ -68,7 +68,7 @@ pub(crate) async fn start(
     match spawned {
         Ok(terminal) => {
             this.update(cx, |workspace, cx| {
-                workspace.run_mut(&record.id).shown = Some(Shown::Running(terminal));
+                workspace.run_mut(&record.id).shown = Some(Shown::Running(Box::new(terminal)));
                 follow_terminals(workspace, cx);
             })
             .map_err(closed)?;
@@ -359,7 +359,7 @@ impl Run {
 
 /// A thread's terminal: the program while it runs, or the screen it left when it ended.
 pub(crate) enum Shown {
-    Running(Terminal),
+    Running(Box<Terminal>),
     Ended(Finished),
 }
 
@@ -482,7 +482,7 @@ impl Workspace {
             .iter()
             .flat_map(|(id, run)| {
                 let program = match &run.shown {
-                    Some(Shown::Running(terminal)) => Some((None, terminal)),
+                    Some(Shown::Running(terminal)) => Some((None, terminal.as_ref())),
                     _ => None,
                 };
                 program

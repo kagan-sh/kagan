@@ -1,14 +1,16 @@
 use gpui_kit::TestAppContext;
 use kg_domain::*;
+#[cfg(unix)]
 use serde_json::json;
 
 use crate::Workspace;
 
 use super::{
-    Fixture, GitTrack, commit_file, empty_repo, environment_of, events, git_in, op, pending_delete,
-    pid_of, program, repo_dir, started_personal, tracks_upstream, wait_for_status, worktree_count,
-    worktree_run,
+    Fixture, commit_file, empty_repo, environment_of, git_in, op, pending_delete, pid_of, program,
+    repo_dir, started_personal,
 };
+#[cfg(unix)]
+use super::{GitTrack, events, tracks_upstream, wait_for_status, worktree_count, worktree_run};
 #[cfg(unix)]
 use super::{error_rows, stop_archive_and_settle};
 
@@ -1058,6 +1060,7 @@ async fn a_new_project_branch_refuses_a_name_that_exists(cx: &mut TestAppContext
 
 /// The fixture folder holds the database, so a git repo there ignores everything but the files a
 /// test means to commit. `dirty.txt` stays visible to `git status`.
+#[cfg(unix)]
 fn clean_repo(fixture: &Fixture) -> std::path::PathBuf {
     let repo = repo_dir(fixture);
     empty_repo(&repo);
@@ -1079,6 +1082,7 @@ fn clean_repo(fixture: &Fixture) -> std::path::PathBuf {
     repo
 }
 
+#[cfg(unix)]
 fn project_on(fixture: &Fixture, title: Option<&str>, branch: ProjectBranch) -> Op {
     Op::Thread(ThreadOp::Run(Run {
         project_id: fixture.project.clone(),
@@ -1093,6 +1097,7 @@ fn project_on(fixture: &Fixture, title: Option<&str>, branch: ProjectBranch) -> 
     }))
 }
 
+#[cfg(unix)]
 fn rev(repo: &std::path::Path) -> String {
     let output = std::process::Command::new("git")
         .arg("-C")
@@ -1104,6 +1109,7 @@ fn rev(repo: &std::path::Path) -> String {
     String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }
 
+#[cfg(unix)]
 fn show_current(repo: &std::path::Path) -> String {
     let output = std::process::Command::new("git")
         .arg("-C")
@@ -1115,6 +1121,7 @@ fn show_current(repo: &std::path::Path) -> String {
     String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }
 
+#[cfg(unix)]
 fn branch_name(repo: &std::path::Path) -> String {
     let output = std::process::Command::new("git")
         .arg("-C")
