@@ -1,5 +1,5 @@
 use gpui_kit::{AsyncApp, WeakEntity};
-use kg_domain::{OpResult, SavedPrompt, SavedPromptId, SavedPromptOp};
+use kg_domain::{OpError, OpResult, SavedPrompt, SavedPromptId, SavedPromptOp};
 
 use crate::Workspace;
 use crate::host::database::{Database, Result};
@@ -13,7 +13,10 @@ pub(crate) async fn run(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     match op {
-        SavedPromptOp::Add { title, body } => {
+        SavedPromptOp::Add { title, body, .. } => {
+            let Some(body) = body else {
+                return Err(OpError::Invalid("give the prompt text, or --file".into()));
+            };
             let prompt = SavedPrompt {
                 id: SavedPromptId(id("svp")),
                 title: title.trim().to_owned(),
@@ -22,7 +25,16 @@ pub(crate) async fn run(
             };
             let stored = prompt.clone();
             database
-                .call(move |store| store.insert_saved_prompt(&stored))
+                .call(move |store| {
+                    // A title is one name, as a saved program's is, so the same title is refused.
+                    if store.saved_prompt_titled(&stored.title)? {
+                        return Err(kg_store::Error::Conflict(format!(
+                            "a saved prompt named {} already exists",
+                            stored.title
+                        )));
+                    }
+                    store.insert_saved_prompt(&stored)
+                })
                 .await?;
             Ok(OpResult::SavedPrompt(prompt))
         }

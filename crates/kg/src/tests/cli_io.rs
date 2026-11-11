@@ -439,3 +439,29 @@ fn env_set_checks_the_name_before_reading_stdin() {
     });
     assert!(matches!(refused, Err(OpError::Invalid(_))), "{refused:?}");
 }
+
+#[test]
+fn saved_prompt_add_reads_its_text_from_stdin_or_a_file() {
+    use crate::cli::take_file_text;
+    use kg_domain::SavedPromptOp;
+    let body = "a long prompt\n";
+    let add = |body: Option<String>, file: Option<std::path::PathBuf>| {
+        Op::SavedPrompt(SavedPromptOp::Add {
+            title: "review".into(),
+            body,
+            file,
+        })
+    };
+    let sent = add(Some(body.into()), None);
+    assert_eq!(
+        take_file_text(add(None, Some("-".into())), std::io::Cursor::new(body)).unwrap(),
+        sent
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("prompt.md");
+    std::fs::write(&path, body).unwrap();
+    assert_eq!(
+        take_file_text(add(None, Some(path)), std::io::empty()).unwrap(),
+        sent
+    );
+}

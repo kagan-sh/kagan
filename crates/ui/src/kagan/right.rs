@@ -14,7 +14,7 @@ mod tab;
 pub(super) use tab::Tab;
 
 pub(super) const WIDTH: f32 = 320.;
-pub(super) const WIDTH_RANGE: (f32, f32) = (240., 560.);
+pub(super) const WIDTH_RANGE: (f32, f32) = kg_domain::prefs::RIGHT_WIDTH_RANGE;
 
 pub(super) struct Sidebar {
     pub(super) slots: Vec<super::surface::Slot>,

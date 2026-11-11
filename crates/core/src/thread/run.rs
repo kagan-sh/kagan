@@ -154,20 +154,9 @@ pub(crate) async fn prepare(
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default();
     let branch = worktree_branch(&run.environment, &title, &thread_id, prefix)?;
-    let folder_title = if run.title.is_some() {
-        title.clone()
-    } else {
-        let mut chars = run.program.chars();
-        let mut program: String = chars.by_ref().take(80).collect();
-        if chars.next().is_some() {
-            program.pop();
-            program.push('…');
-        }
-        program
-    };
+    let folder = folder_title(run.title.as_deref(), &title, &run.program);
     let environment =
-        crate::environment::prepare(this, &project, run.environment, branch, &folder_title, cx)
-            .await?;
+        crate::environment::prepare(this, &project, run.environment, branch, &folder, cx).await?;
     Ok(PreparedRun {
         thread_id,
         project,
@@ -181,6 +170,22 @@ pub(crate) async fn prepare(
         lifecycle_owner_thread_id: run.lifecycle_owner_thread_id,
         metadata: run.metadata,
     })
+}
+
+// The name a Personal folder is made from. A thread the person named uses its title. Otherwise the
+// folder follows the program line, as it did before untitled threads got a short name: the short
+// name is for people to read, and a folder must not change when that name does.
+fn folder_title(given: Option<&str>, title: &str, program: &str) -> String {
+    if given.is_some() {
+        return title.to_owned();
+    }
+    let mut chars = program.chars();
+    let mut text: String = chars.by_ref().take(80).collect();
+    if chars.next().is_some() {
+        text.pop();
+        text.push('…');
+    }
+    text
 }
 
 pub(crate) async fn start_run(
@@ -296,7 +301,23 @@ fn created_with(notices: Vec<String>) -> Vec<EventKind> {
 mod tests {
     use kg_domain::{EnvironmentSpec, ProjectBranch, ThreadId};
 
-    use super::worktree_branch;
+    use super::{folder_title, worktree_branch};
+
+    #[test]
+    fn an_untitled_folder_follows_the_program_line_not_the_short_name() {
+        assert_eq!(
+            folder_title(None, "Codex", "/tools/codex --fast"),
+            "/tools/codex --fast"
+        );
+        let long = format!("/tools/{}", "x".repeat(100));
+        let folder = folder_title(None, "Codex", &long);
+        assert_eq!(folder.chars().count(), 80);
+        assert!(folder.ends_with('…'), "{folder}");
+        assert_eq!(
+            folder_title(Some("Notes"), "Notes", "/tools/codex"),
+            "Notes"
+        );
+    }
 
     fn thread() -> ThreadId {
         ThreadId("thr_abc123".into())

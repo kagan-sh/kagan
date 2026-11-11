@@ -20,6 +20,16 @@ impl super::Store {
         Ok(())
     }
 
+    pub fn saved_prompt_titled(&self, title: &str) -> Result<bool> {
+        self.conn
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM saved_prompts WHERE title = :title COLLATE NOCASE)",
+                named_params! { ":title": title },
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
     pub fn saved_prompt(&self, id: &SavedPromptId) -> Result<Option<SavedPrompt>> {
         self.conn
             .query_row(

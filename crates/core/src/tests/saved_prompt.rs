@@ -8,7 +8,8 @@ use super::{events, screen_with, sent_text, started};
 fn add(title: &str, body: &str) -> Op {
     Op::SavedPrompt(SavedPromptOp::Add {
         title: title.into(),
-        body: body.into(),
+        body: Some(body.into()),
+        file: None,
     })
 }
 
@@ -246,4 +247,15 @@ async fn prompt_listed(id: &SavedPromptId, cx: &mut TestAppContext) -> bool {
         panic!("list");
     };
     all.iter().any(|prompt| &prompt.id == id)
+}
+
+#[gpui_kit::test]
+async fn a_saved_prompt_title_is_refused_when_another_has_it(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    added("Review", "first", cx).await;
+    let error = op(add("review", "second"), cx).await.unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "a saved prompt named review already exists"
+    );
 }

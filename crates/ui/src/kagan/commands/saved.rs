@@ -117,7 +117,7 @@ impl Kagan {
             .as_ref()
             .is_some_and(|list| list.mode == Mode::Saved && list.draft.is_none())
         {
-            self.begin_draft(window, cx);
+            self.open_draft(None, window, cx);
         }
     }
 
@@ -142,10 +142,6 @@ impl Kagan {
             .filter(|list| list.mode == Mode::Saved && list.draft.is_none())?;
         let row = list.state.read(cx).selected_index()?.row;
         list.prompts.get(row).cloned()
-    }
-
-    fn begin_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_draft(None, window, cx);
     }
 
     pub(super) fn begin_edit(
@@ -207,7 +203,11 @@ impl Kagan {
         let body = draft.body.read(cx).value().to_string();
         let op = match draft.editing {
             Some(id) => SavedPromptOp::Edit { id, title, body },
-            None => SavedPromptOp::Add { title, body },
+            None => SavedPromptOp::Add {
+                title,
+                body: Some(body),
+                file: None,
+            },
         };
         let task = Workspace::dispatch(Op::SavedPrompt(op), cx);
         cx.spawn_in(window, async move |this, cx| {
@@ -356,7 +356,7 @@ fn prompt_list(list: &CommandList, this: &WeakEntity<Kagan>) -> Command {
                             .label("New saved prompt")
                             .on_click(move |_, window, cx| {
                                 cx.stop_propagation();
-                                _ = owner.update(cx, |this, cx| this.begin_draft(window, cx));
+                                _ = owner.update(cx, |this, cx| this.open_draft(None, window, cx));
                             }),
                     ),
             )

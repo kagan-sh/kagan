@@ -26,6 +26,7 @@ pub enum ProgramOp {
     /// Pin or unpin a saved program. Pinned ones are listed first among the saved programs
     Pin {
         name: String,
+        /// true to pin, false to unpin
         #[arg(action = clap::ArgAction::Set)]
         pinned: bool,
     },

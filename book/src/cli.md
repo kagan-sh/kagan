@@ -1550,6 +1550,8 @@ Arguments:
           
 
   <PINNED>
+          true to pin, false to unpin
+          
           [possible values: true, false]
 
 Options:
@@ -2182,7 +2184,7 @@ Usage: kg plugin rail <ID> <ACTION>
 
 Arguments:
   <ID>
-          
+          The plugin id, then hide or show
 
   <ACTION>
           [possible values: hide, show]
@@ -2411,7 +2413,7 @@ Saved prompts: stored text the person can send
 Usage: kg saved-prompt [OPTIONS] <COMMAND>
 
 Commands:
-  add     Save text the person can send later
+  add     Save text the person can send later. Give the text, or --file (`-` for stdin)
   edit    Change a saved prompt's title and text. Its star stays
   search  Saved prompts whose title or body contains this text. An empty search lists them all
   star    Star or unstar a saved prompt
@@ -2430,18 +2432,21 @@ Options:
 ## `kg saved-prompt add`
 
 ```text
-Save text the person can send later
+Save text the person can send later. Give the text, or --file (`-` for stdin)
 
-Usage: kg saved-prompt add <TITLE> <BODY>
+Usage: kg saved-prompt add [OPTIONS] <TITLE> [BODY]
 
 Arguments:
   <TITLE>
           
 
-  <BODY>
-          
+  [BODY]
+          The text to save. Omit it when `--file` is set
 
 Options:
+      --file <PATH>
+          Read the text from this path, or `-` for stdin
+
   -h, --help
           Print help
 ```
@@ -3268,7 +3273,7 @@ Commands:
   click       Click the center of an element. `--within` picks the one inside that element, when several match
   type        Send text to the focused control
   key         Send a keystroke such as escape or cmd-,
-  scroll      Scroll an element by dy pixels
+  scroll      Scroll an element by dy pixels: a negative dy scrolls down, a positive dy scrolls up
   drag        Press an element, drag it onto another, and release. `--at` picks the target's top quarter, middle or bottom quarter. `--hold` keeps the button down: finish with `kg ui drop`, or cancel with `kg ui key escape`
   drop        Release a drag that `kg ui drag --hold` left held, where the pointer is
   screenshot  Save a PNG without focusing the window
@@ -3360,7 +3365,7 @@ Options:
 ## `kg ui scroll`
 
 ```text
-Scroll an element by dy pixels
+Scroll an element by dy pixels: a negative dy scrolls down, a positive dy scrolls up
 
 Usage: kg ui scroll [OPTIONS] <ELEMENT_ID> <DY>
 

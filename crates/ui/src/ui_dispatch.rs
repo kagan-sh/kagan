@@ -1,4 +1,4 @@
-use crate::ui_registry::snapshots;
+use crate::ui_registry::{ElementSnapshot, snapshots};
 use gpui_kit::{
     App, ElementId, InputEvent, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollDelta, ScrollEvent, Window,
@@ -175,8 +175,13 @@ fn spot(
     Ok(position)
 }
 
-pub(crate) fn press(window: &mut Window, key: &str, cx: &mut App) -> Result<(), OpError> {
-    let key = kg_core::parse_key(key).map_err(|error| OpError::Invalid(error.to_string()))?;
+pub(crate) fn press(window: &mut Window, text: &str, cx: &mut App) -> Result<(), OpError> {
+    let key = kg_core::parse_key(text).map_err(|error| OpError::Invalid(error.to_string()))?;
+    if !kg_core::is_known_key(&key.key) {
+        return Err(OpError::Invalid(format!(
+            "{text} is not a key name; use one character, or a name such as escape, enter or f5"
+        )));
+    }
     render_frame(window, cx);
     press_key(window, key, cx);
     render_frame(window, cx);
@@ -204,7 +209,11 @@ pub(crate) fn snapshot(window: &Window, index: u32) -> kg_domain::UiSnapshot {
 }
 
 fn observed_elements(window: &Window) -> Vec<kg_domain::UiElement> {
-    snapshots(window)
+    observed(&snapshots(window))
+}
+
+fn observed(elements: &[ElementSnapshot]) -> Vec<kg_domain::UiElement> {
+    let mut elements: Vec<_> = elements
         .iter()
         .map(|element| {
             let path = element.path.iter().map(|id| format!("{id:?}")).collect();
@@ -233,8 +242,22 @@ fn observed_elements(window: &Window) -> Vec<kg_domain::UiElement> {
                 hint: element.hint.as_deref().map(str::to_owned),
             }
         })
-        .collect()
+        .collect();
+    elements.sort_by(reading_order);
+    elements
 }
+
+// The registry keeps its elements in a map, so each read would list them in a new order.
+fn reading_order(a: &kg_domain::UiElement, b: &kg_domain::UiElement) -> std::cmp::Ordering {
+    a.bounds
+        .y
+        .total_cmp(&b.bounds.y)
+        .then(a.bounds.x.total_cmp(&b.bounds.x))
+        .then_with(|| a.id.cmp(&b.id))
+}
+
+#[cfg(test)]
+mod tests;
 
 fn locate(
     window: &Window,

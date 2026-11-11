@@ -42,9 +42,7 @@ fn closed() -> OpError {
 fn drive(op: UiOp, cx: &mut gpui_kit::AsyncApp) -> Result<OpResult, OpError> {
     let _armed = crate::synthetic::arm();
     let index = window_index(&op);
-    let handle = cx
-        .update(|cx| window_at(cx, index))
-        .ok_or_else(|| OpError::NotFound(format!("window {index}")))?;
+    let handle = cx.update(|cx| window_at(cx, index).ok_or_else(|| missing_window(cx, index)))?;
     let result = cx
         .update_window(handle, |_, window, cx| {
             crate::synthetic::with_active(|| run_op(op, window, cx))
@@ -97,9 +95,7 @@ async fn capture_after_present(
     path: PathBuf,
     cx: &mut gpui_kit::AsyncApp,
 ) -> Result<OpResult, OpError> {
-    let handle = cx
-        .update(|cx| window_at(cx, index))
-        .ok_or_else(|| OpError::NotFound(format!("window {index}")))?;
+    let handle = cx.update(|cx| window_at(cx, index).ok_or_else(|| missing_window(cx, index)))?;
     let visible = cx
         .update_window(handle, |_, window, cx| {
             window.refresh();
@@ -176,8 +172,7 @@ fn captured(target: Target, path: &Path, current: bool) -> Result<OpResult, OpEr
 fn capture_offscreen(index: u32, path: &Path, cx: &mut App) -> Result<OpResult, OpError> {
     #[cfg(target_os = "macos")]
     {
-        let handle =
-            window_at(cx, index).ok_or_else(|| OpError::NotFound(format!("window {index}")))?;
+        let handle = window_at(cx, index).ok_or_else(|| missing_window(cx, index))?;
         let image = cx
             .update_window(handle, |_, window, cx| {
                 crate::ui_dispatch::render_frame(window, cx);
@@ -241,6 +236,24 @@ fn window_at(cx: &App, index: u32) -> Option<AnyWindowHandle> {
     handles.sort_by_key(AnyWindowHandle::window_id);
     handles.get(index as usize).copied()
 }
+
+fn missing_window(cx: &App, index: u32) -> OpError {
+    OpError::NotFound(no_window_message(index, cx.windows().len()))
+}
+
+// An offscreen app starts with no window until `kg open` makes one, so say that when there is none.
+fn no_window_message(index: u32, open: usize) -> String {
+    match open {
+        0 => "no window yet: run kg open".into(),
+        open => format!(
+            "no window {index}; the open windows are numbered 0 to {}",
+            open - 1
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests;
 
 fn run_op(op: UiOp, window: &mut gpui_kit::Window, cx: &mut App) -> Result<OpResult, OpError> {
     crate::ui_dispatch::render_frame(window, cx);

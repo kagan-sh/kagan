@@ -968,6 +968,55 @@ fn cli_browser_text_omits_an_empty_title_and_text() {
 }
 
 #[test]
+fn ui_scroll_takes_a_negative_pixel_count_without_a_separator() {
+    assert_eq!(
+        parse(&["ui", "scroll", "list", "-300"]),
+        Op::Ui(kg_domain::UiOp::Scroll {
+            element_id: "list".into(),
+            dy: -300.,
+            within: None,
+            window: 0,
+        })
+    );
+}
+
+#[test]
+fn env_set_given_a_value_argument_says_the_value_comes_on_stdin() {
+    let argv: Vec<String> = ["kg", "env", "set", "NAME", "value"]
+        .map(String::from)
+        .into();
+    let error = Cli::try_parse_from(&argv)
+        .err()
+        .expect("a value argument is unexpected");
+    let hint = crate::hint(&error, &argv).expect("a hint for the value");
+    assert!(hint.contains("stdin"), "{hint}");
+}
+
+#[test]
+fn text_ends_with_one_newline_in_a_terminal_and_is_unchanged_in_a_pipe() {
+    let mut out = Vec::new();
+    crate::cli::write_text(&mut out, "rules", true).unwrap();
+    assert_eq!(out, b"rules\n");
+    out.clear();
+    crate::cli::write_text(&mut out, "rules\n", true).unwrap();
+    assert_eq!(out, b"rules\n");
+    out.clear();
+    crate::cli::write_text(&mut out, "rules", false).unwrap();
+    assert_eq!(out, b"rules");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_word_that_is_not_utf8_becomes_lossy_text_instead_of_a_panic() {
+    use std::os::unix::ffi::OsStringExt as _;
+    let words = crate::argv_words([
+        std::ffi::OsString::from("kg"),
+        std::ffi::OsString::from_vec(vec![0xff, b'a']),
+    ]);
+    assert_eq!(words, ["kg", "\u{fffd}a"]);
+}
+
+#[test]
 fn cli_saved_prompt_edit_takes_the_id_then_the_title_and_text() {
     assert_eq!(
         parse(&["saved-prompt", "edit", "svp_1", "Plans", "new text"]),

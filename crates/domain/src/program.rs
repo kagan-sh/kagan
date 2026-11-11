@@ -65,15 +65,15 @@ pub struct SavedProgram {
 pub fn saved_name(name: &str) -> Result<String, String> {
     let name = name.trim();
     if name.is_empty() {
-        return Err("A saved program needs a name.".into());
+        return Err("a saved program needs a name".into());
     }
     if name.chars().count() > SAVED_NAME_MAX {
         return Err(format!(
-            "A saved program name is at most {SAVED_NAME_MAX} characters."
+            "a saved program name is at most {SAVED_NAME_MAX} characters"
         ));
     }
     if name.chars().any(crate::unsafe_char) {
-        return Err("A saved program name has no control or bidi characters.".into());
+        return Err("a saved program name has no control or bidi characters".into());
     }
     Ok(name.to_owned())
 }
