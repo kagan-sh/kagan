@@ -37,7 +37,8 @@ fn add(cx: &mut TestAppContext, title: &str, body: &str) -> SavedPrompt {
         cx,
         Op::SavedPrompt(SavedPromptOp::Add {
             title: title.into(),
-            body: body.into(),
+            body: Some(body.into()),
+            file: None,
         }),
     ) {
         OpResult::SavedPrompt(prompt) => prompt,

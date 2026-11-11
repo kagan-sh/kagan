@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use kg_domain::{
     BrowserOp, BrowserSnapshot, ConfigOp, EnvOp, InstructionsOp, Op, OpError, OpResult, PluginOp,
-    PreviewKind, TEXT_MAX, ThreadOp, UiSnapshot, is_git_source,
+    PreviewKind, SavedPromptOp, TEXT_MAX, ThreadOp, UiSnapshot, is_git_source,
 };
 
 use crate::socket::Client;
@@ -157,7 +157,7 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
             }
             OpResult::Text(text) | OpResult::Logs { text, .. } => {
                 use std::io::Write as _;
-                std::io::stdout().lock().write_all(text.as_bytes())?;
+                std::io::stdout().write_all(terminated(text).as_bytes())?;
                 return Ok(());
             }
             OpResult::Wait(outcome) => {
@@ -244,6 +244,15 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
     Ok(())
 }
 
+// Text a person reads ends with a newline, so the shell prompt starts on its own line.
+pub(crate) fn terminated(text: &str) -> std::borrow::Cow<'_, str> {
+    if text.ends_with('\n') {
+        text.into()
+    } else {
+        format!("{text}\n").into()
+    }
+}
+
 /// Reads the `--file` of a paste or a browser fill (`-` is stdin) and sends its text, so a
 /// password stays out of argv and the process list.
 pub(crate) fn take_file_text(mut op: Op, stdin: impl std::io::Read) -> Result<Op, OpError> {
@@ -253,6 +262,7 @@ pub(crate) fn take_file_text(mut op: Op, stdin: impl std::io::Read) -> Result<Op
         }
         Op::Browser(BrowserOp::Fill { text, file, .. }) => (text, file.take(), "text"),
         Op::Instructions(InstructionsOp::Set { text, file, .. }) => (text, file.take(), "rules"),
+        Op::SavedPrompt(SavedPromptOp::Add { body, file, .. }) => (body, file.take(), "prompt"),
         _ => return Ok(op),
     };
     let Some(path) = path else {
