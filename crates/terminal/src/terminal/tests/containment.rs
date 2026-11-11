@@ -179,14 +179,14 @@ fn a_failed_job_is_kept_as_unavailable_and_stop_still_ends_the_program() {
     drop(reap);
 }
 
-// Four 1 MiB submits to a program that never reads. Each must settle before finish runs, and
+// Three 1 MiB submits to a program that never reads, under the 4 MiB input cap (decision 252). Each must settle before finish runs, and
 // finish must settle afterwards, so a blocked writer shows up as a timeout here.
 #[test]
 fn finish_settles_large_submits_to_a_program_that_never_reads() {
     let terminal = Terminal::spawn(cmd_launch("ping -n 60 127.0.0.1 >NUL"), 80, 24).unwrap();
     let reap = Reap(terminal.process_id());
     let chunk = "x".repeat(1024 * 1024);
-    let pending: Vec<_> = (0..4)
+    let pending: Vec<_> = (0..3)
         .map(|n| terminal.submit(&format!("{n}-{chunk}")).unwrap().1)
         .collect();
     for written in &pending {
