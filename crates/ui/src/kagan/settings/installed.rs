@@ -9,7 +9,7 @@ use gpui_kit::{
     Context, ElementId, Focusable as _, InteractiveElement, IntoElement, ParentElement as _, Role,
     Styled as _, Window, div,
 };
-use kg_domain::{Op, PluginId, PluginOp, is_git_source};
+use kg_domain::{Op, PluginId, PluginOp, RailAction, is_git_source};
 use kg_plugins::{PluginHost, PluginStatus};
 
 use super::Kagan;
@@ -18,6 +18,7 @@ use crate::kagan::controls::{act, answer, control, dispatch};
 use crate::kagan::plugin_actions::{
     CheckPluginUpdates, InstallPlugin, ReloadPlugin, RemovePlugin, ShowPluginLogs,
     ToggleInstallForm, TogglePluginDetails, TogglePluginEnabled, UpdateAllPlugins, UpdatePlugin,
+    set_rail,
 };
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -62,7 +63,32 @@ pub(super) fn group(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>)
     for status in &statuses {
         rows.extend(plugin_rows(kagan, status, window, cx));
     }
+    let hidden: Vec<PluginId> = kagan.sidebar.read(cx).hidden_rail.iter().cloned().collect();
+    for id in &hidden {
+        let name = statuses
+            .iter()
+            .find(|status| &status.id == id)
+            .map_or(id.0.as_str(), |status| status.name.as_str());
+        rows.push(rail_row(id, name));
+    }
     super::row::group("installed", "Installed", rows)
+}
+
+fn rail_row(id: &PluginId, name: &str) -> Row {
+    let show = {
+        let id = id.clone();
+        Button::new(ElementId::Name(format!("button-rail-show-{}", id.0).into()))
+            .small()
+            .outline()
+            .label("Show")
+            .on_click(move |_, _, cx| set_rail(id.clone(), RailAction::Show, cx))
+    };
+    row(
+        &format!("rail-hidden-{}", id.0),
+        &format!("{name} icons are hidden from the rail"),
+        "They still open from menus, kg and the command palette.",
+        control(format!("rail-show-{}", id.0), Facts::button("Show"), show).into_any_element(),
+    )
 }
 
 fn install_row(kagan: &Kagan) -> Row {

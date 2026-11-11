@@ -5,10 +5,11 @@ set -eu
 cd "$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 
 usage() {
-  echo "usage: sh scripts/smoke.sh [--binary <path>] [--keep] [--strict]"
+  echo "usage: sh scripts/smoke.sh [--binary <path>] [--keep] [--strict] [--visible]"
 }
 
 binary=target/debug/kg
+mode=--offscreen
 keep=0
 strict=0
 while [ $# -gt 0 ]; do
@@ -17,6 +18,10 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || { usage >&2; exit 2; }
       binary=$2
       shift 2
+      ;;
+    --visible)
+      mode=--headless
+      shift
       ;;
     --keep)
       keep=1
@@ -94,7 +99,7 @@ fail() {
   exit 1
 }
 
-"$binary" --headless >"$log" 2>&1 &
+"$binary" "$mode" >"$log" 2>&1 &
 app=$!
 
 # Clients never start an app here (KG_NO_START=1), so readiness is the socket file, not `kg status`.

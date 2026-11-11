@@ -10,7 +10,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo t --workspace --locked
 ```
 
-On macOS, a change to the window also runs `sh scripts/smoke.sh --keep`. Attach the snapshot path and the screenshot path.
+On macOS, a change to the window also runs `sh scripts/smoke.sh --keep`, which shows no window (offscreen). Add `--visible` to also check the window as the person sees it. Attach the snapshot path and the screenshot path.
 
 The [design documents](https://github.com/kagan-sh/kagan/tree/main/docs) explain the code. When you change what kagan does, update `docs/behaviour.md`.
 

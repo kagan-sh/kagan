@@ -15,6 +15,10 @@ QA and agents drive the native kagan window without OS mouse or keyboard. Input 
 
 `--window` is a zero-based index into open windows sorted by `WindowId`. Default `0`.
 
+## Offscreen windows
+
+`kg --offscreen` starts the app with the same socket, data folder and commands as `kg --headless`, but its windows are never shown or brought forward, so a run takes no focus and is not tiled. Its windows are created with `show` and `focus` off. `kg ui screenshot` renders the window's own scene to a PNG on macOS, with no present and no frame wait. On other platforms it fails with the typed screenshot-unavailable error. Offscreen is proven on macOS only; Linux and Windows are not run yet. The capture is always `current`. Browser pages, web panels and VSCodium are native views outside the scene, so they do not appear in it [decision 238]. `scripts/smoke.sh` runs offscreen by default; `--visible` runs the window the person sees.
+
 `kg ui` does not drive page content. A Browser page is driven with `kg browser`.
 
 A screenshot's JSON is `{"capture": {"path": ..., "current": true|false}}`. `current` is false when the window did not draw a new frame before the capture (it was hidden, or no frame came within two seconds), so the image may show an earlier state. The plain output prints the path and, when `current` is false, a note on stderr.
@@ -31,6 +35,6 @@ Only input that reaches an answer button is refused. An unrelated click or key s
 
 ## Requirements
 
-The `kg` app must be running with a window open. If the UI driver is not installed yet, open a window once (`kg open`). Drive the instance `kg status --json` confirmed. Leave `KG_DATA_DIR` and `KG_SOCKET` unset. A command that starts a second headless app is the wrong window. `KG_NO_START=1` makes a client fail with `no kagan app is listening on <socket>; start it first` instead of starting one. The live smoke gate (`scripts/smoke.sh`) is one exception: it sets every variable to a temporary folder, so it drives its own window and never yours. The Browser check (`scripts/browser.sh`) is the other, and CI runs it on Linux, macOS and Windows (decision 167).
+The `kg` app must be running with a window open. If the UI driver is not installed yet, open a window once (`kg open`). Drive the instance `kg status --json` confirmed. Leave `KG_DATA_DIR` and `KG_SOCKET` unset. A command that starts a second headless app is the wrong window. `KG_NO_START=1` makes a client fail with `no kagan app is listening on <socket>; start it first` instead of starting one. The smoke gate (`scripts/smoke.sh`) is one exception: it sets every variable to a temporary folder, so it drives its own app and never yours. The Browser check (`scripts/browser.sh`) is the other, and CI runs it on Linux, macOS and Windows (decision 167).
 
 `kg plugin install` waits until a person approves powers in the app. This driver cannot answer that. The Op returns `person-only approvals cannot be answered with kg ui`.

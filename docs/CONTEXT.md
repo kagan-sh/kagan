@@ -93,7 +93,7 @@ _Avoid_: Prompt, dialog
 Stored text the person can send. It has a title, a body, and a starred flag. It is not a question waiting for an answer.
 
 **Saved program**:
-A program line the person saved under a short name, such as "Claude, careful" for `claude --model claude-opus-5-5 --effort high`. It can be pinned, renamed, and deleted. Starting a thread from it runs its whole line [decision 238].
+A program line the person saved under a short name, such as "Claude, careful" for `claude --model claude-opus-5-5 --effort high`. It can be pinned, renamed, and deleted. Starting a thread from it runs its whole line [decision 240].
 _Avoid_: Preset, profile, alias
 
 ## Agents and extensions
@@ -152,6 +152,10 @@ _Avoid_: Web view, embedded browser
 **Browser session**:
 The page a thread drives through `kg browser` or `kagan/browser`: one per window, owned by one thread, ending on Stop agent, `kg browser close`, its tab, or kagan quitting.
 _Avoid_: Automation, headless browser
+
+**Offscreen window**:
+A kagan window that is never shown or brought forward. `kg --offscreen` makes its windows, so `kg ui` drives and captures them without taking focus.
+_Avoid_: Headless, hidden window
 
 **Preview**:
 A tab of the right sidebar that shows one file read-only: UTF-8 text, Markdown, PNG or JPEG, or CSV/TSV. One file at a time. It reads the shown thread's environment folder, or a path the person picked, and never edits, saves or fetches.
