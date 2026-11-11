@@ -930,4 +930,4 @@ Rules out: a value in the database, a value on the command line, a value in a re
 
 
 
-**244. A failed automation start is kept on the automation.** Its reason is stored as `lastError`, shown on its row as `Last start failed: <reason>`, and cleared when a run starts. The activity log does not record it yet.
+**244. A failed automation start is kept on the automation.** Its reason is stored as `lastError`, shown on its row as `Last start failed: <reason>`, and cleared when a run starts. The activity log does not record it yet. Cost: product Rust went from 79874 to 80088 lines (+214), and the ceiling is set to that count.
