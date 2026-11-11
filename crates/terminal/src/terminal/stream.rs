@@ -185,7 +185,7 @@ pub(super) fn write_bytes(
     #[cfg(not(unix))]
     {
         let _ = write_stop;
-        return writer.write_all(bytes).and_then(|()| writer.flush());
+        writer.write_all(bytes).and_then(|()| writer.flush())
     }
     #[cfg(unix)]
     {
