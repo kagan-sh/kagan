@@ -1,10 +1,10 @@
 use gpui_kit::component::button::Button;
 use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::{ActiveTheme as _, Disableable as _, Sizable as _, h_flex};
+use gpui_kit::component::{ActiveTheme as _, Disableable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, AppContext as _, ClickEvent, Context, ElementId, Entity,
     InteractiveElement as _, IntoElement as _, ParentElement as _, StatefulInteractiveElement as _,
-    Styled as _, Window, div,
+    Styled as _, Window, div, px,
 };
 use kg_domain::{IndexOp, OpResult, PluginOp};
 use kg_plugins::PluginHost;
@@ -241,24 +241,31 @@ fn add_row(kagan: &Kagan, cx: &mut Context<Kagan>) -> Row {
     )
     .key_context("PluginIndex")
     .on_action(cx.listener(|this, _: &AddIndex, _, cx| this.add_index(cx)));
-    let add_row = row(
-        "index-add",
-        "Add an index",
-        "A git address with a ref, git:<url>@<ref>, or a folder or file on this computer. Private repositories use your own git sign-in.",
-        add.into_any_element(),
-    );
+    // One line is always reserved under the field, so an error does not resize the row.
+    let error = kagan.plugins.index_error.clone();
+    let slot = div()
+        .id("plugin-index-error")
+        .h(px(20.))
+        .type_small(cx)
+        .text_color(cx.theme().danger)
+        .children(error.clone());
+    let slot = match error {
+        Some(error) => slot.ui_container().aria_label(error),
+        None => slot.ui_container(),
+    };
+    let control = v_flex()
+        .w_full()
+        .gap_1()
+        .child(add.into_any_element())
+        .child(slot)
+        .into_any_element();
     Row {
         wide: true,
-        note_content: kagan.plugins.index_error.as_ref().map(|error| {
-            div()
-                .id("plugin-index-error")
-                .ui_container()
-                .aria_label(error.clone())
-                .type_small(cx)
-                .text_color(cx.theme().danger)
-                .child(error.clone())
-                .into_any_element()
-        }),
-        ..add_row
+        ..row(
+            "index-add",
+            "Add an index",
+            "A git address with a ref, git:<url>@<ref>, or a folder or file on this computer. Private repositories use your own git sign-in.",
+            control,
+        )
     }
 }

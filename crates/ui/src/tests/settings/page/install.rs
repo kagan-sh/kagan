@@ -1,4 +1,4 @@
-use gpui_kit::{AnyWindowHandle, TestAppContext, px, size};
+use gpui_kit::{AnyWindowHandle, AppContext as _, TestAppContext, px, size};
 use kg_core::Workspace;
 use kg_domain::{KeymapOp, Op, OpResult, PluginOp};
 use serde_json::{Value, json};
@@ -176,12 +176,30 @@ fn a_bad_index_address_is_named_beside_its_field(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, |_| {});
     click(cx, window, "settings-gear");
     click(cx, window, "settings-section-installed");
+    let height = |cx: &mut TestAppContext| {
+        cx.update_window(window, |_, window, _| {
+            crate::ui_registry::find(
+                window,
+                &gpui_kit::ElementId::Name("setting-row-index-add".into()),
+            )
+            .map(|element| element.bounds.size.height.as_f32())
+        })
+        .unwrap()
+    };
+    let before = height(cx);
+    assert!(before.is_some(), "the add row is measured");
     click(cx, window, "plugin-index");
     cx.simulate_input(window, "banana");
     cx.simulate_keystrokes(window, "enter");
     wait_until(cx, |cx| {
         aria_label(cx, window, "plugin-index-error").is_some()
     });
+    assert_eq!(height(cx), before, "the error must not resize the add row");
+    assert!(
+        aria_label(cx, window, "setting-row-index-add-note")
+            .is_some_and(|note| note.contains("Private repositories")),
+        "the help text stays while the error shows"
+    );
     let error = aria_label(cx, window, "plugin-index-error").unwrap_or_default();
     assert!(error.starts_with("banana is not a folder"), "{error}");
     assert!(!error.contains("os error"), "{error}");
