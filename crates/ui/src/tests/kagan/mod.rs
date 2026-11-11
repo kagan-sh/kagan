@@ -12,6 +12,7 @@ mod approvals;
 mod commands;
 mod ended;
 mod keys;
+mod list_options;
 mod marks;
 mod paint;
 mod panels;

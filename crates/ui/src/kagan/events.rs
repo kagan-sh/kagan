@@ -1,4 +1,4 @@
-use super::screen::{Activation, Side};
+use super::screen::{Activation, Center, Side};
 use super::sidebar::{Event, Shows};
 use super::surface::ClosePage;
 use super::{FocusSidebar, Kagan, OpenSettings};
@@ -101,6 +101,10 @@ impl Kagan {
                 .screen
                 .page()
                 .map(|slot| (slot.plugin.clone(), slot.contribution.clone())),
+            project: match self.screen.current() {
+                Center::Project(page) => Some(page.read(cx).project().clone()),
+                _ => None,
+            },
             tool: self.slots.tool.as_ref().map(|slot| slot.plugin.clone()),
             archived: self.shows_archived(),
             skills: self.shows_skills(),
