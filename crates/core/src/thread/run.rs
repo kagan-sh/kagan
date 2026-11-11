@@ -137,16 +137,14 @@ pub(crate) async fn prepare(
         .ok_or_else(|| missing("project", &run.project_id))?;
     let thread_id = ThreadId(id("thr"));
     let title_locked = run.title.is_some();
-    let title = match run.title.as_deref() {
-        Some(title) => clean_title(title)?,
-        None => match saved_name(&database, &run.program).await? {
-            Some(name) => clean_title(&name)?,
-            None => {
-                let name = split_program(&run.program)
-                    .map_or_else(|_| run.program.clone(), |(name, _)| name);
-                clean_title(&label_of(&name)).unwrap_or_else(|_| "Thread".into())
-            }
-        },
+    let title = if let Some(title) = run.title.as_deref() {
+        clean_title(title)?
+    } else if let Some(name) = saved_name(&database, &run.program).await? {
+        clean_title(&name)?
+    } else {
+        let name =
+            split_program(&run.program).map_or_else(|_| run.program.clone(), |(name, _)| name);
+        clean_title(&label_of(&name)).unwrap_or_else(|_| "Thread".into())
     };
     let prefix = database
         .call(|store| store.setting(kg_domain::prefs::BRANCH_PREFIX))
