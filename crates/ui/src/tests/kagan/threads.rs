@@ -231,15 +231,20 @@ fn archived_closes_from_search_and_close_control(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn long_default_thread_title_ends_with_an_ellipsis(cx: &mut TestAppContext) {
+fn a_default_thread_title_is_the_program_name_not_its_arguments(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     let program = format!("{} {}", shell(), "x".repeat(100));
     let id = run_program(cx, &program);
     wait_until(cx, |cx| shows(cx, window, &format!("thread-{}", id.0)));
+    let name = std::path::Path::new(shell())
+        .file_stem()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
     cx.update_window(window, |_, window, _| {
         let row = crate::ui_registry::find(window, &ElementId::Name(format!("thread-{id}").into()))
             .expect("thread row");
-        assert!(row.label.is_some_and(|label| label.contains('…')));
+        assert!(row.label.is_some_and(|label| label.to_string() == name));
     })
     .unwrap();
 }
