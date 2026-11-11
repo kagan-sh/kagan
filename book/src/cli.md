@@ -773,6 +773,55 @@ Options:
           Print help
 ```
 
+## `kg thread turn`
+
+```text
+Record that an agent turn started or ended; an agent's own hook calls this
+
+Usage: kg thread turn <COMMAND>
+
+Commands:
+  start  The person sent a prompt
+  end    The agent finished its reply
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg thread turn start`
+
+```text
+The person sent a prompt
+
+Usage: kg thread turn start <ID>
+
+Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg thread turn end`
+
+```text
+The agent finished its reply
+
+Usage: kg thread turn end <ID>
+
+Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
 ## `kg thread details`
 
 ```text
