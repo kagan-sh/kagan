@@ -142,13 +142,9 @@ pub(crate) async fn prepare(
     } else if let Some(name) = saved_name(&database, &run.program).await? {
         clean_title(&name)?
     } else {
-        let mut chars = run.program.chars();
-        let mut program: String = chars.by_ref().take(80).collect();
-        if chars.next().is_some() {
-            program.pop();
-            program.push('…');
-        }
-        clean_title(&program).unwrap_or_else(|_| "Thread".into())
+        let name =
+            split_program(&run.program).map_or_else(|_| run.program.clone(), |(name, _)| name);
+        clean_title(&label_of(&name)).unwrap_or_else(|_| "Thread".into())
     };
     let prefix = database
         .call(|store| store.setting(kg_domain::prefs::BRANCH_PREFIX))
