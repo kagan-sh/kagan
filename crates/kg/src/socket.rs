@@ -432,39 +432,47 @@ impl Client {
         wait_for_socket(&location, START_TIMEOUT).map_err(|error| start_failed(&location, error))
     }
 
-    /// Says on stderr when the op waits for the person, and how that ended.
     pub(crate) fn call(&mut self, op: &Op) -> Result<OpResult, OpError> {
-        let mut asked = false;
-        let result = self.call_with(op, |question| {
-            asked = true;
-            eprintln!("kg: waiting for the person to answer in kagan: {question}");
-        });
-        if asked && result.is_ok() {
-            eprintln!("kg: the person answered in kagan.");
-        }
-        result
+        self.call_to(op, &mut io::stderr())
     }
 
-    /// Sends `op` and reads frames until its reply. `waiting` hears each question first.
-    pub(crate) fn call_with(
+    /// Sends `op` and reads frames until its reply. A question is written to `notices` as it
+    /// arrives, and an approved reply says so after it. Control characters are dropped from the
+    /// question, since it can come from thread output or a plugin.
+    pub(crate) fn call_to(
         &mut self,
         op: &Op,
-        mut waiting: impl FnMut(&str),
+        notices: &mut impl Write,
     ) -> Result<OpResult, OpError> {
         let mut out = serde_json::to_vec(op)?;
         out.push(b'\n');
         self.0.get_mut().write_all(&out)?;
-        loop {
+        let mut asked = false;
+        let result = loop {
             let mut line = String::new();
             if self.0.read_line(&mut line)? == 0 {
                 return Err(OpError::Failed("kagan closed the connection".into()));
             }
             match serde_json::from_str(&line)? {
-                Line::Waiting { waiting: question } => waiting(&question),
-                Line::Done(result) => return Ok(*result),
-                Line::Failed(error) => return Err(error),
+                Line::Waiting { waiting } => {
+                    asked = true;
+                    let shown: String = waiting
+                        .chars()
+                        .filter(|ch| !kg_domain::unsafe_char(*ch))
+                        .collect();
+                    _ = writeln!(
+                        notices,
+                        "kg: waiting for the person to answer in kagan: {shown}"
+                    );
+                }
+                Line::Done(result) => break Ok(*result),
+                Line::Failed(error) => break Err(error),
             }
+        };
+        if asked && result.is_ok() {
+            _ = writeln!(notices, "kg: the person answered in kagan.");
         }
+        result
     }
 }
 

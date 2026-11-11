@@ -524,16 +524,42 @@ fn a_turn_hook_never_starts_an_app_and_never_fails() {
 }
 
 #[test]
-fn a_question_reaches_the_client_before_the_reply() {
+fn a_question_is_announced_then_the_reply_says_how_it_ended() {
     let (_dir, name) = test_name("waiting");
     let listener = socket::bind(name.borrow()).unwrap().unwrap();
-    socket::serve(listener, |_, _, waiting| {
-        waiting("Delete the automation “Morning”?");
-        Ok(OpResult::Done)
+    socket::serve(listener, |op, _, waiting| {
+        waiting("Delete the automation \u{1b}[31m“Morning”?\u{7}");
+        match op {
+            Op::Sidebar => Ok(OpResult::Done),
+            _ => Err(OpError::Invalid("declined: Delete the automation".into())),
+        }
     });
     let mut client = Client::connect(name.borrow()).unwrap();
-    let mut asked = Vec::new();
-    let reply = client.call_with(&Op::Sidebar, |question| asked.push(question.to_owned()));
-    assert_eq!(reply, Ok(OpResult::Done));
-    assert_eq!(asked, ["Delete the automation “Morning”?"]);
+    let mut notices = Vec::new();
+    let approved = client.call_to(&Op::Sidebar, &mut notices);
+    assert_eq!(approved, Ok(OpResult::Done));
+    let text = String::from_utf8(notices).unwrap();
+    assert_eq!(
+        text,
+        "kg: waiting for the person to answer in kagan: Delete the automation [31m“Morning”?\n\
+         kg: the person answered in kagan.\n"
+    );
+
+    let mut refused_notices = Vec::new();
+    let refused = client.call_to(
+        &Op::Thread(ThreadOp::Get {
+            id: ThreadId("thr_9".into()),
+        }),
+        &mut refused_notices,
+    );
+    assert_eq!(
+        refused,
+        Err(OpError::Invalid("declined: Delete the automation".into()))
+    );
+    assert!(
+        String::from_utf8(refused_notices)
+            .unwrap()
+            .contains("waiting for the person"),
+        "the question is still announced"
+    );
 }
