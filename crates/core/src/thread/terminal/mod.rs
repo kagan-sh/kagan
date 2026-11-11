@@ -476,6 +476,30 @@ impl Workspace {
         self.runs.get(id)?.shown.as_ref()
     }
 
+    /// Each live terminal's containment: the thread, its extra terminal's number (`None` for the program's), and what it is.
+    pub(crate) fn live_containments(&self) -> Vec<(ThreadId, Option<u32>, String)> {
+        self.runs
+            .iter()
+            .flat_map(|(id, run)| {
+                let program = match &run.shown {
+                    Some(Shown::Running(terminal)) => Some((None, terminal)),
+                    _ => None,
+                };
+                program
+                    .into_iter()
+                    .chain(
+                        run.extras
+                            .open
+                            .iter()
+                            .map(|(number, terminal)| (Some(*number), terminal)),
+                    )
+                    .map(move |(number, terminal)| {
+                        (id.clone(), number, terminal.containment().to_string())
+                    })
+            })
+            .collect()
+    }
+
     /// A terminal's screen as cells, for a window in this process: the program's, or an extra one by number.
     #[must_use]
     pub fn grid(&self, id: &ThreadId, terminal: Option<u32>) -> Option<kg_terminal::Grid> {
