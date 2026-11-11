@@ -744,14 +744,14 @@ The agent rules are text a thread's program is told when it starts: the global f
 ### `Set`
 
 - **Changes**: writes the file and creates its folder. The text comes from the argument, or from `--file` (`-` for stdin) [book:cli].
-- **Refused when**: more than 16 KiB — `invalid`, and nothing is written [decision 211]. No text — `invalid`. An unknown project — `not-found` [op/]. A project whose folder is gone — `invalid`, and no folder is made [decision 211].
+- **Refused when**: more than 16 KiB — `invalid`, and nothing is written [decision 211]. No text — `invalid`. An unknown project — `not-found` [op/]. A project whose folder is gone — `invalid`, and no folder is made [decision 211]. The window sends the text it last read, and the file holds other text now — `changed`, and nothing is written [decision 241].
 - **Writes**: through a temp file renamed into place, so a start never reads half a file [decision 211].
 - **Applies**: a start reads the files then. A running thread keeps the text it started with. Codex's `kg mcp` server reads them when it lists tools [decision 211].
 
 ### `Clear`
 
 - **Changes**: deletes the file. Clearing a missing file succeeds.
-- **Refused when**: an unknown project — `not-found` [op/].
+- **Refused when**: an unknown project — `not-found` [op/]. The window's text no longer matches the file — `changed`, and the file stays [decision 241].
 
 ## Config
 

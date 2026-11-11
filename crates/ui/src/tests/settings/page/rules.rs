@@ -1,4 +1,6 @@
 use gpui_kit::{AnyWindowHandle, TestAppContext};
+use kg_core::Workspace;
+use kg_domain::{InstructionsOp, Op};
 
 use super::aria_label;
 use crate::tests::kagan::{click, disabled, open, present, value_of, wait_until};
@@ -60,4 +62,61 @@ fn a_draft_survives_leaving_and_reopening_settings(cx: &mut TestAppContext) {
             .unwrap_or_default()
             .contains("draft rule")
     );
+}
+
+fn set_rules_elsewhere(cx: &mut TestAppContext, text: &str) {
+    let set = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Instructions(InstructionsOp::Set {
+                text: Some(text.into()),
+                file: None,
+                project: None,
+                expected: None,
+            }),
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(set).unwrap();
+}
+
+#[gpui_kit::test]
+fn the_rules_box_follows_a_change_made_elsewhere_while_settings_is_open(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    open_general(cx, window);
+    set_rules_elsewhere(cx, "rules from cli");
+    wait_until(cx, |cx| {
+        value_of(cx, window, "agent-rules-text").is_some_and(|text| text.contains("rules from cli"))
+    });
+}
+
+#[gpui_kit::test]
+fn save_refuses_rules_changed_elsewhere_and_keeps_the_draft(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    set_rules_elsewhere(cx, "first");
+    open_general(cx, window);
+    wait_until(cx, |cx| {
+        value_of(cx, window, "agent-rules-text").is_some_and(|text| text.contains("first"))
+    });
+    click(cx, window, "agent-rules-text");
+    cx.simulate_input(window, " draft");
+    cx.run_until_parked();
+    set_rules_elsewhere(cx, "second");
+    wait_until(cx, |cx| {
+        aria_label(cx, window, "agent-rules-notice").is_some()
+    });
+    cx.simulate_input(window, "!");
+    click(cx, window, "agent-rules-save");
+    wait_until(cx, |cx| {
+        aria_label(cx, window, "agent-rules-notice").is_some()
+    });
+    let stored = std::fs::read_to_string(data.path().join("instructions.md")).unwrap();
+    assert_eq!(
+        stored, "second",
+        "the first Save must not replace the newer rules"
+    );
+
+    click(cx, window, "agent-rules-save");
+    wait_until(cx, |cx| {
+        std::fs::read_to_string(data.path().join("instructions.md")).unwrap() == "first draft!"
+    });
 }

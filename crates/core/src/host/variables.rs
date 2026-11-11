@@ -111,9 +111,15 @@ pub(crate) async fn run(
             return Err(missing("project", id));
         }
     }
-    cx.background_executor()
+    let writes = !matches!(op, EnvOp::List { .. });
+    let listed = cx
+        .background_executor()
         .spawn(async move { apply(&data_dir, op) })
-        .await
+        .await?;
+    if writes {
+        crate::workspace::changed(this, cx)?;
+    }
+    Ok(listed)
 }
 
 fn scope_of(op: &EnvOp) -> Option<&ProjectId> {

@@ -337,9 +337,6 @@ impl Kagan {
     }
 
     pub(super) fn load_settings(&mut self, cx: &mut Context<Self>) {
-        self.settings
-            .variables
-            .update(cx, super::variables::Variables::reload);
         Self::load_layout(cx);
         self.load_prefs(cx);
         self.load_kg_on_path(cx);

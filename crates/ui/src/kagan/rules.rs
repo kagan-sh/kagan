@@ -12,14 +12,16 @@ use gpui_kit::{
     ParentElement as _, Render, Role, StatefulInteractiveElement as _, Styled as _, Subscription,
     Task, Window, div, px,
 };
-use kg_core::Workspace;
-use kg_domain::{INSTRUCTIONS_MAX, InstructionsOp, Op, OpResult, ProjectId};
+use kg_core::{Workspace, WorkspaceEvent};
+use kg_domain::{INSTRUCTIONS_MAX, InstructionsOp, Op, OpError, OpResult, ProjectId};
 
 use crate::kagan::controls::control;
 use crate::theme::{SpaceStep, TypeScale as _, space, type_body};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
+const CHANGED: &str =
+    "The rules changed elsewhere. Your text is kept. Press Save again to replace them.";
 const PROGRAMS: &str =
     "Claude Code, Codex, Cursor Agent and Pi read these rules. Kimi and opencode do not.";
 
@@ -39,6 +41,7 @@ pub(super) struct RulesEditor {
     load: Option<Task<()>>,
     save: Option<Task<()>>,
     _watch: Subscription,
+    _stored: Subscription,
 }
 
 impl RulesEditor {
@@ -48,16 +51,30 @@ impl RulesEditor {
         cx: &mut Context<Self>,
     ) -> Self {
         let text = cx.new(|cx| TextareaState::new(window, cx).auto_grow(6, 16));
-        let watch = cx.subscribe(&text, |this, _, event: &InputEvent, cx| match event {
-            InputEvent::Change => {
-                this.notice = None;
-                cx.notify();
-            }
-            InputEvent::PressEnter {
-                secondary: true, ..
-            } => this.save(cx),
-            _ => {}
-        });
+        let watch =
+            cx.subscribe_in(
+                &text,
+                window,
+                |this, _, event: &InputEvent, window, cx| match event {
+                    InputEvent::Change => {
+                        this.notice = None;
+                        cx.notify();
+                    }
+                    InputEvent::PressEnter {
+                        secondary: true, ..
+                    } => this.save(window, cx),
+                    _ => {}
+                },
+            );
+        let stored = cx.subscribe_in(
+            &Workspace::global(cx),
+            window,
+            |this, _, event: &WorkspaceEvent, window, cx| {
+                if matches!(event, WorkspaceEvent::Changed) {
+                    this.refresh(window, cx);
+                }
+            },
+        );
         let mut editor = Self {
             project,
             text,
@@ -66,24 +83,19 @@ impl RulesEditor {
             load: None,
             save: None,
             _watch: watch,
+            _stored: stored,
         };
-        editor.load(window, cx);
+        editor.refresh(window, cx);
         editor
     }
 
-    /// Reads the file again when the page opens, so a change made from the CLI shows. A draft
-    /// the person typed is kept: only a box that still matches the file is replaced.
+    /// Reads the stored rules. A box the person has not edited follows them; a draft is kept, and
+    /// the next Save is refused until the person saves again.
     pub(super) fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Loaded::Ready { saved } = &self.state
-            && self.text.read(cx).value().as_ref() != saved.as_str()
-        {
-            return;
-        }
-        self.load(window, cx);
+        self.read(false, window, cx);
     }
 
-    fn load(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.state = Loaded::Pending;
+    fn read(&mut self, after_conflict: bool, window: &mut Window, cx: &mut Context<Self>) {
         let read = Workspace::dispatch(
             Op::Instructions(InstructionsOp::Get {
                 project: self.project.clone(),
@@ -93,61 +105,88 @@ impl RulesEditor {
         self.load = Some(cx.spawn_in(window, async move |this, cx| {
             let result = read.await;
             _ = this.update_in(cx, |editor, window, cx| {
-                match result {
-                    Ok(OpResult::Text(saved)) => {
-                        editor.text.update(cx, |state, cx| {
-                            state.set_value(saved.clone(), window, cx);
-                        });
-                        editor.state = Loaded::Ready { saved };
-                        editor.notice = None;
-                    }
-                    Ok(_) => {
-                        editor.state = Loaded::Failed;
-                        editor.notice = Some("The rules did not load.".into());
-                    }
-                    Err(error) => {
-                        editor.state = Loaded::Failed;
-                        editor.notice = Some(error.to_string());
-                    }
-                }
+                editor.adopt(result, after_conflict, window, cx);
                 cx.notify();
             });
         }));
     }
 
-    fn save(&mut self, cx: &mut Context<Self>) {
-        if !matches!(self.state, Loaded::Ready { .. }) {
-            return;
+    fn adopt(
+        &mut self,
+        result: Result<OpResult, OpError>,
+        after_conflict: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let stored = match result {
+            Ok(OpResult::Text(stored)) => stored,
+            Ok(_) => {
+                self.state = Loaded::Failed;
+                self.notice = Some("The rules did not load.".into());
+                return;
+            }
+            Err(error) => {
+                self.state = Loaded::Failed;
+                self.notice = Some(error.to_string());
+                return;
+            }
+        };
+        let draft = self.text.read(cx).value().to_string();
+        match &self.state {
+            Loaded::Ready { saved } if *saved == stored => {}
+            Loaded::Ready { saved } if *saved != draft => {
+                // The box holds the person's own text, so it stays. Until a Save has been refused,
+                // the basis stays what they read, so the first Save is refused and says so.
+                self.notice = Some(CHANGED.into());
+                if after_conflict {
+                    self.state = Loaded::Ready { saved: stored };
+                }
+            }
+            _ => {
+                self.text.update(cx, |state, cx| {
+                    state.set_value(stored.clone(), window, cx);
+                });
+                self.notice = after_conflict.then(|| CHANGED.into());
+                self.state = Loaded::Ready { saved: stored };
+            }
         }
+    }
+
+    fn save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Loaded::Ready { saved } = &self.state else {
+            return;
+        };
         // Cmd+Enter inserts a newline before it saves, so trailing whitespace is not kept.
         let text = self.text.read(cx).value().trim_end().to_owned();
         if text.len() > INSTRUCTIONS_MAX {
             return;
         }
-        let saved = text.clone();
+        let expected = Some(saved.clone());
+        let project = self.project.clone();
         let op = if text.trim().is_empty() {
-            InstructionsOp::Clear {
-                project: self.project.clone(),
-            }
+            InstructionsOp::Clear { project, expected }
         } else {
             InstructionsOp::Set {
-                text: Some(text),
+                text: Some(text.clone()),
                 file: None,
-                project: self.project.clone(),
+                project,
+                expected,
             }
         };
         let written = Workspace::dispatch(Op::Instructions(op), cx);
-        self.save = Some(cx.spawn(async move |this, cx| {
+        self.save = Some(cx.spawn_in(window, async move |this, cx| {
             let result = written.await;
-            _ = this.update(cx, |editor, cx| {
-                match result {
-                    Ok(_) => {
-                        editor.state = Loaded::Ready { saved };
-                        editor.notice = Some("Saved.".into());
-                    }
-                    Err(error) => editor.notice = Some(error.to_string()),
+            _ = this.update_in(cx, |editor, window, cx| match result {
+                Ok(_) => {
+                    editor.state = Loaded::Ready { saved: text };
+                    editor.notice = Some("Saved.".into());
+                    cx.notify();
                 }
-                cx.notify();
+                Err(OpError::Changed(_)) => editor.read(true, window, cx),
+                Err(error) => {
+                    editor.notice = Some(error.to_string());
+                    cx.notify();
+                }
             });
         }));
     }
@@ -201,7 +240,7 @@ impl Render for RulesEditor {
                 .primary()
                 .label("Save")
                 .disabled(!can_save)
-                .on_click(cx.listener(|this, _, _, cx| this.save(cx))),
+                .on_click(cx.listener(|this, _, window, cx| this.save(window, cx))),
         );
         let muted = cx.theme().muted_foreground;
         v_flex()
@@ -231,7 +270,15 @@ impl Render for RulesEditor {
                     .child(save),
             )
             .when_some(self.notice.clone(), |column, notice| {
-                column.child(div().type_small(cx).text_color(muted).child(notice))
+                column.child(
+                    div()
+                        .id("agent-rules-notice")
+                        .ui_container()
+                        .aria_label(notice.clone())
+                        .type_small(cx)
+                        .text_color(muted)
+                        .child(notice),
+                )
             })
     }
 }

@@ -30,11 +30,21 @@ pub enum InstructionsOp {
         /// Project whose rules to replace
         #[arg(long)]
         project: Option<ProjectId>,
+        /// The text the editor last read. The write is refused when the file holds other text now.
+        /// Only the window sets it.
+        #[arg(skip)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expected: Option<String>,
     },
     /// Remove the agent rules
     Clear {
         /// Project whose rules to remove
         #[arg(long)]
         project: Option<ProjectId>,
+        /// The text the editor last read. The removal is refused when the file holds other text now.
+        /// Only the window sets it.
+        #[arg(skip)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expected: Option<String>,
     },
 }
