@@ -11,27 +11,30 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 pub(crate) fn show(message: SharedString, cx: &mut App) -> gpui_kit::Result<()> {
-    let options = crate::prepare_window(WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
-            None,
-            size(px(440.), px(240.)),
-            cx,
-        ))),
-        titlebar: Some(TitlebarOptions {
-            title: Some("kagan could not start".into()),
-            ..TitlebarOptions::default()
-        }),
-        is_resizable: false,
-        is_minimizable: false,
-        ..WindowOptions::default()
-    });
+    let options = crate::prepare_window(
+        WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                None,
+                size(px(440.), px(240.)),
+                cx,
+            ))),
+            titlebar: Some(TitlebarOptions {
+                title: Some("kagan could not start".into()),
+                ..TitlebarOptions::default()
+            }),
+            is_resizable: false,
+            is_minimizable: false,
+            ..WindowOptions::default()
+        },
+        cx,
+    );
     gpui_kit::open_window(options, cx, |_, cx| {
         cx.new(|cx| StartFailed {
             message,
             _quit: cx.on_release(|_, cx| cx.quit()),
         })
     })?;
-    cx.activate(true);
+    crate::presentation::activate(cx);
     Ok(())
 }
 

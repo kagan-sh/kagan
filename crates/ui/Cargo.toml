@@ -10,7 +10,7 @@ kg-core.workspace = true
 kg-domain.workspace = true
 kg-plugins.workspace = true
 # GPUI Fast draws menus and dialogs over the native page on every desktop (decision 161).
-gpui-kit = { workspace = true, features = ["gpui-fast"] }
+gpui-kit = { workspace = true, features = ["gpui-fast", "offscreen"] }
 gpui-shell = { workspace = true, features = ["gpui-fast"] }
 gpui-webview.workspace = true
 wry.workspace = true
@@ -31,6 +31,7 @@ webkit2gtk = { version = "=2.0.1", features = ["v2_38"] }
 raw-window-handle.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
 objc2-foundation = { workspace = true, features = ["NSString", "NSProcessInfo"] }
 objc2.workspace = true
 objc2-app-kit = { workspace = true, features = ["NSApplication", "NSDockTile", "NSImage", "NSBitmapImageRep", "NSImageRep", "std"] }

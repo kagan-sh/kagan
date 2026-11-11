@@ -3,6 +3,8 @@
     clippy::expect_used,
     reason = "a test stops at the first broken step"
 )]
+// Every test here drives `kg` over a unix socket, so the file is unix-only.
+#![cfg(unix)]
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -18,7 +20,7 @@ fn documented_first_run_commands_run() {
     let _ = std::fs::remove_file(&socket);
     let log = dir.path().join("server.log");
     let home = data.parent().unwrap();
-    let mut server = Server::start(home, Some(&data), &socket, &log);
+    let mut server = Server::start(home, Some(&data), &socket, &log, "--headless");
     server.wait_until_listening();
 
     for command in first_run_commands() {
@@ -61,7 +63,74 @@ fn documented_first_run_commands_run() {
     let _ = std::fs::remove_file(&socket);
 }
 
-#[cfg(unix)]
+// macOS only until Linux and Windows offscreen are proven; see decision 238.
+#[cfg(target_os = "macos")]
+#[test]
+fn offscreen_app_answers_ui_commands_and_captures_its_window() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    let socket = PathBuf::from(format!("/tmp/kg-offscreen-{}.sock", std::process::id()));
+    let _ = std::fs::remove_file(&socket);
+    let log = dir.path().join("server.log");
+    let home = data.parent().unwrap();
+    let mut server = Server::start(home, Some(&data), &socket, &log, "--offscreen");
+    server.wait_until_listening();
+    let open = kg(&["kg".into(), "open".into()], home, Some(&data), &socket);
+    assert!(
+        open.status.success(),
+        "{}",
+        server.failure("kg open failed")
+    );
+
+    // The window builds after `kg open` returns, so poll the snapshot as the smoke script does.
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let (snapshot, text) = loop {
+        let snapshot = kg(
+            &["kg".into(), "ui".into(), "snapshot".into(), "--json".into()],
+            home,
+            Some(&data),
+            &socket,
+        );
+        let text = String::from_utf8_lossy(&snapshot.stdout).into_owned();
+        if (snapshot.status.success() && text.contains("sidebar-new-thread"))
+            || Instant::now() > deadline
+        {
+            break (snapshot, text);
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    };
+    assert!(
+        snapshot.status.success() && text.contains("sidebar-new-thread"),
+        "{}",
+        server.failure(&format!(
+            "{text}{}",
+            String::from_utf8_lossy(&snapshot.stderr)
+        ))
+    );
+
+    let image = dir.path().join("offscreen.png");
+    let shot = kg(
+        &[
+            "kg".into(),
+            "ui".into(),
+            "screenshot".into(),
+            image.display().to_string(),
+            "--json".into(),
+        ],
+        home,
+        Some(&data),
+        &socket,
+    );
+    assert!(
+        shot.status.success(),
+        "{}",
+        server.failure(&String::from_utf8_lossy(&shot.stdout))
+    );
+    // A blank or nearly blank frame has a handful of colours; the start screen has hundreds.
+    let colours = distinct_colours(&image);
+    assert!(colours >= 64, "the capture has only {colours} colours");
+}
+
 #[test]
 fn the_app_keeps_its_data_in_home_kagan_without_kg_data_dir() {
     let home = tempfile::tempdir().unwrap();
@@ -70,7 +139,7 @@ fn the_app_keeps_its_data_in_home_kagan_without_kg_data_dir() {
     let log = home.path().join("server.log");
     let status = ["kg".to_owned(), "status".into(), "--json".into()];
 
-    let mut server = Server::start(home.path(), None, &socket, &log);
+    let mut server = Server::start(home.path(), None, &socket, &log, "--headless");
     server.wait_until_listening();
     let output = kg(&status, home.path(), None, &socket);
     assert!(
@@ -124,6 +193,17 @@ fn first_run_commands() -> Vec<Vec<String>> {
     commands
 }
 
+/// Decodes a PNG and counts its distinct colours.
+#[cfg(target_os = "macos")]
+fn distinct_colours(path: &Path) -> usize {
+    let image = image::open(path).expect("the capture is a PNG").to_rgba8();
+    image
+        .pixels()
+        .map(|pixel| pixel.0)
+        .collect::<std::collections::HashSet<[u8; 4]>>()
+        .len()
+}
+
 #[cfg(unix)]
 fn kg(args: &[String], home: &Path, data: Option<&Path>, socket: &Path) -> std::process::Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_kg"));
@@ -155,10 +235,10 @@ struct Server {
 
 #[cfg(unix)]
 impl Server {
-    fn start(home: &Path, data: Option<&Path>, socket: &Path, log: &Path) -> Self {
+    fn start(home: &Path, data: Option<&Path>, socket: &Path, log: &Path, mode: &str) -> Self {
         let err = File::create(log).unwrap();
         let mut command = Command::new(env!("CARGO_BIN_EXE_kg"));
-        command.arg("--headless");
+        command.arg(mode);
         environment(&mut command, home, data, socket);
         command
             .stdin(Stdio::null())
