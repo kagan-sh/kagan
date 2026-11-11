@@ -157,6 +157,22 @@ pub(crate) fn discover(
             pinned: false,
         });
     }
+    // Pinned saved programs first, then the recent ones newest first, then the rest in the order
+    // above. The window and `kg program list` both show this order.
+    let mut ordered: Vec<(usize, Program)> = programs.into_iter().enumerate().collect();
+    ordered.sort_by_key(|(index, program)| {
+        if program.pinned {
+            (0, *index)
+        } else if let Some(newest) = recent
+            .iter()
+            .position(|command| *command == program.command)
+        {
+            (1, newest)
+        } else {
+            (2, *index)
+        }
+    });
+    let programs: Vec<Program> = ordered.into_iter().map(|(_, program)| program).collect();
     let default = project
         .and_then(|project| {
             programs

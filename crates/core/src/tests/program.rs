@@ -249,13 +249,14 @@ fn saved_programs_sit_after_the_shell_and_before_recent_ones_and_fold_a_repeat()
         .iter()
         .map(|program| (program.source, program.label.as_str()))
         .collect();
-    let at = |source| {
-        order
-            .iter()
-            .position(|(found, _)| *found == source)
-            .unwrap()
-    };
-    assert!(at(kg_domain::ProgramSource::Shell) < at(kg_domain::ProgramSource::Saved));
+    let position = |label: &str| order.iter().position(|(_, found)| *found == label).unwrap();
+    assert!(position("Pinned") < position("Fast"));
+    assert!(
+        position("Fast") < position("tool"),
+        "recent ones follow the pinned ones"
+    );
+    assert!(position("tool") < position("Shell"), "then the rest");
+    assert!(position("tool") < position("Missing"));
     assert_eq!(
         order
             .iter()
@@ -265,7 +266,6 @@ fn saved_programs_sit_after_the_shell_and_before_recent_ones_and_fold_a_repeat()
         ["Pinned", "Fast", "Missing"],
         "saved programs keep the order the store gives them"
     );
-    assert!(at(kg_domain::ProgramSource::Saved) < at(kg_domain::ProgramSource::Recent));
     let fast: Vec<_> = list
         .programs
         .iter()
