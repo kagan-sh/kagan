@@ -33,7 +33,7 @@ pub(crate) fn show(cx: &mut App) -> gpui_kit::Result<()> {
     if let Some(open) = cx.try_global::<OpenWindow>().map(|open| open.handle)
         && cx
             .update_window(open, |_, window, cx| {
-                crate::presentation::activate_window(window, cx)
+                crate::presentation::activate_window(window, cx);
             })
             .is_ok()
     {

@@ -44,7 +44,7 @@ pub(crate) fn show(cx: &mut App) {
     if let Some(&Shown(handle)) = cx.try_global::<Shown>()
         && cx
             .update_window(handle, |_, window, cx| {
-                crate::presentation::activate_window(window, cx)
+                crate::presentation::activate_window(window, cx);
             })
             .is_ok()
     {
