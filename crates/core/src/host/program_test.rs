@@ -8,7 +8,6 @@ fn a_program_environment_names_its_path_and_shell() {
     let environment = ProgramEnvironment {
         path: "/work/bin".into(),
         shell: "/bin/zsh".into(),
-        home: None,
     };
     assert_eq!(
         read_environment(Some(environment)),
@@ -16,7 +15,6 @@ fn a_program_environment_names_its_path_and_shell() {
             Some(OsString::from("/work/bin")),
             None,
             Some(OsString::from("/bin/zsh")),
-            None
         )
     );
 }

@@ -24,9 +24,7 @@ use crate::ui_registry::Facts;
 impl RenderOnce for ProgramRow {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
-        // An installed known agent is a card with its letter mark. Shell and recent rows have none.
         let card = self.program.source == ProgramSource::Known && self.program.installed();
-        // A recent command shows its arguments; the whole command is its tooltip.
         let detail = match self.program.source {
             ProgramSource::Known => None,
             ProgramSource::Shell => Some(self.program.command.clone()),
@@ -74,11 +72,8 @@ impl RenderOnce for ProgramRow {
                             .px_2()
                             .h_7()
                             .rounded(cx.theme().radius)
-                            .when(card, |row| row.border_1().border_color(cx.theme().border))
-                            .when(!card, |row| {
-                                // Every row has the border, so the names line up on the same x.
-                                row.border_1().border_color(Hsla::transparent_black())
-                            })
+                            .relative()
+                            .when(card, |row| row.child(card_border(cx)))
                             .child(
                                 h_flex()
                                     .items_center()
@@ -129,12 +124,10 @@ impl RenderOnce for ProgramRow {
     }
 }
 
-// The mark's width, and the gap after it: every row reserves this slot, so names line up.
 const MARK_SLOT: f32 = 20.;
 const MARK_GAP: f32 = 8.;
 
-// The first letter of the name, on a tile, for an installed agent. Other rows keep an empty slot
-// of the same width. The letter stands in for a logo, which kagan does not ship.
+// Other rows keep an empty slot, so the names line up.
 fn mark_slot(label: &str, card: bool, cx: &App) -> AnyElement {
     let slot = div().flex_shrink_0().size(gpui_kit::px(MARK_SLOT));
     if !card {
@@ -147,7 +140,6 @@ fn mark_slot(label: &str, card: bool, cx: &App) -> AnyElement {
         .unwrap_or_default();
     slot.id(format!("program-mark-{label}"))
         .ui_container()
-        .aria_label(letter.clone())
         .rounded(cx.theme().radius)
         .bg(cx.theme().muted)
         .flex()
@@ -159,10 +151,17 @@ fn mark_slot(label: &str, card: bool, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-// The custom command's label starts where the program names start: past the mark slot, the gap,
-// and the row's border.
+fn card_border(cx: &App) -> impl IntoElement {
+    div()
+        .absolute()
+        .inset_0()
+        .rounded(cx.theme().radius)
+        .border_1()
+        .border_color(cx.theme().border)
+}
+
 fn name_inset() -> gpui_kit::Pixels {
-    gpui_kit::px(MARK_SLOT + MARK_GAP + 1.)
+    gpui_kit::px(MARK_SLOT + MARK_GAP)
 }
 
 // The first row's height is every row's height, so the list's cap is read in rows.

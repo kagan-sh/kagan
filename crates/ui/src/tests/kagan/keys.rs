@@ -103,7 +103,7 @@ fn a_shortcut_works_after_the_thread_is_archived(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn ctrl_keys_reach_the_program_and_are_not_window_shortcuts(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);
-    let id = run_program(cx, "/bin/cat");
+    let id = run_program(cx, "cat");
     click(cx, window, &format!("thread-{}", id.0));
 
     cx.simulate_keystrokes(window, "ctrl-n");

@@ -125,11 +125,11 @@ pub(in crate::tests) fn setup_with(cx: &mut TestAppContext, seeded: bool) -> tem
         )
     });
     cx.foreground_executor().block_test(opened).unwrap();
-    // No test finds the machine's own programs: a PATH with nothing on it, and no home folder.
-    let no_programs = data.path().join("no-programs");
+    // No test finds a program in the machine's own install folders.
+    let no_home = data.path().join("no-home");
     cx.update(|cx| {
         Workspace::global(cx).update(cx, |workspace, _| {
-            workspace.use_program_environment(&no_programs, std::path::Path::new("/bin/sh"));
+            workspace.use_program_home(&no_home);
         });
     });
     cx.update(|cx| {
