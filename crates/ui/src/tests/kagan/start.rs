@@ -55,6 +55,7 @@ fn the_public_entry_point_opens_one_window(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn the_window_is_titled_kagan_and_opens_at_its_size(cx: &mut TestAppContext) {
     let options = cx.update(crate::kagan::window_options);
+    assert!(options.window_min_size.is_some());
     let title = options.titlebar.and_then(|bar| bar.title);
     assert_eq!(title.as_deref(), Some("Kagan"));
     let Some(WindowBounds::Windowed(bounds)) = options.window_bounds else {

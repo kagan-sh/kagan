@@ -30,7 +30,11 @@ fn a_tail_that_starts_on_a_whole_line_counts_that_line() {
     let pad = 64 * 1024 - warn.len() - info("").len();
     let tail = format!("{warn}{}", info(&"x".repeat(pad)));
     assert_eq!(tail.len(), 64 * 1024);
-    std::fs::write(&path, format!("{}{tail}", info("older").repeat(2000))).unwrap();
+    std::fs::write(
+        &path,
+        format!("{}{}{tail}", warn.repeat(2000), info("older").repeat(2000)),
+    )
+    .unwrap();
     assert_eq!(
         counts(data.path(), &id),
         LogCounts::Counted { warn: 1, error: 0 }

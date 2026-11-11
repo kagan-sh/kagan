@@ -287,6 +287,38 @@ async fn enter_ends_the_wait_for_a_draft(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+async fn a_paste_counts_as_a_draft_too(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let flag = fixture.dir.path().join("parent-done");
+    let (parent, _parent_run) =
+        started(&fixture, &parent_until(fixture.dir.path(), &flag), cx).await;
+    wait_until_busy(&fixture, &parent, cx);
+    let program = finishing(fixture.dir.path(), "finish");
+    let (child_id, _child_run) = child(&fixture, &program, &parent, false, cx).await;
+    wait_for_waiting(&child_id, 1, cx).await;
+    op(
+        Op::Thread(ThreadOp::Paste {
+            id: parent.clone(),
+            text: Some("half".into()),
+            terminal: None,
+            file: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    std::fs::write(&flag, "").unwrap();
+    wait_until_idle(&fixture, &parent, cx);
+    cx.executor().advance_clock(Duration::from_secs(3));
+    cx.run_until_parked();
+    assert!(sent_text(&events(&parent, cx).await).is_empty());
+    cx.executor().advance_clock(Duration::from_secs(30));
+    let sent = sent_to(&parent, cx).await;
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert!(sent[0].contains(&child_id.to_string()), "{}", sent[0]);
+}
+
+#[gpui_kit::test]
 async fn a_wait_on_the_child_drops_the_line_it_already_told_the_parent(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let flag = fixture.dir.path().join("parent-done");

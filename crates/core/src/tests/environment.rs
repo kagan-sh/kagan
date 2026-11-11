@@ -92,6 +92,10 @@ async fn deleting_a_personal_thread_names_its_folder_and_removes_it_on_approval(
         "{question}"
     );
     assert!(question.contains("valuable-note.txt"), "{question}");
+    let refused = cx
+        .update(|cx| Workspace::answer_standalone(approval.clone(), "maybe".into(), cx))
+        .await;
+    assert!(matches!(refused, Err(OpError::Invalid(_))), "{refused:?}");
     cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx))
         .await
         .unwrap();
