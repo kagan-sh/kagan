@@ -144,6 +144,7 @@ pub(super) fn notice(cx: &mut Context<Kagan>) -> Option<AnyElement> {
             .py_2()
             .border_b_1()
             .border_color(cx.theme().border)
+            .bg(cx.theme().background)
             .type_body(cx)
             .child(text)
             .child(actions(cx))

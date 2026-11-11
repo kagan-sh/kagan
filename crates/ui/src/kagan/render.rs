@@ -238,7 +238,6 @@ impl Kagan {
                                 .child(note),
                         )
                     })
-                    .children(update::notice(cx))
                     .children(
                         self.plugin_prompt_visible(cx)
                             .then(|| self.plugin_prompt.clone())
@@ -246,6 +245,11 @@ impl Kagan {
                             .map(|(_, text)| Self::plugin_prompt_notice(&text, cx)),
                     )
                     .child(main)
+                    .children(
+                        update::notice(cx).map(|notice| {
+                            div().absolute().top_0().left_0().right_0().child(notice)
+                        }),
+                    )
                     .children(overlays::render(self, cx))
                     .children(popup)
                     .when_some(self.toast.clone(), |main, toast| {

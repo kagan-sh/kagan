@@ -6,7 +6,9 @@ use kg_core::{Target, Updater, Workspace};
 use kg_domain::{Op, OpError, OpResult, UI_PERSON_ONLY, UiOp, UpdateState};
 use serde_json::json;
 
-use crate::tests::kagan::{click, open, present, press, release, shows, value_of, wait_until};
+use crate::tests::kagan::{
+    click, open, present, press, release, row_top, shows, value_of, wait_until,
+};
 
 fn bundle(dir: &Path) -> PathBuf {
     let exe = dir.join("Applications/kagan.app/Contents/MacOS/kg");
@@ -183,4 +185,18 @@ fn kg_ui_cannot_confirm_an_install_a_person_asked_for(cx: &mut TestAppContext) {
         cx.update(|cx| Updater::global(cx).read(cx).state().clone()),
         UpdateState::Available { .. }
     ));
+}
+
+#[gpui_kit::test]
+fn the_update_notice_floats_over_the_page_and_moves_nothing(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    click(cx, window, "project-prj_kagan");
+    cx.run_until_parked();
+    let before = row_top(cx, window, "start-fields");
+    offer(
+        cx,
+        Target::find("macos", &bundle(data.path()), None, None, &[]),
+    );
+    assert!(shows(cx, window, "update-notice"));
+    assert_eq!(row_top(cx, window, "start-fields"), before);
 }
