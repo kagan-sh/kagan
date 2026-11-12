@@ -703,7 +703,7 @@ fn tab_from_the_search_reaches_the_grid_where_the_arrows_move_the_cards(cx: &mut
 
 #[cfg(unix)]
 #[gpui_kit::test]
-fn a_search_leaves_only_its_matching_cards_and_the_custom_card(cx: &mut TestAppContext) {
+fn a_search_leaves_only_its_matching_cards_and_the_custom_button(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
     fixture_programs(cx, data.path(), &ROW_NAMES);
     start_in_plain_folder(cx, window, data.path());
@@ -1223,5 +1223,94 @@ fn a_recent_command_shows_its_flags_with_the_quotes_it_was_started_with(cx: &mut
     assert_eq!(
         label(cx, window, "program-command-codex -p 'deep think'"),
         "-p 'deep think'"
+    );
+}
+
+// The border colour the window paints around the element with this id, from the quad that
+// covers the element's bounds.
+#[cfg(unix)]
+fn painted_border(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    id: &str,
+) -> Option<gpui_kit::Hsla> {
+    let (x, y, width, height) = bounds(cx, window, id)?;
+    cx.update_window(window, |_, window, _| {
+        // Quads are in device pixels; the element bounds are in points.
+        let scale = window.scale_factor();
+        window
+            .painted_quads()
+            .into_iter()
+            .find(|quad| {
+                let bounds = quad.bounds;
+                let (qx, qy) = (
+                    bounds.origin.x.as_f32() / scale,
+                    bounds.origin.y.as_f32() / scale,
+                );
+                let (qw, qh) = (
+                    bounds.size.width.as_f32() / scale,
+                    bounds.size.height.as_f32() / scale,
+                );
+                quad.border_widths.top.as_f32() > 0.
+                    && (qx - x).abs() < 1.
+                    && (qy - y).abs() < 1.
+                    && (qw - width).abs() < 1.
+                    && (qh - height).abs() < 1.
+            })
+            .map(|quad| quad.border_color)
+    })
+    .unwrap()
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn the_focused_search_has_the_focus_border_and_an_idle_field_the_input_border(
+    cx: &mut TestAppContext,
+) {
+    let (kagan, window, data) = open(cx);
+    fixture_programs(cx, data.path(), &["codex"]);
+    start_in_plain_folder(cx, window, data.path());
+    let (ring, input) = cx.update(|cx| {
+        use gpui_kit::component::ActiveTheme as _;
+        (cx.theme().ring, cx.theme().input)
+    });
+    search(cx, window, &kagan, "");
+    assert_eq!(focused_of(cx, window, "program-search"), Some(true));
+    assert_eq!(painted_border(cx, window, "program-search"), Some(ring));
+    // Move the focus to the grid: the search goes back to the input border.
+    let picker = picker(cx, &kagan);
+    cx.update_window(window, |_, window, cx| {
+        picker.update(cx, |picker, cx| picker.focus_list(window, cx));
+    })
+    .unwrap();
+    cx.run_until_parked();
+    assert_eq!(focused_of(cx, window, "program-search"), Some(false));
+    assert_eq!(painted_border(cx, window, "program-search"), Some(input));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn enter_on_the_custom_command_button_opens_its_fields_and_starts_nothing(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    fixture_programs(cx, data.path(), &["codex"]);
+    let project = start_in_plain_folder(cx, window, data.path());
+    let before = threads_in(cx, &project).len();
+    let picker = picker(cx, &kagan);
+    cx.update_window(window, |_, window, cx| {
+        picker.update(cx, |picker, cx| picker.focus(window, cx));
+    })
+    .unwrap();
+    // Search, then the grid, then the Custom command button. The button sits below the fold in a
+    // short window, so the form scrolls to it.
+    cx.simulate_keystrokes(window, "tab");
+    cx.simulate_keystrokes(window, "tab");
+    scroll_form_to_end(cx, window);
+    cx.simulate_keystrokes(window, "enter");
+    wait_until(cx, |cx| shows(cx, window, "custom-program"));
+    cx.run_until_parked();
+    assert_eq!(
+        threads_in(cx, &project).len(),
+        before,
+        "Enter on the button starts no thread"
     );
 }

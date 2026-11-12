@@ -10,8 +10,13 @@ use kg_domain::{Program, split_program};
 use super::{CloseCustomCommand, RetryPrograms};
 
 pub(crate) const CONTEXT: &str = "ProgramPicker";
+// The card grid alone takes Enter: a focused button under it keeps its own Enter.
+pub(crate) const GRID_CONTEXT: &str = "ProgramGrid";
+// The Custom command button: the start form binds Enter to nothing in its controls, so the button
+// binds its own.
+pub(crate) const CUSTOM_CONTEXT: &str = "ProgramCustom";
 
-pub(crate) fn bindings() -> [gpui_kit::KeyBinding; 5] {
+pub(crate) fn bindings() -> [gpui_kit::KeyBinding; 6] {
     use gpui_kit::KeyBinding;
     use gpui_kit::base::actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp};
     [
@@ -19,7 +24,12 @@ pub(crate) fn bindings() -> [gpui_kit::KeyBinding; 5] {
         KeyBinding::new("down", SelectDown, Some(CONTEXT)),
         KeyBinding::new("left", SelectLeft, Some(CONTEXT)),
         KeyBinding::new("right", SelectRight, Some(CONTEXT)),
-        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
+        KeyBinding::new("enter", Confirm { secondary: false }, Some(GRID_CONTEXT)),
+        KeyBinding::new(
+            "enter",
+            crate::kagan::ToggleCustomCommand,
+            Some(CUSTOM_CONTEXT),
+        ),
     ]
 }
 

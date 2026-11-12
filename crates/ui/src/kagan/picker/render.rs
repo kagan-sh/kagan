@@ -6,7 +6,7 @@ use gpui_kit::component::FocusableExt as _;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::input::Input;
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{Sizable as _, v_flex};
+use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Bounds, Context, Hsla, InteractiveElement as _, IntoElement,
@@ -18,7 +18,7 @@ use kg_domain::{Program, ProgramSource};
 use super::list::{Version, version_of};
 use super::mark::program_mark;
 use super::saved;
-use super::{COLUMNS, CONTEXT, Mode, Picker, Programs};
+use super::{COLUMNS, CONTEXT, CUSTOM_CONTEXT, GRID_CONTEXT, Mode, Picker, Programs};
 use super::{CloseCustomCommand, RetryPrograms};
 use crate::kagan::controls::program_key;
 use crate::kagan::controls::{control, dispatch, note};
@@ -27,8 +27,8 @@ use crate::ui_registry::Facts;
 
 // A card fills its column and is this tall: the mark on top, the name, then its caption.
 const CARD_HEIGHT: f32 = 96.;
-// The grid shows this many rows of cards, then scrolls: three rows hold nine cards, and a tenth,
-// the custom command, scrolls into view. Three rows and the Start row fit a 720-point window.
+// The grid shows this many rows of cards, then scrolls: three rows hold nine cards, and a tenth
+// scrolls into view. Three rows and the Start row fit a 720-point window.
 const VISIBLE_ROWS: f32 = 3.;
 
 #[derive(IntoElement)]
@@ -142,17 +142,20 @@ fn custom_toggle(open: bool) -> AnyElement {
     } else {
         "Custom command"
     };
-    control(
-        "custom-command-toggle",
-        Facts::button(label),
-        Button::new("custom-command-toggle-button")
-            .small()
-            .outline()
-            .icon(gpui_kit::assets::IconName::SquareTerminal)
-            .label(label)
-            .on_click(dispatch(crate::kagan::ToggleCustomCommand)),
-    )
-    .into_any_element()
+    // A row, so the button keeps its own width under the grid's full-width column.
+    h_flex()
+        .key_context(CUSTOM_CONTEXT)
+        .child(control(
+            "custom-command-toggle",
+            Facts::button(label),
+            Button::new("custom-command-toggle-button")
+                .small()
+                .outline()
+                .icon(gpui_kit::assets::IconName::SquareTerminal)
+                .label(label)
+                .on_click(dispatch(crate::kagan::ToggleCustomCommand)),
+        ))
+        .into_any_element()
 }
 
 // The first row's cards share a top edge, so the cards in that row are the columns.
@@ -204,6 +207,7 @@ impl Picker {
                 _ = measured.update(cx, |this, _| this.cards.columns = columns);
             })
             .id("program-list")
+            .key_context(GRID_CONTEXT)
             .ui_observe_as(Facts {
                 role: Role::ListBox,
                 focus: Some(self.grid.clone()),
@@ -270,8 +274,8 @@ impl Render for Picker {
             }))
             .on_action(cx.listener(|this, _: &SelectLeft, _, cx| this.move_by(-1, cx)))
             .on_action(cx.listener(|this, _: &SelectRight, _, cx| this.move_by(1, cx)))
-            // Enter in the custom fields is theirs: it saves or starts from the field itself.
             .on_action(cx.listener(|this, _: &Confirm, _, cx| {
+                // Only the grid has this context, so Enter here starts the selected card.
                 if this.mode == Mode::Custom {
                     return;
                 }
