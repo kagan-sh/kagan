@@ -1,7 +1,8 @@
 # Product Rust line ceilings. A count may grow up to its ceiling, never past it.
-# This branch: main is 80936 lines, and the merged count is 82464 (+1528). The ceiling is that count.
+# This branch: main is 81471 lines, and the merged count is 82552 (+1081). The ceiling is that count.
 target 35000
-ceiling 82464
+# The browser QA fixes add 88 lines on top of main (81383, after #135): the held-thread tab, the hide calls, the page inset, the toolbar and the test-only shown record. The ceiling is set to the merged count.
+ceiling 82552
 allow_expect 8
 crates/core/src/thread/agent/files.rs 754
 crates/ui/src/theme/catalog.rs 646
