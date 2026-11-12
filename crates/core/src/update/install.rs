@@ -136,11 +136,7 @@ impl Target {
     pub(super) fn replace(&self, staged: &Path) -> io::Result<()> {
         match self.install {
             InstallKind::App => swap(staged, &self.path),
-            InstallKind::Installer => Command::new(staged)
-                .arg("/P")
-                .stdin(Stdio::null())
-                .spawn()
-                .map(drop),
+            InstallKind::Installer => windows_setup(staged, false).spawn().map(drop),
             _ => std::fs::rename(staged, &self.path),
         }
     }
@@ -149,11 +145,7 @@ impl Target {
     pub(super) fn relaunch(&self) -> io::Result<()> {
         let mut command = match self.install {
             InstallKind::Installer => {
-                return Command::new(&self.staged)
-                    .args(["/P", "/R"])
-                    .stdin(Stdio::null())
-                    .spawn()
-                    .map(drop);
+                return windows_setup(&self.staged, true).spawn().map(drop);
             }
             // `open` starts the bundle as Finder would, and passes on only the `--env` it is given.
             InstallKind::App => {
@@ -195,6 +187,34 @@ fn waiting(then: &str) -> Command {
         ))
         .arg("sh")
         .arg(std::process::id().to_string());
+    command
+}
+
+// The Windows setup cannot replace a kg.exe that is still running, so a waiter runs it after this
+// process has ended. `/R` opens kagan again. The waiter gets its inputs from the environment, so no
+// path is quoted into the script, and no `KG_` variable reaches kagan's own children.
+const WINDOWS_WAIT: &str = "Wait-Process -Id $env:KAGAN_UPDATE_PID -Timeout 120 -ErrorAction SilentlyContinue; Start-Process -FilePath $env:KAGAN_UPDATE_SETUP -ArgumentList $env:KAGAN_UPDATE_ARGS";
+
+fn windows_setup(setup: &Path, restart: bool) -> Command {
+    let mut command = Command::new("powershell.exe");
+    command
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            WINDOWS_WAIT,
+        ])
+        .env("KAGAN_UPDATE_PID", std::process::id().to_string())
+        .env("KAGAN_UPDATE_SETUP", setup)
+        .env("KAGAN_UPDATE_ARGS", if restart { "/P /R" } else { "/P" })
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    // CREATE_NO_WINDOW: the waiter needs no console window of its own.
+    #[cfg(windows)]
+    std::os::windows::process::CommandExt::creation_flags(&mut command, 0x0800_0000);
     command
 }
 
@@ -331,6 +351,52 @@ mod tests {
         let outside = posix("/usr/bin/kg");
         let target = Target::find("linux", &outside, Some(image), Some(&mounted), &[]);
         assert_eq!(target.install, InstallKind::Other);
+    }
+
+    fn env_of(command: &Command, name: &str) -> Option<String> {
+        command
+            .get_envs()
+            .find(|(key, _)| *key == name)
+            .and_then(|(_, value)| value)
+            .map(|value| value.to_string_lossy().into_owned())
+    }
+
+    #[test]
+    fn a_windows_setup_is_started_by_a_waiter_not_directly() {
+        let setup = posix("C:/kagan/kagan-update-setup.exe");
+        let command = windows_setup(&setup, true);
+        assert_eq!(command.get_program(), "powershell.exe");
+        assert!(command.get_args().any(|arg| arg == WINDOWS_WAIT));
+        assert_ne!(command.get_program(), setup.as_os_str());
+    }
+
+    #[test]
+    fn the_waiter_waits_for_this_kagan_then_runs_the_setup() {
+        let setup = posix("C:/kagan/kagan-update-setup.exe");
+        let command = windows_setup(&setup, true);
+        assert_eq!(
+            env_of(&command, "KAGAN_UPDATE_PID"),
+            Some(std::process::id().to_string())
+        );
+        assert_eq!(
+            env_of(&command, "KAGAN_UPDATE_SETUP"),
+            Some(setup.to_string_lossy().into_owned())
+        );
+        assert!(WINDOWS_WAIT.contains("Wait-Process -Id $env:KAGAN_UPDATE_PID"));
+        assert!(WINDOWS_WAIT.contains("Start-Process -FilePath $env:KAGAN_UPDATE_SETUP"));
+    }
+
+    #[test]
+    fn a_restart_opens_kagan_again_and_an_install_at_quit_does_not() {
+        let setup = posix("C:/kagan/kagan-update-setup.exe");
+        assert_eq!(
+            env_of(&windows_setup(&setup, true), "KAGAN_UPDATE_ARGS").as_deref(),
+            Some("/P /R")
+        );
+        assert_eq!(
+            env_of(&windows_setup(&setup, false), "KAGAN_UPDATE_ARGS").as_deref(),
+            Some("/P")
+        );
     }
 
     #[test]
