@@ -89,6 +89,7 @@ fn dock_count_tracks_distinct_threads_after_the_window_closes(cx: &mut TestAppCo
             attention.questions.len() == 2 && attention.count(cx) == 1
         })
     });
+    cx.update(crate::about::show);
     cx.update_window(window, |_, window, _| window.remove_window())
         .unwrap();
     cx.run_until_parked();
