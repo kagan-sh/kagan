@@ -1,53 +1,26 @@
-use gpui_kit::component::IndexPath;
 use gpui_kit::component::input::{InputEvent, InputState};
-use gpui_kit::component::list::{ListEvent, ListState};
 use gpui_kit::{App, AppContext as _, Context, Focusable as _, Window};
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, ProgramList, ProgramOp};
 
 use super::list::custom_command;
-use super::{Mode, Picker, Programs, Rows, Start};
+use super::{Cards, Mode, Picker, Programs, Start};
 
 impl Picker {
     pub(crate) fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let picker = cx.weak_entity();
-        let list = cx.new(|cx| ListState::new(Rows::new(picker), window, cx));
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search programs"));
         let program =
             cx.new(|cx| InputState::new(window, cx).placeholder("Program, such as claude"));
         let arguments = cx.new(|cx| InputState::new(window, cx).placeholder("Arguments, if any"));
         let name = cx.new(|cx| InputState::new(window, cx).placeholder("Name, to save it"));
-        let mut subscriptions = vec![
-            cx.observe(&list, |_, _, cx| cx.notify()),
-            cx.subscribe_in(
-                &list,
-                window,
-                |this, _, event: &ListEvent, window, cx| match event {
-                    ListEvent::Confirm(ix) => {
-                        this.list
-                            .update(cx, |list, _| list.delegate_mut().selected = Some(ix.row));
-                        this.confirm(cx);
-                    }
-                    ListEvent::Cancel => {
-                        // Escape makes the list drop its own selection. The row the person saw stays
-                        // the one that starts, so the list is put back to the delegate's choice.
-                        // CloseCustomCommand is the same key and emits Close, so this must not.
-                        this.set_mode(Mode::Catalog, cx);
-                        let selected = this.list.read(cx).delegate().selected;
-                        this.list.update(cx, |list, cx| {
-                            list.set_selected_index(selected.map(IndexPath::new), window, cx);
-                        });
-                        cx.notify();
-                    }
-                    ListEvent::Select(_) => cx.notify(),
-                },
-            ),
-            cx.subscribe_in(&search, window, |this, _, event, window, cx| match event {
-                InputEvent::Change => this.search_changed(window, cx),
-                InputEvent::PressEnter { .. } => this.confirm(cx),
-                InputEvent::Focus | InputEvent::Blur => {}
-            }),
-        ];
+        let mut subscriptions =
+            vec![
+                cx.subscribe_in(&search, window, |this, _, event, _, cx| match event {
+                    InputEvent::Change => this.search_changed(cx),
+                    InputEvent::PressEnter { .. } => this.confirm(cx),
+                    InputEvent::Focus | InputEvent::Blur => {}
+                }),
+            ];
         subscriptions.extend([&program, &arguments].map(|field| {
             cx.subscribe_in(field, window, |_, _, event, _, cx| {
                 if let InputEvent::PressEnter { .. } = event {
@@ -73,7 +46,9 @@ impl Picker {
         );
         Self {
             state: Programs::default(),
-            list,
+            cards: Cards::new(),
+            grid: cx.focus_handle(),
+            scroll: gpui_kit::ScrollHandle::new(),
             search,
             mode: Mode::Catalog,
             program,
@@ -103,8 +78,7 @@ impl Picker {
         self.set_mode(Mode::Catalog, cx);
         self.notice = None;
         self.state = Programs::Loading;
-        self.list
-            .update(cx, |list, _| list.delegate_mut().loading = true);
+        self.cards.loading = true;
         let task = Workspace::dispatch(
             Op::Program(ProgramOp::Discover {
                 project_id: project.clone(),
@@ -114,10 +88,10 @@ impl Picker {
         let window = window.window_handle();
         self.load_task = Some(cx.spawn(async move |this, cx| {
             let result = task.await;
-            _ = cx.update_window(window, |_, window, cx| {
+            _ = cx.update_window(window, |_, _, cx| {
                 _ = this.update(cx, |this, cx| {
                     match result {
-                        Ok(OpResult::Programs(list)) => this.show(list, window, cx),
+                        Ok(OpResult::Programs(list)) => this.show(list, cx),
                         Ok(_) => this.state = Programs::Failed("the reply had no programs".into()),
                         Err(error) => this.state = Programs::Failed(error.to_string()),
                     }
@@ -134,30 +108,30 @@ impl Picker {
             });
             if let Ok(OpResult::Programs(programs)) = versions.await {
                 _ = this.update(cx, |this, cx| {
-                    this.list.update(cx, |state, cx| {
-                        let rows = state.delegate_mut();
-                        for program in &mut rows.all {
-                            if let Some(found) = programs.programs.iter().find(|found| {
-                                found.command == program.command && found.path == program.path
-                            }) {
-                                program.version.clone_from(&found.version);
-                            }
+                    let cards = &mut this.cards;
+                    for program in &mut cards.all {
+                        if let Some(found) = programs.programs.iter().find(|found| {
+                            found.command == program.command && found.path == program.path
+                        }) {
+                            program.version.clone_from(&found.version);
                         }
-                        for program in &mut rows.matches {
-                            if let Some(found) = rows.all.iter().find(|found| {
-                                found.command == program.command && found.path == program.path
-                            }) {
-                                program.version.clone_from(&found.version);
-                            }
+                    }
+                    for program in &mut cards.matches {
+                        if let Some(found) = cards.all.iter().find(|found| {
+                            found.command == program.command && found.path == program.path
+                        }) {
+                            program.version.clone_from(&found.version);
                         }
-                        cx.notify();
-                    });
+                    }
+                    cx.notify();
                 });
             }
         }));
     }
 
-    fn confirm(&mut self, cx: &mut Context<Self>) {
+    // Enter, a card's click and the search's Enter start the selected program. The custom card
+    // opens its fields instead, which the key and the click do themselves.
+    pub(super) fn confirm(&mut self, cx: &mut Context<Self>) {
         self.set_mode(Mode::Catalog, cx);
         if self.command(cx).is_ok() {
             cx.emit(Start);
@@ -165,53 +139,50 @@ impl Picker {
         cx.notify();
     }
 
-    fn search_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    // A card's click: the card is selected and the grid takes the focus. The custom card opens
+    // its fields, and a program card starts.
+    pub(super) fn pick(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        window.focus(&self.grid.clone(), cx);
+        if index == self.cards.matches.len() {
+            // The program the person chose stays the selection, so Escape returns to it.
+            self.toggle_custom(window, cx);
+        } else {
+            self.cards.cursor = index;
+            self.confirm(cx);
+        }
+    }
+
+    fn search_changed(&mut self, cx: &mut Context<Self>) {
         let query = self.search.read(cx).value().to_string();
-        self.list.update(cx, |state, cx| {
-            state.delegate_mut().search(&query);
-            let selected = state.delegate().selected.map(IndexPath::new);
-            state.set_selected_index(selected, window, cx);
-            cx.notify();
-        });
+        self.cards.search(&query);
+        cx.notify();
     }
 
-    pub(super) fn move_selection(
-        &mut self,
-        step: isize,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.list.update(cx, |state, cx| {
-            let rows = state.delegate();
-            let count = rows.matches.len();
-            if count == 0 {
-                return;
-            }
-            let current = rows.selected.unwrap_or(0).cast_signed();
-            let next = (current + step)
-                .clamp(0, count.cast_signed() - 1)
-                .cast_unsigned();
-            state.set_selected_index(Some(IndexPath::new(next)), window, cx);
-            state.scroll_to_selected_item(window, cx);
-        });
+    // Moves the selection across the cards, to the custom card at the end. Up and Down pass the
+    // number of cards in a row; a move past either end stops at it.
+    pub(super) fn move_by(&mut self, step: isize, cx: &mut Context<Self>) {
+        let last = self.cards.matches.len().cast_signed();
+        let next = (self.cards.cursor.cast_signed() + step).clamp(0, last);
+        self.cards.cursor = next.cast_unsigned();
+        self.scroll.scroll_to_item(self.cards.cursor);
+        cx.notify();
     }
 
-    fn show(&mut self, list: ProgramList, window: &mut Window, cx: &mut Context<Self>) {
+    fn show(&mut self, list: ProgramList, cx: &mut Context<Self>) {
         self.state = Programs::Loaded;
-        self.list.update(cx, |state, cx| {
-            let rows = state.delegate_mut();
-            rows.loading = false;
-            rows.all = list.programs;
-            rows.filter();
-            if let Some(default) = &list.default
-                && let Some(row) = rows.matches.iter().position(|p| &p.command == default)
-            {
-                rows.selected = Some(row);
-            }
-            let selected = rows.selected.map(IndexPath::new);
-            state.set_selected_index(selected, window, cx);
-            state.scroll_to_selected_item(window, cx);
-        });
+        self.cards.loading = false;
+        self.cards.all = list.programs;
+        self.cards.filter();
+        if let Some(default) = &list.default
+            && let Some(row) = self
+                .cards
+                .matches
+                .iter()
+                .position(|p| &p.command == default)
+        {
+            self.cards.cursor = row;
+        }
+        cx.notify();
     }
 
     #[cfg(test)]
@@ -251,17 +222,13 @@ impl Picker {
         cx.notify();
     }
 
-    // The list draws its selection from the same mode, so both change together. Leaving the custom
-    // command ends a rename too.
+    // Leaving the custom command ends a rename too.
     pub(super) fn set_mode(&mut self, mode: Mode, cx: &mut Context<Self>) {
         self.mode = mode;
         if mode == Mode::Catalog {
             self.editing = None;
         }
-        self.list.update(cx, |list, cx| {
-            list.delegate_mut().mode = mode;
-            cx.notify();
-        });
+        cx.notify();
     }
 
     fn focus_custom(&self, window: &mut Window, cx: &mut Context<Self>) {
@@ -274,7 +241,7 @@ impl Picker {
 
     #[cfg(test)]
     pub(crate) fn focus_list(&self, window: &mut Window, cx: &mut Context<Self>) {
-        self.list.update(cx, |list, cx| list.focus(window, cx));
+        window.focus(&self.grid, cx);
     }
 
     pub(crate) fn command(&self, cx: &App) -> Result<String, String> {
@@ -283,8 +250,7 @@ impl Picker {
             let arguments = self.arguments.read(cx).value().trim().to_owned();
             return custom_command(&program, &arguments).map_err(|(_, message)| message);
         }
-        let list = self.list.read(cx).delegate();
-        match list.selected() {
+        match self.cards.selected() {
             Some(program) if program.installed() => Ok(program.command.clone()),
             Some(program) => Err(format!(
                 "{} is not installed. Install it, or choose another program.",

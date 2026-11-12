@@ -1,17 +1,12 @@
-use crate::theme::TypeScale as _;
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::list::{ListDelegate, ListItem, ListState};
-use gpui_kit::component::{IndexPath, Selectable, v_flex};
+use gpui_kit::component::v_flex;
 use gpui_kit::{
-    App, Context, Entity, Focusable as _, Hsla, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _, WeakEntity, Window, div,
+    App, Entity, Focusable as _, Hsla, InteractiveElement as _, IntoElement, MouseButton,
+    ParentElement as _, StatefulInteractiveElement as _, Styled as _, div,
 };
 use kg_domain::{Program, split_program};
 
-use crate::kagan::controls::program_key;
-
-use super::{Mode, Picker, Rows};
+use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -60,89 +55,6 @@ pub(super) fn custom_command(program: &str, arguments: &str) -> Result<String, (
         )
     })?;
     Ok(command)
-}
-
-impl ListDelegate for Rows {
-    type Item = ProgramRow;
-
-    fn items_count(&self, _: usize, _: &App) -> usize {
-        self.matches.len()
-    }
-
-    fn loading(&self, _: &App) -> bool {
-        self.loading
-    }
-
-    fn render_item(
-        &mut self,
-        ix: IndexPath,
-        _: &mut Window,
-        cx: &mut Context<ListState<Self>>,
-    ) -> Option<Self::Item> {
-        let program = self.matches.get(ix.row)?.clone();
-        Some(ProgramRow {
-            base: ListItem::new(format!("program-item-{}", program_key(&program))),
-            selected: self.mode == Mode::Catalog && self.selected == Some(ix.row),
-            mode: self.mode,
-            first: ix.row == 0,
-            list: cx.entity().downgrade(),
-            picker: self.picker.clone(),
-            program,
-        })
-    }
-
-    fn set_selected_index(
-        &mut self,
-        ix: Option<IndexPath>,
-        _: &mut Window,
-        cx: &mut Context<ListState<Self>>,
-    ) {
-        if ix.is_some() || self.matches.is_empty() {
-            self.selected = ix.map(|ix| ix.row);
-        }
-        cx.notify();
-    }
-
-    fn render_empty(
-        &mut self,
-        _: &mut Window,
-        cx: &mut Context<ListState<Self>>,
-    ) -> impl IntoElement {
-        let text = format!(
-            "No program matches “{}”. Clear the search to see them all.",
-            self.query
-        );
-        div()
-            .id("program-empty")
-            .ui_container()
-            .p_2()
-            .type_body(cx)
-            .text_color(cx.theme().muted_foreground)
-            .aria_label(text.clone())
-            .child(text)
-    }
-}
-
-#[derive(IntoElement)]
-pub(crate) struct ProgramRow {
-    pub(super) base: ListItem,
-    pub(super) program: Program,
-    pub(super) selected: bool,
-    pub(super) mode: Mode,
-    pub(super) first: bool,
-    pub(super) list: WeakEntity<ListState<Rows>>,
-    pub(super) picker: WeakEntity<Picker>,
-}
-
-impl Selectable for ProgramRow {
-    fn selected(mut self, selected: bool) -> Self {
-        self.selected = selected && self.mode == Mode::Catalog;
-        self
-    }
-
-    fn is_selected(&self) -> bool {
-        self.selected
-    }
 }
 
 pub(super) fn custom_field(

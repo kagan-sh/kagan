@@ -16,6 +16,8 @@ const AGENT_MARKS: &[(&str, &str)] = &[
     ("gemini", "agents/gemini.svg"),
     ("copilot", "agents/copilot.svg"),
     ("opencode", "agents/opencode.svg"),
+    ("cursor-agent", "agents/cursor.svg"),
+    ("kimi", "agents/kimi.svg"),
 ];
 
 const MARK: f32 = 20.;

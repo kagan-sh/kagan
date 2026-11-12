@@ -1,14 +1,13 @@
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::input::InputState;
-use gpui_kit::component::list::ListState;
 use gpui_kit::component::v_flex;
 use gpui_kit::{
-    AnyElement, Context, Entity, EventEmitter, IntoElement, ParentElement as _, Pixels,
-    SharedString, Styled as _, Subscription, Task, WeakEntity,
+    AnyElement, Context, Entity, EventEmitter, FocusHandle, IntoElement, ParentElement as _,
+    ScrollHandle, SharedString, Styled as _, Subscription, Task,
 };
 use kg_domain::{Program, split_program};
 
-use super::{CloseCustomCommand, RetryPrograms, ToggleCustomCommand};
+use super::{CloseCustomCommand, RetryPrograms};
 
 pub(crate) const CONTEXT: &str = "ProgramPicker";
 
@@ -23,7 +22,8 @@ enum Programs {
     Failed(String),
 }
 
-const LIST_ROWS: u16 = 8;
+// The cards in a row, when the grid is at its widest. A narrower grid wraps to fewer.
+const COLUMNS: usize = 3;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 enum Mode {
@@ -32,29 +32,27 @@ enum Mode {
     Custom,
 }
 
-pub(super) struct Rows {
+// The program cards: the programs that match the search, then the custom command card.
+pub(super) struct Cards {
     all: Vec<Program>,
     matches: Vec<Program>,
-    selected: Option<usize>,
+    // An index into `matches`, or `matches.len()` for the custom command card.
+    cursor: usize,
     query: String,
     loading: bool,
-    mode: Mode,
-    row_height: Option<Pixels>,
-    // The picker that owns these rows, for a saved program's pin, rename and delete buttons.
-    picker: WeakEntity<Picker>,
+    // The cards in a row, as the last paint laid them out. Up and Down move by this many.
+    columns: usize,
 }
 
-impl Rows {
-    fn new(picker: WeakEntity<Picker>) -> Self {
+impl Cards {
+    fn new() -> Self {
         Self {
             all: Vec::new(),
             matches: Vec::new(),
-            selected: None,
+            cursor: 0,
             query: String::new(),
             loading: false,
-            mode: Mode::Catalog,
-            row_height: None,
-            picker,
+            columns: COLUMNS,
         }
     }
 
@@ -78,17 +76,24 @@ impl Rows {
             })
             .cloned()
             .collect();
-        self.selected = (!self.matches.is_empty()).then_some(0);
+        self.cursor = 0;
     }
 
     fn selected(&self) -> Option<&Program> {
-        self.selected.and_then(|row| self.matches.get(row))
+        self.matches.get(self.cursor)
+    }
+
+    fn custom_selected(&self) -> bool {
+        self.cursor == self.matches.len()
     }
 }
 
 pub(crate) struct Picker {
     state: Programs,
-    list: Entity<ListState<Rows>>,
+    cards: Cards,
+    // Keys go to the grid when a card has the focus; the search field keeps its own arrows.
+    grid: FocusHandle,
+    scroll: ScrollHandle,
     search: Entity<InputState>,
     mode: Mode,
     program: Entity<InputState>,

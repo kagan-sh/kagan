@@ -65,6 +65,14 @@ const BRAND: &[(&str, &[u8])] = &[
         include_bytes!("../../../assets/agents/copilot.svg"),
     ),
     (
+        "agents/cursor.svg",
+        include_bytes!("../../../assets/agents/cursor.svg"),
+    ),
+    (
+        "agents/kimi.svg",
+        include_bytes!("../../../assets/agents/kimi.svg"),
+    ),
+    (
         "agents/opencode.svg",
         include_bytes!("../../../assets/agents/opencode.svg"),
     ),

@@ -1,13 +1,13 @@
 // Saved programs in the new thread picker: a custom command saved under a name, and a saved
 // program's pin, rename and delete. The rows themselves come from `Discover`.
 
+use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{Sizable as _, h_flex};
 use gpui_kit::{
-    AnyElement, App, Context, Focusable as _, InteractiveElement as _, IntoElement,
-    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, Task,
-    WeakEntity, Window, div,
+    AnyElement, Context, Focusable as _, InteractiveElement as _, IntoElement, ParentElement as _,
+    SharedString, StatefulInteractiveElement as _, Styled as _, Task, WeakEntity, Window, div,
 };
 use kg_core::Workspace;
 use kg_domain::{Op, OpError, OpResult, Program, ProgramOp, ProgramSource};
@@ -61,27 +61,25 @@ impl Picker {
     // The keyboard path to the buttons: each acts on the selected row, and only a saved program has
     // one.
     pub(crate) fn pin_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(program) = self.selected_saved(cx) {
+        if let Some(program) = self.selected_saved() {
             self.set_pinned(program.label, !program.pinned, window, cx);
         }
     }
 
     pub(crate) fn rename_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(program) = self.selected_saved(cx) {
+        if let Some(program) = self.selected_saved() {
             self.begin_rename(&program.label, window, cx);
         }
     }
 
     pub(crate) fn delete_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(program) = self.selected_saved(cx) {
+        if let Some(program) = self.selected_saved() {
             self.remove_saved(program.label, window, cx);
         }
     }
 
-    fn selected_saved(&self, cx: &App) -> Option<Program> {
-        self.list
-            .read(cx)
-            .delegate()
+    fn selected_saved(&self) -> Option<Program> {
+        self.cards
             .selected()
             .filter(|program| program.source == ProgramSource::Saved)
             .cloned()
@@ -162,8 +160,9 @@ pub(super) fn notice(text: SharedString, cx: &gpui_kit::App) -> impl IntoElement
         .child(text)
 }
 
-// A saved program's row buttons: pin or unpin, rename, and delete. Other rows have none.
-pub(super) fn row_actions(program: &Program, picker: &WeakEntity<Picker>) -> Option<AnyElement> {
+// A saved program's card buttons: pin or unpin, rename, and delete. Other cards have none. They are
+// icons, always shown, so the card keeps its size.
+pub(super) fn card_actions(program: &Program, picker: &WeakEntity<Picker>) -> Option<AnyElement> {
     if program.source != ProgramSource::Saved {
         return None;
     }
@@ -180,23 +179,26 @@ pub(super) fn row_actions(program: &Program, picker: &WeakEntity<Picker>) -> Opt
         h_flex()
             .gap_1()
             .flex_shrink_0()
-            .child(row_button(
+            .child(card_button(
                 format!("program-pin-{key}"),
                 pin_label,
+                Some(IconName::Pin),
                 &name,
                 picker.clone(),
                 move |this, window, cx| this.set_pinned(pin_name.clone(), pinned, window, cx),
             ))
-            .child(row_button(
+            .child(card_button(
                 format!("program-rename-{key}"),
                 "Rename",
+                None,
                 &name,
                 picker.clone(),
                 move |this, window, cx| this.begin_rename(&rename_name, window, cx),
             ))
-            .child(row_button(
+            .child(card_button(
                 format!("program-delete-{key}"),
                 "Delete",
+                None,
                 &name,
                 picker,
                 move |this, window, cx| this.remove_saved(delete_name.clone(), window, cx),
@@ -205,9 +207,10 @@ pub(super) fn row_actions(program: &Program, picker: &WeakEntity<Picker>) -> Opt
     )
 }
 
-fn row_button(
+fn card_button(
     id: String,
     label: &'static str,
+    icon: Option<IconName>,
     subject: &str,
     picker: WeakEntity<Picker>,
     run: impl Fn(&mut Picker, &mut Window, &mut Context<Picker>) + 'static,
@@ -217,14 +220,14 @@ fn row_button(
         .id(id)
         .ui_observe_as(Facts::button(format!("{label} {subject}")))
         .child(
-            Button::new(button)
-                .small()
-                .ghost()
-                .label(label)
-                .on_click(move |_, window, cx| {
-                    cx.stop_propagation();
-                    _ = picker.update(cx, |this, cx| run(this, window, cx));
-                }),
+            match icon {
+                Some(icon) => Button::new(button).small().ghost().icon(icon),
+                None => Button::new(button).small().ghost().label(label),
+            }
+            .on_click(move |_, window, cx| {
+                cx.stop_propagation();
+                _ = picker.update(cx, |this, cx| run(this, window, cx));
+            }),
         )
         .into_any_element()
 }

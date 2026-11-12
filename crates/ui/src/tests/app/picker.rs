@@ -69,6 +69,16 @@ fn picker(cx: &mut TestAppContext, kagan: &Entity<Kagan>) -> Entity<crate::kagan
     cx.update(|cx| kagan.read(cx).picker_entity())
 }
 
+// Left and Right belong to the search box while it has the focus, so the grid takes it first.
+#[cfg(unix)]
+fn focus_grid(cx: &mut TestAppContext, window: AnyWindowHandle, kagan: &Entity<Kagan>) {
+    let picker = picker(cx, kagan);
+    cx.update_window(window, |_, window, cx| {
+        picker.update(cx, |picker, cx| picker.focus_list(window, cx));
+    })
+    .unwrap();
+}
+
 #[cfg(unix)]
 fn command(cx: &mut TestAppContext, kagan: &Entity<Kagan>) -> Result<String, String> {
     let picker = picker(cx, kagan);
@@ -248,7 +258,7 @@ fn escape_closes_the_custom_command_from_its_fields_and_from_the_list(cx: &mut T
 #[cfg(unix)]
 #[gpui_kit::test]
 fn the_selected_row_is_marked_on_screen_and_in_words(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open(cx);
+    let (kagan, window, data) = open(cx);
     let bin = fixture_programs(cx, data.path(), &["codex"]);
     start_in_plain_folder(cx, window, data.path());
     assert_eq!(label(cx, window, "program-codex"), "Codex, selected");
@@ -276,7 +286,8 @@ fn the_selected_row_is_marked_on_screen_and_in_words(cx: &mut TestAppContext) {
     );
     let shell = bin.join("fixture-shell").display().to_string();
     assert_eq!(label(cx, window, &format!("program-name-{shell}")), "Shell");
-    cx.simulate_keystrokes(window, "down");
+    focus_grid(cx, window, &kagan);
+    cx.simulate_keystrokes(window, "right");
     wait_until(cx, |cx| {
         label(cx, window, &format!("program-name-{shell}")) == "Shell, selected"
     });
@@ -307,12 +318,9 @@ fn a_known_agent_row_shows_its_version_and_a_shell_row_shows_its_command(cx: &mu
     wait_until(cx, |cx| {
         label(cx, window, "program-version-codex") == "1.2.3"
     });
-    assert!(!shows(cx, window, "program-command-codex"));
+    // A card's command is its tooltip, not a line on the card.
     let shell = bin.join("fixture-shell").display().to_string();
-    assert_eq!(
-        label(cx, window, &format!("program-command-{shell}")),
-        shell
-    );
+    assert_eq!(label(cx, window, &format!("program-name-{shell}")), "Shell");
 }
 
 #[cfg(unix)]
@@ -519,10 +527,7 @@ fn an_empty_custom_command_says_why_start_is_off(cx: &mut TestAppContext) {
 fn the_custom_command_button_is_named_in_both_states(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
     start_in_plain_folder(cx, window, data.path());
-    assert_eq!(
-        label(cx, window, "custom-command-toggle"),
-        "Custom command…"
-    );
+    assert_eq!(label(cx, window, "custom-command-toggle"), "Custom command");
     click(cx, window, "custom-command-toggle");
     wait_until(cx, |cx| shows(cx, window, "custom-program"));
     assert_eq!(
@@ -531,10 +536,7 @@ fn the_custom_command_button_is_named_in_both_states(cx: &mut TestAppContext) {
     );
     click(cx, window, "custom-command-toggle");
     wait_until(cx, |cx| !shows(cx, window, "custom-program"));
-    assert_eq!(
-        label(cx, window, "custom-command-toggle"),
-        "Custom command…"
-    );
+    assert_eq!(label(cx, window, "custom-command-toggle"), "Custom command");
 }
 
 #[gpui_kit::test]
@@ -646,19 +648,6 @@ const ROW_NAMES: [&str; 7] = [
 ];
 
 #[cfg(unix)]
-fn list_height(cx: &mut TestAppContext, window: AnyWindowHandle) -> f32 {
-    bounds(cx, window, "program-list").unwrap().3
-}
-
-/// The first row's height: the distance from its label down to the next row's label.
-#[cfg(unix)]
-fn row_height(cx: &mut TestAppContext, window: AnyWindowHandle) -> f32 {
-    let (_, first, _, _) = bounds(cx, window, "program-name-claude").unwrap();
-    let (_, second, _, _) = bounds(cx, window, "program-name-codex").unwrap();
-    second - first
-}
-
-#[cfg(unix)]
 fn search(cx: &mut TestAppContext, window: AnyWindowHandle, kagan: &Entity<Kagan>, text: &str) {
     let picker = picker(cx, kagan);
     cx.update_window(window, |_, window, cx| {
@@ -679,65 +668,15 @@ fn assert_close(actual: f32, expected: f32, what: &str) {
 
 #[cfg(unix)]
 #[gpui_kit::test]
-fn a_short_result_is_one_row_and_a_long_one_shows_eight(cx: &mut TestAppContext) {
+fn a_search_leaves_only_its_matching_cards_and_the_custom_card(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
     fixture_programs(cx, data.path(), &ROW_NAMES);
     start_in_plain_folder(cx, window, data.path());
-    let row = row_height(cx, window);
-    let all = list_height(cx, window);
+    assert!(shows(cx, window, "program-claude"));
     search(cx, window, &kagan, "codex");
-    // Eight rows show seven more rows than the one row a search leaves.
-    assert_close(
-        all - list_height(cx, window),
-        7. * row,
-        "eight rows minus one",
-    );
-}
-
-#[cfg(unix)]
-#[gpui_kit::test]
-fn a_list_longer_than_its_rows_says_how_many_more_there_are(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open(cx);
-    fixture_programs(
-        cx,
-        data.path(),
-        &[
-            "claude",
-            "codex",
-            "gemini",
-            "opencode",
-            "cursor-agent",
-            "amp",
-            "copilot",
-            "kimi",
-        ],
-    );
-    start_in_plain_folder(cx, window, data.path());
-    wait_until(cx, |cx| shows(cx, window, "program-more"));
-    assert_eq!(
-        label(cx, window, "program-more"),
-        "1 more. Type to search, or scroll."
-    );
-}
-
-#[cfg(unix)]
-#[gpui_kit::test]
-fn larger_text_makes_the_rows_taller_and_the_eight_row_cap_follows(cx: &mut TestAppContext) {
-    let (kagan, window, data) = open(cx);
-    // kagan has no text-size setting, so larger text is the theme's base font size. It is set
-    // before the picker opens, so the rows are measured once, at that size.
-    cx.update(|cx| gpui_kit::component::theme::Theme::global_mut(cx).font_size = px(24.));
-    fixture_programs(cx, data.path(), &ROW_NAMES);
-    start_in_plain_folder(cx, window, data.path());
-    let row = row_height(cx, window);
-    assert!(row > 28., "rows grow with the text: {row}");
-    let all = list_height(cx, window);
-    search(cx, window, &kagan, "codex");
-    assert_close(
-        all - list_height(cx, window),
-        7. * row,
-        "cap at larger text",
-    );
+    wait_until(cx, |cx| !shows(cx, window, "program-claude"));
+    assert!(shows(cx, window, "program-codex"));
+    assert!(shows(cx, window, "custom-command-toggle"));
 }
 
 #[cfg(unix)]
@@ -889,17 +828,6 @@ fn a_version_shows_its_number_without_its_build_suffix_or_full_stop(cx: &mut Tes
 
 #[cfg(unix)]
 #[gpui_kit::test]
-fn the_custom_command_label_starts_on_the_program_names(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open(cx);
-    fixture_programs(cx, data.path(), &["codex"]);
-    start_in_plain_folder(cx, window, data.path());
-    let (name_x, _, _, _) = bounds(cx, window, "program-name-codex").unwrap();
-    let (label_x, _, _, _) = bounds(cx, window, "custom-command-text").unwrap();
-    assert_close(label_x, name_x, "the custom command label");
-}
-
-#[cfg(unix)]
-#[gpui_kit::test]
 fn reopening_the_screen_closes_the_custom_command(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
     let _bin = fixture_programs(cx, data.path(), &["codex"]);
@@ -966,7 +894,7 @@ fn a_selected_program_below_the_cap_is_in_view_on_every_open(cx: &mut TestAppCon
 #[cfg(unix)]
 #[gpui_kit::test]
 fn programs_show_while_versions_are_loading_and_keep_the_choice(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open(cx);
+    let (kagan, window, data) = open(cx);
     let bin = fixture_programs(cx, data.path(), &["codex", "gemini"]);
     let started = data.path().join("version-started");
     let release = data.path().join("version-release");
@@ -983,7 +911,8 @@ fn programs_show_while_versions_are_loading_and_keep_the_choice(cx: &mut TestApp
     wait_until(cx, |cx| shows(cx, window, "program-codex"));
     wait_until(cx, |_| started.exists());
     assert_eq!(selected_of(cx, window, "program-codex"), Some(true));
-    cx.simulate_keystrokes(window, "down");
+    focus_grid(cx, window, &kagan);
+    cx.simulate_keystrokes(window, "right");
     wait_until(cx, |cx| {
         selected_of(cx, window, "program-gemini") == Some(true)
     });
@@ -997,14 +926,15 @@ fn programs_show_while_versions_are_loading_and_keep_the_choice(cx: &mut TestApp
 #[cfg(unix)]
 #[gpui_kit::test]
 fn the_selected_program_row_reports_selected_as_the_arrow_keys_move(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open(cx);
+    let (kagan, window, data) = open(cx);
     let bin = fixture_programs(cx, data.path(), &["codex"]);
     start_in_plain_folder(cx, window, data.path());
     let shell_row = format!("program-{}", bin.join("fixture-shell").display());
     assert_eq!(selected_of(cx, window, "program-codex"), Some(true));
     assert_eq!(selected_of(cx, window, &shell_row), Some(false));
 
-    cx.simulate_keystrokes(window, "down");
+    focus_grid(cx, window, &kagan);
+    cx.simulate_keystrokes(window, "right");
     wait_until(cx, |cx| selected_of(cx, window, &shell_row) == Some(true));
     assert_eq!(selected_of(cx, window, "program-codex"), Some(false));
 }
