@@ -815,7 +815,7 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 
 ### `Close`
 
-- **Changes**: closes the window. Programs keep running [decision 46] [docs:look]. Clicking the Dock icon opens the window again [decision 66].
+- **Changes**: closes the window. On macOS programs keep running [decision 46] [docs:look], and clicking the Dock icon opens the window again [decision 66]. On Windows and Linux, closing the last window quits kagan as `Quit` does, without the question, once the programs have stopped and their threads are kept to resume [decision 249]. An app started with `--headless` and no window is not affected.
 
 ### `CommandList`, `SearchThreads`, `SavedPrompts`
 

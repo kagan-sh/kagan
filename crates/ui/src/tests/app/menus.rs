@@ -183,6 +183,22 @@ fn command_comma_and_quit_work_outside_the_terminal(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn closing_the_last_window_quits_except_on_macos(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let before = crate::kagan::quit::quit_requests();
+    cx.simulate_keystrokes(window, "cmd-w");
+    cx.run_until_parked();
+    assert!(cx.update(|cx| cx.windows().is_empty()));
+    if cfg!(target_os = "macos") {
+        cx.run_until_parked();
+        assert_eq!(crate::kagan::quit::quit_requests(), before);
+    } else {
+        wait_until(cx, |_| crate::kagan::quit::quit_requests() > before);
+        assert_eq!(crate::kagan::quit::quit_requests(), before + 1);
+    }
+}
+
+#[gpui_kit::test]
 fn quit_is_the_focused_default_of_the_question(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     run_shell(cx);

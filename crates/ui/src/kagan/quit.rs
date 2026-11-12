@@ -7,7 +7,7 @@ use gpui_kit::component::dialog::DialogFooter;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, WindowExt as _};
 use gpui_kit::{
     App, AppContext as _, FocusHandle, Global, InteractiveElement as _, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, div,
+    StatefulInteractiveElement as _, Styled as _, Subscription, div,
 };
 
 use super::show;
@@ -19,6 +19,10 @@ struct QuitPrompt;
 impl Global for QuitPrompt {}
 struct Quitting;
 impl Global for Quitting {}
+struct Ended;
+impl Global for Ended {}
+struct LastWindow(Subscription);
+impl Global for LastWindow {}
 
 static CONFIRMED: AtomicBool = AtomicBool::new(false);
 
@@ -27,11 +31,24 @@ thread_local! {
     static REQUESTS: Cell<usize> = const { Cell::new(0) };
 }
 
-pub(crate) fn prepare(cx: &App) {
+pub(crate) fn prepare(cx: &mut App) {
     let app = cx.to_async();
     APP.with(|slot| *slot.borrow_mut() = Some(app));
     #[cfg(target_os = "macos")]
     install_should_terminate();
+    let closed = cx.on_window_closed(|cx, _| quit_if_none_left(cx));
+    cx.set_global(LastWindow(closed));
+}
+
+// macOS keeps the app in the Dock when its last window closes. Elsewhere that close ends kagan
+// as Quit does, without the prompt: no window is left to ask in.
+fn quit_if_none_left(cx: &mut App) {
+    if cfg!(target_os = "macos") {
+        return;
+    }
+    if cx.windows().is_empty() && !cx.has_global::<Quitting>() && !cx.has_global::<Ended>() {
+        accept(cx);
+    }
 }
 
 pub(crate) fn ask(cx: &mut App) {
@@ -133,6 +150,7 @@ fn quit_footer(focus: &FocusHandle, cx: &App) -> DialogFooter {
 
 pub(crate) fn finish(cx: &mut App) {
     CONFIRMED.store(true, Ordering::SeqCst);
+    cx.set_global(Ended);
     #[cfg(test)]
     REQUESTS.with(|requests| requests.set(requests.get() + 1));
     cx.quit();
