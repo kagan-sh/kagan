@@ -362,18 +362,10 @@ mod tests {
     }
 
     #[test]
-    fn a_windows_setup_is_started_by_a_waiter_not_directly() {
-        let setup = posix("C:/kagan/kagan-update-setup.exe");
+    fn the_waiter_is_powershell_and_gets_the_pid_and_setup_path_exactly() {
+        let setup = posix("C:/kagan dir/it's/kagan-update-setup.exe");
         let command = windows_setup(&setup, true);
         assert_eq!(command.get_program(), "powershell.exe");
-        assert!(command.get_args().any(|arg| arg == WINDOWS_WAIT));
-        assert_ne!(command.get_program(), setup.as_os_str());
-    }
-
-    #[test]
-    fn the_waiter_waits_for_this_kagan_then_runs_the_setup() {
-        let setup = posix("C:/kagan/kagan-update-setup.exe");
-        let command = windows_setup(&setup, true);
         assert_eq!(
             env_of(&command, "KAGAN_UPDATE_PID"),
             Some(std::process::id().to_string())
@@ -382,12 +374,10 @@ mod tests {
             env_of(&command, "KAGAN_UPDATE_SETUP"),
             Some(setup.to_string_lossy().into_owned())
         );
-        assert!(WINDOWS_WAIT.contains("Wait-Process -Id $env:KAGAN_UPDATE_PID"));
-        assert!(WINDOWS_WAIT.contains("Start-Process -FilePath $env:KAGAN_UPDATE_SETUP"));
     }
 
     #[test]
-    fn a_restart_opens_kagan_again_and_an_install_at_quit_does_not() {
+    fn a_restart_passes_r_and_an_install_at_quit_does_not() {
         let setup = posix("C:/kagan/kagan-update-setup.exe");
         assert_eq!(
             env_of(&windows_setup(&setup, true), "KAGAN_UPDATE_ARGS").as_deref(),
@@ -397,6 +387,39 @@ mod tests {
             env_of(&windows_setup(&setup, false), "KAGAN_UPDATE_ARGS").as_deref(),
             Some("/P")
         );
+    }
+
+    // Off Windows there is no PowerShell, so a waiter fails with NotFound. The old direct start of
+    // the setup fails with PermissionDenied, because the setup is not executable. The error kind
+    // tells the two apart, so these fail if `replace` or `relaunch` starts the setup directly.
+    #[cfg(not(windows))]
+    fn installer_target(dir: &tempfile::TempDir) -> (Target, PathBuf) {
+        let staged = dir.path().join("kagan-update-setup.exe");
+        std::fs::write(&staged, "not a program").unwrap();
+        let target = Target {
+            install: InstallKind::Installer,
+            path: dir.path().join("kg.exe"),
+            staged: staged.clone(),
+        };
+        (target, staged)
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn replace_starts_the_waiter_not_the_setup() {
+        let dir = tempfile::tempdir().unwrap();
+        let (target, staged) = installer_target(&dir);
+        let error = target.replace(&staged).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn relaunch_starts_the_waiter_not_the_setup() {
+        let dir = tempfile::tempdir().unwrap();
+        let (target, _) = installer_target(&dir);
+        let error = target.relaunch().unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
     }
 
     #[test]
