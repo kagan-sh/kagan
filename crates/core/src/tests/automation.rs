@@ -319,6 +319,22 @@ async fn deleting_an_automation_waits_for_the_person(cx: &mut TestAppContext) {
 }
 
 #[cfg(unix)]
+fn pause_heard(
+    paused: &async_channel::Receiver<(String, String)>,
+    cx: &mut TestAppContext,
+) -> Option<(String, String)> {
+    for _ in 0..200 {
+        cx.executor().advance_clock(Duration::from_millis(50));
+        cx.run_until_parked();
+        if let Ok(event) = paused.try_recv() {
+            return Some(event);
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    None
+}
+
+#[cfg(unix)]
 async fn runs_with_status(
     automation: &AutomationId,
     status: ThreadStatus,
@@ -362,17 +378,14 @@ async fn three_failed_runs_in_a_row_pause_the_automation(cx: &mut TestAppContext
     .unwrap() else {
         panic!("automation")
     };
-    let told = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let (told, paused) = async_channel::unbounded();
     let workspace = fixture.workspace.clone();
-    let _subscription = cx.update({
-        let told = told.clone();
-        move |cx| {
-            cx.subscribe(&workspace, move |_, event: &crate::WorkspaceEvent, _| {
-                if let crate::WorkspaceEvent::AutomationPaused(name, reason) = event {
-                    told.borrow_mut().push((name.clone(), reason.clone()));
-                }
-            })
-        }
+    let _subscription = cx.update(move |cx| {
+        cx.subscribe(&workspace, move |_, event: &crate::WorkspaceEvent, _| {
+            if let crate::WorkspaceEvent::AutomationPaused(name, reason) = event {
+                let _ = told.try_send((name.clone(), reason.clone()));
+            }
+        })
     });
     for run in 1..=3 {
         cx.executor().advance_clock(Duration::from_secs(60));
@@ -386,15 +399,16 @@ async fn three_failed_runs_in_a_row_pause_the_automation(cx: &mut TestAppContext
     assert!(!row.paused, "it pauses only when the next run is due");
 
     cx.executor().advance_clock(Duration::from_secs(60));
-    for _ in 0..20 {
-        cx.executor().advance_clock(Duration::from_millis(50));
-        cx.run_until_parked();
-    }
+    let heard = pause_heard(&paused, cx);
+    assert_eq!(
+        heard,
+        Some(("Failing".to_owned(), "3 runs failed in a row".to_owned())),
+        "the due run pauses instead of starting"
+    );
     let row = automations(cx).await.remove(0);
     assert!(row.paused, "the due run pauses instead of starting");
-    assert_eq!(
-        *told.borrow(),
-        [("Failing".to_owned(), "3 runs failed in a row".to_owned())],
+    assert!(
+        paused.try_recv().is_err(),
         "the activity log hears about the pause once"
     );
     assert!(row.failing);
