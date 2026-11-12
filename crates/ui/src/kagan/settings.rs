@@ -400,11 +400,8 @@ impl Kagan {
         let prefs = self.prefs.clone();
         cx.spawn(async move |_, cx| {
             let list_order = list_order.await.ok().flatten();
-            let usage_on = usage_limits
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or(kg_domain::prefs::USAGE_LIMITS_DEFAULT);
+            let usage_saved = usage_limits.await.ok().flatten();
+            let usage_on = usage_saved.unwrap_or(kg_domain::prefs::USAGE_LIMITS_DEFAULT);
             let hide_empty_projects = hide_empty.await.ok().flatten().unwrap_or(false);
             let unread_first = unread.await.ok().flatten().unwrap_or(false);
             let hidden_rail = hidden_rail.await.ok().flatten().unwrap_or_default();

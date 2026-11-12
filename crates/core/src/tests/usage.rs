@@ -537,3 +537,129 @@ async fn turning_the_preference_off_drops_the_readings_at_once(cx: &mut TestAppC
         "a turned-off reading is read again, not kept"
     );
 }
+
+/// A made-up `claude` that records its arguments and stdin, then prints `reply` and exits.
+#[cfg(unix)]
+fn fake_claude(folder: &Path, body: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    std::fs::create_dir_all(folder).unwrap();
+    let script = format!(
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{dir}/args.txt'\ncat > '{dir}/stdin.txt'\ncat <<'REPLY'\n{body}\nREPLY\n",
+        dir = folder.display(),
+    );
+    let path = folder.join("claude");
+    std::fs::write(&path, script).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    folder.to_path_buf()
+}
+
+#[cfg(unix)]
+const CLAUDE_REPLY: &str = r#"{"type":"control_response","response":{"subtype":"success","request_id":"initialize","response":{"account":{"email":"person@example.test","subscriptionType":"max"}}}}
+{"type":"control_response","response":{"subtype":"success","request_id":"usage","response":{"subscription_type":"max","rate_limits_available":true,"rate_limits":{"five_hour":{"utilization":37,"resets_at":"2099-01-01T05:00:00+00:00"},"seven_day":{"utilization":12,"resets_at":"2099-01-05T00:00:00+00:00"},"model_scoped":[{"display_name":"Sonnet","utilization":9,"resets_at":"2099-01-05T00:00:00+00:00"}]}}}}"#;
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn claude_bars_come_from_the_installed_cli(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let folder = fake_claude(&fixture.dir.path().join("bin"), CLAUDE_REPLY);
+    cx.update(|cx| crate::use_claude_path(cx, Some(folder.clone().into_os_string())));
+    set_enabled(cx, true).await;
+
+    let view = show(cx, UsageOp::Refresh).await;
+    let account = view
+        .accounts
+        .iter()
+        .find(|account| account.provider == UsageProvider::Claude)
+        .unwrap();
+    assert_eq!(account.status, UsageStatus::Ok);
+    assert_eq!(account.plan.as_deref(), Some("Max"));
+    let labels: Vec<_> = account.windows.iter().map(|w| w.label.as_str()).collect();
+    assert_eq!(labels, ["5h", "7d", "7d Sonnet"]);
+    let stdin = std::fs::read_to_string(folder.join("stdin.txt")).unwrap();
+    assert!(stdin.contains(r#""subtype":"get_usage""#));
+    assert!(stdin.contains(r#""skip_behaviors":true"#));
+    let args = std::fs::read_to_string(folder.join("args.txt")).unwrap();
+    assert!(args.contains("stream-json"));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn no_claude_on_the_path_is_a_message_not_a_crash(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let empty = fixture.dir.path().join("empty");
+    std::fs::create_dir_all(&empty).unwrap();
+    cx.update(|cx| crate::use_claude_path(cx, Some(empty.into_os_string())));
+    set_enabled(cx, true).await;
+
+    let view = show(cx, UsageOp::Refresh).await;
+    let account = view
+        .accounts
+        .iter()
+        .find(|account| account.provider == UsageProvider::Claude)
+        .unwrap();
+    assert_eq!(
+        account.status,
+        UsageStatus::Error {
+            message: "Claude Code is not installed on this computer.".to_owned()
+        }
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_slow_claude_is_stopped_and_says_so(cx: &mut TestAppContext) {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let fixture = Fixture::new(cx).await;
+    let folder = fixture.dir.path().join("slow");
+    std::fs::create_dir_all(&folder).unwrap();
+    let path = folder.join("claude");
+    std::fs::write(&path, "#!/bin/sh\ncat > /dev/null\nsleep 30\n").unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    cx.update(|cx| {
+        crate::use_claude_path(cx, Some(folder.into_os_string()));
+        crate::use_claude_timeout(cx, Duration::from_secs(1));
+    });
+    set_enabled(cx, true).await;
+
+    let started = std::time::Instant::now();
+    let view = show(cx, UsageOp::Refresh).await;
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "the wait is cut short"
+    );
+    let account = view
+        .accounts
+        .iter()
+        .find(|account| account.provider == UsageProvider::Claude)
+        .unwrap();
+    assert_eq!(
+        account.status,
+        UsageStatus::Error {
+            message: "Claude did not answer in time.".to_owned()
+        }
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_reply_kagan_cannot_read_is_a_message(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let folder = fake_claude(&fixture.dir.path().join("bin"), "not json at all");
+    cx.update(|cx| crate::use_claude_path(cx, Some(folder.into_os_string())));
+    set_enabled(cx, true).await;
+
+    let view = show(cx, UsageOp::Refresh).await;
+    let account = view
+        .accounts
+        .iter()
+        .find(|account| account.provider == UsageProvider::Claude)
+        .unwrap();
+    assert_eq!(
+        account.status,
+        UsageStatus::Error {
+            message: "Claude sent a reply kagan could not read.".to_owned()
+        }
+    );
+}

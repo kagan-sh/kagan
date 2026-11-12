@@ -1,6 +1,7 @@
 //! Provider usage limits, read live and kept in memory only (decision 268). A token is read for
 //! one request to its own provider and is never written, copied, cached or logged.
 
+mod claude;
 mod codex;
 mod http;
 
@@ -33,6 +34,7 @@ pub(super) struct Answer {
 
 #[derive(Clone)]
 pub(super) struct Sources {
+    claude: claude::Source,
     codex: codex::Source,
 }
 
@@ -47,6 +49,7 @@ impl Cache {
         Self {
             entries: BTreeMap::new(),
             sources: Sources {
+                claude: claude::Source::initial(),
                 codex: codex::Source::initial(),
             },
             skew: Duration::ZERO,
@@ -138,6 +141,16 @@ impl Cache {
     }
 
     #[cfg(any(test, feature = "test"))]
+    fn use_claude_path(&mut self, path: Option<std::ffi::OsString>) {
+        self.sources.claude.search = claude::Search::Path(path);
+    }
+
+    #[cfg(any(test, feature = "test"))]
+    fn use_claude_timeout(&mut self, timeout: Duration) {
+        self.sources.claude.timeout = timeout;
+    }
+
+    #[cfg(any(test, feature = "test"))]
     fn advance(&mut self, by: Duration) {
         self.skew += by;
     }
@@ -145,6 +158,7 @@ impl Cache {
 
 fn read(provider: UsageProvider, sources: &Sources, now: i64) -> Option<Answer> {
     match provider {
+        UsageProvider::Claude => claude::read(&sources.claude, now),
         UsageProvider::Codex => codex::read(&sources.codex, now),
     }
 }
@@ -185,6 +199,21 @@ pub fn use_codex_source(
     let workspace = Workspace::global(cx);
     workspace.update(cx, |workspace, _| {
         workspace.usage.use_source(codex_home, codex_url);
+    });
+}
+
+/// Where the Claude Code CLI is searched for: a PATH, or `None` for no PATH.
+#[cfg(any(test, feature = "test"))]
+pub fn use_claude_path(cx: &mut gpui_kit::App, path: Option<std::ffi::OsString>) {
+    let workspace = Workspace::global(cx);
+    workspace.update(cx, |workspace, _| workspace.usage.use_claude_path(path));
+}
+
+#[cfg(any(test, feature = "test"))]
+pub fn use_claude_timeout(cx: &mut gpui_kit::App, timeout: Duration) {
+    let workspace = Workspace::global(cx);
+    workspace.update(cx, |workspace, _| {
+        workspace.usage.use_claude_timeout(timeout);
     });
 }
 

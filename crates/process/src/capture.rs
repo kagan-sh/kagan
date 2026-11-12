@@ -16,13 +16,41 @@ pub struct Captured {
 /// When the program cannot start, output cannot be read, it runs past `limit` (`TimedOut`), or
 /// `stop` returns true first (`Interrupted`).
 pub fn capture(command: Command, limit: Duration, stop: impl Fn() -> bool) -> io::Result<Captured> {
+    run(command, Stdio::null(), limit, stop)
+}
+
+/// Like `capture`, with `input` as the program's standard input. The input is written to a file
+/// first, so the program reads all of it and then sees the end of its input.
+///
+/// # Errors
+/// As `capture`, and when the input cannot be written.
+pub fn capture_with_input(
+    command: Command,
+    input: &[u8],
+    limit: Duration,
+    stop: impl Fn() -> bool,
+) -> io::Result<Captured> {
+    use io::{Seek as _, Write as _};
+
+    let mut file = tempfile::tempfile()?;
+    file.write_all(input)?;
+    file.rewind()?;
+    run(command, file.into(), limit, stop)
+}
+
+fn run(
+    command: Command,
+    stdin: Stdio,
+    limit: Duration,
+    stop: impl Fn() -> bool,
+) -> io::Result<Captured> {
     use io::{Read as _, Seek as _};
 
     let mut stdout = tempfile::tempfile()?;
     let mut stderr = tempfile::tempfile()?;
     let mut process = crate::Process::spawn(
         command,
-        Stdio::null(),
+        stdin,
         stdout.try_clone()?.into(),
         stderr.try_clone()?.into(),
     )?;

@@ -291,7 +291,10 @@ fn account_block(
             div()
                 .type_caption(cx)
                 .text_color(Tone::Failed.color(cx))
-                .child("Expired. Sign in again in the provider's app."),
+                .child(format!(
+                    "Expired. Sign in again in {}.",
+                    account.provider.label().to_lowercase()
+                )),
         ),
         UsageStatus::NoLimits => block.child(
             div()
