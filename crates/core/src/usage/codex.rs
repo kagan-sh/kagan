@@ -1,7 +1,6 @@
 //! Codex's usage: the sign-in file in `CODEX_HOME` (default `~/.codex`) and the `ChatGPT` usage
 //! endpoint. The token goes only to that endpoint, and it is never refreshed.
 
-use std::io::Read as _;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -9,10 +8,12 @@ use base64::Engine as _;
 use kg_domain::{UsageAccount, UsageProvider, UsageStatus, UsageWindow};
 use serde_json::Value;
 
+use super::http::{self, Refused};
+use super::{Answer, as_text, error, plain};
+
 pub(super) const HOST: &str = "chatgpt.com";
 pub(super) const URL: &str = "https://chatgpt.com/backend-api/wham/usage";
 const TIMEOUT: Duration = Duration::from_secs(15);
-const LIMIT: u64 = 1024 * 1024;
 const AUTH_CLAIM: &str = "https://api.openai.com/auth";
 const PROFILE_CLAIM: &str = "https://api.openai.com/profile";
 
@@ -56,11 +57,6 @@ impl Source {
     }
 }
 
-pub(super) struct Answer {
-    pub(super) account: UsageAccount,
-    pub(super) busy: bool,
-}
-
 fn home() -> Option<PathBuf> {
     std::env::var_os("CODEX_HOME")
         .filter(|dir| !dir.is_empty())
@@ -73,10 +69,20 @@ pub(super) fn read(source: &Source, now: i64) -> Option<Answer> {
     let text = match std::fs::read_to_string(path) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
-        Err(_) => return Some(plain(error("Could not read the Codex sign-in."), now)),
+        Err(_) => {
+            return Some(plain(
+                UsageProvider::Codex,
+                error("Could not read the Codex sign-in."),
+                now,
+            ));
+        }
     };
     let Ok(file) = serde_json::from_str::<Value>(&text) else {
-        return Some(plain(error("The Codex sign-in file is not valid."), now));
+        return Some(plain(
+            UsageProvider::Codex,
+            error("The Codex sign-in file is not valid."),
+            now,
+        ));
     };
     let tokens = file.get("tokens");
     let token = tokens
@@ -88,7 +94,7 @@ pub(super) fn read(source: &Source, now: i64) -> Option<Answer> {
         } else {
             UsageStatus::Expired
         };
-        return Some(plain(status, now));
+        return Some(plain(UsageProvider::Codex, status, now));
     };
     let login = Login::new(tokens, token);
     if login.expires_at.is_some_and(|expires| now >= expires) {
@@ -170,33 +176,6 @@ impl Login {
     }
 }
 
-fn plain(status: UsageStatus, now: i64) -> Answer {
-    Answer {
-        account: UsageAccount {
-            provider: UsageProvider::Codex,
-            email: None,
-            plan: None,
-            windows: Vec::new(),
-            status,
-            fetched_at: Some(now),
-        },
-        busy: false,
-    }
-}
-
-fn error(message: &str) -> UsageStatus {
-    UsageStatus::Error {
-        message: message.to_owned(),
-    }
-}
-
-fn as_text(value: &Value) -> Option<String> {
-    value
-        .as_str()
-        .filter(|text| !text.is_empty())
-        .map(str::to_owned)
-}
-
 fn claims(jwt: &str) -> Option<Value> {
     let payload = jwt.split('.').nth(1)?;
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -205,66 +184,21 @@ fn claims(jwt: &str) -> Option<Value> {
     serde_json::from_slice(&bytes).ok()
 }
 
-pub(super) fn allowed(url: &str) -> bool {
-    let Ok(url) = reqwest::Url::parse(url) else {
-        return false;
-    };
-    match url.scheme() {
-        "https" => url.host_str() == Some(HOST),
-        "http" => {
-            cfg!(any(test, debug_assertions))
-                && matches!(url.host_str(), Some("127.0.0.1" | "localhost"))
-        }
-        _ => false,
-    }
-}
-
-enum Refused {
-    Status(UsageStatus),
-    Busy(UsageStatus),
-}
-
 fn fetch(login: &Login, source: &Source) -> Result<Vec<u8>, Refused> {
-    if !allowed(&source.url) {
-        return Err(Refused::Status(error(
-            "Usage is only sent to the provider.",
-        )));
-    }
-    let client = reqwest::blocking::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(source.timeout)
-        .user_agent(concat!("kagan/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|_| Refused::Status(error("Could not start the usage request.")))?;
-    let mut request = client.get(&source.url).bearer_auth(&login.token);
-    if let Some(account) = &login.account_id {
-        request = request.header("chatgpt-account-id", account);
-    }
-    let response = request
-        .send()
-        .map_err(|_| Refused::Status(error("Could not reach Codex.")))?;
-    let status = response.status();
-    if status == reqwest::StatusCode::UNAUTHORIZED {
-        return Err(Refused::Status(UsageStatus::Expired));
-    }
-    if status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
-        return Err(Refused::Busy(error(&format!(
-            "Codex answered {}.",
-            status.as_u16()
-        ))));
-    }
-    if !status.is_success() {
-        return Err(Refused::Status(error(&format!(
-            "Codex answered {}.",
-            status.as_u16()
-        ))));
-    }
-    let mut body = Vec::new();
-    response
-        .take(LIMIT)
-        .read_to_end(&mut body)
-        .map_err(|_| Refused::Status(error("Codex's reply stopped early.")))?;
-    Ok(body)
+    let headers: Vec<(&str, &str)> = login
+        .account_id
+        .as_deref()
+        .map(|id| ("chatgpt-account-id", id))
+        .into_iter()
+        .collect();
+    http::get(
+        "Codex",
+        &source.url,
+        HOST,
+        &login.token,
+        &headers,
+        source.timeout,
+    )
 }
 
 fn parse(body: &[u8]) -> (UsageStatus, Vec<UsageWindow>) {

@@ -133,7 +133,7 @@ impl EventEmitter<Start> for Picker {}
 impl EventEmitter<Close> for Picker {}
 
 mod list;
-mod mark;
+pub(crate) mod mark;
 
 use list::{Field, custom_command, custom_field};
 mod render;
