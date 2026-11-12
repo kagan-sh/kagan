@@ -24,12 +24,12 @@ Read a crate's own `AGENTS.md` before you change it. It adds to the rules here:
 - `crates/plugins/AGENTS.md`: powers and approval.
 - `crates/kg/AGENTS.md`: the CLI, the `cli.md` regeneration, and an isolated app.
 
-Keep `CLAUDE.md` and `CLAUDE.local.md` out of this repo: Claude Code reads `AGENTS.md` only when neither exists. opencode finds the crate files through `opencode.json`. Codex and Gemini CLI see a crate file only when started in that crate, so this list is their pointer.
+Keep `CLAUDE.md` and `CLAUDE.local.md` out of this repo: Claude Code reads `AGENTS.md` only when neither exists. opencode finds the crate files through `opencode.json`. Codex sees a crate file only when started in that crate, and Gemini CLI reads `GEMINI.md`, not `AGENTS.md`, by default, so this list is their pointer.
 
 ## Build and test
 
 - Rust 1.99 is pinned. macOS links with `ld64.lld`, so run `brew install lld` first; Linux and Windows prerequisites are in `book/src/start.md`.
-- `cargo t` is the alias for the pinned nextest (`cargo bin cargo-nextest run`; install `cargo-run-bin` once). Run `cargo t --workspace --locked`; one crate or test with `cargo t -p kg-core <filter>`. Plain `cargo test` is not the gate: it runs a crate's tests in one process, so a `static` set by one test leaks into the next. A test that only fails under `cargo test` is not a bug to fix.
+- `cargo t` is the alias for the pinned nextest (`cargo bin cargo-nextest run`; install `cargo-run-bin` once). Run `cargo t --workspace --locked`; one crate or test with `cargo t -p kg-core <filter>`. Plain `cargo test` is not the gate: it runs a crate's tests in one process, so a `static` set by one test leaks into the next (the `CONFIRMED` flag in `crates/ui/src/kagan/quit.rs`). A test that only fails under `cargo test` is not a bug to fix.
 - Before a pull request, run: `cargo fmt --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo t --workspace --locked`.
 - CI denies every warning, so a pedantic lint, `unreachable_pub`, or `too_many_lines` (over 100 lines, `clippy.toml`) fails the build. Split the function; an `#[allow]` or `#[expect]` needs a `reason` and counts against `allow_expect` in the size budget.
 - jscpd (copy detection) runs in CI, not in the hooks: `npx --yes jscpd@5.4.0 --config .config/jscpd.json`.
@@ -47,7 +47,7 @@ Keep `CLAUDE.md` and `CLAUDE.local.md` out of this repo: Claude Code reads `AGEN
 - Every user-visible feature is an `Op` dispatched by `Workspace::dispatch`, and a changed `Op` updates `docs/behaviour.md`. Check: review.
 - `scripts/crate-boundaries.sh` enforces the graph in its `EXPECTED` table. The diagram in `docs/architecture.md` is a picture of that table, and review checks that they match.
 
-The GPUI Kit coding and design skills are in the `skills/` folder of [gpui-kit](https://github.com/aorumbayev/gpui-kit). Where a skill disagrees with this file, this file wins. Known override: no tokio in kagan's own code. Async runs on GPUI's executors (`cx.spawn`, `cx.background_spawn`); see decision 90. `.agents/skills/kagan-fork-sync` merges upstream into the forks `Cargo.toml` pins by rev (gpui-kit, gpui-fast, wry).
+The GPUI Kit coding and design skills are in the `skills/` folder of [gpui-kit](https://github.com/aorumbayev/gpui-kit). Where a skill disagrees with this file, this file wins. Known override: no tokio in kagan's own code. Async runs on GPUI's executors (`cx.spawn`, `cx.background_spawn`); see decision 90. `.agents/skills/kagan-fork-sync` merges upstream into the forks that `Cargo.toml` pins by rev (gpui-kit, gpui-fast, wry).
 
 ## Laconic
 

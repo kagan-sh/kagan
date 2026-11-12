@@ -9,5 +9,5 @@ Read the root `AGENTS.md` first. These rules add to it.
 - `ElementId`s stay the same across renders. Check: review.
 - Every user-facing command is a GPUI action with a keybinding, and also an `Op`. Check: review.
 - UI behavior is tested through GPUI's test context and the view's interface. Check: review.
-- Tests wait with `wait_until` or `wait_for_shell` in `src/tests/kagan/support.rs`; never write a second wait loop. Check: review.
+- Tests wait with `wait_until`, `wait_for_screen` or `wait_for_output` in `src/tests/kagan/support.rs`; never write a second wait loop. Check: review.
 - Before a pull request for a UI change, run `sh scripts/smoke.sh --keep` on macOS and attach the snapshot and screenshot paths. Check: review.
