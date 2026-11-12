@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use gpui_kit::{AsyncApp, WeakEntity};
+use gpui_kit::{App, AsyncApp, WeakEntity};
 use kg_domain::OpError;
 
 use crate::host::database::{Database, Result};
@@ -40,19 +40,14 @@ pub(crate) fn time(
     this: &WeakEntity<Workspace>,
     cx: &mut AsyncApp,
 ) -> Result<kg_domain::Timestamp> {
-    this.update(cx, |workspace, cx| {
-        let elapsed = cx
-            .background_executor()
-            .now()
-            .duration_since(workspace.clock.1)
-            .as_millis();
-        kg_domain::Timestamp(
-            workspace
-                .clock
-                .0
-                .0
-                .saturating_add(i64::try_from(elapsed).unwrap_or(i64::MAX)),
-        )
-    })
-    .map_err(closed)
+    this.update(cx, |workspace, cx| workspace.clock_now(cx))
+        .map_err(closed)
+}
+
+impl Workspace {
+    pub fn clock_now(&self, cx: &App) -> kg_domain::Timestamp {
+        let elapsed = cx.background_executor().now().duration_since(self.clock.1);
+        let millis = i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX);
+        kg_domain::Timestamp(self.clock.0.0.saturating_add(millis))
+    }
 }
