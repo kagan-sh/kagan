@@ -232,12 +232,14 @@ fn a_worktree_can_start_from_another_local_branch(cx: &mut TestAppContext) {
         format!("Branch from: {base}")
     );
     click(cx, window, "branch-from");
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "branch-pick-topic"));
     cx.simulate_keystrokes(window, "escape");
     cx.run_until_parked();
     assert!(!shows(cx, window, "branch-pick-topic"));
     assert!(shows(cx, window, "folder-worktree"));
     click(cx, window, "branch-from");
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "branch-pick-topic"));
     click(cx, window, "branch-pick-topic");
     wait_until(cx, |cx| {
@@ -338,6 +340,7 @@ fn escape_closes_the_branch_menu_before_the_start_screen(cx: &mut TestAppContext
     click(cx, window, &format!("project-new-{}", project.id.0));
     wait_until(cx, |cx| shows(cx, window, "branch-from"));
     click(cx, window, "branch-from");
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "branch-pick-topic"));
     cx.simulate_keystrokes(window, "escape");
     cx.run_until_parked();
@@ -357,6 +360,7 @@ fn escape_closes_the_branch_menu_before_the_start_screen(cx: &mut TestAppContext
     assert!(shows(cx, window, "folder-project"));
     click(cx, window, "folder-worktree");
     click(cx, window, "branch-from");
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "branch-pick-topic"));
     click(cx, window, "program-search");
     cx.simulate_keystrokes(window, "escape");

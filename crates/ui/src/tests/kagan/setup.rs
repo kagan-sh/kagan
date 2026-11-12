@@ -7,8 +7,8 @@ use kg_core::Workspace;
 use kg_domain::EnvironmentStatus;
 
 use super::{
-    click, committed_repo, environment_of, git, head_commit, label, open, set_program, shell,
-    shown, shows, wait_until,
+    click, committed_repo, environment_of, git, head_commit, label, open, scroll_form_to_end,
+    set_program, shell, shown, shows, wait_until,
 };
 #[cfg(unix)]
 use super::{only_worktree, worktree_dirs};
@@ -217,6 +217,7 @@ fn the_start_screen_can_show_the_pinned_setup_script(cx: &mut TestAppContext) {
     commit_setup(&repo, "echo from-commit\n");
     std::fs::write(repo.join(".kagan/setup"), "echo from-worktree\n").unwrap();
     click(cx, window, &format!("project-new-{}", project.id.0));
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-disclose"));
     assert_eq!(label(cx, window, "setup-disclose"), "Show script");
     assert!(!shows(cx, window, "setup-body"));
@@ -238,6 +239,7 @@ fn a_long_setup_script_is_capped(cx: &mut TestAppContext) {
     }
     commit_setup(&repo, &body);
     click(cx, window, &format!("project-new-{}", project.id.0));
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-disclose"));
     click(cx, window, "setup-disclose");
     wait_until(cx, |cx| !label(cx, window, "setup-body").is_empty());

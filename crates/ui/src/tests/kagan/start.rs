@@ -460,6 +460,7 @@ fn show_script_starts_on_the_spine_of_the_note_above_it(cx: &mut TestAppContext)
     let (repo, project) = committed_repo(cx, data.path());
     commit_setup(&repo, "echo from-commit\n");
     click(cx, window, &format!("project-new-{}", project.id.0));
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-disclose"));
     let (note_x, _, _, _) = bounds(cx, window, "setup-script").unwrap();
     let (disclose_x, _, _, _) = bounds(cx, window, "setup-disclose").unwrap();

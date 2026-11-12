@@ -24,10 +24,10 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 // A card fills its column and is this tall: the mark on top, the name, then its caption.
-const CARD_HEIGHT: f32 = 130.;
-// The grid shows this many rows of cards, then scrolls. Two keep the worktree hint and Start on
-// screen in a short window.
-const VISIBLE_ROWS: f32 = 2.;
+const CARD_HEIGHT: f32 = 96.;
+// The grid shows this many rows of cards, then scrolls: three rows hold nine cards, and a tenth,
+// the custom command, scrolls into view. Three rows and the Start row fit a 720-point window.
+const VISIBLE_ROWS: f32 = 3.;
 
 #[derive(IntoElement)]
 struct ProgramCard {
@@ -89,7 +89,8 @@ impl RenderOnce for ProgramCard {
             .group(card_group)
             .w_full()
             .h(px(CARD_HEIGHT))
-            .p_2()
+            .px_2()
+            .py_1()
             .rounded(cx.theme().radius)
             .border_1()
             .border_color(cx.theme().border)
@@ -155,7 +156,8 @@ fn custom_card(
         })
         .w_full()
         .h(px(CARD_HEIGHT))
-        .p_2()
+        .px_2()
+        .py_1()
         .rounded(cx.theme().radius)
         .border_1()
         .border_color(cx.theme().border)
