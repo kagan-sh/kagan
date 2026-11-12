@@ -6,10 +6,11 @@ use kg_domain::ProjectId;
 
 #[cfg(unix)]
 use crate::kagan::Kagan;
-use crate::tests::kagan::{add_project, click, label, open, scroll_form_to_end, shows, wait_until};
+use crate::tests::kagan::{add_project, click, label, open, shows, wait_until};
 #[cfg(unix)]
 use crate::tests::kagan::{
-    committed_repo, focused_of, role_of, selected_of, shown, thread_record, threads_in, value_of,
+    committed_repo, focused_of, role_of, scroll_form_to_end, selected_of, shown, thread_record,
+    threads_in, value_of,
 };
 #[cfg(unix)]
 use gpui_kit::Entity;

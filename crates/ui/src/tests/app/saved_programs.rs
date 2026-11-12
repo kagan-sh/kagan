@@ -313,7 +313,6 @@ fn a_reopened_picker_starts_with_an_empty_search(cx: &mut TestAppContext) {
 }
 
 // The arrow keys move the grid once it has the focus; the search box keeps Left and Right.
-#[cfg(unix)]
 fn focus_grid(
     cx: &mut TestAppContext,
     window: AnyWindowHandle,

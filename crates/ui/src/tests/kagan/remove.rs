@@ -15,12 +15,11 @@ use kg_domain::{EnvironmentStatus, ThreadStatus};
 #[cfg(unix)]
 use crate::kagan::{ArchiveThread, StopThread};
 
-use super::{
-    add_project, approvals_waiting, click, open, scroll_form_to_end, send, shows, wait_until,
-};
+use super::{add_project, approvals_waiting, click, open, send, shows, wait_until};
 #[cfg(unix)]
 use super::{
-    commit_setup, committed_repo, environment_of, label, set_program, shell, shown, thread_record,
+    commit_setup, committed_repo, environment_of, label, scroll_form_to_end, set_program, shell,
+    shown, thread_record,
 };
 
 #[cfg(unix)]
