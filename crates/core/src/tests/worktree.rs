@@ -8,8 +8,8 @@ use crate::Workspace;
 #[cfg(unix)]
 use super::git_in;
 use super::{
-    Fixture, commit_file, empty_repo, environment_of, op, pending_delete, pid_of, program,
-    repo_dir, started_personal,
+    Fixture, commit_file, empty_repo, environment_of, op, pending_delete, personal_run, pid_of,
+    program, repo_dir, started_personal,
 };
 #[cfg(unix)]
 use super::{GitTrack, events, tracks_upstream, wait_for_status, worktree_count, worktree_run};
@@ -1383,4 +1383,22 @@ async fn a_kagan_named_branch_takes_the_saved_prefix(cx: &mut TestAppContext) {
     let folder = environment_of(&started.environment_id.clone().unwrap(), cx).await;
     let branch = folder.branch.unwrap_or_default();
     assert!(branch.starts_with("bb/"), "{branch}");
+}
+
+#[gpui_kit::test]
+async fn a_worktree_in_a_personal_project_points_to_the_personal_environment(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::personal(cx).await;
+    let spec = EnvironmentSpec::Worktree {
+        base_branch: None,
+        branch: None,
+    };
+    let error = op(personal_run(&fixture, "notes", spec), cx)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&error, OpError::Invalid(text) if text == "git worktrees need a standard project; a personal project uses a personal environment."),
+        "{error:?}"
+    );
 }

@@ -11,7 +11,7 @@ use gpui_kit::{
     Window, div,
 };
 use kg_core::Workspace;
-use kg_domain::{KeymapAction, KeymapOp, Op, OpResult, PluginId, SHORTCUTS, ShortcutGroup};
+use kg_domain::{KeymapAction, KeymapOp, Op, OpError, PluginId, SHORTCUTS, ShortcutGroup};
 use kg_plugins::{CommandContribution, PluginHost};
 
 use super::Kagan;
@@ -456,9 +456,9 @@ impl Kagan {
             let result = saved.await;
             this.update(cx, |this, cx| {
                 let message = match result {
-                    Ok(OpResult::Setting(value)) if value["ok"] == false => taken(
+                    Err(OpError::Conflict(action)) => taken(
                         key.as_deref().unwrap_or_default(),
-                        &label(&labels(cx), value["conflict"].as_str().unwrap_or_default()),
+                        &label(&labels(cx), &action),
                     ),
                     Ok(_) => return,
                     Err(error) => error.to_string(),
