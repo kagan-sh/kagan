@@ -135,6 +135,7 @@ async fn a_project_page_opens_only_for_a_live_project(cx: &mut TestAppContext) {
     let missing = op(
         Op::Settings(SettingsOp::Project {
             id: ProjectId("prj_missing".into()),
+            section: None,
         }),
         cx,
     )
@@ -144,6 +145,7 @@ async fn a_project_page_opens_only_for_a_live_project(cx: &mut TestAppContext) {
     let shown = op(
         Op::Settings(SettingsOp::Project {
             id: fixture.project.clone(),
+            section: None,
         }),
         cx,
     )

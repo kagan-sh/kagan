@@ -7,11 +7,11 @@ use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::{
     AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement,
-    KeyBinding, ParentElement as _, Render, Role, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Task, WeakEntity, Window, actions, div, px,
+    KeyBinding, ParentElement as _, Render, Role, ScrollHandle, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Task, WeakEntity, Window, actions, div, px,
 };
 use kg_core::Workspace;
-use kg_domain::{Op, OpResult, Program, ProgramOp, ProjectId, ProjectOp};
+use kg_domain::{Op, OpResult, Program, ProgramOp, ProjectId, ProjectOp, ProjectSection};
 
 use super::automations::List;
 
@@ -44,6 +44,7 @@ pub(in crate::kagan) struct Page {
     variables: Entity<Variables>,
     rules: Entity<RulesEditor>,
     automations: Entity<List>,
+    scroll: ScrollHandle,
     kagan: WeakEntity<Kagan>,
     note: Option<SharedString>,
     // Each task is kept while it runs; dropping one cancels it.
@@ -72,6 +73,7 @@ impl Page {
             variables,
             rules,
             automations,
+            scroll: ScrollHandle::new(),
             kagan,
             note: None,
             load: None,
@@ -189,6 +191,17 @@ impl Page {
             "New threads in this project start with this program. Only installed programs are listed.",
             column.into_any_element(),
         )
+    }
+
+    // The scroll position is clamped to the page's end when it is drawn, so a large offset lands at
+    // the bottom, where Automations is, without waiting for the page's height.
+    pub(crate) fn reveal(&self, section: ProjectSection) {
+        match section {
+            ProjectSection::Automations => {
+                self.scroll
+                    .set_offset(gpui_kit::point(px(0.), px(-1_000_000.)));
+            }
+        }
     }
 
     fn groups(&self, cx: &mut Context<Self>) -> Vec<Group> {
@@ -336,6 +349,7 @@ impl Render for Page {
                     .id("project-settings-scroll")
                     .w_full()
                     .overflow_y_scroll()
+                    .track_scroll(&self.scroll)
                     .child(
                         v_flex()
                             .w_full()
@@ -347,21 +361,22 @@ impl Render for Page {
 }
 
 impl Kagan {
-    pub(crate) fn open_project_page(
+    pub(in crate::kagan) fn open_project_page(
         &mut self,
         project: ProjectId,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) {
+    ) -> Entity<Page> {
         if !matches!(self.screen.current(), Center::Project(_)) {
             self.screen.remember_center(window, cx);
         }
         let kagan = cx.entity().downgrade();
         let page = cx.new(|cx| Page::new(project, kagan, window, cx));
         let focus = page.read(cx).focus.clone();
-        self.open_center(Center::Project(page), window, cx);
+        self.open_center(Center::Project(page.clone()), window, cx);
         window.focus(&focus, cx);
         cx.notify();
+        page
     }
 
     pub(in crate::kagan) fn leave_project_page(

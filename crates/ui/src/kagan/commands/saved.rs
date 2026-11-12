@@ -28,6 +28,8 @@ const NO_THREAD: &str = "No thread is shown.";
 pub(super) struct Draft {
     title: Entity<InputState>,
     body: Entity<TextareaState>,
+    // The prompt this form edits. Empty for a new one.
+    editing: Option<SavedPromptId>,
 }
 
 pub(crate) fn chords() -> [&'static str; 4] {
@@ -115,7 +117,7 @@ impl Kagan {
             .as_ref()
             .is_some_and(|list| list.mode == Mode::Saved && list.draft.is_none())
         {
-            self.begin_draft(window, cx);
+            self.open_draft(None, window, cx);
         }
     }
 
@@ -142,14 +144,37 @@ impl Kagan {
         list.prompts.get(row).cloned()
     }
 
-    fn begin_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn begin_edit(
+        &mut self,
+        prompt: SavedPrompt,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_draft(Some(prompt), window, cx);
+    }
+
+    // The same form for a new prompt and for an edit, which starts with the prompt's text.
+    fn open_draft(
+        &mut self,
+        prompt: Option<SavedPrompt>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let title = cx.new(|cx| InputState::new(window, cx).placeholder("Title"));
         let body = cx.new(|cx| TextareaState::new(window, cx));
+        if let Some(prompt) = &prompt {
+            title.update(cx, |state, cx| state.set_value(&prompt.title, window, cx));
+            body.update(cx, |state, cx| state.set_value(&prompt.body, window, cx));
+        }
         let Some(list) = self.commands.as_mut() else {
             return;
         };
         list.failed = None;
-        list.draft = Some(Draft { title, body });
+        list.draft = Some(Draft {
+            title,
+            body,
+            editing: prompt.map(|prompt| prompt.id),
+        });
         let handle = list
             .draft
             .as_ref()
@@ -176,14 +201,15 @@ impl Kagan {
         };
         let title = draft.title.read(cx).value().to_string();
         let body = draft.body.read(cx).value().to_string();
-        let task = Workspace::dispatch(
-            Op::SavedPrompt(SavedPromptOp::Add {
+        let op = match draft.editing {
+            Some(id) => SavedPromptOp::Edit { id, title, body },
+            None => SavedPromptOp::Add {
                 title,
                 body: Some(body),
                 file: None,
-            }),
-            cx,
-        );
+            },
+        };
+        let task = Workspace::dispatch(Op::SavedPrompt(op), cx);
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
             _ = this.update_in(cx, |this, window, cx| {
@@ -220,6 +246,8 @@ impl Kagan {
     fn delete_saved(&mut self, id: SavedPromptId, window: &mut Window, cx: &mut Context<Self>) {
         let task = Workspace::dispatch(Op::SavedPrompt(SavedPromptOp::Delete { id }), cx);
         self.after_saved(task, window, cx);
+        // The question about the delete is in the Questions panel, which the open list would cover.
+        _ = self.close_commands(window, cx);
     }
 
     fn after_saved(
@@ -328,7 +356,7 @@ fn prompt_list(list: &CommandList, this: &WeakEntity<Kagan>) -> Command {
                             .label("New saved prompt")
                             .on_click(move |_, window, cx| {
                                 cx.stop_propagation();
-                                _ = owner.update(cx, |this, cx| this.begin_draft(window, cx));
+                                _ = owner.update(cx, |this, cx| this.open_draft(None, window, cx));
                             }),
                     ),
             )
@@ -347,6 +375,8 @@ fn row(prompt: SavedPrompt, this: &WeakEntity<Kagan>) -> CommandItem {
     let delete_id = id.clone();
     let starring = this.clone();
     let deleting = this.clone();
+    let editing = this.clone();
+    let edited = prompt.clone();
     let starred = prompt.starred;
     CommandItem::new()
         .label(prompt.title.clone())
@@ -355,6 +385,7 @@ fn row(prompt: SavedPrompt, this: &WeakEntity<Kagan>) -> CommandItem {
             let muted = cx.theme().muted_foreground;
             let star_name = format!("saved-prompt-star-{}", star_id.0);
             let delete_name = format!("saved-prompt-delete-{}", delete_id.0);
+            let edit_name = format!("saved-prompt-edit-{}", delete_id.0);
             let star_label: SharedString = (if starred { "Unstar" } else { "Star" }).into();
             let star_value: SharedString = (if starred { "starred" } else { "unstarred" }).into();
             h_flex()
@@ -392,6 +423,7 @@ fn row(prompt: SavedPrompt, this: &WeakEntity<Kagan>) -> CommandItem {
                             starring.clone(),
                             !starred,
                         ))
+                        .child(edit_button(&edit_name, edited.clone(), editing.clone()))
                         .child(remove_button(
                             &delete_name,
                             delete_id.clone(),
@@ -424,6 +456,24 @@ fn mark(
                     cx.stop_propagation();
                     let id = id.clone();
                     _ = this.update(cx, |this, cx| this.set_star(id, next, window, cx));
+                }),
+        )
+        .into_any_element()
+}
+
+fn edit_button(name: &str, prompt: SavedPrompt, this: WeakEntity<Kagan>) -> gpui_kit::AnyElement {
+    div()
+        .id(ElementId::Name(name.to_owned().into()))
+        .ui_observe_as(Facts::button("Edit"))
+        .child(
+            Button::new(format!("{name}-button"))
+                .small()
+                .ghost()
+                .label("Edit")
+                .on_click(move |_, window, cx| {
+                    cx.stop_propagation();
+                    let prompt = prompt.clone();
+                    _ = this.update(cx, |this, cx| this.begin_edit(prompt, window, cx));
                 }),
         )
         .into_any_element()

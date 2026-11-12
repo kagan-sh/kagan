@@ -23,7 +23,7 @@ use crate::ui_registry::Facts;
 impl Picker {
     // Saves the custom command under the typed name, or renames the saved program being edited.
     pub(crate) fn save_program(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.mode != Mode::Custom {
+        if self.mode != Mode::Custom || self.saving {
             return;
         }
         let name = self.name.read(cx).value().trim().to_owned();
@@ -44,6 +44,7 @@ impl Picker {
             }
         };
         let task = Workspace::dispatch(Op::Program(op), cx);
+        self.saving = true;
         self.after_change(task, window, cx);
     }
 
@@ -119,14 +120,17 @@ impl Picker {
         self.notice = None;
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
-            _ = this.update_in(cx, |this, window, cx| match result {
-                Ok(_) => {
-                    this.name
-                        .update(cx, |state, cx| state.set_value("", window, cx));
-                    let project = this.project.clone();
-                    this.load(project, window, cx);
+            _ = this.update_in(cx, |this, window, cx| {
+                this.saving = false;
+                match result {
+                    Ok(_) => {
+                        this.name
+                            .update(cx, |state, cx| state.set_value("", window, cx));
+                        let project = this.project.clone();
+                        this.reload(project, window, cx);
+                    }
+                    Err(error) => this.fail(error.to_string(), cx),
                 }
-                Err(error) => this.fail(error.to_string(), cx),
             });
         })
         .detach();
@@ -163,7 +167,14 @@ pub(super) fn notice(text: SharedString, cx: &gpui_kit::App) -> impl IntoElement
 }
 
 // A saved program's row buttons: pin or unpin, rename, and delete. Other rows have none.
-pub(super) fn row_actions(program: &Program, picker: &WeakEntity<Picker>) -> Option<AnyElement> {
+// The buttons show on a row the pointer is over, or on the selected row, so a list of names is not
+// a list of buttons.
+pub(super) fn row_actions(
+    program: &Program,
+    picker: &WeakEntity<Picker>,
+    row_group: &str,
+    selected: bool,
+) -> Option<AnyElement> {
     if program.source != ProgramSource::Saved {
         return None;
     }
@@ -176,10 +187,13 @@ pub(super) fn row_actions(program: &Program, picker: &WeakEntity<Picker>) -> Opt
         ("Pin", true)
     };
     let (pin_name, rename_name, delete_name) = (name.clone(), name.clone(), name.clone());
+    let shown = h_flex()
+        .gap_1()
+        .flex_shrink_0()
+        .invisible()
+        .group_hover(row_group.to_owned(), gpui_kit::Styled::visible);
     Some(
-        h_flex()
-            .gap_1()
-            .flex_shrink_0()
+        if selected { shown.visible() } else { shown }
             .child(row_button(
                 format!("program-pin-{key}"),
                 pin_label,

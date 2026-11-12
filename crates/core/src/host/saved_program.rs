@@ -1,5 +1,7 @@
+use gpui_kit::AsyncApp;
 use kg_domain::{OpError, OpResult, SavedProgram, saved_name};
 
+use crate::Requester;
 use crate::host::database::{Database, Result};
 use crate::workspace::missing;
 
@@ -50,8 +52,30 @@ pub(crate) async fn rename(database: Database, name: String, to: String) -> Resu
     }
 }
 
-pub(crate) async fn remove(database: Database, name: String) -> Result<OpResult> {
+// A name that is not saved is refused before anyone is asked; the person approves the delete in the app.
+pub(crate) async fn remove(
+    database: Database,
+    requester: Option<Requester>,
+    name: String,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
     let name = name.trim().to_owned();
+    let lookup = name.clone();
+    if database
+        .call(move |store| store.saved_program(&lookup))
+        .await?
+        .is_none()
+    {
+        return Err(missing("saved program", &name));
+    }
+    crate::workspace::approve(
+        None,
+        requester,
+        format!("Delete the saved program “{name}”?"),
+        "Delete",
+        cx,
+    )
+    .await?;
     database
         .call(move |store| store.delete_saved_program(&name))
         .await?;

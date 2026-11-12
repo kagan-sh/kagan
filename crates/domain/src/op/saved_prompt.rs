@@ -22,6 +22,12 @@ pub enum SavedPromptOp {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         file: Option<PathBuf>,
     },
+    /// Change a saved prompt's title and text. Its star stays
+    Edit {
+        id: SavedPromptId,
+        title: String,
+        body: String,
+    },
     /// Saved prompts whose title or body contains this text. An empty search lists them all
     Search {
         #[arg(default_value = "")]
@@ -33,7 +39,7 @@ pub enum SavedPromptOp {
         #[arg(action = clap::ArgAction::Set)]
         starred: bool,
     },
-    /// Delete a saved prompt
+    /// Delete a saved prompt after the person approves it in kagan
     Delete { id: SavedPromptId },
     /// Type a saved prompt into a thread and press Enter
     Send {

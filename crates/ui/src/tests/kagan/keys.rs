@@ -19,7 +19,7 @@ use crate::kagan::{ArchiveThread, StopThread, chord_for};
 use super::{
     cell_point, host_dimensions, press, release, run_program, selection, shown_row, thread_status,
 };
-use super::{click, grid_text, open, run_shell, shows, thread_record, wait_until};
+use super::{click, grid_text, open, run_shell, shows, thread_record, wait_for_screen, wait_until};
 
 #[test]
 fn off_macos_the_default_chord_stays_off_the_program_keys() {
@@ -116,14 +116,14 @@ fn ctrl_keys_reach_the_program_and_are_not_window_shortcuts(cx: &mut TestAppCont
 
     cx.simulate_keystrokes(window, "ctrl-n");
     // The shell echoes a control key as ^N; it can only show up if the key reached the program.
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("^N"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("^N"));
     assert_eq!(
         cx.update(|cx| screen_read::start_project(kagan.read(cx))),
         None
     );
 
     cx.simulate_keystrokes(window, "ctrl-c");
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("^C"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("^C"));
 }
 
 #[gpui_kit::test]
@@ -161,7 +161,9 @@ fn the_paste_key_sends_the_clipboard(cx: &mut TestAppContext) {
         "ctrl-shift-v"
     };
     cx.simulate_keystrokes(window, paste);
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("keyed-paste"));
+    wait_for_screen(cx, &kagan, |cx| {
+        grid_text(cx, &kagan).contains("keyed-paste")
+    });
 }
 
 #[cfg(unix)]
@@ -287,9 +289,9 @@ fn paging_back_through_an_ended_program_redraws_it(cx: &mut TestAppContext) {
         "/bin/sh -c \"i=1; while [ $i -le 200 ]; do echo row$i; i=$((i+1)); done\"",
     );
     click(cx, window, &format!("thread-{}", id.0));
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("row200"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("row200"));
     cx.dispatch_action(window, crate::terminal::ScrollPageUp);
-    wait_until(cx, |cx| !grid_text(cx, &kagan).contains("row200"));
+    wait_for_screen(cx, &kagan, |cx| !grid_text(cx, &kagan).contains("row200"));
 }
 
 #[cfg(unix)]
@@ -306,7 +308,7 @@ fn selecting_text_after_a_program_that_asked_for_the_mouse_exits(cx: &mut TestAp
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
     let id = finished_program(cx, script.to_str().unwrap());
     click(cx, window, &format!("thread-{}", id.0));
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("picked"));
     let (row, _) = shown_row(cx, &kagan, "picked");
     let at = cell_point(cx, window, &kagan, row, 2);
     press(cx, window, at, 1, Modifiers::default());
@@ -323,7 +325,7 @@ fn selecting_text_in_an_ended_program_redraws_its_selection(cx: &mut TestAppCont
     let (kagan, window, _data) = open(cx);
     let id = finished_program(cx, "/bin/sh -c \"printf picked; exit 0\"");
     click(cx, window, &format!("thread-{}", id.0));
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("picked"));
+    wait_for_screen(cx, &kagan, |cx| grid_text(cx, &kagan).contains("picked"));
     let (row, _) = shown_row(cx, &kagan, "picked");
     let at = cell_point(cx, window, &kagan, row, 2);
     press(cx, window, at, 1, Modifiers::default());

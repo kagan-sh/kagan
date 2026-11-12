@@ -6,14 +6,14 @@ use kg_domain::*;
 use super::{Fixture, events, op, program};
 use crate::{Requester, Workspace};
 
-fn add(project: &ProjectId, minutes: Option<u16>, at: Option<Timestamp>) -> Op {
+fn add(project: &ProjectId, minutes: Option<u16>, in_minutes: Option<u16>) -> Op {
     Op::Automation(AutomationOp::Add {
         name: "Morning".into(),
         body: "ping".into(),
         project_id: project.clone(),
         program: program().into(),
         minutes,
-        at,
+        in_minutes,
     })
 }
 
@@ -91,29 +91,6 @@ async fn drive_until_sent(cx: &mut TestAppContext) -> ThreadId {
     panic!("the automation never sent its text")
 }
 
-// A time a second ahead of the wall clock, so it is still in the future when the test adds it.
-fn soon(ms: i64) -> Timestamp {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    Timestamp(i64::try_from(now).unwrap_or(i64::MAX).saturating_add(ms))
-}
-
-#[gpui_kit::test]
-async fn add_refuses_a_one_time_that_is_already_past(cx: &mut TestAppContext) {
-    let fixture = Fixture::new(cx).await;
-    cx.executor().advance_clock(Duration::from_mins(1));
-    let past = op(add(&fixture.project, None, Some(Timestamp(1))), cx)
-        .await
-        .unwrap_err();
-    assert!(
-        matches!(past, OpError::Invalid(ref message) if message.contains("in the future")),
-        "{past}"
-    );
-    assert!(automations(cx).await.is_empty());
-}
-
 #[gpui_kit::test]
 async fn add_refuses_a_missing_time_and_a_missing_project(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -122,7 +99,7 @@ async fn add_refuses_a_missing_time_and_a_missing_project(cx: &mut TestAppContex
         matches!(neither, OpError::Invalid(ref message) if message.contains("needs minutes")),
         "{neither}"
     );
-    let both = op(add(&fixture.project, Some(1), Some(Timestamp(1))), cx)
+    let both = op(add(&fixture.project, Some(1), Some(1)), cx)
         .await
         .unwrap_err();
     assert!(matches!(both, OpError::Invalid(_)), "{both}");
@@ -200,10 +177,8 @@ async fn a_running_thread_is_left_alone_when_the_automation_is_due_again(cx: &mu
 #[gpui_kit::test]
 async fn one_time_runs_once(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
-    op(add(&fixture.project, None, Some(soon(1_000))), cx)
-        .await
-        .unwrap();
-    cx.executor().advance_clock(Duration::from_secs(1));
+    op(add(&fixture.project, None, Some(1)), cx).await.unwrap();
+    cx.executor().advance_clock(Duration::from_mins(1));
     let id = drive_until_sent(cx).await;
     cx.executor().advance_clock(Duration::from_mins(5));
     cx.run_until_parked();
@@ -217,13 +192,11 @@ async fn deleting_an_automation_leaves_a_running_thread_and_starts_no_other(
     cx: &mut TestAppContext,
 ) {
     let fixture = Fixture::new(cx).await;
-    let OpResult::Automation(saved) = op(add(&fixture.project, None, Some(soon(1_000))), cx)
-        .await
-        .unwrap()
+    let OpResult::Automation(saved) = op(add(&fixture.project, None, Some(1)), cx).await.unwrap()
     else {
         panic!("add")
     };
-    cx.executor().advance_clock(Duration::from_secs(1));
+    cx.executor().advance_clock(Duration::from_mins(1));
     let id = drive_until_sent(cx).await;
     let deleting = delete(&saved.id, cx);
     cx.run_until_parked();
@@ -238,7 +211,6 @@ async fn deleting_an_automation_leaves_a_running_thread_and_starts_no_other(
 #[gpui_kit::test]
 async fn a_one_time_automation_that_cannot_start_waits_before_it_retries(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
-    let due = soon(1_000);
     op(
         Op::Automation(AutomationOp::Add {
             name: "Missing".into(),
@@ -246,13 +218,15 @@ async fn a_one_time_automation_that_cannot_start_waits_before_it_retries(cx: &mu
             project_id: fixture.project.clone(),
             program: "kg-no-such-program".into(),
             minutes: None,
-            at: Some(Timestamp(due.0)),
+            in_minutes: Some(1),
         }),
         cx,
     )
     .await
     .unwrap();
-    cx.executor().advance_clock(Duration::from_secs(5));
+    let due = automations(cx).await[0].next_at;
+    cx.executor()
+        .advance_clock(Duration::from_mins(1) + Duration::from_secs(1));
     cx.run_until_parked();
     let row = automations(cx).await.remove(0);
     assert!(
@@ -262,7 +236,8 @@ async fn a_one_time_automation_that_cannot_start_waits_before_it_retries(cx: &mu
     assert!(row.threads.is_empty());
     assert_eq!(thread_count(cx).await, 0);
     assert!(
-        row.next_at.is_some_and(|next| next.0 > due.0),
+        row.next_at
+            .is_some_and(|next| due.is_some_and(|due| next > due)),
         "a failed start must wait, not retry every second: {:?}",
         row.next_at
     );
@@ -271,7 +246,6 @@ async fn a_one_time_automation_that_cannot_start_waits_before_it_retries(cx: &mu
 #[gpui_kit::test]
 async fn a_start_that_fails_before_its_thread_is_saved_is_not_a_run(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
-    let due = soon(1_000);
     let raw = rusqlite::Connection::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
     raw.execute_batch(
         "CREATE TRIGGER no_threads BEFORE INSERT ON threads BEGIN SELECT RAISE(ABORT, 'blocked'); END;",
@@ -284,19 +258,22 @@ async fn a_start_that_fails_before_its_thread_is_saved_is_not_a_run(cx: &mut Tes
             project_id: fixture.project.clone(),
             program: program().into(),
             minutes: None,
-            at: Some(Timestamp(due.0)),
+            in_minutes: Some(1),
         }),
         cx,
     )
     .await
     .unwrap();
-    cx.executor().advance_clock(Duration::from_secs(5));
+    let due = automations(cx).await[0].next_at;
+    cx.executor()
+        .advance_clock(Duration::from_mins(1) + Duration::from_secs(1));
     cx.run_until_parked();
     let row = automations(cx).await.remove(0);
     assert!(row.threads.is_empty(), "{:?}", row.threads);
     assert_eq!(thread_count(cx).await, 0);
     assert!(
-        row.next_at.is_some_and(|next| next.0 > due.0),
+        row.next_at
+            .is_some_and(|next| due.is_some_and(|due| next > due)),
         "a start that saved no thread must be retried, not kept as a run: {:?}",
         row.next_at
     );
@@ -339,6 +316,107 @@ async fn deleting_an_automation_waits_for_the_person(cx: &mut TestAppContext) {
     approve(cx).await;
     deleting.await.unwrap();
     assert!(automations(cx).await.is_empty());
+}
+
+#[cfg(unix)]
+async fn runs_with_status(
+    automation: &AutomationId,
+    status: ThreadStatus,
+    count: usize,
+    cx: &mut TestAppContext,
+) -> bool {
+    for _ in 0..200 {
+        cx.executor().advance_clock(Duration::from_millis(50));
+        cx.run_until_parked();
+        let row = automations(cx)
+            .await
+            .into_iter()
+            .find(|row| &row.id == automation);
+        if let Some(row) = row
+            && row.threads.len() == count
+            && super::thread(&row.threads[count - 1], cx).await.status == status
+        {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    false
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn three_failed_runs_in_a_row_pause_the_automation(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Automation(automation) = op(
+        Op::Automation(AutomationOp::Add {
+            name: "Failing".into(),
+            body: "ping".into(),
+            project_id: fixture.project.clone(),
+            program: "/bin/sh -c 'exit 3'".into(),
+            minutes: Some(1),
+            in_minutes: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("automation")
+    };
+    let told = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let workspace = fixture.workspace.clone();
+    let _subscription = cx.update({
+        let told = told.clone();
+        move |cx| {
+            cx.subscribe(&workspace, move |_, event: &crate::WorkspaceEvent, _| {
+                if let crate::WorkspaceEvent::AutomationPaused(name, reason) = event {
+                    told.borrow_mut().push((name.clone(), reason.clone()));
+                }
+            })
+        }
+    });
+    for run in 1..=3 {
+        cx.executor().advance_clock(Duration::from_secs(60));
+        assert!(
+            runs_with_status(&automation.id, ThreadStatus::Error, run, cx).await,
+            "run {run} did not fail"
+        );
+    }
+    let row = automations(cx).await.remove(0);
+    assert!(row.failing, "three failed runs are a failing automation");
+    assert!(!row.paused, "it pauses only when the next run is due");
+
+    cx.executor().advance_clock(Duration::from_secs(60));
+    for _ in 0..20 {
+        cx.executor().advance_clock(Duration::from_millis(50));
+        cx.run_until_parked();
+    }
+    let row = automations(cx).await.remove(0);
+    assert!(row.paused, "the due run pauses instead of starting");
+    assert_eq!(
+        *told.borrow(),
+        [("Failing".to_owned(), "3 runs failed in a row".to_owned())],
+        "the activity log hears about the pause once"
+    );
+    assert!(row.failing);
+    assert_eq!(row.threads.len(), 3, "no fourth thread was started");
+    assert_eq!(thread_count(cx).await, 3);
+
+    op(
+        Op::Automation(AutomationOp::Resume {
+            id: automation.id.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let row = automations(cx).await.remove(0);
+    assert!(!row.failing, "a resume starts a new streak");
+    cx.executor().advance_clock(Duration::from_secs(60));
+    assert!(
+        runs_with_status(&automation.id, ThreadStatus::Error, 4, cx).await,
+        "the first run after a resume starts"
+    );
+    assert!(!automations(cx).await.remove(0).failing);
 }
 
 #[gpui_kit::test]
