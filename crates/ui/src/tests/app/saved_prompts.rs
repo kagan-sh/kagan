@@ -55,6 +55,22 @@ fn new_key() -> &'static str {
     chords()[1]
 }
 
+// Deleting a saved prompt asks the person first, so the test answers the question.
+fn approve_delete(cx: &mut TestAppContext) {
+    let id = cx
+        .read(|cx| {
+            Workspace::global(cx)
+                .read(cx)
+                .approvals()
+                .next()
+                .map(|a| a.id.clone())
+        })
+        .expect("the delete is waiting for the person");
+    let answer = cx.update(|cx| Workspace::answer_standalone(id, "approve".into(), cx));
+    cx.foreground_executor().block_test(answer).unwrap();
+    cx.run_until_parked();
+}
+
 fn delete_key() -> &'static str {
     chords()[2]
 }
@@ -95,6 +111,10 @@ fn the_command_list_opens_saved_prompts_and_can_search_star_delete_and_add(
     );
     click(cx, window, &format!("saved-prompt-delete-{}", other.id.0));
     cx.run_until_parked();
+    approve_delete(cx);
+    assert!(cx.update(|cx| commands_state(kagan.read(cx))).is_none());
+    dispatch(cx, Op::Window(WindowOp::SavedPrompts));
+    cx.run_until_parked();
     assert!(!shows(cx, window, &row(&other.id)));
     query(cx, window, &kagan, "");
     click(cx, window, "saved-prompt-new");
@@ -131,8 +151,17 @@ fn star_and_delete_act_on_the_selected_row_from_the_keyboard(cx: &mut TestAppCon
     );
     cx.simulate_keystrokes(window, delete_key());
     cx.run_until_parked();
-    assert!(!shows(cx, window, &row(&notes.id)));
-    assert!(cx.update(|cx| commands_state(kagan.read(cx))).is_some());
+    approve_delete(cx);
+    assert!(cx.update(|cx| commands_state(kagan.read(cx))).is_none());
+    let OpResult::SavedPrompts(left) = dispatch(
+        cx,
+        Op::SavedPrompt(SavedPromptOp::Search {
+            text: String::new(),
+        }),
+    ) else {
+        panic!("search");
+    };
+    assert!(left.is_empty(), "the approved delete removed it");
 }
 
 #[gpui_kit::test]
@@ -222,4 +251,68 @@ fn screen(cx: &mut TestAppContext, id: &kg_domain::ThreadId) -> String {
         OpResult::Screen(text) => text,
         other => panic!("{other:?}"),
     }
+}
+
+#[gpui_kit::test]
+fn edit_opens_the_form_with_the_prompt_and_saves_the_change(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let notes = add(cx, "Notes", "remember this");
+    dispatch(cx, Op::Window(WindowOp::SavedPrompts));
+    cx.run_until_parked();
+    assert!(shows(cx, window, &row(&notes.id)), "the row is listed");
+    click(cx, window, &format!("saved-prompt-edit-{}", notes.id.0));
+    assert_eq!(
+        value_of(cx, window, "saved-prompt-title").as_deref(),
+        Some("Notes"),
+        "the form opens with the saved title"
+    );
+    assert!(has_value(cx, window, "remember this"));
+    click(cx, window, "saved-prompt-title");
+    for _ in 0.."Notes".len() {
+        cx.simulate_keystrokes(window, "backspace");
+    }
+    cx.simulate_input(window, "Plans");
+    click(cx, window, "saved-prompt-save");
+    cx.run_until_parked();
+    let OpResult::SavedPrompts(found) = dispatch(
+        cx,
+        Op::SavedPrompt(SavedPromptOp::Search {
+            text: "Plans".into(),
+        }),
+    ) else {
+        panic!("search");
+    };
+    assert_eq!(found.len(), 1, "the edit replaced the title");
+    assert_eq!(found[0].id, notes.id);
+    assert_eq!(
+        found[0].body, "remember this",
+        "the text is kept when not changed"
+    );
+    assert!(!shows(cx, window, "saved-prompt-title"), "the form closes");
+}
+
+// The question about a delete is shown in the Questions panel, which the open list covers. So a
+// delete from the list closes the list, and the person sees the question.
+#[gpui_kit::test]
+fn a_delete_from_the_list_closes_it_so_the_question_shows(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let notes = add(cx, "Notes", "remember this");
+    dispatch(cx, Op::Window(WindowOp::SavedPrompts));
+    cx.run_until_parked();
+    click(cx, window, &format!("saved-prompt-delete-{}", notes.id.0));
+    cx.run_until_parked();
+    assert!(
+        cx.update(|cx| commands_state(kagan.read(cx))).is_none(),
+        "the list closes while the question waits"
+    );
+    approve_delete(cx);
+    let OpResult::SavedPrompts(left) = dispatch(
+        cx,
+        Op::SavedPrompt(SavedPromptOp::Search {
+            text: String::new(),
+        }),
+    ) else {
+        panic!("search");
+    };
+    assert!(left.is_empty(), "the approved delete removed it");
 }

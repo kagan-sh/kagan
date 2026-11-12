@@ -8,9 +8,10 @@ use super::{
     type_in, wait_for_status,
 };
 #[cfg(unix)]
-use super::{Reap, dispatch_delete, kinds_of, pending_delete, screen_of};
-#[cfg(unix)]
-use super::{dispatch_send, job_pid, screen_lines, script, sent_text, wait_until_busy};
+use super::{
+    Reap, dispatch_delete, dispatch_send, job_pid, kinds_of, pending_delete, screen_lines,
+    screen_of, script, sent_text, wait_until_busy,
+};
 
 #[gpui_kit::test]
 async fn run_puts_the_programs_output_on_the_screen(cx: &mut TestAppContext) {

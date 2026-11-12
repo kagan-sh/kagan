@@ -60,12 +60,10 @@ pub(in crate::tests) use start::press_key;
 #[cfg(unix)]
 pub(in crate::tests) use support::app_then;
 pub(in crate::tests) use support::setup_with;
-#[cfg(unix)]
-pub(in crate::tests) use support::wait_for_shell;
 pub(in crate::tests) use support::{
     click, click_within, count_repaints, git, grid_text, host_grid, host_then, input, pending,
-    run_child, run_program, scroll_form_to_end, set_preference, setup, thread_record,
-    thread_status, wait_until,
+    run_child, run_program, screen_text, scroll_form_to_end, set_preference, setup, thread_record,
+    thread_status, wait_for_output, wait_for_screen, wait_until,
 };
 pub(crate) use support::{open, open_empty, run_shell};
 pub(in crate::tests) use surfaces::{

@@ -59,6 +59,7 @@ fn a_project_page_sets_its_own_variables_and_leaves_the_global_ones(cx: &mut Tes
         Workspace::dispatch(
             Op::Settings(SettingsOp::Project {
                 id: ProjectId("prj_kagan".into()),
+                section: None,
             }),
             cx,
         )
@@ -84,6 +85,7 @@ fn open_project_page(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Settings(SettingsOp::Project {
                 id: ProjectId("prj_kagan".into()),
+                section: None,
             }),
             cx,
         )

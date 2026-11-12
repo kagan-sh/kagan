@@ -18,6 +18,8 @@ use gpui_kit::Role;
 #[cfg(unix)]
 use kg_core::Workspace;
 #[cfg(unix)]
+use kg_domain::ProjectOp;
+#[cfg(unix)]
 use kg_domain::{EnvironmentSpec, Op, OpResult, ProgramOp, Run, ThreadOp};
 #[cfg(unix)]
 use std::path::PathBuf;
@@ -427,7 +429,7 @@ fn escape_in_the_program_list_leaves_the_screen_and_keeps_the_program(cx: &mut T
 
 #[cfg(unix)]
 #[gpui_kit::test]
-fn an_archived_program_stays_the_recent_default(cx: &mut TestAppContext) {
+fn an_archived_program_is_not_the_default(cx: &mut TestAppContext) {
     let (_kagan, _window, data) = open(cx);
     let data = data.path().to_path_buf();
     let bin = fixture_programs(cx, &data, &["codex", "gemini"]);
@@ -457,10 +459,9 @@ fn an_archived_program_stays_the_recent_default(cx: &mut TestAppContext) {
     });
     cx.foreground_executor().block_test(archive).unwrap();
     cx.run_until_parked();
-    let gemini = bin.join("gemini").display().to_string();
-    // Without the archived thread the default would be the first installed agent, codex.
-    assert_eq!(default_program(cx), Some(gemini.clone()));
-    // A restart reopens the same data folder, and the recent program is still the default.
+    // A recent program never becomes the default: the first installed agent does.
+    assert_eq!(default_program(cx), Some("codex".to_owned()));
+    // A restart reopens the same data folder, and the archived program is still not the default.
     let reopened = cx.update(|cx| {
         Workspace::open(
             data.as_path().into(),
@@ -471,7 +472,15 @@ fn an_archived_program_stays_the_recent_default(cx: &mut TestAppContext) {
     });
     cx.foreground_executor().block_test(reopened).unwrap();
     cx.run_until_parked();
-    assert_eq!(default_program(cx), Some(gemini));
+    // The reopened workspace has no fixture PATH yet: give it the same one as before.
+    let shell = bin.join("fixture-shell");
+    cx.update(|cx| {
+        Workspace::global(cx).update(cx, |workspace, _| {
+            workspace.use_program_environment(&bin, &shell);
+        });
+    });
+    cx.run_until_parked();
+    assert_eq!(default_program(cx), Some("codex".to_owned()));
 }
 
 #[gpui_kit::test]
@@ -845,21 +854,18 @@ fn an_offscreen_default_program_is_visible_when_the_picker_opens(cx: &mut TestAp
     let (_kagan, window, data) = open(cx);
     let bin = fixture_programs(cx, data.path(), &ROW_NAMES);
     let shell = bin.join("fixture-shell").display().to_string();
-    let run = Run {
-        project_id: ProjectId("personal".into()),
-        program: shell.clone(),
-        title: None,
-        environment: EnvironmentSpec::Personal,
-        visibility: None,
-        parent_thread_id: None,
-        quiet: false,
-        lifecycle_owner_thread_id: None,
-        metadata: None,
-    };
-    let started = cx.update(|cx| Workspace::dispatch(Op::Thread(ThreadOp::Run(run)), cx));
-    cx.foreground_executor().block_test(started).unwrap();
-    cx.run_until_parked();
-    start_in_plain_folder(cx, window, data.path());
+    let project = start_in_plain_folder(cx, window, data.path());
+    let set = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Project(ProjectOp::SetProgram {
+                id: project.clone(),
+                program: Some(shell.clone()),
+            }),
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(set).unwrap();
+    click(cx, window, &format!("project-new-{}", project.0));
     let row = format!("program-{shell}");
     wait_until(cx, |cx| shows(cx, window, &row));
     assert_eq!(selected_of(cx, window, &row), Some(true));
@@ -885,6 +891,40 @@ fn a_version_shows_its_number_without_its_build_suffix_or_full_stop(cx: &mut Tes
         label(cx, window, "program-version-copilot") == "1.0.10"
     });
     assert_eq!(label(cx, window, "program-version-codex"), "0.16.0");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_version_written_with_a_v_shows_its_number(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let bin = fixture_programs(cx, data.path(), &["opencode"]);
+    std::fs::write(
+        bin.join("opencode"),
+        "#!/bin/sh\necho \"opencode v2.2.5\"\n",
+    )
+    .unwrap();
+    start_in_plain_folder(cx, window, data.path());
+    wait_until(cx, |cx| {
+        label(cx, window, "program-version-opencode") == "2.2.5"
+    });
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_version_stays_clear_of_the_list_scrollbar(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    fixture_programs(cx, data.path(), &["codex"]);
+    start_in_plain_folder(cx, window, data.path());
+    wait_until(cx, |cx| {
+        label(cx, window, "program-version-codex") == "1.2.3"
+    });
+    let (version_x, _, version_w, _) = bounds(cx, window, "program-version-codex").unwrap();
+    let (list_x, _, list_w, _) = bounds(cx, window, "program-list").unwrap();
+    assert!(
+        version_x + version_w <= list_x + list_w - 12.0,
+        "the version ends {} before the list's edge; the scrollbar needs about 12",
+        list_x + list_w - (version_x + version_w)
+    );
 }
 
 #[cfg(unix)]
@@ -1162,10 +1202,11 @@ fn a_recent_command_is_named_by_its_program_with_its_flags_under_it(cx: &mut Tes
     wait_until(cx, |cx| {
         label(cx, window, "program-command-codex --model fast") == "--model fast"
     });
-    // The default row is selected, so its name says so in words.
+    // The default is the first installed agent, so that row is selected, not the recent run.
+    assert_eq!(label(cx, window, "program-name-codex"), "Codex, selected");
     assert_eq!(
         label(cx, window, "program-name-codex --model fast"),
-        "Codex, selected"
+        "Codex"
     );
 }
 

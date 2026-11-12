@@ -1,11 +1,8 @@
 # Product Rust line ceilings. A count may grow up to its ceiling, never past it.
+# This branch: main is 80936 lines, and the merged count is 81383 (+447). The ceiling is that count.
 target 35000
-# Cost: this branch adds 254 product lines on top of main (80446 lines), for the QA CLI fixes
-# and their review rounds. The merged count is 80700, and the ceiling is set to it. The end
-# target of 35000 is unchanged.
-# The terminal input cap adds 118 lines on top of that. The merged count is 80818, and the ceiling is set to it.
-# The browser QA fixes add 88 lines on top of main's 80936 (the held-thread tab, the hide calls, the page inset, the toolbar and the test-only shown record). The ceiling is set to the merged count.
-ceiling 81024
+# The browser QA fixes add 88 lines on top of main (81383, after #135): the held-thread tab, the hide calls, the page inset, the toolbar and the test-only shown record. The ceiling is set to the merged count.
+ceiling 81471
 allow_expect 8
 crates/core/src/thread/agent/files.rs 754
 crates/ui/src/theme/catalog.rs 646
