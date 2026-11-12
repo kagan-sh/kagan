@@ -24,7 +24,13 @@ pub struct Automation {
     pub last_error: Option<String>,
     /// The thread each run started, oldest first.
     pub threads: Vec<ThreadId>,
+    /// The last `FAILED_RUNS_LIMIT` runs since the last resume all ended in an error. A due
+    /// automation like this pauses instead of starting another run.
+    pub failing: bool,
 }
+
+/// How many runs in a row must end in an error before an automation pauses itself.
+pub const FAILED_RUNS_LIMIT: usize = 3;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Subcommand)]
 #[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
@@ -40,13 +46,13 @@ pub enum AutomationOp {
         #[arg(long)]
         program: String,
         /// Whole minutes between runs, from 1 to 1440
-        #[arg(long, conflicts_with = "at")]
+        #[arg(long, conflicts_with = "in_minutes")]
         #[serde(default, skip_serializing_if = "Option::is_none")]
         minutes: Option<u16>,
-        /// When to run once, as milliseconds since the Unix epoch
-        #[arg(long, conflicts_with = "minutes")]
+        /// Run once, this many minutes from now, from 1 to 1440
+        #[arg(long = "in", conflicts_with = "minutes")]
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        at: Option<Timestamp>,
+        in_minutes: Option<u16>,
     },
     /// Pause an automation. A thread it already started keeps running
     Pause { id: AutomationId },
@@ -70,15 +76,18 @@ pub(super) fn valid(op: &AutomationOp) -> Result<(), String> {
         body,
         program,
         minutes,
-        at,
+        in_minutes,
         ..
     } = op
     else {
         return Ok(());
     };
     let name = name.trim();
-    if name.is_empty() || name.chars().any(crate::unsafe_char) {
+    if name.is_empty() {
         return Err("an automation needs a name".into());
+    }
+    if name.chars().any(crate::unsafe_char) {
+        return Err("an automation name cannot hold a control or bidi character".into());
     }
     if name.chars().count() > NAME_MAX {
         return Err(format!("a name is over {NAME_MAX} characters"));
@@ -90,11 +99,11 @@ pub(super) fn valid(op: &AutomationOp) -> Result<(), String> {
         return Err(format!("text is over {} MiB", TEXT_MAX >> 20));
     }
     crate::split_program(program.trim()).map_err(|error| error.to_string())?;
-    match (*minutes, *at) {
+    match (*minutes, *in_minutes) {
         (Some(minutes), None) if (1..=1440).contains(&minutes) => Ok(()),
         (Some(_), None) => Err("minutes must be a whole number from 1 to 1440".into()),
-        (None, Some(at)) if at.0 >= 0 => Ok(()),
-        (None, Some(_)) => Err("a time cannot be negative".into()),
+        (None, Some(minutes)) if (1..=1440).contains(&minutes) => Ok(()),
+        (None, Some(_)) => Err("the one-time minutes must be a whole number from 1 to 1440".into()),
         (None, None) => Err("an automation needs minutes from 1 to 1440, or one time".into()),
         (Some(_), Some(_)) => Err("an automation takes minutes or one time".into()),
     }

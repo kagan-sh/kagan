@@ -261,6 +261,7 @@ impl TerminalView {
     }
 
     #[cfg(test)]
+    #[cfg(unix)]
     pub(crate) fn notice(&self) -> Option<&str> {
         self.notice.as_deref()
     }

@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use kg_domain::{
     AutomationId, AutomationOp, ConfigOp, DiffOp, DiffQuery, DiffScope, EnvironmentSpec, Metadata,
-    Op, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, SectionId, SectionOp, SkillOp,
-    TerminalOp, ThreadId, ThreadOp, Timestamp,
+    Op, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, ProjectSection, SavedPromptId,
+    SavedPromptOp, SectionId, SectionOp, SettingsOp, SkillOp, TerminalOp, ThreadId, ThreadOp,
 };
 use serde_json::{Value, json};
 
@@ -655,7 +655,7 @@ fn cli_automations_parse_next_to_thread() {
             project_id: project,
             program: "claude".into(),
             minutes: Some(15),
-            at: None,
+            in_minutes: None,
         })
     );
     assert_eq!(
@@ -682,7 +682,7 @@ fn cli_automations_parse_next_to_thread() {
             "ping",
             "--program",
             "codex",
-            "--at",
+            "--in",
             "5",
             "--project-id",
             "prj_1"
@@ -693,8 +693,25 @@ fn cli_automations_parse_next_to_thread() {
             project_id: ProjectId("prj_1".into()),
             program: "codex".into(),
             minutes: None,
-            at: Some(Timestamp(5)),
+            in_minutes: Some(5),
         })
+    );
+    // One unit for a one-time run: minutes from now, as the window has it.
+    assert!(
+        Cli::try_parse_from([
+            "kg",
+            "automation",
+            "add",
+            "Once",
+            "ping",
+            "--program",
+            "codex",
+            "--at",
+            "1000",
+            "--project-id",
+            "prj_1"
+        ])
+        .is_err()
     );
 }
 
@@ -947,5 +964,77 @@ fn cli_browser_text_omits_an_empty_title_and_text() {
     assert_eq!(
         crate::cli::format_browser_snapshot(&snapshot),
         "https://example.com/login\n[2] textbox \"Email\" value=\"ada@example.com\"\n"
+    );
+}
+
+#[test]
+fn ui_scroll_takes_a_negative_pixel_count_without_a_separator() {
+    assert_eq!(
+        parse(&["ui", "scroll", "list", "-300"]),
+        Op::Ui(kg_domain::UiOp::Scroll {
+            element_id: "list".into(),
+            dy: -300.,
+            within: None,
+            window: 0,
+        })
+    );
+}
+
+#[test]
+fn env_set_given_a_value_argument_says_the_value_comes_on_stdin() {
+    let argv: Vec<String> = ["kg", "env", "set", "NAME", "value"]
+        .map(String::from)
+        .into();
+    let error = Cli::try_parse_from(&argv)
+        .err()
+        .expect("a value argument is unexpected");
+    let hint = crate::hint(&error, &argv).expect("a hint for the value");
+    assert!(hint.contains("stdin"), "{hint}");
+}
+
+#[test]
+fn text_ends_with_one_newline_in_a_terminal_and_is_unchanged_in_a_pipe() {
+    let mut out = Vec::new();
+    crate::cli::write_text(&mut out, "rules", true).unwrap();
+    assert_eq!(out, b"rules\n");
+    out.clear();
+    crate::cli::write_text(&mut out, "rules\n", true).unwrap();
+    assert_eq!(out, b"rules\n");
+    out.clear();
+    crate::cli::write_text(&mut out, "rules", false).unwrap();
+    assert_eq!(out, b"rules");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_word_that_is_not_utf8_becomes_lossy_text_instead_of_a_panic() {
+    use std::os::unix::ffi::OsStringExt as _;
+    let words = crate::argv_words([
+        std::ffi::OsString::from("kg"),
+        std::ffi::OsString::from_vec(vec![0xff, b'a']),
+    ]);
+    assert_eq!(words, ["kg", "\u{fffd}a"]);
+}
+
+#[test]
+fn cli_saved_prompt_edit_takes_the_id_then_the_title_and_text() {
+    assert_eq!(
+        parse(&["saved-prompt", "edit", "svp_1", "Plans", "new text"]),
+        Op::SavedPrompt(SavedPromptOp::Edit {
+            id: SavedPromptId("svp_1".into()),
+            title: "Plans".into(),
+            body: "new text".into(),
+        })
+    );
+}
+
+#[test]
+fn cli_settings_project_can_open_its_automations() {
+    assert_eq!(
+        parse(&["settings", "project", "prj_1", "--section", "automations"]),
+        Op::Settings(SettingsOp::Project {
+            id: ProjectId("prj_1".into()),
+            section: Some(ProjectSection::Automations),
+        })
     );
 }

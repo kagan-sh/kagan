@@ -46,3 +46,18 @@ fn a_repeated_update_or_install_line_is_written_once(cx: &mut gpui_kit::TestAppC
     strip.installing(None);
     assert_eq!(strip.kept(), 2);
 }
+
+#[gpui_kit::test]
+fn an_automation_pause_is_written_to_the_log(cx: &mut gpui_kit::TestAppContext) {
+    let mut strip = strip(cx);
+    strip.automation_paused("Morning", "3 runs failed in a row");
+    let lines: Vec<String> = strip
+        .tail()
+        .into_iter()
+        .map(|(_, line)| line.to_string())
+        .collect();
+    assert_eq!(
+        lines,
+        ["Automation “Morning” paused: 3 runs failed in a row"]
+    );
+}

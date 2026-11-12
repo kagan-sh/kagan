@@ -3,6 +3,7 @@ use crate::ThreadId;
 use super::automation::valid;
 use super::browser::browser_check;
 use super::env::{shell_name, variable_name, variable_value};
+use super::instructions::InstructionsOp;
 use super::saved_prompt::TITLE_MAX;
 use super::{
     DiffOp, EnvOp, EnvironmentOp, Op, PluginOp, PreviewOp, ProgramOp, ProjectOp, SEARCH_LIMIT,
@@ -18,8 +19,8 @@ use crate::{saved_name, split_program, unsafe_char};
 /// Returns an error when a thread id is not a plain identifier (at most 128 ASCII letters,
 /// digits, `_`, or `-`), when a surface id is empty or holds a control character, when a search
 /// is empty, longer than [`SEARCH_TEXT_MAX`], or names a limit outside [`SEARCH_LIMIT`], when a
-/// resize is outside [`TERMINAL_COLS`] and [`TERMINAL_ROWS`], or when a window index is outside
-/// 1 to 9.
+/// resize is outside [`TERMINAL_COLS`] and [`TERMINAL_ROWS`], when input or a report is longer
+/// than [`TEXT_MAX`], or when a window index is outside 1 to 9.
 pub fn check(op: &Op) -> Result<(), String> {
     match op {
         Op::Window(WindowOp::Thread { index }) if !(1..=9).contains(index) => {
@@ -33,6 +34,8 @@ pub fn check(op: &Op) -> Result<(), String> {
             .and_then(|()| search(op))
             .and_then(|()| match op {
                 ThreadOp::Paste { text, file, .. } => carried_text(text.as_ref(), file.as_ref()),
+                ThreadOp::Input { text, .. } if text.len() > TEXT_MAX => Err(over_cap()),
+                ThreadOp::Report { bytes, .. } if bytes.len() > TEXT_MAX => Err(over_cap()),
                 _ => Ok(()),
             }),
         Op::Environment(op) => environment_thread(op),
@@ -58,6 +61,7 @@ pub fn check(op: &Op) -> Result<(), String> {
         }
         Op::Plugin(op) => plain_opt(plugin_thread(op)),
         Op::Browser(op) => plain(op.thread()).and_then(|()| browser_check(op)),
+        Op::Instructions(op) => instructions(op),
         Op::Guide { .. }
         | Op::Skill(_)
         | Op::Open
@@ -66,7 +70,6 @@ pub fn check(op: &Op) -> Result<(), String> {
         | Op::Theme(_)
         | Op::Keymap(_)
         | Op::Preference(_)
-        | Op::Instructions(_)
         | Op::Settings(_)
         | Op::Window(_)
         | Op::Sidebar
@@ -100,6 +103,22 @@ pub fn check(op: &Op) -> Result<(), String> {
                 printable(path).ok_or_else(|| "preview path must be a plain path".into())
             }),
         },
+    }
+}
+
+// Rules are text for a program to read, so a control character other than a line break (LF or
+// CRLF, as Windows editors save it) or a tab has no place in them.
+fn instructions(op: &InstructionsOp) -> Result<(), String> {
+    match op {
+        InstructionsOp::Set {
+            text: Some(text), ..
+        } if text
+            .chars()
+            .any(|c| c.is_control() && !matches!(c, '\n' | '\r' | '\t')) =>
+        {
+            Err("the rules cannot hold a control character other than a line break or tab".into())
+        }
+        _ => Ok(()),
     }
 }
 
@@ -138,11 +157,13 @@ pub(super) fn carried_text<P>(text: Option<&String>, file: Option<&P>) -> Result
         (Some(_), Some(_)) => Err("pass the text or --file, not both".into()),
         (None, None) => Err("pass the text or --file".into()),
         (None, Some(_)) => Err("send the text, not a path".into()),
-        (Some(text), None) if text.len() > TEXT_MAX => {
-            Err(format!("text is over {} MiB", TEXT_MAX >> 20))
-        }
+        (Some(text), None) if text.len() > TEXT_MAX => Err(over_cap()),
         (Some(_), None) => Ok(()),
     }
+}
+
+fn over_cap() -> String {
+    format!("text is over {} MiB", TEXT_MAX >> 20)
 }
 
 fn search(op: &ThreadOp) -> Result<(), String> {
@@ -248,7 +269,12 @@ fn env_check(op: &EnvOp) -> Result<(), String> {
 
 fn saved_prompt(op: &SavedPromptOp) -> Result<(), String> {
     match op {
-        SavedPromptOp::Add { title, body } => prompt_title(title).and_then(|()| prompt_body(body)),
+        SavedPromptOp::Add { title, body, .. } => {
+            prompt_title(title).and_then(|()| body.as_deref().map_or(Ok(()), prompt_body))
+        }
+        SavedPromptOp::Edit { id, title, body } => prompt_id(id)
+            .and_then(|()| prompt_title(title))
+            .and_then(|()| prompt_body(body)),
         SavedPromptOp::Search { text } if text.chars().count() > SEARCH_TEXT_MAX => Err(format!(
             "search text is longer than {SEARCH_TEXT_MAX} characters"
         )),

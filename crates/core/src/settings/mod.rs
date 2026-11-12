@@ -63,7 +63,8 @@ enum Kind {
     Notify,
     FontSize,
     Slot,
-    Pixels,
+    LeftWidth,
+    RightWidth,
     Map,
     BranchPrefix,
     Density,
@@ -97,9 +98,9 @@ const PREFERENCES: &[(&str, Kind)] = &[
 ];
 const LAYOUT: &[(&str, Kind)] = &[
     (prefs::LEFT_SIDEBAR, Kind::Flag),
-    (prefs::LEFT_WIDTH, Kind::Pixels),
+    (prefs::LEFT_WIDTH, Kind::LeftWidth),
     (prefs::RIGHT_SIDEBAR, Kind::Flag),
-    (prefs::RIGHT_WIDTH, Kind::Pixels),
+    (prefs::RIGHT_WIDTH, Kind::RightWidth),
     (prefs::REVIEW_WRAP, Kind::Flag),
 ];
 
@@ -114,11 +115,24 @@ fn kind(key: &str) -> Option<Kind> {
         .map(|(_, kind)| *kind)
 }
 
+// A sidebar width is refused, not clamped, outside its range, so the value read back is the one saved.
+fn width(key: &str, value: &serde_json::Value, (min, max): (f32, f32)) -> Result<()> {
+    serde_json::from_value::<f32>(value.clone())
+        .ok()
+        .filter(|pixels| (min..=max).contains(pixels))
+        .map(|_| ())
+        .ok_or_else(|| {
+            OpError::Invalid(format!(
+                "{key} must be a number of pixels from {min} to {max}"
+            ))
+        })
+}
+
 fn accepts(kind: Kind, key: &str, value: &serde_json::Value) -> Result<()> {
     match kind {
         Kind::Flag => serde_json::from_value::<bool>(value.clone())
             .map(|_| ())
-            .map_err(|_| OpError::Invalid(format!("{key} must be a boolean"))),
+            .map_err(|_| OpError::Invalid(format!("{key} must be true or false"))),
         Kind::FontSize => value
             .as_u64()
             .and_then(|size| u8::try_from(size).ok())
@@ -137,9 +151,8 @@ fn accepts(kind: Kind, key: &str, value: &serde_json::Value) -> Result<()> {
         Kind::Notify => serde_json::from_value::<kg_domain::NotifyLevel>(value.clone())
             .map(|_| ())
             .map_err(|_| OpError::Invalid(format!("{key} must be all, asks or off"))),
-        Kind::Pixels => serde_json::from_value::<f32>(value.clone())
-            .map(|_| ())
-            .map_err(|_| OpError::Invalid(format!("{key} must be a number of pixels"))),
+        Kind::LeftWidth => width(key, value, prefs::LEFT_WIDTH_RANGE),
+        Kind::RightWidth => width(key, value, prefs::RIGHT_WIDTH_RANGE),
         Kind::FontName => value
             .as_str()
             .filter(|text| prefs::valid_font_name(text))
@@ -180,7 +193,11 @@ fn accepts(kind: Kind, key: &str, value: &serde_json::Value) -> Result<()> {
             .ok()
             .filter(|ids| ids.iter().all(kg_domain::PluginId::valid))
             .map(|_| ())
-            .ok_or_else(|| OpError::Invalid(format!("{key} must be a list of plugin ids"))),
+            .ok_or_else(|| {
+                OpError::Invalid(format!(
+                    "{key} must be a list of plugin ids, such as [\"hello\"]"
+                ))
+            }),
     }
 }
 
@@ -409,6 +426,9 @@ fn canonical(key: &str) -> Option<String> {
         .map(|key| key.unparse(crate::host_os()))
 }
 
+#[cfg(test)]
+#[path = "limits_test.rs"]
+mod limits_tests;
 #[cfg(test)]
 #[path = "review_wrap_test.rs"]
 mod review_wrap_tests;

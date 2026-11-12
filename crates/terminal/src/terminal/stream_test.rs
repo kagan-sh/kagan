@@ -1,9 +1,23 @@
 use std::io::{self, Write};
-use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use proptest::prelude::*;
 
-use super::write_bytes;
+use super::{INPUT_MAX, reserve, write_bytes};
+
+#[test]
+fn a_dropped_charge_gives_its_bytes_back() {
+    let queued = Arc::new(AtomicUsize::new(0));
+    let first = reserve(&queued, INPUT_MAX).expect("the whole budget fits");
+    let Err(error) = reserve(&queued, 1) else {
+        panic!("a full budget refuses more")
+    };
+    assert_eq!(error.kind(), io::ErrorKind::QuotaExceeded);
+    drop(first);
+    let _second = reserve(&queued, 1).expect("the freed bytes fit");
+    assert_eq!(queued.load(Ordering::Acquire), 1);
+}
 
 struct Chunks {
     data: Vec<u8>,

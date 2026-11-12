@@ -202,9 +202,17 @@ pub(super) fn version_of(program: &Program) -> Version {
         .next()
         .unwrap_or_default()
         .trim();
+    // A word such as `v2.2.5` is the number too, with its `v` left off.
     let number = line
         .split_whitespace()
-        .find(|word| word.starts_with(|c: char| c.is_ascii_digit()))
+        .find_map(|word| {
+            let word = word
+                .strip_prefix('v')
+                .filter(|rest| rest.starts_with(|c: char| c.is_ascii_digit()))
+                .unwrap_or(word);
+            word.starts_with(|c: char| c.is_ascii_digit())
+                .then_some(word)
+        })
         .unwrap_or_default()
         .split(['-', '+'])
         .next()

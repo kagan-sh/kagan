@@ -68,7 +68,7 @@ pub(crate) async fn start(
     match spawned {
         Ok(terminal) => {
             this.update(cx, |workspace, cx| {
-                workspace.run_mut(&record.id).shown = Some(Shown::Running(terminal));
+                workspace.run_mut(&record.id).shown = Some(Shown::Running(Box::new(terminal)));
                 follow_terminals(workspace, cx);
             })
             .map_err(closed)?;
@@ -197,11 +197,11 @@ pub(crate) async fn submit(
     }
     let (typed, written) = this
         .update(cx, |workspace, _| match workspace.shown(id) {
-            Some(Shown::Running(terminal)) => terminal
-                .submit(text)
-                .map_err(|error| OpError::Invalid(error.to_string())),
+            Some(Shown::Running(terminal)) => {
+                terminal.submit(text).map_err(|error| refused(&error))
+            }
             Some(Shown::Ended(_)) => Err(OpError::Invalid("the program has ended".into())),
-            None => Err(missing("terminal", id)),
+            None => Err(missing("thread", id)),
         })
         .map_err(closed)??;
     // A blocking recv would pin a background worker and starve Stop and the DB.
@@ -297,10 +297,10 @@ pub(crate) fn run(
         } else {
             workspace
                 .shown(&id)
-                .ok_or_else(|| missing("terminal", &id))
+                .ok_or_else(|| missing("thread", &id))
                 .map(|shown| act(shown.running(), shown.view(), op))
         }?
-        .map_err(|error| OpError::Invalid(error.to_string()));
+        .map_err(|error| refused(&error));
         if moves_view {
             cx.emit(WorkspaceEvent::Screen(id.clone(), number));
         }
@@ -359,7 +359,7 @@ impl Run {
 
 /// A thread's terminal: the program while it runs, or the screen it left when it ended.
 pub(crate) enum Shown {
-    Running(Terminal),
+    Running(Box<Terminal>),
     Ended(Finished),
 }
 
@@ -376,6 +376,15 @@ impl Shown {
             Self::Running(terminal) => Some(terminal),
             Self::Ended(_) => None,
         }
+    }
+}
+
+// `full` is not `invalid`: a client can tell a program that is not reading from a bad request.
+fn refused(error: &std::io::Error) -> OpError {
+    if error.kind() == std::io::ErrorKind::QuotaExceeded {
+        OpError::Full(error.to_string())
+    } else {
+        OpError::Invalid(error.to_string())
     }
 }
 
@@ -474,6 +483,30 @@ impl Workspace {
 
     pub(crate) fn shown(&self, id: &ThreadId) -> Option<&Shown> {
         self.runs.get(id)?.shown.as_ref()
+    }
+
+    /// Each live terminal's containment: the thread, its extra terminal's number (`None` for the program's), and what it is.
+    pub(crate) fn live_containments(&self) -> Vec<(ThreadId, Option<u32>, String)> {
+        self.runs
+            .iter()
+            .flat_map(|(id, run)| {
+                let program = match &run.shown {
+                    Some(Shown::Running(terminal)) => Some((None, terminal.as_ref())),
+                    _ => None,
+                };
+                program
+                    .into_iter()
+                    .chain(
+                        run.extras
+                            .open
+                            .iter()
+                            .map(|(number, terminal)| (Some(*number), terminal)),
+                    )
+                    .map(move |(number, terminal)| {
+                        (id.clone(), number, terminal.containment().to_string())
+                    })
+            })
+            .collect()
     }
 
     /// A terminal's screen as cells, for a window in this process: the program's, or an extra one by number.

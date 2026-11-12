@@ -1,24 +1,27 @@
 use super::chord;
 use crate::kagan::review_read;
+#[cfg(unix)]
 use crate::kagan::screen_read;
+#[cfg(unix)]
 use std::time::Duration;
 
 use gpui_kit::point;
 use gpui_kit::{AppContext as _, ElementId, TestAppContext, px, size};
 use kg_core::Workspace;
-use kg_domain::{
-    EnvironmentSpec, Op, OpResult, ProjectId, Run, ThreadOp, ThreadStatus, Visibility,
-};
+#[cfg(unix)]
+use kg_domain::ThreadStatus;
+use kg_domain::{EnvironmentSpec, Op, OpResult, ProjectId, Run, ThreadOp, Visibility};
 
 use crate::kagan::changes::POLL;
 
 #[cfg(unix)]
 use super::notice_of;
 use super::{
-    add_project, approvals_waiting, click, focused_of, grid_text, hover_to, label, line, open,
-    present, repo_thread, run_program, run_shell, selected_of, set_preference, shell, shows,
-    thread_status, two_changes, value_of, wait_until,
+    add_project, approvals_waiting, click, focused_of, hover_to, label, open, present, repo_thread,
+    run_shell, selected_of, set_preference, shell, shows, two_changes, value_of, wait_until,
 };
+#[cfg(unix)]
+use super::{grid_text, line, run_program, thread_status};
 
 #[gpui_kit::test]
 fn remove_project_focuses_cancel_in_the_narrow_questions_panel(cx: &mut TestAppContext) {

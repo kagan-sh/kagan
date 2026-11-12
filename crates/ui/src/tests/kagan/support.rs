@@ -270,13 +270,20 @@ pub(in crate::tests) fn host_grid(cx: &mut TestAppContext, id: &ThreadId) -> Gri
 
 pub(in crate::tests) fn grid_text(cx: &mut TestAppContext, kagan: &Entity<Kagan>) -> String {
     let grid = cx.update(|cx| screen_read::terminal_grid(kagan.read(cx), cx));
-    grid.map_or_else(String::new, |grid| {
-        grid.lines
-            .iter()
-            .map(|line| line.iter().map(|cell| cell.c).collect::<String>())
-            .collect::<Vec<_>>()
-            .join("\n")
-    })
+    grid.map_or_else(String::new, |grid| screen_text(&grid))
+}
+
+// The screen as the program printed it: a row the terminal wrapped continues on the next row
+// with no break, so a word split by the wrap still reads as one word.
+pub(in crate::tests) fn screen_text(grid: &Grid) -> String {
+    let mut text = String::new();
+    for (index, line) in grid.lines.iter().enumerate() {
+        text.extend(line.iter().map(|cell| cell.c));
+        if !grid.wrapped.get(index).copied().unwrap_or(false) {
+            text.push('\n');
+        }
+    }
+    text
 }
 
 pub(in crate::tests) fn thread_record(cx: &mut TestAppContext, id: &ThreadId) -> kg_domain::Thread {
@@ -295,9 +302,46 @@ pub(in crate::tests) fn thread_status(cx: &mut TestAppContext, id: &ThreadId) ->
 #[track_caller]
 pub(in crate::tests) fn wait_until(
     cx: &mut TestAppContext,
-    mut done: impl FnMut(&mut TestAppContext) -> bool,
+    done: impl FnMut(&mut TestAppContext) -> bool,
 ) {
-    let deadline = Instant::now() + Duration::from_secs(8);
+    wait_or_report(cx, SCREEN_WAIT, done, |_| String::new());
+}
+
+// A wait on the terminal grid. A timeout prints the grid rows, their lengths, and whether each row
+// wraps, so a failure shows where the text went.
+#[track_caller]
+pub(in crate::tests) fn wait_for_screen(
+    cx: &mut TestAppContext,
+    kagan: &Entity<Kagan>,
+    done: impl FnMut(&mut TestAppContext) -> bool,
+) {
+    wait_or_report(cx, SCREEN_WAIT, done, |cx| grid_report(cx, kagan));
+}
+
+// How long a wait for the screen may take. A program's real-time output can take longer, so
+// `wait_for_output` gets OUTPUT_WAIT: a hang guard for loaded runners, not a speed-up.
+const SCREEN_WAIT: Duration = Duration::from_secs(8);
+const OUTPUT_WAIT: Duration = Duration::from_secs(120);
+
+// A wait for output a program prints in real time, which the test clock cannot speed up. A timeout
+// prints the grid.
+#[track_caller]
+pub(in crate::tests) fn wait_for_output(
+    cx: &mut TestAppContext,
+    kagan: &Entity<Kagan>,
+    done: impl FnMut(&mut TestAppContext) -> bool,
+) {
+    wait_or_report(cx, OUTPUT_WAIT, done, |cx| grid_report(cx, kagan));
+}
+
+#[track_caller]
+fn wait_or_report(
+    cx: &mut TestAppContext,
+    limit: Duration,
+    mut done: impl FnMut(&mut TestAppContext) -> bool,
+    report: impl FnOnce(&mut TestAppContext) -> String,
+) {
+    let deadline = Instant::now() + limit;
     loop {
         cx.executor().advance_clock(Duration::from_millis(50));
         cx.run_until_parked();
@@ -306,31 +350,33 @@ pub(in crate::tests) fn wait_until(
         }
         assert!(
             Instant::now() < deadline,
-            "timed out waiting for the screen"
+            "timed out waiting for the screen\n{}",
+            report(cx)
         );
         std::thread::sleep(Duration::from_millis(20));
     }
 }
 
-// The shell prints in real time, which the test clock cannot speed up, so this wait gets no short
-// limit. The 120 s limit only stops a test that can never pass from hanging.
-pub(in crate::tests) fn wait_for_shell(
-    cx: &mut TestAppContext,
-    mut done: impl FnMut(&mut TestAppContext) -> bool,
-) {
-    let hang = Instant::now() + Duration::from_secs(120);
-    loop {
-        cx.executor().advance_clock(Duration::from_millis(50));
-        cx.run_until_parked();
-        if done(cx) {
-            return;
-        }
-        assert!(
-            Instant::now() < hang,
-            "the shell never printed what the test waits for"
-        );
-        std::thread::sleep(Duration::from_millis(20));
-    }
+fn grid_report(cx: &mut TestAppContext, kagan: &Entity<Kagan>) -> String {
+    let grid = cx.update(|cx| screen_read::terminal_grid(kagan.read(cx), cx));
+    grid.map_or_else(String::new, |grid| {
+        let cols = grid.lines.first().map_or(0, Vec::len);
+        let rows = grid
+            .lines
+            .iter()
+            .enumerate()
+            .map(|(index, line)| {
+                let text: String = line.iter().map(|cell| cell.c).collect();
+                let wrapped = grid.wrapped.get(index).copied().unwrap_or(false);
+                format!(
+                    "[{index} len={} wrapped={wrapped}] {text:?}",
+                    text.chars().count()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("cols={cols} rows={}\n{rows}", grid.lines.len())
+    })
 }
 
 // In a short window the controls below the fields sit below the fold, so a person scrolls the form to them.

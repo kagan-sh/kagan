@@ -1,6 +1,6 @@
-use kg_domain::{Automation, AutomationId, ProjectId, ThreadId, Timestamp};
+use kg_domain::{Automation, AutomationId, ProjectId, ThreadId, ThreadStatus, Timestamp};
 
-use super::store;
+use super::{store, thread};
 
 fn saved(minutes: Option<u16>, at: Option<Timestamp>) -> Automation {
     Automation {
@@ -15,6 +15,7 @@ fn saved(minutes: Option<u16>, at: Option<Timestamp>) -> Automation {
         next_at: Some(Timestamp(5)),
         last_error: None,
         threads: Vec::new(),
+        failing: false,
     }
 }
 
@@ -36,7 +37,9 @@ fn an_automation_keeps_its_runs_and_goes_with_its_project() {
     assert_eq!(loaded.threads, vec![ThreadId("thr_1".into())]);
     assert_eq!(loaded.next_at, Some(Timestamp(9)));
 
-    store.set_automation_paused(&automation.id, true).unwrap();
+    store
+        .set_automation_paused(&automation.id, true, Timestamp(2))
+        .unwrap();
     assert!(store.automation(&automation.id).unwrap().unwrap().paused);
 
     store
@@ -64,6 +67,45 @@ fn only_unpaused_automations_that_are_due_are_loaded() {
     let rows = store.due_automations(Timestamp(10)).unwrap();
     let ids: Vec<_> = rows.into_iter().map(|row| row.id).collect();
     assert_eq!(ids, vec![due.id]);
+}
+
+// A run counts as failed when its thread ended in an error. Three failed runs in a row are a
+// failing automation; a run that did not fail breaks the row, and a resume starts a new streak.
+#[test]
+fn the_failure_streak_is_the_last_three_runs_since_the_last_resume() {
+    let store = store();
+    let automation = saved(Some(15), None);
+    store.insert_automation(&automation).unwrap();
+    let run = |n: i64, status: ThreadStatus| {
+        let id = format!("thr_{n}");
+        store.put_thread(&thread(&id, n)).unwrap();
+        store
+            .set_thread_status(&ThreadId(id.clone()), status, Timestamp(n))
+            .unwrap();
+        store
+            .record_automation_run(&automation.id, &ThreadId(id), Timestamp(n), None)
+            .unwrap();
+        store.automation(&automation.id).unwrap().unwrap().failing
+    };
+    assert!(!run(1, ThreadStatus::Error));
+    assert!(!run(2, ThreadStatus::Error));
+    assert!(
+        !run(3, ThreadStatus::Idle),
+        "a run that did not fail breaks the streak"
+    );
+    assert!(!run(4, ThreadStatus::Error));
+    assert!(!run(5, ThreadStatus::Error));
+    assert!(
+        run(6, ThreadStatus::Error),
+        "the last three runs all failed"
+    );
+    store
+        .set_automation_paused(&automation.id, false, Timestamp(7))
+        .unwrap();
+    assert!(
+        !store.automation(&automation.id).unwrap().unwrap().failing,
+        "a resume starts a new streak"
+    );
 }
 
 #[test]

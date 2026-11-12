@@ -52,13 +52,8 @@ pub(crate) async fn execute(
         Op::Settings(SettingsOp::Plugins) => {
             announce(this, crate::WorkspaceEvent::SettingsPlugins, cx)
         }
-        Op::Settings(SettingsOp::Project { id }) => {
-            let lookup = id.clone();
-            database
-                .call(move |store| store.project(&lookup))
-                .await?
-                .ok_or_else(|| missing("project", &id))?;
-            announce(this, crate::WorkspaceEvent::ProjectSettings(id), cx)
+        Op::Settings(SettingsOp::Project { id, section }) => {
+            project_page(this, &database, id, section, cx).await
         }
         Op::Window(op) => announce(this, crate::WorkspaceEvent::Window(op), cx),
         Op::Sidebar => database.call(read_sidebar).await,
@@ -95,7 +90,7 @@ pub(crate) async fn execute(
             crate::host::saved_program::rename(database, name, to).await
         }
         Op::Program(ProgramOp::Remove { name }) => {
-            crate::host::saved_program::remove(database, name).await
+            crate::host::saved_program::remove(database, requester, name, cx).await
         }
         Op::Program(ProgramOp::Pin { name, pinned }) => {
             crate::host::saved_program::pin(database, name, pinned).await
@@ -127,7 +122,7 @@ pub(crate) async fn execute(
         Op::Thread(op) => dispatch_thread(this, database, op, requester, cx).await,
         Op::Automation(op) => crate::automation::run(this, database, op, requester, cx).await,
         Op::Section(op) => section(this, database, op, cx).await,
-        Op::SavedPrompt(op) => crate::saved_prompt::run(this, database, op, cx).await,
+        Op::SavedPrompt(op) => crate::saved_prompt::run(this, database, op, requester, cx).await,
         Op::Plugin(kg_domain::PluginOp::Start) => {
             announce(this, crate::WorkspaceEvent::NewPlugin, cx)
         }
@@ -190,6 +185,26 @@ async fn project_op(
     }
 }
 
+// The page of a project that exists, at `section` when one is asked for.
+async fn project_page(
+    this: &WeakEntity<Workspace>,
+    database: &Database,
+    id: kg_domain::ProjectId,
+    section: Option<kg_domain::ProjectSection>,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let lookup = id.clone();
+    database
+        .call(move |store| store.project(&lookup))
+        .await?
+        .ok_or_else(|| missing("project", &id))?;
+    announce(
+        this,
+        crate::WorkspaceEvent::ProjectSettings(id, section),
+        cx,
+    )
+}
+
 fn announce(
     this: &WeakEntity<Workspace>,
     event: crate::WorkspaceEvent,
@@ -206,15 +221,12 @@ fn announce(
 fn saved_program_change(op: &ProgramOp) -> bool {
     matches!(
         op,
-        ProgramOp::Save { .. }
-            | ProgramOp::Rename { .. }
-            | ProgramOp::Remove { .. }
-            | ProgramOp::Pin { .. }
+        ProgramOp::Save { .. } | ProgramOp::Rename { .. } | ProgramOp::Pin { .. }
     )
 }
 
 /// `Workspace::handle` awaits it before the loop reads the next envelope. An op that asks
-/// (`ProjectOp::Remove`, `ThreadOp::Delete`, `AutomationOp::Delete`, and the plugin ops that approve powers or a
+/// (`ProjectOp::Remove`, `ThreadOp::Delete`, `AutomationOp::Delete`, `ProgramOp::Remove`, `SavedPromptOp::Delete`, and the plugin ops that approve powers or a
 /// removal) is detached, and a detached handler submits its request only after the person
 /// answers. `UiOp::Snapshot` is serialized because a window job never submits a request.
 pub(crate) fn serialized(op: &Op) -> bool {
@@ -247,7 +259,9 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Update(_)
         | Op::Usage(_)
         | Op::SavedPrompt(
-            kg_domain::SavedPromptOp::Search { .. } | kg_domain::SavedPromptOp::Send { .. },
+            kg_domain::SavedPromptOp::Search { .. }
+            | kg_domain::SavedPromptOp::Send { .. }
+            | kg_domain::SavedPromptOp::Delete { .. },
         ) => false,
         Op::Project(
             ProjectOp::Add { .. } | ProjectOp::Reorder { .. } | ProjectOp::SetProgram { .. },
@@ -267,8 +281,8 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Section(_)
         | Op::SavedPrompt(
             kg_domain::SavedPromptOp::Add { .. }
-            | kg_domain::SavedPromptOp::Star { .. }
-            | kg_domain::SavedPromptOp::Delete { .. },
+            | kg_domain::SavedPromptOp::Edit { .. }
+            | kg_domain::SavedPromptOp::Star { .. },
         )
         | Op::Ui(_) => true,
         Op::Program(op) => saved_program_change(op),
