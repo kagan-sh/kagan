@@ -15,8 +15,6 @@ use crate::kagan::changes::POLL;
 use super::send;
 use super::{click, open, repo_thread, row_top, selected_of, shows, wait_until};
 
-#[cfg(target_os = "macos")]
-// Reopening in this process after the last window closes is macOS only: elsewhere that close quits kagan (decision 269).
 #[gpui_kit::test]
 fn wrap_lines_fits_the_review_and_survives_reopening(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);

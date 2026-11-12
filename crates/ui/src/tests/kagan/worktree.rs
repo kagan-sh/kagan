@@ -114,8 +114,6 @@ fn a_worktree_starts_from_the_branch_on_screen_after_a_switch(cx: &mut TestAppCo
     assert_eq!(head_commit(&environment.path), pinned);
 }
 
-#[cfg(target_os = "macos")]
-// The app keeps running after its last window closes only on macOS (decision 269).
 #[gpui_kit::test]
 fn closing_the_window_before_a_worktree_is_prepared_still_finishes_it(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
