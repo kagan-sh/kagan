@@ -143,6 +143,7 @@ pub struct Workspace {
     /// Environments whose folder removal is running outside the operation loop.
     pub(crate) removing: BTreeSet<EnvironmentId>,
     pub(crate) diffs: std::sync::Arc<crate::diff::Cache>,
+    pub(crate) usage: crate::usage::Cache,
     keymap: kg_domain::Keymap,
     pub(crate) plugins: Option<PluginDispatch>,
     /// Where this workspace finds programs, when a test has set it; None is the login PATH
@@ -285,6 +286,7 @@ impl Workspace {
                         watching: false,
                         removing: BTreeSet::new(),
                         diffs: crate::diff::Cache::new(),
+                        usage: crate::usage::Cache::new(),
                         keymap: kg_domain::Keymap::default(),
                         plugins: None,
                         #[cfg(any(test, feature = "test"))]

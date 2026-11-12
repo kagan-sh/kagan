@@ -42,6 +42,7 @@ mod start;
 mod surface;
 mod tabs;
 mod update;
+mod usage;
 mod variables;
 mod web_panel;
 pub(crate) use web_panel::drop_plugin as drop_web_panel;
@@ -114,6 +115,7 @@ actions!(
         DismissLeftOverlay,
         OpenSettings,
         OpenSkills,
+        OpenUsage,
         UseProjectFolder,
         UseWorktreeFolder,
         RetryBranches,

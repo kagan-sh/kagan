@@ -8,7 +8,7 @@ use super::appearance::{density_row, mode_group, terminal_size, theme_group};
 use super::fonts::font_row;
 use super::general::{
     agents, branch_group, copy_on_select_row, environment, links_row, plugin_status_row,
-    setup_guide_group,
+    setup_guide_group, usage_row,
 };
 use super::indexes;
 use super::installed;
@@ -21,6 +21,7 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     let (agent, notify) = (prefs.agent_integration, prefs.notify);
     let (confirm_archive, plugin_status) = (prefs.confirm_archive, prefs.plugin_status);
     let (copy_on_select, links_in_tab) = (prefs.copy_on_select, prefs.links_in_tab);
+    let usage_limits = prefs.usage_limits;
     let mut appearance = theme_group(window, cx);
     appearance.key = "appearance".into();
     appearance.title = "Appearance".into();
@@ -73,6 +74,10 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     if let Some(suggested) = super::suggested::group(cx) {
         out.push(within(suggested, Category::Installed));
     }
+    out.push(within(
+        group("usage", "Usage", vec![usage_row(usage_limits)]),
+        Category::General,
+    ));
     out.push(within(
         group(
             "activity",
