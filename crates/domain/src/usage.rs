@@ -18,6 +18,8 @@ pub enum UsageProvider {
 }
 
 impl UsageProvider {
+    pub const ALL: [Self; 1] = [Self::Codex];
+
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
