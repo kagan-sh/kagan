@@ -157,13 +157,8 @@ impl Picker {
     // its fields, and a program card starts.
     pub(super) fn pick(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.grid.clone(), cx);
-        if index == self.cards.matches.len() {
-            // The program the person chose stays the selection, so Escape returns to it.
-            self.toggle_custom(window, cx);
-        } else {
-            self.cards.cursor = index;
-            self.confirm(cx);
-        }
+        self.cards.cursor = index;
+        self.confirm(cx);
     }
 
     fn search_changed(&mut self, cx: &mut Context<Self>) {
@@ -172,10 +167,10 @@ impl Picker {
         cx.notify();
     }
 
-    // Moves the selection across the cards, to the custom card at the end. Up and Down pass the
-    // number of cards in a row; a move past either end stops at it.
+    // Moves the selection across the agent cards. Up and Down pass the number of cards in a row;
+    // a move past either end stops at the first or last card.
     pub(super) fn move_by(&mut self, step: isize, cx: &mut Context<Self>) {
-        let last = self.cards.matches.len().cast_signed();
+        let last = self.cards.matches.len().saturating_sub(1).cast_signed();
         let next = (self.cards.cursor.cast_signed() + step).clamp(0, last);
         self.cards.cursor = next.cast_unsigned();
         self.scroll.scroll_to_item(self.cards.cursor);

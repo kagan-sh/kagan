@@ -1,10 +1,10 @@
 use crate::theme::{SpaceStep, TypeScale as _, space};
 use gpui_kit::base::actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp};
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::component::button::Button;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Input;
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{Icon, IconName, Sizable as _, v_flex};
+use gpui_kit::component::{Sizable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Bounds, Context, Hsla, InteractiveElement as _, IntoElement,
@@ -133,58 +133,23 @@ impl RenderOnce for ProgramCard {
     }
 }
 
-// The custom command card: the terminal, and the fields below the grid when it is open.
-fn custom_card(
-    selected: bool,
-    open: bool,
-    index: usize,
-    picker: WeakEntity<Picker>,
-    cx: &App,
-) -> AnyElement {
-    let muted = cx.theme().muted_foreground;
+// The Custom command button under the grid. It opens the program line fields below it.
+fn custom_toggle(open: bool) -> AnyElement {
     let label = if open {
         "Hide custom command"
     } else {
         "Custom command"
     };
-    div()
-        .id("custom-command-toggle")
-        .ui_observe_as(Facts {
-            role: Role::ListBoxOption,
-            selected: Some(selected),
-            ..Facts::button(label)
-        })
-        .w_full()
-        .h(px(CARD_HEIGHT))
-        .px_2()
-        .py_1()
-        .rounded(cx.theme().radius)
-        .border_1()
-        .border_color(cx.theme().border)
-        .when(selected, |card| card.bg(cx.theme().secondary))
-        .on_click(move |_, window, cx| {
-            _ = picker.update(cx, |this, cx| this.pick(index, window, cx));
-        })
-        .child(
-            v_flex()
-                .size_full()
-                .items_center()
-                .justify_center()
-                .gap_1()
-                .child(
-                    Icon::new(IconName::SquareTerminal)
-                        .text_color(muted)
-                        .size(px(28.)),
-                )
-                .child(
-                    div()
-                        .id("custom-command-text")
-                        .ui_container()
-                        .type_body(cx)
-                        .child(label),
-                ),
-        )
-        .into_any_element()
+    control(
+        "custom-command-toggle",
+        Facts::button(label),
+        Button::new("custom-command-toggle-button")
+            .small()
+            .ghost()
+            .label(label)
+            .on_click(dispatch(crate::kagan::ToggleCustomCommand)),
+    )
+    .into_any_element()
 }
 
 // The first row's cards share a top edge, so the cards in that row are the columns.
@@ -229,7 +194,6 @@ impl Picker {
         let height = px(VISIBLE_ROWS * CARD_HEIGHT + (VISIBLE_ROWS - 1.) * gap);
         let picker: WeakEntity<Picker> = cx.weak_entity();
         let cards = &self.cards;
-        let custom = cards.matches.len();
         let measured = picker.clone();
         let mut grid = div()
             .on_children_prepainted(move |bounds: Vec<Bounds<Pixels>>, _, cx| {
@@ -257,15 +221,7 @@ impl Picker {
                 picker: picker.clone(),
             });
         }
-        let open = self.mode == Mode::Custom;
-        grid.child(custom_card(
-            cards.custom_selected() || open,
-            open,
-            custom,
-            picker,
-            cx,
-        ))
-        .into_any_element()
+        grid.into_any_element()
     }
 }
 
@@ -312,15 +268,11 @@ impl Render for Picker {
             .on_action(cx.listener(|this, _: &SelectLeft, _, cx| this.move_by(-1, cx)))
             .on_action(cx.listener(|this, _: &SelectRight, _, cx| this.move_by(1, cx)))
             // Enter in the custom fields is theirs: it saves or starts from the field itself.
-            .on_action(cx.listener(|this, _: &Confirm, window, cx| {
+            .on_action(cx.listener(|this, _: &Confirm, _, cx| {
                 if this.mode == Mode::Custom {
                     return;
                 }
-                if this.cards.custom_selected() {
-                    this.toggle_custom(window, cx);
-                } else {
-                    this.confirm(cx);
-                }
+                this.confirm(cx);
             }))
             .child(control(
                 "program-search",
@@ -347,6 +299,7 @@ impl Render for Picker {
                 )
             })
             .child(body)
+            .child(custom_toggle(custom))
             .when_some(reason, |this, reason| {
                 this.child(note("program-reason", reason, muted, cx))
             })

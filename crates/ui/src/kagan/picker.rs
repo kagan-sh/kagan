@@ -94,10 +94,6 @@ impl Cards {
     fn selected(&self) -> Option<&Program> {
         self.matches.get(self.cursor)
     }
-
-    fn custom_selected(&self) -> bool {
-        self.cursor == self.matches.len()
-    }
 }
 
 pub(crate) struct Picker {

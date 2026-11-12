@@ -188,7 +188,8 @@ fn cancel_leaves_the_new_thread_screen(cx: &mut TestAppContext) {
 }
 
 // The form's controls in the order Tab reaches them, after the program search.
-const FORM_STOPS: [&str; 6] = [
+const FORM_STOPS: [&str; 7] = [
+    "custom-command-toggle-button",
     "saved-program-save-button",
     "folder-project-button",
     "folder-worktree-button",

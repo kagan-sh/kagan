@@ -6,7 +6,7 @@ use kg_domain::ProjectId;
 
 #[cfg(unix)]
 use crate::kagan::Kagan;
-use crate::tests::kagan::{add_project, click, label, open, shows, wait_until};
+use crate::tests::kagan::{add_project, click, label, open, scroll_form_to_end, shows, wait_until};
 #[cfg(unix)]
 use crate::tests::kagan::{
     committed_repo, focused_of, role_of, selected_of, shown, thread_record, threads_in, value_of,
@@ -351,6 +351,8 @@ fn start_sits_under_the_last_field_and_on_screen_in_a_worktree(cx: &mut TestAppC
     let (_repo, project) = committed_repo(cx, data.path());
     click(cx, window, &format!("project-new-{}", project.id.0));
     wait_until(cx, |cx| shows(cx, window, "worktree-hint"));
+    // The form scrolls, and the hint is measured where a person reads it: at the end of the fields.
+    scroll_form_to_end(cx, window);
     let (_, hint_y, _, hint_height) = bounds(cx, window, "worktree-hint").unwrap();
     let (_, start_y, _, start_height) = bounds(cx, window, "start").unwrap();
     let gap = start_y - (hint_y + hint_height);
@@ -1120,16 +1122,18 @@ fn enter_in_the_search_starts_the_selected_program_not_the_custom_command(cx: &m
 #[gpui_kit::test]
 fn an_agent_shows_its_icon_and_an_unknown_program_keeps_its_letter(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
-    fixture_programs(cx, data.path(), &["claude"]);
+    let bin = fixture_programs(cx, data.path(), &["claude"]);
     start_in_plain_folder(cx, window, data.path());
     wait_until(cx, |cx| {
         label(cx, window, "program-version-claude") == "1.2.3"
     });
-    assert!(shows(cx, window, "program-icon-Claude Code"));
-    assert!(!shows(cx, window, "program-mark-Claude Code"));
-    assert!(shows(cx, window, "program-icon-Shell"));
+    // Marks are named by the program key, which is the command for a known program.
+    assert!(shows(cx, window, "program-icon-claude"));
+    assert!(!shows(cx, window, "program-mark-claude"));
+    let shell = bin.join("fixture-shell").display().to_string();
+    assert!(shows(cx, window, &format!("program-icon-{shell}")));
     // Codex is listed as a row while it is missing, and it has its icon all the same.
-    assert!(shows(cx, window, "program-icon-Codex"));
+    assert!(shows(cx, window, "program-icon-codex"));
 }
 
 #[cfg(unix)]

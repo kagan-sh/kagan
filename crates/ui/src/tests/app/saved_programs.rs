@@ -358,7 +358,7 @@ fn a_saved_program_has_a_letter_mark_like_a_built_in_one(cx: &mut TestAppContext
     start_in_plain_folder(cx, window, data.path());
     search(cx, window, "Alpha");
     assert!(
-        shows(cx, window, "program-mark-Alpha"),
+        shows(cx, window, "program-mark-saved-Alpha"),
         "the saved row has its letter mark"
     );
 }

@@ -67,11 +67,14 @@ fn the_project_folder_choice_does_not_name_setup(cx: &mut TestAppContext) {
     let (repo, project) = committed_repo(cx, data.path());
     commit_setup(&repo, "exit 0\n");
     click(cx, window, &format!("project-new-{}", project.id.0));
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-script"));
     click(cx, window, "folder-project");
     cx.run_until_parked();
     assert!(!shows(cx, window, "setup-script"));
+    scroll_form_to_end(cx, window);
     click(cx, window, "folder-worktree");
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-script"));
     let _ = kagan;
 }
@@ -115,6 +118,7 @@ fn retry_runs_a_failed_setup_again_without_a_second_worktree(cx: &mut TestAppCon
         "if [ -f .kagan/once ]; then exit 0; fi\ntouch .kagan/once\nexit 1\n",
     );
     click(cx, window, &format!("project-new-{}", project.id.0));
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-script"));
     set_program(cx, window, &kagan, shell());
     click(cx, window, "start");
@@ -260,6 +264,7 @@ fn a_changed_script_hides_retry_and_leaves_start(cx: &mut TestAppContext) {
     let (repo, project) = committed_repo(cx, data.path());
     commit_setup(&repo, "exit 1\n");
     click(cx, window, &format!("project-new-{}", project.id.0));
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-script"));
     set_program(cx, window, &kagan, shell());
     click(cx, window, "start");

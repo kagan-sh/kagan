@@ -43,7 +43,6 @@ notice=$(dirname "$stdlib")/NOTICE
   echo "--- Primer Octicons (copilot.svg) ---"
   cat assets/agents/Primer-MIT.txt
   echo
-  echo "--- Simple Icons (CC0 1.0; see assets/agents/README.md for each mark's owner) ---"
   echo "--------------------------------------------------------------------------------"
   echo "NOTICE of quickjs-jit-stdlib, which includes LLRT's"
   echo "--------------------------------------------------------------------------------"

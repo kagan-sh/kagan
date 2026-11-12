@@ -353,6 +353,7 @@ fn escape_closes_the_branch_menu_before_the_start_screen(cx: &mut TestAppContext
     wait_until(cx, |cx| shows(cx, window, "branch-from"));
     click(cx, window, "folder-project");
     click(cx, window, "branch-from");
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "branch-current"));
     cx.simulate_keystrokes(window, "escape");
     cx.run_until_parked();

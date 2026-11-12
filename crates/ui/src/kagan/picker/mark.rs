@@ -5,7 +5,9 @@ use gpui_kit::{
     px, svg,
 };
 use kg_domain::{Program, ProgramSource, split_program};
+use std::path::Path;
 
+use crate::kagan::controls::program_key;
 use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
 
@@ -28,6 +30,7 @@ const MARK: f32 = 20.;
 pub(crate) fn program_mark(program: &Program, cx: &App) -> AnyElement {
     let color = cx.theme().muted_foreground;
     let label = program.label.clone();
+    let key = program_key(program);
     let frame = div()
         .flex_shrink_0()
         .size(px(MARK))
@@ -36,7 +39,7 @@ pub(crate) fn program_mark(program: &Program, cx: &App) -> AnyElement {
         .justify_center();
     if program.source == ProgramSource::Shell {
         return frame
-            .id(format!("program-icon-{label}"))
+            .id(format!("program-icon-{key}"))
             .ui_container()
             .child(Icon::new(IconName::SquareTerminal).text_color(color))
             .into_any_element();
@@ -46,7 +49,7 @@ pub(crate) fn program_mark(program: &Program, cx: &App) -> AnyElement {
         agent_path(&program.command).filter(|_| program.source != ProgramSource::Saved)
     {
         return frame
-            .id(format!("program-icon-{label}"))
+            .id(format!("program-icon-{key}"))
             .ui_container()
             .child(svg().path(path).size(px(MARK)).text_color(color))
             .into_any_element();
@@ -57,7 +60,7 @@ pub(crate) fn program_mark(program: &Program, cx: &App) -> AnyElement {
         .map(|letter| letter.to_uppercase().to_string())
         .unwrap_or_default();
     frame
-        .id(format!("program-mark-{label}"))
+        .id(format!("program-mark-{key}"))
         .ui_container()
         .rounded(cx.theme().radius)
         .bg(cx.theme().muted)
@@ -69,7 +72,7 @@ pub(crate) fn program_mark(program: &Program, cx: &App) -> AnyElement {
 
 fn agent_path(command: &str) -> Option<&'static str> {
     let (name, _) = split_program(command).ok()?;
-    let name = std::path::Path::new(&name).file_stem()?.to_str()?;
+    let name = Path::new(&name).file_stem()?.to_str()?;
     AGENT_MARKS
         .iter()
         .find(|(known, _)| *known == name)
@@ -85,6 +88,18 @@ mod tests {
         assert_eq!(agent_path("claude"), Some("agents/claude.svg"));
         assert_eq!(agent_path("claude --resume"), Some("agents/claude.svg"));
         assert_eq!(agent_path("/usr/local/bin/codex"), Some("agents/codex.svg"));
+    }
+
+    #[test]
+    fn every_mark_path_is_bundled() {
+        use gpui_kit::AssetSource as _;
+        for (command, path) in super::AGENT_MARKS {
+            let bundled = crate::brand::Assets.load(path).ok().flatten();
+            assert!(
+                bundled.is_some(),
+                "the mark for {command} is not bundled: {path}"
+            );
+        }
     }
 
     #[test]
