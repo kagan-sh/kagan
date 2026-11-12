@@ -34,6 +34,7 @@ mod terminal;
 mod thread;
 mod turn;
 mod update;
+mod usage;
 mod variables;
 mod workspace;
 mod worktree;

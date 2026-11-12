@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
+use gpui_kit::AppContext as _;
 use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::{
     App, Context, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable as _, KeyBinding,
@@ -130,6 +131,7 @@ pub(super) struct Sidebar {
     drag: Option<ProjectId>,
     drop: Option<(ProjectId, Place)>,
     drag_keys: Option<Subscription>,
+    pub(super) usage: Entity<crate::kagan::usage::Usage>,
 }
 
 impl EventEmitter<Event> for Sidebar {}
@@ -158,6 +160,7 @@ impl Sidebar {
             brand_menu: None,
             drag: None,
             drop: None,
+            usage: cx.new(|_| crate::kagan::usage::Usage::default()),
             drag_keys: None,
         }
     }
