@@ -411,6 +411,8 @@ fn switching_threads_shows_each_threads_own_screen(cx: &mut TestAppContext) {
     assert!(!grid_text(cx, &kagan).contains("bravo-out"));
 }
 
+#[cfg(target_os = "macos")]
+// Reopening in this process after the last window closes is macOS only: elsewhere that close quits kagan (decision 269).
 #[gpui_kit::test]
 fn a_thread_keeps_its_screen_when_the_window_closes_and_reopens(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
