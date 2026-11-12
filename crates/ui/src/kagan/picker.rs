@@ -2,8 +2,8 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::v_flex;
 use gpui_kit::{
-    AnyElement, Context, Entity, EventEmitter, FocusHandle, IntoElement, ParentElement as _,
-    ScrollHandle, SharedString, Styled as _, Subscription, Task,
+    AnyElement, Context, Entity, EventEmitter, FocusHandle, Focusable as _, IntoElement,
+    ParentElement as _, ScrollHandle, SharedString, Styled as _, Subscription, Task, Window,
 };
 use kg_domain::{Program, split_program};
 
@@ -130,8 +130,9 @@ mod render;
 pub(crate) mod saved;
 mod state;
 impl Picker {
-    fn render_custom(&self, cx: &mut Context<Self>) -> AnyElement {
+    fn render_custom(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
+        let focused = |input: &Entity<InputState>| input.focus_handle(cx).is_focused(window);
         if self.editing.is_some() {
             return v_flex()
                 .gap_2()
@@ -141,6 +142,7 @@ impl Picker {
                     &self.name,
                     None,
                     muted,
+                    focused(&self.name),
                     cx,
                 ))
                 .child(saved::save_control(true))
@@ -172,6 +174,7 @@ impl Picker {
                 &self.program,
                 program_note,
                 muted,
+                focused(&self.program),
                 cx,
             ))
             .child(custom_field(
@@ -180,6 +183,7 @@ impl Picker {
                 &self.arguments,
                 arguments_note,
                 muted,
+                focused(&self.arguments),
                 cx,
             ))
             .child(custom_field(
@@ -188,6 +192,7 @@ impl Picker {
                 &self.name,
                 None,
                 muted,
+                focused(&self.name),
                 cx,
             ))
             .child(saved::save_control(false))

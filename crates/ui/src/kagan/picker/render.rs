@@ -1,4 +1,5 @@
 use crate::theme::{SpaceStep, TypeScale as _, space};
+use gpui_kit::Focusable as _;
 use gpui_kit::base::actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp};
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::FocusableExt as _;
@@ -228,7 +229,7 @@ impl Picker {
 }
 
 impl Render for Picker {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let body: AnyElement = match &self.state {
             Programs::Failed(message) => programs_failed(message, muted, cx),
@@ -283,6 +284,10 @@ impl Render for Picker {
                     // One ring: the field's own border in the focus token, inside its bounds, so no
                     // parent clips it. The outer ring doubled it.
                     .focus_ring(false)
+                    .border_color(super::list::focus_border(
+                        self.search.focus_handle(cx).is_focused(window),
+                        cx,
+                    ))
                     .text_size(gpui_kit::px(crate::theme::type_body(cx)))
                     .small(),
             ))
@@ -311,6 +316,6 @@ impl Render for Picker {
             .when_some(self.notice.clone(), |this, text| {
                 this.child(saved::notice(text, cx))
             })
-            .when(custom, |this| this.child(self.render_custom(cx)))
+            .when(custom, |this| this.child(self.render_custom(window, cx)))
     }
 }

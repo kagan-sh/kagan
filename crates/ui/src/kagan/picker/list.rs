@@ -1,3 +1,4 @@
+use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::FocusableExt as _;
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::v_flex;
@@ -64,6 +65,7 @@ pub(super) fn custom_field(
     input: &Entity<InputState>,
     note: Option<(&'static str, String)>,
     muted: Hsla,
+    focused: bool,
     cx: &App,
 ) -> impl IntoElement {
     let focus = input.focus_handle(cx);
@@ -82,6 +84,7 @@ pub(super) fn custom_field(
                 .child(
                     Input::new(input)
                         .focus_ring(false)
+                        .border_color(focus_border(focused, cx))
                         .text_size(gpui_kit::px(crate::theme::type_body(cx))),
                 )
                 .children(note.map(|(id, text)| {
@@ -138,5 +141,15 @@ pub(super) fn version_of(program: &Program) -> Version {
     Version {
         shown: number.to_owned(),
         full: (!line.is_empty()).then(|| line.to_owned()),
+    }
+}
+
+// The focused field's border is the focus token; an unfocused one keeps the input border. The
+// input's own outer ring is off, so the focus is one ring inside the field's bounds.
+pub(super) fn focus_border(focused: bool, cx: &App) -> Hsla {
+    if focused {
+        cx.theme().ring
+    } else {
+        cx.theme().input
     }
 }
