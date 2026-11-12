@@ -3100,13 +3100,13 @@ Options:
 ```text
 Rebind a shortcut, or reset it
 
-Usage: kg keymap set [OPTIONS] <ACTION> <KEY>
+Usage: kg keymap set [OPTIONS] <ACTION> [KEY]
 
 Arguments:
   <ACTION>
           Action name, such as `ToggleSidebar`, or `<plugin-id>:<command>` for a plugin's command
 
-  <KEY>
+  [KEY]
           Chord to record. Empty with `--reset`
 
 Options:

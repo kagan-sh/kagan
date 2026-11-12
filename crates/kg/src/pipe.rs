@@ -3,13 +3,31 @@ use std::{io, ptr};
 use interprocess::os::windows::security_descriptor::SecurityDescriptor;
 use widestring::{U16CStr, U16CString};
 use windows_sys::Win32::{
-    Foundation::{CloseHandle, HANDLE, LocalFree},
+    Foundation::{CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, LocalFree, SetHandleInformation},
     Security::{
         Authorization::ConvertSidToStringSidW, GetTokenInformation, TOKEN_QUERY, TOKEN_USER,
         TokenUser,
     },
     System::Threading::{GetCurrentProcess, OpenProcessToken},
 };
+
+/// Clears the inherit flag on this process's std handles, so a child started next does not hold
+/// the caller's pipes open. Rust's `Command` always passes handles on, so the child would
+/// otherwise keep a caller's stdout pipe open until the child exits.
+pub(crate) fn stop_inheriting_std_handles() {
+    use std::os::windows::io::AsRawHandle;
+
+    let handles = [
+        io::stdin().as_raw_handle(),
+        io::stdout().as_raw_handle(),
+        io::stderr().as_raw_handle(),
+    ];
+    for handle in handles {
+        // SAFETY: a std handle is owned by the process; clearing its inherit flag changes nothing
+        // else. A handle that is not there (no console) makes the call fail, and that is fine.
+        unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0) };
+    }
+}
 
 pub(crate) fn current_user_only() -> io::Result<SecurityDescriptor> {
     let sddl = U16CString::from_str(format!("D:P(A;;GA;;;{})", current_user_sid()?))

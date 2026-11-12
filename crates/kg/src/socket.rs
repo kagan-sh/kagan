@@ -564,6 +564,7 @@ fn start_headless(location: &std::ffi::OsStr) -> io::Result<()> {
     #[cfg(windows)]
     {
         use windows_sys::Win32::System::Threading::{CREATE_NO_WINDOW, DETACHED_PROCESS};
+        crate::pipe::stop_inheriting_std_handles();
         std::os::windows::process::CommandExt::creation_flags(
             &mut command,
             DETACHED_PROCESS | CREATE_NO_WINDOW,

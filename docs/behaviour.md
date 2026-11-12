@@ -4,7 +4,7 @@ What each `Op` does, one rule per line, for a reader who has the `Op` signatures
 
 Sources, in order: [CONTEXT], [decision N], [book:page], [docs:file], [op/] (the `crates/domain/src/op/` modules), [event.rs], [record.rs]. Help text is the CLI contract in [book:cli].
 
-A missing id is `not-found`. A bad argument is `invalid`. A pinned setup script that changed before Start is `setup-changed` [decision 192]. A write past a program's input budget is `full` [decision 252]. Every other refusal is `failed` [op/]. An `Op` request uses the kebab-case name and camelCase fields, like the `OpResult` reply.
+A missing id is `not-found`. A bad argument is `invalid`. A pinned setup script that changed before Start is `setup-changed` [decision 192]. A keymap chord another action holds is `conflict`, and names that action [decision 267]. A write past a program's input budget is `full` [decision 252]. Every other refusal is `failed` [op/]. An `Op` request uses the kebab-case name and camelCase fields, like the `OpResult` reply.
 
 ## Questions for the person
 
@@ -713,8 +713,8 @@ Built-in shortcut overrides, and the keys of plugin commands, named `<plugin-id>
 ### `Set`
 
 - **Allowed when**: the action is one of those defaults, or a command of an enabled plugin [op/] [book:cli] [decision 102].
-- **Changes**: records the chord for this machine [book:cli]. `--reset` drops the saved chord and uses the default key [book:cli]. A conflicting chord is not stored; the result names the other action [op/]. A plugin command's key is refused when it overlaps a window key or another plugin command's key [docs:plugin-api]. It is stored with that plugin and applies while the app is in front [decision 102].
-- **Refused when**: an unknown action, or a plugin that is not enabled or has no such command — `invalid` or `not-found` [op/]. An empty key or an unknown key name — `invalid` [op/].
+- **Changes**: records the chord for this machine [book:cli]. `--reset` drops the saved chord and uses the default key [book:cli]. A conflicting chord is not stored; the Op fails with `conflict` naming the other action [op/], so the window, the command line and MCP all see it [decision 267]. A plugin command's key is refused when it overlaps a window key or another plugin command's key [docs:plugin-api]. It is stored with that plugin and applies while the app is in front [decision 102].
+- **Refused when**: an unknown action, or a plugin that is not enabled or has no such command — `invalid` or `not-found` [op/]. An empty key or an unknown key name — `invalid` [op/]. The command line needs a KEY unless `--reset` is given; clap refuses the rest [book:cli] [decision 264].
 
 ### `Remove`
 
