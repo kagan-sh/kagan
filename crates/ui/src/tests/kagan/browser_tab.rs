@@ -137,6 +137,9 @@ fn opening_settings_hides_the_page_in_that_step(cx: &mut TestAppContext) {
 fn switching_threads_hides_the_page_in_that_step(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);
     driven_browser(cx, window, &kagan);
+    assert!(kagan.read_with(cx, |kagan, _| kagan.browser_shown_for_test()));
+    // Calls leave_thread directly on purpose: a thread click renders a frame, which would hide the
+    // page anyway and mask a missing hide in this step.
     let shown = cx.update_window(window, |_, window, cx| {
         kagan.update(cx, |kagan, cx| {
             kagan.leave_browser_thread_for_test(window, cx);

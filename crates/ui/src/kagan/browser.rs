@@ -38,6 +38,7 @@ pub(super) struct Browser {
     address: Entity<InputState>,
     page: Option<Entity<WebPage>>,
     // Whether the page was last told to show. Tests read it, since they build no native page.
+    #[cfg(test)]
     pub(super) shown: bool,
     pub(super) agent: Option<Agent>,
     driven_focus: FocusHandle,
@@ -58,6 +59,7 @@ impl Browser {
         Self {
             address,
             page: None,
+            #[cfg(test)]
             shown: false,
             agent: None,
             driven_focus: cx.focus_handle().tab_stop(true),
@@ -119,7 +121,10 @@ impl Browser {
     }
 
     fn sync_page(&mut self, shown: bool, cx: &mut App) {
-        self.shown = shown;
+        #[cfg(test)]
+        {
+            self.shown = shown;
+        }
         let Some(page) = &self.page else { return };
         if page.read(cx).visible(cx) != shown {
             page.update(cx, |page, cx| {
