@@ -79,6 +79,7 @@ const PREFERENCES: &[(&str, Kind)] = &[
     (prefs::NOTIFY, Kind::Notify),
     (prefs::PLUGIN_STATUS, Kind::Flag),
     (prefs::UPDATE_CHECK, Kind::Flag),
+    (prefs::USAGE_LIMITS, Kind::Flag),
     (prefs::SETUP_GUIDE, Kind::Flag),
     (prefs::SIDEBAR_ORDER, Kind::SidebarOrder),
     (prefs::SIDEBAR_HIDE_EMPTY_PROJECTS, Kind::Flag),
@@ -218,11 +219,16 @@ pub(crate) async fn preference(
         }
         PreferenceOp::Set { key, value } => {
             preference_value(&key, &value)?;
+            let usage_off = key == prefs::USAGE_LIMITS && value == serde_json::Value::Bool(false);
             let key = key.clone();
             let saved = value.clone();
             database
                 .call(move |store| store.set_setting(&key, &saved))
                 .await?;
+            if usage_off {
+                this.update(cx, |workspace, _| workspace.usage.clear())
+                    .map_err(crate::workspace::closed)?;
+            }
             crate::workspace::changed(this, cx)?;
             Ok(OpResult::Setting(value))
         }

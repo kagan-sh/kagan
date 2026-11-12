@@ -76,7 +76,8 @@ pub fn check(op: &Op) -> Result<(), String> {
         | Op::Ui(_)
         | Op::Notify(_)
         | Op::Diagnostics(_)
-        | Op::Update(_) => Ok(()),
+        | Op::Update(_)
+        | Op::Usage(_) => Ok(()),
         Op::Surface(op) => match op {
             SurfaceOp::List | SurfaceOp::Threads => Ok(()),
             SurfaceOp::Open { id, .. } | SurfaceOp::Close { id, .. } => {

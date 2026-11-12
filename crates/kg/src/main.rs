@@ -9,6 +9,7 @@ mod pipe;
 mod socket;
 #[cfg(test)]
 mod tests;
+mod usage;
 
 use std::{ffi::OsString, io, process::ExitCode};
 
