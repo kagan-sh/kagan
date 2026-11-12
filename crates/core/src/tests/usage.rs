@@ -581,7 +581,9 @@ async fn claude_bars_come_from_the_installed_cli(cx: &mut TestAppContext) {
     assert!(stdin.contains(r#""skip_behaviors":true"#));
     let args = std::fs::read_to_string(folder.join("args.txt")).unwrap();
     let args: Vec<&str> = args.lines().collect();
-    assert_eq!(args, CLAUDE_ARGS, "the exact flags, one per argument");
+    let (flags, config) = args.split_at(CLAUDE_ARGS.len());
+    assert_eq!(flags, CLAUDE_ARGS, "the exact flags, one per argument");
+    assert_eq!(config.len(), 1, "then one path to the empty MCP config");
     let cwd = std::fs::read_to_string(folder.join("cwd.txt")).unwrap();
     let home = crate::host::program::user_home().unwrap();
     assert_eq!(
@@ -680,11 +682,9 @@ const CLAUDE_ARGS: &[&str] = &[
     "--input-format",
     "stream-json",
     "--no-session-persistence",
-    "--setting-sources",
-    "",
+    "--setting-sources=",
     "--strict-mcp-config",
     "--mcp-config",
-    "{\"mcpServers\":{}}",
 ];
 
 #[cfg(unix)]

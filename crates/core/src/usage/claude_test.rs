@@ -1,6 +1,6 @@
 use kg_domain::{UsageProvider, UsageStatus};
 
-use super::{answer, badge};
+use super::{ARGS, answer, badge};
 
 /// A made-up CLI transcript with the reply shapes the CLI gave on 2.1.322. The values are not
 /// anyone's usage.
@@ -85,4 +85,22 @@ fn the_plan_badge_reads_the_subscription_name() {
     assert_eq!(badge("max").as_deref(), Some("Max"));
     assert_eq!(badge("claude_team").as_deref(), Some("Team"));
     assert_eq!(badge(""), None);
+}
+
+#[test]
+fn the_cli_gets_the_same_flags_on_every_system() {
+    assert_eq!(
+        ARGS,
+        [
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--input-format",
+            "stream-json",
+            "--no-session-persistence",
+            "--setting-sources=",
+            "--strict-mcp-config",
+            "--mcp-config",
+        ]
+    );
 }

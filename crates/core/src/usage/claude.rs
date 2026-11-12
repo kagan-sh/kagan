@@ -23,11 +23,9 @@ const ARGS: &[&str] = &[
     "--input-format",
     "stream-json",
     "--no-session-persistence",
-    "--setting-sources",
-    "",
+    "--setting-sources=",
     "--strict-mcp-config",
     "--mcp-config",
-    "{\"mcpServers\":{}}",
 ];
 const INITIALIZE: &str = "initialize";
 const USAGE: &str = "usage";
@@ -92,9 +90,17 @@ pub(super) fn read(source: &Source, now: i64) -> Option<Answer> {
             now,
         ));
     };
+    let Ok(mcp_config) = empty_mcp_config() else {
+        return Some(plain(
+            UsageProvider::Claude,
+            error("Could not start Claude Code."),
+            now,
+        ));
+    };
     let mut command = Command::new(program);
     command
         .args(ARGS)
+        .arg(mcp_config.as_os_str())
         .current_dir(crate::host::program::user_home().unwrap_or_else(std::env::temp_dir));
     let input = [
         json!({"type": "control_request", "request_id": INITIALIZE, "request": {"subtype": "initialize"}}),
@@ -117,6 +123,16 @@ pub(super) fn read(source: &Source, now: i64) -> Option<Answer> {
             ),
         },
     )
+}
+
+/// An MCP config with no servers, in a file removed when the read ends. A path has no quotes or
+/// spaces for a Windows `.cmd` shim to mangle, unlike inline JSON.
+fn empty_mcp_config() -> io::Result<tempfile::TempPath> {
+    use io::Write as _;
+
+    let mut file = tempfile::NamedTempFile::new()?;
+    file.write_all(b"{\"mcpServers\":{}}")?;
+    Ok(file.into_temp_path())
 }
 
 /// The control replies in the CLI's output, one JSON object per line. Other lines are skipped.
