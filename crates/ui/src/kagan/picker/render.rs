@@ -1,7 +1,7 @@
 use crate::theme::{SpaceStep, TypeScale as _, space};
 use gpui_kit::base::actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp};
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::button::Button;
 use gpui_kit::component::input::Input;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Sizable as _, v_flex};
@@ -145,7 +145,8 @@ fn custom_toggle(open: bool) -> AnyElement {
         Facts::button(label),
         Button::new("custom-command-toggle-button")
             .small()
-            .ghost()
+            .outline()
+            .icon(gpui_kit::assets::IconName::SquareTerminal)
             .label(label)
             .on_click(dispatch(crate::kagan::ToggleCustomCommand)),
     )
