@@ -22,6 +22,7 @@ impl Kagan {
             return;
         }
         self.panes = want;
+        self.hide_browser(cx);
         let layout = self.layout;
         self.columns.update(cx, |state, cx| {
             if held.right && !want.right && state.sizes().len() > right_index(held.left) {
