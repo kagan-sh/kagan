@@ -1625,7 +1625,7 @@ fn an_automation_name_with_a_control_character_says_so() {
             project_id: crate::ProjectId("prj_1".into()),
             program: "claude".into(),
             minutes: Some(5),
-            at: None,
+            in_minutes: None,
         }))
     };
     assert_eq!(add("nightly"), Ok(()));
@@ -1658,7 +1658,7 @@ fn bidi_overrides_are_refused_in_names_like_control_characters() {
                 project_id: ProjectId::personal(),
                 program: "claude".into(),
                 minutes: Some(5),
-                at: None,
+                in_minutes: None,
             }))
             .is_err(),
             "{mark:?}"

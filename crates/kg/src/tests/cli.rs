@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use kg_domain::{
     AutomationId, AutomationOp, ConfigOp, DiffOp, DiffQuery, DiffScope, EnvironmentSpec, Metadata,
-    Op, OpError, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, SectionId, SectionOp, SkillOp,
-    TerminalOp, ThreadId, ThreadOp, Timestamp,
+    Op, OpError, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, ProjectSection, SavedPromptId,
+    SavedPromptOp, SectionId, SectionOp, SettingsOp, SkillOp, TerminalOp, ThreadId, ThreadOp,
 };
 use serde_json::{Value, json};
 
@@ -655,7 +655,7 @@ fn cli_automations_parse_next_to_thread() {
             project_id: project,
             program: "claude".into(),
             minutes: Some(15),
-            at: None,
+            in_minutes: None,
         })
     );
     assert_eq!(
@@ -682,7 +682,7 @@ fn cli_automations_parse_next_to_thread() {
             "ping",
             "--program",
             "codex",
-            "--at",
+            "--in",
             "5",
             "--project-id",
             "prj_1"
@@ -693,8 +693,25 @@ fn cli_automations_parse_next_to_thread() {
             project_id: ProjectId("prj_1".into()),
             program: "codex".into(),
             minutes: None,
-            at: Some(Timestamp(5)),
+            in_minutes: Some(5),
         })
+    );
+    // One unit for a one-time run: minutes from now, as the window has it.
+    assert!(
+        Cli::try_parse_from([
+            "kg",
+            "automation",
+            "add",
+            "Once",
+            "ping",
+            "--program",
+            "codex",
+            "--at",
+            "1000",
+            "--project-id",
+            "prj_1"
+        ])
+        .is_err()
     );
 }
 
@@ -997,6 +1014,29 @@ fn a_word_that_is_not_utf8_becomes_lossy_text_instead_of_a_panic() {
         std::ffi::OsString::from_vec(vec![0xff, b'a']),
     ]);
     assert_eq!(words, ["kg", "\u{fffd}a"]);
+}
+
+#[test]
+fn cli_saved_prompt_edit_takes_the_id_then_the_title_and_text() {
+    assert_eq!(
+        parse(&["saved-prompt", "edit", "svp_1", "Plans", "new text"]),
+        Op::SavedPrompt(SavedPromptOp::Edit {
+            id: SavedPromptId("svp_1".into()),
+            title: "Plans".into(),
+            body: "new text".into(),
+        })
+    );
+}
+
+#[test]
+fn cli_settings_project_can_open_its_automations() {
+    assert_eq!(
+        parse(&["settings", "project", "prj_1", "--section", "automations"]),
+        Op::Settings(SettingsOp::Project {
+            id: ProjectId("prj_1".into()),
+            section: Some(ProjectSection::Automations),
+        })
+    );
 }
 
 #[test]

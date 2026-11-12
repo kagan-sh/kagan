@@ -13,7 +13,7 @@ use gpui_kit::{
 };
 use kg_core::{Workspace, WorkspaceEvent};
 use kg_domain::{
-    Automation, AutomationId, AutomationOp, Op, OpResult, ProjectId, ProjectOp, Timestamp,
+    Automation, AutomationId, AutomationOp, FAILED_RUNS_LIMIT, Op, OpResult, ProjectId, ProjectOp,
 };
 
 use crate::kagan::controls::control;
@@ -28,7 +28,7 @@ pub(super) struct List {
     body: Entity<InputState>,
     program: Entity<InputState>,
     minutes: Entity<InputState>,
-    at: Entity<InputState>,
+    in_minutes: Entity<InputState>,
     fallback: Option<String>,
     note: Option<SharedString>,
     load: Option<Task<()>>,
@@ -48,7 +48,7 @@ impl List {
             body: field("Text to send", window, cx),
             program: field("Program", window, cx),
             minutes: field("Minutes", window, cx),
-            at: field("Once in (minutes)", window, cx),
+            in_minutes: field("In minutes", window, cx),
             fallback: None,
             note: None,
             load: None,
@@ -89,7 +89,7 @@ impl List {
 
     fn add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let every = self.minutes.read(cx).value().to_string();
-        let once = self.at.read(cx).value().to_string();
+        let once = self.in_minutes.read(cx).value().to_string();
         let minutes = match parse_minutes(&every) {
             Ok(minutes) => minutes,
             Err(error) => {
@@ -98,8 +98,8 @@ impl List {
                 return;
             }
         };
-        let at = match parse_once(&once) {
-            Ok(at) => at,
+        let in_minutes = match parse_minutes(&once) {
+            Ok(in_minutes) => in_minutes,
             Err(error) => {
                 self.note = Some(error.into());
                 cx.notify();
@@ -118,7 +118,7 @@ impl List {
             project_id: self.project.clone(),
             program,
             minutes,
-            at,
+            in_minutes,
         });
         self.send(op, true, window, cx);
     }
@@ -161,7 +161,7 @@ impl List {
                                 &this.body,
                                 &this.program,
                                 &this.minutes,
-                                &this.at,
+                                &this.in_minutes,
                             ] {
                                 field.update(cx, |state, cx| state.set_value("", window, cx));
                             }
@@ -188,20 +188,6 @@ fn parse_minutes(text: &str) -> Result<Option<u16>, &'static str> {
         .ok_or("minutes must be a whole number from 1 to 1440")
 }
 
-fn parse_once(text: &str) -> Result<Option<Timestamp>, &'static str> {
-    let Some(minutes) = parse_minutes(text)? else {
-        return Ok(None);
-    };
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| {
-            i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)
-        });
-    Ok(Some(Timestamp(now.saturating_add(
-        i64::from(minutes).saturating_mul(60_000),
-    ))))
-}
-
 fn when(automation: &Automation) -> String {
     match automation.minutes {
         Some(minutes) => format!("Every {minutes} min"),
@@ -209,9 +195,55 @@ fn when(automation: &Automation) -> String {
     }
 }
 
+// What the row says the automation sends and to which program, before the person opens it.
+fn detail(automation: &Automation) -> String {
+    let text = automation
+        .body
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let text: String = text.chars().take(60).collect();
+    format!("{} · {text}", automation.program)
+}
+
+// When the next run is due, counted from now: one time automations have no next run once started.
+fn next_run(automation: &Automation) -> String {
+    if automation.paused {
+        return "Paused".into();
+    }
+    let Some(next) = automation.next_at else {
+        return "Done".into();
+    };
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)
+        });
+    let minutes = next.0.saturating_sub(now).max(0) / 60_000;
+    match minutes {
+        0 => "Due now".into(),
+        1 => "Next in 1 min".into(),
+        minutes if minutes >= 60 => format!("Next in {} h {} min", minutes / 60, minutes % 60),
+        minutes => format!("Next in {minutes} min"),
+    }
+}
+
 fn runs(automation: &Automation) -> String {
+    // The streak and the last failed start both show, so neither hides the other.
+    let mut notes = Vec::new();
+    if automation.failing {
+        let failed = format!("{FAILED_RUNS_LIMIT} runs failed in a row");
+        notes.push(if automation.paused {
+            format!("Paused: {failed}")
+        } else {
+            failed
+        });
+    }
     if let Some(error) = &automation.last_error {
-        return format!("Last start failed: {error}");
+        notes.push(format!("Last start failed: {error}"));
+    }
+    if !notes.is_empty() {
+        return notes.join(" · ");
     }
     match automation.threads.len() {
         0 => "No run yet".into(),
@@ -248,7 +280,16 @@ fn row(automation: &Automation, cx: &mut Context<List>) -> gpui_kit::AnyElement 
                 .min_w_0()
                 .type_small(cx)
                 .ui_observe_as(labeled(automation.name.clone()))
-                .child(automation.name.clone()),
+                .child(
+                    v_flex().min_w_0().child(automation.name.clone()).child(
+                        div()
+                            .text_color(muted)
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .whitespace_nowrap()
+                            .child(detail(automation)),
+                    ),
+                ),
         )
         .child(
             div()
@@ -265,6 +306,12 @@ fn row(automation: &Automation, cx: &mut Context<List>) -> gpui_kit::AnyElement 
                 .text_color(muted)
                 .ui_observe_as(labeled(started.clone()))
                 .child(started),
+        )
+        .child(
+            div()
+                .type_small(cx)
+                .text_color(muted)
+                .child(next_run(automation)),
         )
         .children(last.map(|last| {
             control(
@@ -341,7 +388,12 @@ impl Render for List {
                     .child(field("automation-body", &self.body, "Text", cx))
                     .child(field("automation-program", &self.program, "Program", cx))
                     .child(field("automation-minutes", &self.minutes, "Minutes", cx))
-                    .child(field("automation-at", &self.at, "Once in", cx))
+                    .child(field(
+                        "automation-in",
+                        &self.in_minutes,
+                        "Run once in (minutes)",
+                        cx,
+                    ))
                     .child(control(
                         "automation-add",
                         Facts::button("Add automation"),
@@ -362,3 +414,7 @@ impl Render for List {
             }))
     }
 }
+
+#[cfg(test)]
+#[path = "automations_test.rs"]
+mod tests;

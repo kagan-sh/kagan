@@ -91,6 +91,7 @@ fn the_project_page_on_screen_stays_when_empty_projects_are_hidden(cx: &mut Test
         cx,
         Op::Settings(SettingsOp::Project {
             id: ProjectId("personal".into()),
+            section: None,
         }),
     );
     cx.run_until_parked();

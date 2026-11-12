@@ -40,7 +40,7 @@ use crate::{
     Sidebar, Thread, ThreadId,
 };
 
-pub use automation::{Automation, AutomationOp};
+pub use automation::{Automation, AutomationOp, FAILED_RUNS_LIMIT};
 pub use browser::{BrowserControl, BrowserOp, BrowserSnapshot, BrowserView};
 pub use check::check;
 pub use config::ConfigOp;
@@ -65,7 +65,7 @@ pub use program::ProgramOp;
 pub use project::ProjectOp;
 pub use saved_prompt::SavedPromptOp;
 pub use section::SectionOp;
-pub use settings::SettingsOp;
+pub use settings::{ProjectSection, SettingsOp};
 pub use skill::{Skill, SkillOp, SkillSource, SkillTemplate};
 pub use surface::{Slot, SlotChoice, SlotChoiceError, SurfaceItem, SurfaceOp, SurfacePlacement};
 pub use terminal::{

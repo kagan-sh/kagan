@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use gpui_kit::{AsyncApp, Context, Task, WeakEntity};
 use kg_domain::{
-    Automation, AutomationId, AutomationOp, EnvironmentSpec, OpError, OpResult, Run, ThreadId,
-    ThreadOp, Timestamp,
+    Automation, AutomationId, AutomationOp, EnvironmentSpec, FAILED_RUNS_LIMIT, OpError, OpResult,
+    Run, ThreadId, ThreadOp, Timestamp,
 };
 
 use crate::Requester;
@@ -43,14 +43,14 @@ pub(crate) async fn run(
             project_id,
             program,
             minutes,
-            at,
+            in_minutes,
         } => {
             let lookup = project_id.clone();
             database
                 .call(move |store| store.project(&lookup))
                 .await?
                 .ok_or_else(|| missing("project", &project_id))?;
-            let next_at = due(minutes, at, time(this, cx)?)?;
+            let next_at = due(minutes.or(in_minutes), time(this, cx)?)?;
             let automation = Automation {
                 id: AutomationId(id("auto")),
                 project_id,
@@ -58,11 +58,12 @@ pub(crate) async fn run(
                 body,
                 program: program.trim().to_owned(),
                 minutes,
-                at,
+                at: in_minutes.map(|_| next_at),
                 paused: false,
                 next_at: Some(next_at),
                 last_error: None,
                 threads: Vec::new(),
+                failing: false,
             };
             let saved = automation.clone();
             database
@@ -70,8 +71,8 @@ pub(crate) async fn run(
                 .await?;
             OpResult::Automation(automation)
         }
-        AutomationOp::Pause { id } => set_paused(&database, id, true).await?,
-        AutomationOp::Resume { id } => set_paused(&database, id, false).await?,
+        AutomationOp::Pause { id } => set_paused(&database, id, true, time(this, cx)?).await?,
+        AutomationOp::Resume { id } => set_paused(&database, id, false, time(this, cx)?).await?,
         AutomationOp::Delete { id } => {
             let lookup = id.clone();
             let automation = database
@@ -105,23 +106,25 @@ pub(crate) async fn run(
     Ok(result)
 }
 
-fn due(minutes: Option<u16>, at: Option<Timestamp>, now: Timestamp) -> Result<Timestamp> {
-    match (minutes, at) {
-        (Some(minutes), None) => Ok(later(now, minutes)),
-        (None, Some(at)) if at.0 <= now.0 => Err(OpError::Invalid(
-            "a one-time automation needs a time in the future".into(),
-        )),
-        (None, Some(at)) => Ok(at),
-        _ => Err(OpError::Invalid(
+// The first run is due one interval after the save, or after the one-time minutes.
+fn due(minutes: Option<u16>, now: Timestamp) -> Result<Timestamp> {
+    match minutes {
+        Some(minutes) => Ok(later(now, minutes)),
+        None => Err(OpError::Invalid(
             "an automation needs minutes from 1 to 1440, or one time".into(),
         )),
     }
 }
 
-async fn set_paused(database: &Database, id: AutomationId, paused: bool) -> Result<OpResult> {
+async fn set_paused(
+    database: &Database,
+    id: AutomationId,
+    paused: bool,
+    at: Timestamp,
+) -> Result<OpResult> {
     let lookup = id.clone();
     database
-        .call(move |store| store.set_automation_paused(&lookup, paused))
+        .call(move |store| store.set_automation_paused(&lookup, paused, at))
         .await?;
     let loaded = id.clone();
     let automation = database
@@ -144,12 +147,38 @@ async fn tick(this: &WeakEntity<Workspace>, cx: &mut AsyncApp) -> Option<()> {
         }
     };
     for automation in due {
+        if automation.failing {
+            report(halt(this, &database, &automation, cx).await);
+            continue;
+        }
         if running(this, &automation, cx)? {
             continue;
         }
         fire(this, &database, &automation, cx).await?;
     }
     Some(())
+}
+
+// A run that keeps failing is not started again: the automation pauses, its row says why, and the
+// activity log hears about it.
+async fn halt(
+    this: &WeakEntity<Workspace>,
+    database: &Database,
+    automation: &Automation,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    let at = time(this, cx)?;
+    let id = automation.id.clone();
+    database
+        .call(move |store| store.set_automation_paused(&id, true, at))
+        .await?;
+    Workspace::refresh(this, cx).await?;
+    let reason = format!("{FAILED_RUNS_LIMIT} runs failed in a row");
+    let name = automation.name.clone();
+    this.update(cx, |_, cx| {
+        cx.emit(crate::WorkspaceEvent::AutomationPaused(name, reason));
+    })
+    .map_err(crate::workspace::closed)
 }
 
 fn running(

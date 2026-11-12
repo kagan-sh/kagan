@@ -8,7 +8,7 @@ use kg_domain::{KeymapOp, Op, OpError, OpResult, Plugin, PluginId, PluginOp, Pro
 
 use super::{
     add_project, click, grid_text, install_navigator, open_surface, open_with_plugins_then,
-    plugin_log, run_op, run_shell, shows, wait_until,
+    plugin_log, run_op, run_shell, shows, wait_for_screen, wait_until,
 };
 
 #[gpui_kit::test]
@@ -143,7 +143,7 @@ fn paste_into_thread_puts_text_in_the_program(cx: &mut TestAppContext) {
         )
     });
     cx.foreground_executor().block_test(task).unwrap();
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         grid_text(cx, &kagan).contains("pasted-from-plugin")
     });
     assert!(plugin_log(cx, "dev.kagan.paster").contains("paste ran"));

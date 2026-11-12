@@ -2,13 +2,15 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use gpui_kit::{AsyncApp, WeakEntity};
-use kg_domain::{EventKind, NoticeSeverity, OpError, OpResult, Run, ThreadId, ThreadStatus};
+use kg_domain::{
+    EventKind, NoticeSeverity, OpError, OpResult, Run, ThreadId, ThreadStatus, split_program,
+};
 use kg_process::pathext;
 
 use super::clean_title;
 use crate::Workspace;
-use crate::host::database::Result;
-use crate::host::program::locate;
+use crate::host::database::{Database, Result};
+use crate::host::program::{label_of, locate};
 use crate::workspace::{Request, RunOutcome, closed, id, missing, time};
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -102,6 +104,21 @@ impl PreparedRun {
     }
 }
 
+// The name of the one saved program whose line is `line`. Two names can share a line, and then
+// the line does not say which one was picked, so the program's own name is used instead.
+async fn saved_name(database: &Database, line: &str) -> Result<Option<String>> {
+    let line = line.trim().to_owned();
+    let saved = database.call(|store| store.saved_programs()).await?;
+    let mut names = saved
+        .into_iter()
+        .filter(|program| program.line.trim() == line)
+        .map(|program| program.name);
+    Ok(match (names.next(), names.next()) {
+        (Some(name), None) => Some(name),
+        _ => None,
+    })
+}
+
 pub(crate) async fn prepare(
     this: &WeakEntity<Workspace>,
     run: Run,
@@ -122,14 +139,12 @@ pub(crate) async fn prepare(
     let title_locked = run.title.is_some();
     let title = if let Some(title) = run.title.as_deref() {
         clean_title(title)?
+    } else if let Some(name) = saved_name(&database, &run.program).await? {
+        clean_title(&name)?
     } else {
-        let mut chars = run.program.chars();
-        let mut program: String = chars.by_ref().take(80).collect();
-        if chars.next().is_some() {
-            program.pop();
-            program.push('…');
-        }
-        clean_title(&program).unwrap_or_else(|_| "Thread".into())
+        let name =
+            split_program(&run.program).map_or_else(|_| run.program.clone(), |(name, _)| name);
+        clean_title(&label_of(&name)).unwrap_or_else(|_| "Thread".into())
     };
     let prefix = database
         .call(|store| store.setting(kg_domain::prefs::BRANCH_PREFIX))

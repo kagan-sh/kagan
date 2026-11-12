@@ -215,11 +215,14 @@ fn listen(
                     this.waited(id, window, cx);
                 }
                 WorkspaceEvent::Finished(id) => this.waited(id, window, cx),
+                WorkspaceEvent::AutomationPaused(name, reason) => {
+                    this.activity.automation_paused(name, reason);
+                }
                 WorkspaceEvent::Open
                 | WorkspaceEvent::Settings
                 | WorkspaceEvent::SettingsPlugins
                 | WorkspaceEvent::Skills
-                | WorkspaceEvent::ProjectSettings(_)
+                | WorkspaceEvent::ProjectSettings(..)
                 | WorkspaceEvent::NewPlugin
                 | WorkspaceEvent::Window(_)
                 | WorkspaceEvent::Notice(..)

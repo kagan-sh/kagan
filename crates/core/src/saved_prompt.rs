@@ -9,6 +9,7 @@ pub(crate) async fn run(
     this: &WeakEntity<Workspace>,
     database: Database,
     op: SavedPromptOp,
+    requester: Option<crate::Requester>,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     match op {
@@ -37,6 +38,18 @@ pub(crate) async fn run(
                 .await?;
             Ok(OpResult::SavedPrompt(prompt))
         }
+        SavedPromptOp::Edit { id, title, body } => {
+            let title = title.trim().to_owned();
+            let shown = id.clone();
+            let prompt = database
+                .call(move |store| {
+                    store.update_saved_prompt(&id, &title, &body)?;
+                    store.saved_prompt(&id)
+                })
+                .await?
+                .ok_or_else(|| missing("saved prompt", &shown))?;
+            Ok(OpResult::SavedPrompt(prompt))
+        }
         SavedPromptOp::Search { text } => {
             let text = text.trim().to_owned();
             let prompts = database
@@ -56,8 +69,21 @@ pub(crate) async fn run(
             Ok(OpResult::SavedPrompt(prompt))
         }
         SavedPromptOp::Delete { id } => {
+            let lookup = id.clone();
+            let prompt = database
+                .call(move |store| store.saved_prompt(&lookup))
+                .await?
+                .ok_or_else(|| missing("saved prompt", &id))?;
+            crate::workspace::approve(
+                None,
+                requester,
+                format!("Delete the saved prompt “{}”?", prompt.title),
+                "Delete",
+                cx,
+            )
+            .await?;
             database
-                .call(move |store| store.delete_saved_prompt(&id))
+                .call(move |store| store.delete_saved_prompt(&prompt.id))
                 .await?;
             Ok(OpResult::Done)
         }
