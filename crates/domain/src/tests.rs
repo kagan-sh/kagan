@@ -1,8 +1,9 @@
 use crate::{
     AgentTool, Attachment, ConfigOp, DiffNote, DiffScope, DiffSide, EnvironmentSpec, Event,
-    EventKind, InteractionOption, Op, OpError, OpResult, PendingInteraction, PendingInteractionId,
-    PluginId, PluginOp, ProjectBranch, Thread, ThreadId, ThreadOp, ThreadStatus, Timestamp,
-    TurnOutcome, UpdateState, Visibility, WaitOutcome, branch_slug, format_notes, invalid_json,
+    EventKind, InstructionsOp, InteractionOption, Op, OpError, OpResult, PendingInteraction,
+    PendingInteractionId, PluginId, PluginOp, ProjectBranch, Thread, ThreadId, ThreadOp,
+    ThreadStatus, Timestamp, TurnOutcome, UpdateState, Visibility, WaitOutcome, branch_slug,
+    format_notes, invalid_json,
 };
 use serde_json::{Value, json};
 
@@ -276,6 +277,18 @@ fn error_wire() {
     assert_eq!(
         serde_json::from_value::<OpError>(changed_wire).unwrap(),
         changed
+    );
+    let full = OpError::Full("the program is not reading its input".into());
+    let full_wire =
+        json!({ "error": { "kind": "full", "message": "the program is not reading its input" } });
+    assert_eq!(serde_json::to_value(&full).unwrap(), full_wire);
+    assert_eq!(serde_json::from_value::<OpError>(full_wire).unwrap(), full);
+    let conflict = OpError::Conflict("NewThread".into());
+    let conflict_wire = json!({ "error": { "kind": "conflict", "message": "NewThread" } });
+    assert_eq!(serde_json::to_value(&conflict).unwrap(), conflict_wire);
+    assert_eq!(
+        serde_json::from_value::<OpError>(conflict_wire).unwrap(),
+        conflict
     );
     assert!(
         serde_json::from_value::<OpError>(json!({ "error": { "kind": "odd", "message": "" } }))
@@ -1128,6 +1141,29 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
 }
 
 #[test]
+fn input_and_report_stop_at_the_text_cap() {
+    let id = ThreadId("thread".into());
+    let input = |text: String| {
+        crate::check(&Op::Thread(ThreadOp::Input {
+            id: id.clone(),
+            text,
+            terminal: None,
+        }))
+    };
+    let report = |bytes: usize| {
+        crate::check(&Op::Thread(ThreadOp::Report {
+            id: id.clone(),
+            terminal: None,
+            bytes: vec![0; bytes],
+        }))
+    };
+    assert_eq!(input("x".repeat(crate::TEXT_MAX)), Ok(()));
+    assert!(input("x".repeat(crate::TEXT_MAX + 1)).is_err());
+    assert_eq!(report(crate::TEXT_MAX), Ok(()));
+    assert!(report(crate::TEXT_MAX + 1).is_err());
+}
+
+#[test]
 fn a_setup_revision_may_not_start_with_a_dash() {
     let setup = |rev: &str| {
         crate::check(&Op::Environment(crate::EnvironmentOp::Setup {
@@ -1566,6 +1602,40 @@ fn terminal_ops_keep_their_exact_json() {
 }
 
 #[test]
+fn rules_refuse_a_control_character_but_keep_line_breaks_and_tabs() {
+    let set = |text: &str| {
+        crate::check(&Op::Instructions(InstructionsOp::Set {
+            text: Some(text.into()),
+            file: None,
+            project: None,
+            expected: None,
+        }))
+    };
+    assert_eq!(set("first line\n\tindented"), Ok(()));
+    assert_eq!(set("first line\r\nsecond line"), Ok(()));
+    assert!(set("a\0b").is_err());
+}
+
+#[test]
+fn an_automation_name_with_a_control_character_says_so() {
+    let add = |name: &str| {
+        crate::check(&Op::Automation(crate::AutomationOp::Add {
+            name: name.into(),
+            body: "text".into(),
+            project_id: crate::ProjectId("prj_1".into()),
+            program: "claude".into(),
+            minutes: Some(5),
+            in_minutes: None,
+        }))
+    };
+    assert_eq!(add("nightly"), Ok(()));
+    assert_eq!(
+        add("night\tly"),
+        Err("an automation name cannot hold a control or bidi character".into())
+    );
+}
+
+#[test]
 fn bidi_overrides_are_refused_in_names_like_control_characters() {
     use crate::{AutomationOp, ProjectId, SavedPromptOp, SectionId, SectionOp};
     for mark in ['\u{202A}', '\u{202E}', '\u{2066}', '\u{2069}'] {
@@ -1575,7 +1645,8 @@ fn bidi_overrides_are_refused_in_names_like_control_characters() {
         assert!(
             crate::check(&Op::SavedPrompt(SavedPromptOp::Add {
                 title: reversed.clone(),
-                body: "body".into(),
+                body: Some("body".into()),
+                file: None,
             }))
             .is_err(),
             "{mark:?}"
@@ -1587,7 +1658,7 @@ fn bidi_overrides_are_refused_in_names_like_control_characters() {
                 project_id: ProjectId::personal(),
                 program: "claude".into(),
                 minutes: Some(5),
-                at: None,
+                in_minutes: None,
             }))
             .is_err(),
             "{mark:?}"
@@ -1611,4 +1682,13 @@ fn bidi_overrides_are_refused_in_names_like_control_characters() {
     }
     assert!(crate::unsafe_char('\u{2069}'));
     assert!(!crate::unsafe_char('é'));
+}
+
+#[test]
+fn a_reset_reads_in_days_hours_or_minutes() {
+    let now = 1_000;
+    assert_eq!(crate::resets_in(now + 3 * 86_400 + 4 * 3_600, now), "3d 4h");
+    assert_eq!(crate::resets_in(now + 2 * 3_600 + 10 * 60, now), "2h 10m");
+    assert_eq!(crate::resets_in(now + 5 * 60, now), "5m");
+    assert_eq!(crate::resets_in(now - 60, now), "0m");
 }

@@ -1,5 +1,5 @@
 use std::{
-    io::{self, BufRead, BufReader, Write},
+    io::{self, BufRead, BufReader, Read, Write},
     process::{Command, Stdio},
     sync::{Arc, mpsc},
     thread,
@@ -112,6 +112,15 @@ pub(crate) fn location_in(dir: &std::path::Path) -> io::Result<std::ffi::OsStrin
 pub(crate) fn name(location: &std::ffi::OsStr) -> io::Result<Name<'static>> {
     use interprocess::local_socket::{GenericFilePath, ToFsName};
 
+    if location.len() > SOCKET_PATH_MAX {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "the socket path is {} bytes and the limit is {SOCKET_PATH_MAX}; set KG_SOCKET to a shorter path",
+                location.len()
+            ),
+        ));
+    }
     std::path::Path::new(location)
         .to_path_buf()
         .to_fs_name::<GenericFilePath>()
@@ -138,12 +147,9 @@ pub(crate) fn name(location: &std::ffi::OsStr) -> io::Result<Name<'static>> {
 }
 
 /// Checks a `/tmp/kagan-<id>` folder before a client connects to it.
+#[cfg(unix)]
 pub(crate) fn before_connect(location: &std::ffi::OsStr) -> io::Result<()> {
-    #[cfg(unix)]
-    trust_fallback(std::path::Path::new(location))?;
-    #[cfg(not(unix))]
-    let _ = location;
-    Ok(())
+    trust_fallback(std::path::Path::new(location))
 }
 
 /// Listens on `location`. A leftover socket file is removed only when it is a socket we own,
@@ -364,6 +370,39 @@ pub(crate) fn serve(
     });
 }
 
+// One request is one JSON line. A longer one is refused and its connection closed, so a client
+// cannot make the app hold an unbounded line.
+const LINE_MAX: u64 = 16 << 20;
+
+enum Request {
+    Line(String),
+    TooLong,
+}
+
+fn read_request(reader: &mut impl BufRead) -> io::Result<Option<Request>> {
+    let mut line = Vec::new();
+    if reader
+        .by_ref()
+        .take(LINE_MAX + 1)
+        .read_until(b'\n', &mut line)?
+        == 0
+    {
+        return Ok(None);
+    }
+    if line.len() as u64 > LINE_MAX && !line.ends_with(b"\n") {
+        return Ok(Some(Request::TooLong));
+    }
+    if line.ends_with(b"\n") {
+        line.pop();
+        if line.ends_with(b"\r") {
+            line.pop();
+        }
+    }
+    String::from_utf8(line)
+        .map(|line| Some(Request::Line(line)))
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+}
+
 // A reader thread sees the client leave while an op still waits for a person.
 fn answer(
     stream: Stream,
@@ -376,20 +415,28 @@ fn answer(
     let (present, gone) = async_channel::bounded::<()>(1);
     thread::spawn(move || {
         let _present = present;
-        for line in BufReader::new(&*receive).lines() {
-            if lines.send(line).is_err() {
+        let mut reader = BufReader::new(&*receive);
+        while let Some(request) = read_request(&mut reader).transpose() {
+            let stop = !matches!(request, Ok(Request::Line(_)));
+            if lines.send(request).is_err() || stop {
                 return;
             }
         }
     });
-    for line in incoming {
-        let reply = match serde_json::from_str::<Op>(&line?) {
-            Ok(op) => handle(op, &gone, &mut |question| {
-                let mut frame = serde_json::json!({ "waiting": question }).to_string();
-                frame.push('\n');
-                _ = send.write_all(frame.as_bytes());
-            }),
-            Err(error) => Err(OpError::Invalid(error.to_string())),
+    for request in incoming {
+        let reply = match request? {
+            Request::Line(line) => match serde_json::from_str::<Op>(&line) {
+                Ok(op) => handle(op, &gone, &mut |question| {
+                    let mut frame = serde_json::json!({ "waiting": question }).to_string();
+                    frame.push('\n');
+                    _ = send.write_all(frame.as_bytes());
+                }),
+                Err(error) => Err(OpError::Invalid(error.to_string())),
+            },
+            Request::TooLong => Err(OpError::Invalid(format!(
+                "the request is over {} MiB",
+                LINE_MAX >> 20
+            ))),
         };
         let mut out = match reply {
             Ok(result) => serde_json::to_vec(&result),
@@ -410,6 +457,7 @@ impl Client {
 
     /// Connects to the app listening at `location`, after checking a fallback folder there.
     pub(crate) fn open(location: &std::ffi::OsStr) -> io::Result<Self> {
+        #[cfg(unix)]
         before_connect(location)?;
         Self::connect(name(location)?)
     }
@@ -516,6 +564,7 @@ fn start_headless(location: &std::ffi::OsStr) -> io::Result<()> {
     #[cfg(windows)]
     {
         use windows_sys::Win32::System::Threading::{CREATE_NO_WINDOW, DETACHED_PROCESS};
+        crate::pipe::stop_inheriting_std_handles();
         std::os::windows::process::CommandExt::creation_flags(
             &mut command,
             DETACHED_PROCESS | CREATE_NO_WINDOW,

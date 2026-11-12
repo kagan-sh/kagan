@@ -100,7 +100,8 @@ pub(crate) async fn prepare(
         }
         EnvironmentSpec::Worktree { .. } => {
             return Err(OpError::Invalid(
-                "git worktrees need a standard project".into(),
+                "git worktrees need a standard project; a personal project uses a personal environment."
+                    .into(),
             ));
         }
     };

@@ -4,11 +4,14 @@ use kg_domain::*;
 use crate::Workspace;
 
 use super::{
-    Fixture, Reap, alive, dispatch_delete, events, gone, kinds_of, op, pending_delete, pid_of,
-    program, screen, screen_of, screen_with, started, thread, type_in, wait_for_status,
+    Fixture, alive, events, gone, op, pid_of, program, screen, screen_with, started, thread,
+    type_in, wait_for_status,
 };
 #[cfg(unix)]
-use super::{dispatch_send, job_pid, screen_lines, script, sent_text, wait_until_busy};
+use super::{
+    Reap, dispatch_delete, dispatch_send, job_pid, kinds_of, pending_delete, screen_lines,
+    screen_of, script, sent_text, wait_until_busy,
+};
 
 #[gpui_kit::test]
 async fn run_puts_the_programs_output_on_the_screen(cx: &mut TestAppContext) {
@@ -704,6 +707,65 @@ async fn input_to_an_ended_program_is_refused(cx: &mut TestAppContext) {
     .await
     .unwrap_err();
     assert!(error.to_string().contains("ended"), "{error}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn input_past_the_queue_budget_is_refused_as_full(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Thread(started) = op(fixture.run("/bin/sh -c \"stty raw -echo; sleep 30\""), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("thread")
+    };
+    let text = "a".repeat(1 << 20);
+    for _ in 0..4 {
+        op(
+            Op::Thread(ThreadOp::Input {
+                id: started.id.clone(),
+                text: text.clone(),
+                terminal: None,
+            }),
+            cx,
+        )
+        .await
+        .expect("input inside the budget is accepted");
+    }
+    let refused = op(
+        Op::Thread(ThreadOp::Input {
+            id: started.id.clone(),
+            text: "x".into(),
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(refused, OpError::Full(_)), "{refused}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn input_over_the_text_cap_is_invalid_even_to_an_idle_program(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Thread(started) = op(fixture.run("/bin/sh -c \"stty raw -echo; sleep 30\""), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("thread")
+    };
+    let refused = op(
+        Op::Thread(ThreadOp::Input {
+            id: started.id,
+            text: "a".repeat(5 << 20),
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(refused, OpError::Invalid(_)), "{refused}");
 }
 
 #[cfg(unix)]

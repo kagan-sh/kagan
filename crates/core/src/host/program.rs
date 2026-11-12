@@ -52,7 +52,7 @@ pub(crate) async fn list(
         .into_iter()
         .filter(|thread| thread.visibility == Visibility::Visible && !thread.provider.is_empty())
         .map(|thread| thread.provider);
-    // The project's program goes first, so it is the default when it is installed.
+    // The project's program goes first, so it is listed among the recent ones.
     let recent = project_program.iter().cloned().chain(recent);
     let recent: Vec<String> = recent.fold(Vec::new(), |mut distinct, command| {
         if !distinct.contains(&command) && distinct.len() < RECENT_LIMIT {
@@ -72,6 +72,7 @@ pub(crate) async fn list(
                 home.as_deref(),
                 &saved,
                 &recent,
+                project_program.as_deref(),
             );
             if include_versions {
                 versions(&mut list);
@@ -83,8 +84,9 @@ pub(crate) async fn list(
 }
 
 /// The programs found with `path`, `pathext` and `home`, the `shell`, the `saved` programs, and the
-/// `recent` commands, newest first. Versions are filled in separately, so this reads nothing but
-/// the filesystem.
+/// `recent` commands, newest first. The default is the `project` program when it is installed,
+/// else the first installed known agent. Versions are filled in separately, so this reads nothing
+/// but the filesystem.
 pub(crate) fn discover(
     path: Option<&OsStr>,
     pathext: Option<&OsStr>,
@@ -92,6 +94,7 @@ pub(crate) fn discover(
     home: Option<&Path>,
     saved: &[SavedProgram],
     recent: &[String],
+    project: Option<&str>,
 ) -> ProgramList {
     let mut programs = Vec::new();
     for (command, label) in KNOWN_PROGRAMS {
@@ -154,12 +157,13 @@ pub(crate) fn discover(
             pinned: false,
         });
     }
-    let default = recent
-        .iter()
-        .find_map(|command| {
+    // The default is decided before the order below, so a recent run of a known agent cannot take
+    // the first known agent's place.
+    let default = project
+        .and_then(|project| {
             programs
                 .iter()
-                .find(|program| &program.command == command && program.installed())
+                .find(|program| program.command == project && program.installed())
         })
         .or_else(|| {
             programs
@@ -167,10 +171,27 @@ pub(crate) fn discover(
                 .find(|program| program.source == ProgramSource::Known && program.installed())
         })
         .map(|program| program.command.clone());
+    // Pinned saved programs first, then the recent ones newest first, then the rest in the order
+    // above. The window and `kg program list` both show this order.
+    let mut ordered: Vec<(usize, Program)> = programs.into_iter().enumerate().collect();
+    ordered.sort_by_key(|(index, program)| {
+        if program.pinned {
+            (0, *index)
+        } else if let Some(newest) = recent
+            .iter()
+            .position(|command| *command == program.command)
+        {
+            (1, newest)
+        } else {
+            (2, *index)
+        }
+    });
+    let programs: Vec<Program> = ordered.into_iter().map(|(_, program)| program).collect();
     ProgramList { programs, default }
 }
 
-fn label_of(name: &str) -> String {
+/// The short name a person knows a program by: its known label, else its file name.
+pub(crate) fn label_of(name: &str) -> String {
     let base = Path::new(name)
         .file_stem()
         .map_or_else(|| name.into(), |file| file.to_string_lossy().into_owned());

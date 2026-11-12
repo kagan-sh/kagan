@@ -1,6 +1,11 @@
 # Product Rust line ceilings. A count may grow up to its ceiling, never past it.
+# This branch: main is 82678 lines (after #142), and the merged count is 82692 (+14). The ceiling is that count.
+# Cost: +14 product lines, all in crates/ui/src/kagan/quit.rs: the window-closed hook and its policy check.
 target 35000
-ceiling 80438
+# The browser QA fixes add 88 lines on top of main (81383, after #135): the held-thread tab, the hide calls, the page inset, the toolbar and the test-only shown record. The ceiling is set to the merged count.
+# Cost: this branch adds 28 product lines on top of main (81471), for the CLI and Windows fixes. The merged count is 81499, and the ceiling is set to it.
+# Cost: the Windows update waiter adds 89 product lines on top of main (82692, after #143): one waiter for both Windows install paths, and the tests that run replace and relaunch off Windows. The ceiling is set to the merged count.
+ceiling 82781
 allow_expect 8
 crates/core/src/thread/agent/files.rs 754
 crates/ui/src/theme/catalog.rs 646

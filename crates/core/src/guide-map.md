@@ -28,7 +28,7 @@ sidebar: `kg sidebar`.
 
 section: `kg section create`, `kg section rename`, `kg section delete`, `kg section file`.
 
-saved-prompt: `kg saved-prompt add`, `kg saved-prompt search`, `kg saved-prompt star`, `kg saved-prompt delete`, `kg saved-prompt send`.
+saved-prompt: `kg saved-prompt add`, `kg saved-prompt edit`, `kg saved-prompt search`, `kg saved-prompt star`, `kg saved-prompt delete`, `kg saved-prompt send`.
 
 theme: `kg theme get`, `kg theme set`, `kg theme new`, `kg theme folder`.
 
@@ -54,6 +54,7 @@ preview: `kg preview show` prints one file with the same rules as the Preview ta
 
 diagnostics: `kg diagnostics export`.
 
+usage: `kg usage show` reads each signed-in provider's usage limits now, if the `usage-limits` preference is on; `kg usage refresh` asks again. Nothing is saved.
 update: `kg update check` reads the GitHub release list now; `kg update status` prints the version, the install kind and what the last check found. Only a person installs, from the window.
 
 Preferences and keys: `kg guide customize`.

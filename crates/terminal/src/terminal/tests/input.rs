@@ -183,3 +183,66 @@ fn a_report_leaves_a_scrolled_view_where_it_is() {
     assert_eq!(row_text(&terminal, 0), "28");
     drop(reap);
 }
+
+#[cfg(unix)]
+fn ends_with_cursor_report(bytes: &[u8]) -> bool {
+    let Some(start) = bytes.windows(2).rposition(|pair| pair == b"\x1b[") else {
+        return false;
+    };
+    let report = &bytes[start + 2..];
+    report.len() > 1
+        && report.last() == Some(&b'R')
+        && report[..report.len() - 1]
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || *byte == b';')
+}
+
+// The program sits in raw mode and reads nothing until `go` exists, so the queue fills and stays full.
+#[cfg(unix)]
+#[test]
+fn a_full_input_queue_refuses_input_until_the_writer_drains_it() {
+    const BUDGET: usize = 4 << 20;
+    let dir = tempfile::tempdir().unwrap();
+    let go = dir.path().join("go");
+    let out = dir.path().join("out");
+    let script = format!(
+        "stty raw -echo; printf READY; while [ ! -e '{}' ]; do sleep 0.05; done; printf '\\033[6n'; sleep 0.5; cat > '{}'",
+        go.display(),
+        out.display()
+    );
+    let terminal = Terminal::spawn(sh(&script), 80, 24).unwrap();
+    let reap = Reap(terminal.process_id());
+    wait_for(&terminal, "READY");
+    let chunk = vec![b'a'; 1 << 20];
+    for _ in 0..BUDGET / chunk.len() {
+        terminal
+            .write(chunk.clone())
+            .expect("input inside the budget is queued");
+    }
+    let refused = terminal
+        .write(b"x".to_vec())
+        .expect_err("input past the budget is refused");
+    assert_eq!(refused.kind(), std::io::ErrorKind::QuotaExceeded);
+    let Err(submit_refused) = terminal.submit("x") else {
+        panic!("a submit past the budget is refused");
+    };
+    assert_eq!(submit_refused.kind(), std::io::ErrorKind::QuotaExceeded);
+    std::fs::write(&go, b"").unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let output = std::fs::read(&out).unwrap_or_default();
+        if ends_with_cursor_report(&output) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the program never read its input"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+    terminal
+        .write(chunk)
+        .expect("input is accepted again once the program has read the queue");
+    quit_within(terminal, Duration::from_secs(3));
+    drop(reap);
+}

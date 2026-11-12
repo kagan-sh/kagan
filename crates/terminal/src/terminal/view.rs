@@ -129,7 +129,7 @@ impl View {
         self.shared.publish(&screen);
         if !held.is_empty() {
             // The writer is gone, so the program no longer hears replies.
-            let _ = replies.send(Outgoing::Bytes(held));
+            let _ = replies.send(Outgoing::Reply(held));
         }
     }
 }

@@ -173,6 +173,17 @@ pub(super) fn agents(
     group
 }
 
+pub(super) fn usage_row(on: bool) -> Row {
+    row(
+        "usage-limits",
+        "Provider usage",
+        "Show how much of your Claude and Codex limits you have used, in the sidebar footer. Reads your sign-in on this computer and asks each provider for its usage. Nothing is saved or shared.",
+        switch("usage-limits", "Provider usage", on, |on, _, cx| {
+            set_flag(kg_domain::prefs::USAGE_LIMITS, on, cx);
+        }),
+    )
+}
+
 pub(super) fn plugin_status_row(on: bool) -> Row {
     row(
         "plugin-status",

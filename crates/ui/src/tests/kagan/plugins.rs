@@ -539,6 +539,7 @@ pub(in crate::tests) fn open_with_plugins_then(
     (kagan, window, data)
 }
 
+#[cfg(unix)]
 pub(in crate::tests) fn host(cx: &mut TestAppContext) -> tempfile::TempDir {
     host_then(cx, |_| {})
 }

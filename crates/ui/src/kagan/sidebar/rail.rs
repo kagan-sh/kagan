@@ -413,24 +413,32 @@ pub(super) fn footer(
         .px(px(space(SpaceStep::Md, cx)))
         .justify_between()
         .items_center()
-        .child(control(
-            "add-project",
-            Facts::button("Add project"),
-            Button::new("add-project-control")
-                .small()
-                .ghost()
-                .icon(gpui_kit::assets::IconName::FolderPlus)
-                .accessibility_label("Add project")
-                .tooltip(crate::kagan::controls::tip(
-                    "Add project",
-                    &crate::kagan::AddProject,
-                    cx,
+        .child(
+            h_flex()
+                .gap(px(space(SpaceStep::Xs, cx)))
+                .items_center()
+                .child(control(
+                    "add-project",
+                    Facts::button("Add project"),
+                    Button::new("add-project-control")
+                        .small()
+                        .ghost()
+                        .icon(gpui_kit::assets::IconName::FolderPlus)
+                        .accessibility_label("Add project")
+                        .tooltip(crate::kagan::controls::tip(
+                            "Add project",
+                            &crate::kagan::AddProject,
+                            cx,
+                        ))
+                        .tab_stop(false)
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(crate::kagan::AddProject), cx);
+                        }),
                 ))
-                .tab_stop(false)
-                .on_click(|_, window, cx| {
-                    window.dispatch_action(Box::new(crate::kagan::AddProject), cx);
+                .when(sidebar.usage.read(cx).enabled(), |row| {
+                    row.child(crate::kagan::usage::control_for(&sidebar.usage, cx))
                 }),
-        ))
+        )
         .when(
             matches!(sidebar.archived_footer, ArchivedFooter::Shown),
             |footer| {

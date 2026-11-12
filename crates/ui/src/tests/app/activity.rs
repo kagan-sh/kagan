@@ -9,9 +9,11 @@ use kg_domain::{
 
 use crate::kagan::ActivityPart;
 use crate::kagan::screen_read;
+#[cfg(unix)]
+use crate::tests::kagan::thread_record;
 use crate::tests::kagan::{
     click, focused_of, label, open, open_with_plugins_then, role_of, run_shell, shown, shows,
-    thread_record, value_of, wait_until,
+    value_of, wait_until,
 };
 
 #[cfg(unix)]

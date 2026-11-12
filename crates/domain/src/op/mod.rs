@@ -40,7 +40,7 @@ use crate::{
     Sidebar, Thread, ThreadId,
 };
 
-pub use automation::{Automation, AutomationOp};
+pub use automation::{Automation, AutomationOp, FAILED_RUNS_LIMIT};
 pub use browser::{BrowserControl, BrowserOp, BrowserSnapshot, BrowserView};
 pub use check::check;
 pub use config::ConfigOp;
@@ -65,7 +65,7 @@ pub use program::ProgramOp;
 pub use project::ProjectOp;
 pub use saved_prompt::SavedPromptOp;
 pub use section::SectionOp;
-pub use settings::SettingsOp;
+pub use settings::{ProjectSection, SettingsOp};
 pub use skill::{Skill, SkillOp, SkillSource, SkillTemplate};
 pub use surface::{Slot, SlotChoice, SlotChoiceError, SurfaceItem, SurfaceOp, SurfacePlacement};
 pub use terminal::{
@@ -145,7 +145,7 @@ pub enum Op {
     /// Keyboard shortcuts: built-in ones and plugin commands
     #[command(subcommand)]
     Keymap(KeymapOp),
-    /// Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+    /// Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, usage-limits, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
     #[command(subcommand)]
     Preference(PreferenceOp),
     /// Agent rules: the global rules, or one project's, that a thread's program is told
@@ -172,6 +172,9 @@ pub enum Op {
     /// Check for a newer kagan
     #[command(subcommand)]
     Update(crate::UpdateOp),
+    /// Provider usage limits, read live from each signed-in provider when the `usage-limits` preference is on
+    #[command(subcommand)]
+    Usage(crate::UsageOp),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -290,6 +293,7 @@ pub enum OpResult {
     Details(crate::ThreadDetails),
     Links(Vec<String>),
     Update(crate::UpdateStatus),
+    Usage(crate::UsageView),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]
@@ -305,6 +309,11 @@ pub enum OpError {
     SetupChanged(String),
     #[error("{0}")]
     Changed(String),
+    #[error("{0}")]
+    Full(String),
+    /// A keymap chord is already bound to the named action.
+    #[error("the chord is already bound to {0}")]
+    Conflict(String),
 }
 
 impl From<std::io::Error> for OpError {
@@ -332,6 +341,8 @@ enum Body {
     Failed(String),
     SetupChanged(String),
     Changed(String),
+    Full(String),
+    Conflict(String),
 }
 
 impl From<OpError> for Wire {
@@ -342,6 +353,8 @@ impl From<OpError> for Wire {
             OpError::Failed(message) => Body::Failed(message),
             OpError::SetupChanged(message) => Body::SetupChanged(message),
             OpError::Changed(message) => Body::Changed(message),
+            OpError::Full(message) => Body::Full(message),
+            OpError::Conflict(action) => Body::Conflict(action),
         };
         Self { error }
     }
@@ -355,6 +368,8 @@ impl From<Wire> for OpError {
             Body::Failed(message) => Self::Failed(message),
             Body::SetupChanged(message) => Self::SetupChanged(message),
             Body::Changed(message) => Self::Changed(message),
+            Body::Full(message) => Self::Full(message),
+            Body::Conflict(action) => Self::Conflict(action),
         }
     }
 }

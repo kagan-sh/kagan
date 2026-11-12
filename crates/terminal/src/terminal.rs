@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::thread::JoinHandle;
@@ -25,7 +25,7 @@ use ending::Ending;
 pub use exit::Exit;
 pub use finished::Finished;
 use shared::lock;
-use stream::{Outgoing, io_error, is_unsafe_control, paste_text, pty_size};
+use stream::{Outgoing, io_error, is_unsafe_control, paste_text, pty_size, reserve};
 #[cfg(unix)]
 use stream::{dup_fd, set_nonblocking};
 use stream::{thread_read, thread_write};
@@ -38,9 +38,36 @@ pub struct Launch {
     pub env: Vec<(OsString, OsString)>,
 }
 
+/// What ends the program's processes when it is stopped or its terminal closes.
+#[derive(Debug)]
+pub enum Containment {
+    /// The program's process tree, found by its pid (macOS and Linux).
+    Tree,
+    /// A Job Object: closing or terminating it ends the program and what it started.
+    #[cfg(windows)]
+    Job(kg_process::Job),
+    /// The job could not be made or assigned, so only the program is ended. Holds the OS error.
+    #[cfg(windows)]
+    Unavailable(io::Error),
+}
+
+impl std::fmt::Display for Containment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Tree => write!(f, "tree"),
+            #[cfg(windows)]
+            Self::Job(_) => write!(f, "job"),
+            #[cfg(windows)]
+            Self::Unavailable(error) => write!(f, "unavailable: {error}"),
+        }
+    }
+}
+
 pub struct Terminal {
     master: Option<Box<dyn MasterPty + Send>>,
     input: Sender<Outgoing>,
+    /// Person or agent input the writer has not yet handed to the pty; see `stream::INPUT_MAX`.
+    queued_input: Arc<AtomicUsize>,
     child: Mutex<Option<Box<dyn Child + Send + Sync>>>,
     reader: Option<JoinHandle<()>>,
     writer: Option<JoinHandle<()>>,
@@ -52,9 +79,7 @@ pub struct Terminal {
     epoch: Instant,
     observed: OnceLock<(Exit, std::time::Duration)>,
     ended_with: OnceLock<Exit>,
-    // Holds the program and what it starts; closing the handle kills them all.
-    #[cfg(windows)]
-    job: Option<kg_process::Job>,
+    containment: Containment,
     #[cfg(test)]
     clock: Option<Arc<std::sync::atomic::AtomicU64>>,
     #[cfg(test)]
@@ -66,6 +91,15 @@ impl Terminal {
     ///
     /// The screen is too small, or the program did not start.
     pub fn spawn(launch: Launch, cols: u16, rows: u16) -> io::Result<Self> {
+        Self::start(launch, cols, rows, contain_program)
+    }
+
+    fn start(
+        launch: Launch,
+        cols: u16,
+        rows: u16,
+        contain: impl FnOnce(u32) -> Containment,
+    ) -> io::Result<Self> {
         let size = pty_size(cols, rows)?;
         let pair = native_pty_system().openpty(size).map_err(io_error)?;
         let reader = pair.master.try_clone_reader().map_err(io_error)?;
@@ -103,6 +137,7 @@ impl Terminal {
         #[cfg(test)]
         let fail_write = Arc::new(AtomicBool::new(false));
         let (input, queued) = mpsc::channel();
+        let containment = contain(process_id);
         Ok(Self {
             master: Some(pair.master),
             reader: Some(thread_read(
@@ -127,6 +162,7 @@ impl Terminal {
                 replies: Some(input.clone()),
             },
             input,
+            queued_input: Arc::new(AtomicUsize::new(0)),
             child: Mutex::new(Some(child)),
             ended,
             write_stop,
@@ -134,10 +170,7 @@ impl Terminal {
             epoch: Instant::now(),
             observed: OnceLock::new(),
             ended_with: OnceLock::new(),
-            // The pty starts the program, so it runs briefly before it joins the job. Without a
-            // job, closing the console still ends the programs attached to it.
-            #[cfg(windows)]
-            job: kg_process::Job::assign(process_id).ok(),
+            containment,
             #[cfg(test)]
             clock: None,
             #[cfg(test)]
@@ -148,6 +181,12 @@ impl Terminal {
     #[must_use]
     pub fn process_id(&self) -> u32 {
         self.process_id
+    }
+
+    /// What ends the program's processes. Windows keeps the job, or why there is none.
+    #[must_use]
+    pub fn containment(&self) -> &Containment {
+        &self.containment
     }
 
     pub fn set_snapshot_bound(&self, bound: usize) {
@@ -161,30 +200,36 @@ impl Terminal {
     ///
     /// # Errors
     ///
-    /// The program has already been reaped.
+    /// The program has already been reaped, or it is not reading and the input queue is full.
     pub fn write(&self, bytes: Vec<u8>) -> io::Result<()> {
         if bytes.is_empty() {
             return Ok(());
         }
+        let charge = reserve(&self.queued_input, bytes.len())?;
         self.view.edit(Edit::Bottom);
-        self.send(bytes)
+        self.send(bytes, charge)
     }
 
     /// Bytes a mouse report sends. Unlike typing, a report leaves a scrolled view where it is.
     ///
     /// # Errors
     ///
-    /// The program has already been reaped.
+    /// The program has already been reaped, or it is not reading and the input queue is full.
     pub fn report(&self, bytes: Vec<u8>) -> io::Result<()> {
-        self.send(bytes)
-    }
-
-    fn send(&self, bytes: Vec<u8>) -> io::Result<()> {
         if bytes.is_empty() {
             return Ok(());
         }
+        let charge = reserve(&self.queued_input, bytes.len())?;
+        self.send(bytes, charge)
+    }
+
+    fn send(&self, bytes: Vec<u8>, charge: stream::Charge) -> io::Result<()> {
         self.input
-            .send(Outgoing::Bytes(bytes))
+            .send(Outgoing::Input {
+                bytes,
+                done: None,
+                charge,
+            })
             .map_err(|_| io::Error::other("terminal is closed"))
     }
 
@@ -219,7 +264,8 @@ impl Terminal {
     ///
     /// # Errors
     ///
-    /// The program has ended, the terminal is closed, or nothing non-control remains after the filter.
+    /// The program has ended, the terminal is closed, nothing non-control remains after the filter,
+    /// or it is not reading and the input queue is full.
     pub fn submit(&self, text: &str) -> io::Result<(String, mpsc::Receiver<io::Result<()>>)> {
         if self.exited() {
             return Err(io::Error::other("the program has ended"));
@@ -231,10 +277,15 @@ impl Terminal {
         let bracketed = lock(&self.view.shared.screen).bracketed_paste();
         let mut bytes = paste_text(&typed, bracketed).into_bytes();
         bytes.push(b'\r');
+        let charge = reserve(&self.queued_input, bytes.len())?;
         self.view.edit(Edit::Bottom);
         let (done, written) = mpsc::channel();
         self.input
-            .send(Outgoing::Checked { bytes, done })
+            .send(Outgoing::Input {
+                bytes,
+                done: Some(done),
+                charge,
+            })
             .map_err(|_| io::Error::other("terminal is closed"))?;
         Ok((typed, written))
     }
@@ -294,6 +345,34 @@ impl Terminal {
             shared: self.view.shared.clone(),
             write_stop: Arc::clone(&self.write_stop),
         })
+    }
+}
+
+#[cfg(unix)]
+fn contain_program(_process_id: u32) -> Containment {
+    Containment::Tree
+}
+
+// The pty starts the program, so it runs briefly before it joins the job. Closing the pty's
+// console also ends the programs on that console, but not one with its own console.
+#[cfg(windows)]
+fn contain_program(process_id: u32) -> Containment {
+    contain(process_id, kg_process::Job::assign)
+}
+
+#[cfg(windows)]
+fn contain(
+    process_id: u32,
+    assign: impl FnOnce(u32) -> io::Result<kg_process::Job>,
+) -> Containment {
+    match assign(process_id) {
+        Ok(job) => Containment::Job(job),
+        Err(error) => {
+            eprintln!(
+                "kg: program {process_id} is not in a job object, so stopping it ends only the program: {error}"
+            );
+            Containment::Unavailable(error)
+        }
     }
 }
 

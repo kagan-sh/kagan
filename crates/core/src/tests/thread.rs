@@ -4,9 +4,11 @@ use kg_domain::*;
 use crate::Workspace;
 
 use super::{
-    Fixture, empty_repo, environment_branch, environment_of, events, kinds_of, op, pid_of,
-    plant_old_turn, program, socket_rename, started, thread, wait_for_status, worktree_run,
+    Fixture, empty_repo, environment_branch, events, kinds_of, op, pid_of, plant_old_turn, program,
+    socket_rename, started, thread, wait_for_status,
 };
+#[cfg(unix)]
+use super::{environment_of, worktree_run};
 #[cfg(unix)]
 use super::{script, stop_archive_and_settle};
 
@@ -1367,6 +1369,21 @@ async fn a_rename_for_a_requester_locks_the_title_after_one(cx: &mut TestAppCont
         kept.to_string(),
         "the title is kept; rename it in the window"
     );
+}
+
+#[gpui_kit::test]
+async fn sending_to_an_unknown_thread_names_the_thread(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    let error = op(
+        Op::Thread(ThreadOp::Send {
+            id: ThreadId("thr_nope".into()),
+            text: "hi".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(error.to_string(), "thread thr_nope not found");
 }
 
 #[gpui_kit::test]

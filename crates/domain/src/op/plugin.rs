@@ -122,6 +122,7 @@ pub enum PluginOp {
     Disable { id: PluginId },
     /// Hide a plugin's icons from the rail, or show them again. The plugin keeps working.
     Rail {
+        /// The plugin id, then hide or show
         id: PluginId,
         #[arg(value_enum)]
         action: RailAction,

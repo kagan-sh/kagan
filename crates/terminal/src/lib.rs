@@ -10,4 +10,4 @@ mod tree;
 pub use grid::{Ansi, Cell, Color, Cursor, Grid, Motion, Mouse, Weight};
 pub use link::links;
 pub use screen::{MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS, SNAPSHOT_MAX, SelectMode, Snapshot};
-pub use terminal::{Exit, Finished, Kept, KeptLine, Launch, Terminal, View};
+pub use terminal::{Containment, Exit, Finished, Kept, KeptLine, Launch, Terminal, View};

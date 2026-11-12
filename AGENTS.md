@@ -36,7 +36,7 @@ Keep `CLAUDE.md` and `CLAUDE.local.md` out of this repo: Claude Code reads `AGEN
 
 ## Windows
 
-- No clippy job runs on Windows; the Windows test jobs are the only build of `cfg(windows)` code. Read that code twice, and wait for `windows-tests` before you call a change done.
+- `cfg(windows)` code builds only in the Windows CI jobs (`windows-clippy`, decision 253, and `windows-tests`). A clean macOS run proves nothing about it; wait for those jobs before you call a change done.
 - `#[cfg(...)]` covers the one item below it. When you delete a gated line, check what the attribute now covers: a leftover gate on a `use` passes on macOS and Linux and fails Windows with an unresolved name.
 - A test that starts a shell is `#[cfg(unix)]`. Keep the rest of the logic in a test without a gate, so Windows runs it.
 - A Windows-only failure has a cause. Find it; do not change behaviour just to make the test pass.
@@ -100,7 +100,7 @@ Push with the hooks on, so `.githooks/pre-push` runs. Mutation testing (`scripts
 
 ## Enforced
 
-- `.github/workflows/ci.yml` runs on every pull request and every push to `main` (decision 30): the hook checks, jscpd, cargo-deny, cargo-shear; `cargo clippy --workspace --all-targets -- -D warnings` on Linux and macOS; and the tests on Linux, macOS and Windows. A diff with no Rust input skips the Rust jobs; `scripts/ci-changes.sh` lists the paths that skip. Some docs that tests or checks read do not skip, and neither does any `crates/*/AGENTS.md`.
+- `.github/workflows/ci.yml` runs on every pull request and every push to `main` (decision 30): the hook checks, jscpd, cargo-deny, cargo-shear; `cargo clippy --workspace --all-targets -- -D warnings` on Linux, macOS and Windows (decision 253); and the tests on Linux, macOS and Windows. A diff with no Rust input skips the Rust jobs; `scripts/ci-changes.sh` lists the paths that skip. Some docs that tests or checks read do not skip, and neither does any `crates/*/AGENTS.md`.
 - Merges into `main` are squashed, and the squash commit takes the PR title, so `.github/workflows/pr-title.yml` fails any title that is not a Conventional Commit (`type(scope)?: summary`).
 - Workspace lints in the root `Cargo.toml` (`[workspace.lints]`) deny `unwrap_used`, `expect_used` (tests excepted), `dbg_macro`, `todo`, and `print_stdout` in every crate (`kg` prints through `out.rs`), and warn on `clippy::pedantic`.
 - Every pull request into `main` is reviewed against this file and the folder files, and anything that breaks them is sent back.

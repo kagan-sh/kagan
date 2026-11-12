@@ -1,11 +1,20 @@
+#[cfg(unix)]
 use std::path::Path;
 
-use gpui_kit::{AppContext as _, ElementId, TestAppContext};
+use gpui_kit::TestAppContext;
+#[cfg(unix)]
+use gpui_kit::{AppContext as _, ElementId};
+#[cfg(unix)]
 use kg_core::Workspace;
+#[cfg(unix)]
 use kg_domain::{Op, PluginOp, ThreadId};
 
-use super::{run, tab_to, wide};
-use crate::tests::kagan::{click, label, open, press_key, shows, thread_record, wait_until};
+use super::wide;
+#[cfg(unix)]
+use super::{run, tab_to};
+use crate::tests::kagan::{click, label, open, wait_until};
+#[cfg(unix)]
+use crate::tests::kagan::{press_key, shows, thread_record};
 
 #[cfg(unix)]
 #[gpui_kit::test]
@@ -62,10 +71,12 @@ pub(in crate::tests) fn plugin_agent(cx: &mut TestAppContext, data: &Path, scrip
 }
 
 /// Finds programs in `bin` only, so the agents on this machine do not matter.
+#[cfg(unix)]
 pub(in crate::tests) fn use_path(cx: &mut TestAppContext, bin: &Path) {
     use_environment(cx, bin, Path::new("/bin/sh"));
 }
 
+#[cfg(unix)]
 pub(in crate::tests) fn use_environment(cx: &mut TestAppContext, bin: &Path, shell: &Path) {
     let (bin, shell) = (bin.to_path_buf(), shell.to_path_buf());
     cx.update(|cx| {

@@ -1,7 +1,8 @@
-use crate::kagan::screen_read;
+use crate::kagan::{Kagan, screen_read};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use gpui_kit::Entity;
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::component::input::{Copy, Cut, Paste, Redo, SelectAll, Undo};
 use gpui_kit::{
@@ -14,7 +15,8 @@ use kg_domain::{Op, SelectMode, ThreadOp, WindowOp};
 use crate::kagan::menus::{About, Close, Hide, HideOthers, Minimize, Quit, ShowAll, Zoom};
 
 use crate::tests::kagan::{
-    chord, click, focused_of, grid_text, open, run_shell, shows, wait_until,
+    chord, click, focused_of, grid_text, open, run_shell, shows, wait_for_output, wait_for_screen,
+    wait_until,
 };
 
 #[gpui_kit::test]
@@ -183,6 +185,36 @@ fn command_comma_and_quit_work_outside_the_terminal(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn closing_the_last_window_quits_except_on_macos(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let before = crate::kagan::quit::quit_requests();
+    cx.simulate_keystrokes(window, "cmd-w");
+    assert_last_close_quits(cx, before);
+}
+
+// The title-bar close button and Alt+F4 remove the window without the Close action.
+#[gpui_kit::test]
+fn removing_the_last_window_quits_except_on_macos(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let before = crate::kagan::quit::quit_requests();
+    cx.update_window(window, |_, window, _| window.remove_window())
+        .expect("the window is open");
+    assert_last_close_quits(cx, before);
+}
+
+fn assert_last_close_quits(cx: &mut TestAppContext, before: usize) {
+    cx.run_until_parked();
+    assert!(cx.update(|cx| cx.windows().is_empty()));
+    if cfg!(target_os = "macos") {
+        cx.run_until_parked();
+        assert_eq!(crate::kagan::quit::quit_requests(), before);
+    } else {
+        wait_until(cx, |_| crate::kagan::quit::quit_requests() > before);
+        assert_eq!(crate::kagan::quit::quit_requests(), before + 1);
+    }
+}
+
+#[gpui_kit::test]
 fn quit_is_the_focused_default_of_the_question(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     run_shell(cx);
@@ -293,6 +325,8 @@ fn quit_finishes_when_the_screen_save_never_completes(cx: &mut TestAppContext) {
     drop(release);
 }
 
+#[cfg(target_os = "macos")]
+// Reopening in this process after the last window closes is macOS only: elsewhere that close quits kagan (decision 269).
 #[gpui_kit::test]
 fn closing_the_window_during_the_question_asks_again(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
@@ -317,6 +351,20 @@ fn closing_the_window_during_the_question_asks_again(cx: &mut TestAppContext) {
     assert!(pid(cx, &id).is_some());
 }
 
+#[cfg(not(target_os = "macos"))]
+#[gpui_kit::test]
+fn closing_the_window_during_the_question_quits(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    run_shell(cx);
+    cx.simulate_keystrokes(window, "cmd-q");
+    cx.run_until_parked();
+    assert!(dialog(cx, window));
+    let before = crate::kagan::quit::quit_requests();
+    cx.simulate_keystrokes(window, "cmd-w");
+    wait_until(cx, |_| crate::kagan::quit::quit_requests() > before);
+    assert_eq!(crate::kagan::quit::quit_requests(), before + 1);
+}
+
 #[gpui_kit::test]
 fn the_socket_quit_does_not_ask(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
@@ -332,6 +380,8 @@ fn the_socket_quit_does_not_ask(cx: &mut TestAppContext) {
     );
 }
 
+#[cfg(target_os = "macos")]
+// Reopening in this process after the last window closes is macOS only: elsewhere that close quits kagan (decision 269).
 #[gpui_kit::test]
 fn closing_the_window_and_reopening_shows_it_again(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
@@ -347,6 +397,19 @@ fn closing_the_window_and_reopening_shows_it_again(cx: &mut TestAppContext) {
     assert_eq!(cx.update(|cx| cx.windows().len()), 1);
 }
 
+// The last row that holds `word` whole, and its text.
+fn last_row_with(
+    cx: &mut TestAppContext,
+    kagan: &Entity<Kagan>,
+    word: &str,
+) -> Option<(usize, String)> {
+    let grid = cx.update(|cx| screen_read::terminal_grid(kagan.read(cx), cx))?;
+    grid.lines.iter().enumerate().rev().find_map(|(row, line)| {
+        let text: String = line.iter().map(|cell| cell.c).collect();
+        text.contains(word).then_some((row, text))
+    })
+}
+
 #[gpui_kit::test]
 fn the_edit_menu_copy_and_paste_reach_the_terminal(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);
@@ -354,27 +417,20 @@ fn the_edit_menu_copy_and_paste_reach_the_terminal(cx: &mut TestAppContext) {
     click(cx, window, &format!("thread-{}", id.0));
     cx.write_to_clipboard(ClipboardItem::new_string("menu-paste".into()));
     cx.dispatch_action(window, Paste);
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("menu-paste"));
+    wait_for_screen(cx, &kagan, |cx| {
+        grid_text(cx, &kagan).contains("menu-paste")
+    });
 
+    // Submit the pasted text, so the echo below starts on a clean prompt line.
+    cx.simulate_keystrokes(window, "enter");
     cx.simulate_input(window, "echo menu-copy");
     cx.simulate_keystrokes(window, "enter");
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("menu-copy"));
-
-    let grid = cx
-        .update(|cx| screen_read::terminal_grid(kagan.read(cx), cx))
-        .unwrap();
-    let (row, line) = grid
-        .lines
-        .iter()
-        .enumerate()
-        .find(|(_, line)| {
-            line.iter()
-                .map(|cell| cell.c)
-                .collect::<String>()
-                .contains("menu-copy")
-        })
-        .unwrap();
-    let text: String = line.iter().map(|cell| cell.c).collect();
+    // The output is a row of its own. The typed command row can hold the word too, or wrap it
+    // apart, so wait for a row that holds the whole word.
+    wait_for_output(cx, &kagan, |cx| {
+        last_row_with(cx, &kagan, "menu-copy").is_some()
+    });
+    let (row, text) = last_row_with(cx, &kagan, "menu-copy").unwrap();
     let column = text.find("menu-copy").unwrap() + 1;
     cx.update(|cx| {
         Workspace::dispatch(

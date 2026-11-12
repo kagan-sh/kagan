@@ -17,14 +17,17 @@ mod skill;
 mod tests;
 mod thread;
 mod update;
+mod usage;
 mod workspace;
 
 pub use dispatch::ui::{UiDispatch, UiJob};
 pub use kg_terminal::{Ansi, Cell, Color, Cursor, Grid, Motion, Mouse, Weight};
 pub use plugin_folder::{plugin_data_dir, plugin_dir, plugin_log_file, plugins_dir};
 pub use preview::{human_size, image_size, preview_image, preview_note};
-pub use settings::keys::{host_os, parse_key};
+pub use settings::keys::{host_os, is_known_key, parse_key};
 pub use update::{Target, Updater};
+#[cfg(any(test, feature = "test"))]
+pub use usage::{advance_usage_clock, use_codex_source, use_codex_timeout};
 pub use workspace::approval::{Approval, Requester};
 pub use workspace::entity::{Environment, Project, Thread};
 

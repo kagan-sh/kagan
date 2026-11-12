@@ -5,6 +5,7 @@ pub const AGENT_INTEGRATION: &str = "agent-integration";
 pub const NOTIFY: &str = "notify";
 pub const PLUGIN_STATUS: &str = "plugin-status";
 pub const UPDATE_CHECK: &str = "update-check";
+pub const USAGE_LIMITS: &str = "usage-limits";
 pub const BRANCH_PREFIX: &str = "branch-prefix";
 pub const TERMINAL_COPY_ON_SELECT: &str = "terminal-copy-on-select";
 pub const TERMINAL_LINKS_BROWSER: &str = "terminal-links-browser";
@@ -34,6 +35,9 @@ pub const LEFT_WIDTH: &str = "left-width";
 pub const RIGHT_SIDEBAR: &str = "right-sidebar";
 pub const RIGHT_WIDTH: &str = "right-width";
 pub const REVIEW_WRAP: &str = "review-wrap";
+/// The widths, in pixels, a window's sidebars may be saved at.
+pub const LEFT_WIDTH_RANGE: (f32, f32) = (200., 420.);
+pub const RIGHT_WIDTH_RANGE: (f32, f32) = (240., 560.);
 
 /// The rule a branch prefix follows. Settings and the `kg` error both say it.
 pub const BRANCH_PREFIX_RULE: &str = "It must end in / or -, such as bb/ or feat-.";

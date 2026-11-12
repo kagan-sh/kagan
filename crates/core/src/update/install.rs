@@ -121,6 +121,7 @@ impl Target {
             }
             InstallKind::AppImage | InstallKind::Installer => {
                 std::fs::write(&self.staged, bytes)?;
+                #[cfg(unix)]
                 executable(&self.staged)?;
                 Ok(self.staged.clone())
             }
@@ -135,11 +136,7 @@ impl Target {
     pub(super) fn replace(&self, staged: &Path) -> io::Result<()> {
         match self.install {
             InstallKind::App => swap(staged, &self.path),
-            InstallKind::Installer => Command::new(staged)
-                .arg("/P")
-                .stdin(Stdio::null())
-                .spawn()
-                .map(drop),
+            InstallKind::Installer => windows_setup(staged, false).spawn().map(drop),
             _ => std::fs::rename(staged, &self.path),
         }
     }
@@ -148,11 +145,7 @@ impl Target {
     pub(super) fn relaunch(&self) -> io::Result<()> {
         let mut command = match self.install {
             InstallKind::Installer => {
-                return Command::new(&self.staged)
-                    .args(["/P", "/R"])
-                    .stdin(Stdio::null())
-                    .spawn()
-                    .map(drop);
+                return windows_setup(&self.staged, true).spawn().map(drop);
             }
             // `open` starts the bundle as Finder would, and passes on only the `--env` it is given.
             InstallKind::App => {
@@ -194,6 +187,34 @@ fn waiting(then: &str) -> Command {
         ))
         .arg("sh")
         .arg(std::process::id().to_string());
+    command
+}
+
+// The Windows setup cannot replace a kg.exe that is still running, so a waiter runs it after this
+// process has ended. `/R` opens kagan again. The waiter gets its inputs from the environment, so no
+// path is quoted into the script, and no `KG_` variable reaches kagan's own children.
+const WINDOWS_WAIT: &str = "Wait-Process -Id $env:KAGAN_UPDATE_PID -Timeout 120 -ErrorAction SilentlyContinue; Start-Process -FilePath $env:KAGAN_UPDATE_SETUP -ArgumentList $env:KAGAN_UPDATE_ARGS";
+
+fn windows_setup(setup: &Path, restart: bool) -> Command {
+    let mut command = Command::new("powershell.exe");
+    command
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            WINDOWS_WAIT,
+        ])
+        .env("KAGAN_UPDATE_PID", std::process::id().to_string())
+        .env("KAGAN_UPDATE_SETUP", setup)
+        .env("KAGAN_UPDATE_ARGS", if restart { "/P /R" } else { "/P" })
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    // CREATE_NO_WINDOW: the waiter needs no console window of its own.
+    #[cfg(windows)]
+    std::os::windows::process::CommandExt::creation_flags(&mut command, 0x0800_0000);
     command
 }
 
@@ -264,11 +285,6 @@ fn executable(path: &Path) -> io::Result<()> {
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
 }
 
-#[cfg(not(unix))]
-fn executable(_: &Path) -> io::Result<()> {
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,6 +351,75 @@ mod tests {
         let outside = posix("/usr/bin/kg");
         let target = Target::find("linux", &outside, Some(image), Some(&mounted), &[]);
         assert_eq!(target.install, InstallKind::Other);
+    }
+
+    fn env_of(command: &Command, name: &str) -> Option<String> {
+        command
+            .get_envs()
+            .find(|(key, _)| *key == name)
+            .and_then(|(_, value)| value)
+            .map(|value| value.to_string_lossy().into_owned())
+    }
+
+    #[test]
+    fn the_waiter_is_powershell_and_gets_the_pid_and_setup_path_exactly() {
+        let setup = posix("C:/kagan dir/it's/kagan-update-setup.exe");
+        let command = windows_setup(&setup, true);
+        assert_eq!(command.get_program(), "powershell.exe");
+        assert_eq!(
+            env_of(&command, "KAGAN_UPDATE_PID"),
+            Some(std::process::id().to_string())
+        );
+        assert_eq!(
+            env_of(&command, "KAGAN_UPDATE_SETUP"),
+            Some(setup.to_string_lossy().into_owned())
+        );
+    }
+
+    #[test]
+    fn a_restart_passes_r_and_an_install_at_quit_does_not() {
+        let setup = posix("C:/kagan/kagan-update-setup.exe");
+        assert_eq!(
+            env_of(&windows_setup(&setup, true), "KAGAN_UPDATE_ARGS").as_deref(),
+            Some("/P /R")
+        );
+        assert_eq!(
+            env_of(&windows_setup(&setup, false), "KAGAN_UPDATE_ARGS").as_deref(),
+            Some("/P")
+        );
+    }
+
+    // Off Windows there is no PowerShell, so a waiter fails with NotFound. The old direct start of
+    // the setup fails with PermissionDenied, because the setup is not executable. The error kind
+    // tells the two apart, so these fail if `replace` or `relaunch` starts the setup directly.
+    #[cfg(not(windows))]
+    fn installer_target(dir: &tempfile::TempDir) -> (Target, PathBuf) {
+        let staged = dir.path().join("kagan-update-setup.exe");
+        std::fs::write(&staged, "not a program").unwrap();
+        let target = Target {
+            install: InstallKind::Installer,
+            path: dir.path().join("kg.exe"),
+            staged: staged.clone(),
+        };
+        (target, staged)
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn replace_starts_the_waiter_not_the_setup() {
+        let dir = tempfile::tempdir().unwrap();
+        let (target, staged) = installer_target(&dir);
+        let error = target.replace(&staged).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn relaunch_starts_the_waiter_not_the_setup() {
+        let dir = tempfile::tempdir().unwrap();
+        let (target, _) = installer_target(&dir);
+        let error = target.relaunch().unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
     }
 
     #[test]

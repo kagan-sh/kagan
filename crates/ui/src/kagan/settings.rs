@@ -89,6 +89,7 @@ pub(super) struct Prefs {
     pub(super) confirm_archive: bool,
     pub(super) notify: NotifyLevel,
     pub(super) plugin_status: bool,
+    pub(super) usage_limits: bool,
     pub(super) update_check: bool,
     pub(super) copy_on_select: bool,
     pub(super) links_in_tab: bool,
@@ -204,6 +205,7 @@ pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
         confirm_archive: false,
         notify: NotifyLevel::default(),
         plugin_status: true,
+        usage_limits: false,
         update_check: false,
         copy_on_select: true,
         links_in_tab: false,
@@ -373,6 +375,7 @@ impl Kagan {
         let agent = super::layout::read::<bool>(kg_domain::prefs::AGENT_INTEGRATION, cx);
         let notify = super::layout::read::<NotifyLevel>(kg_domain::prefs::NOTIFY, cx);
         let plugin_status = super::layout::read::<bool>(kg_domain::prefs::PLUGIN_STATUS, cx);
+        let usage_limits = super::layout::read::<bool>(kg_domain::prefs::USAGE_LIMITS, cx);
         let update = super::layout::read::<bool>(kg_domain::prefs::UPDATE_CHECK, cx);
         let confirm = super::layout::read::<bool>(kg_domain::prefs::CONFIRM_ARCHIVE, cx);
         let branch = super::layout::read::<String>(kg_domain::prefs::BRANCH_PREFIX, cx);
@@ -397,10 +400,14 @@ impl Kagan {
         let prefs = self.prefs.clone();
         cx.spawn(async move |_, cx| {
             let list_order = list_order.await.ok().flatten();
+            let usage_on = usage_limits.await.ok().flatten().unwrap_or(false);
             let hide_empty_projects = hide_empty.await.ok().flatten().unwrap_or(false);
             let unread_first = unread.await.ok().flatten().unwrap_or(false);
             let hidden_rail = hidden_rail.await.ok().flatten().unwrap_or_default();
             sidebar.update(cx, |sidebar, cx| {
+                sidebar
+                    .usage
+                    .update(cx, |usage, cx| usage.set_enabled(usage_on, cx));
                 sidebar.apply_options(list_order.as_deref(), hide_empty_projects, unread_first, cx);
                 sidebar.apply_hidden_rail(hidden_rail, cx);
             });
@@ -431,6 +438,7 @@ impl Kagan {
                 prefs.agent_integration = on;
                 prefs.notify = notifications;
                 prefs.plugin_status = status;
+                prefs.usage_limits = usage_on;
                 prefs.update_check = update_check;
                 prefs.copy_on_select = copy_on_select;
                 prefs.links_in_tab = links_in_tab;

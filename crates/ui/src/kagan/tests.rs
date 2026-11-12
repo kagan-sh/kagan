@@ -1,5 +1,5 @@
-use super::{Kagan, layout, picker, settings};
-use gpui_kit::{App, Entity, Window};
+use super::{Kagan, layout, picker, right, settings};
+use gpui_kit::{App, Context, Entity, Window};
 
 pub(crate) use super::keys::{chord_for, is_chord};
 pub(crate) use super::layout::read as layout_read;
@@ -7,6 +7,7 @@ pub(crate) use super::layout::tests as layout_read;
 pub(crate) use super::replace::tests as replace_read;
 pub(crate) use super::review::tests as review_read;
 pub(crate) use super::screen::tests as screen_read;
+#[cfg(unix)]
 pub(crate) use super::tabs::{
     CloseTerminal, NewTerminal, NextTerminal, OpenLocalLink, PreviousTerminal,
 };
@@ -78,6 +79,82 @@ impl Kagan {
 
     pub(crate) fn picker_entity(&self) -> Entity<picker::Picker> {
         self.picker.clone()
+    }
+
+    /// Whether the browser page was last told to show, read without a frame.
+    pub(crate) fn browser_shown_for_test(&self) -> bool {
+        self.browser.shown
+    }
+
+    /// Takes the right panel out of the layout, the step a closed sidebar takes, without a frame.
+    pub(crate) fn close_right_panel_for_test(&mut self, cx: &mut Context<Self>) {
+        let left = self.panes.left;
+        self.sync_to(layout::Panes { left, right: false }, cx);
+    }
+
+    pub(crate) fn select_changes_tab_for_test(&mut self, cx: &mut Context<Self>) {
+        self.select_right_tab(right::Tab::Changes, cx);
+    }
+
+    pub(crate) fn open_settings_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_center(super::screen::Center::Settings, window, cx);
+    }
+
+    /// Closes the right sidebar the way its button does: the setting goes shut, so a frame keeps it shut.
+    pub(crate) fn close_right_sidebar_for_test(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.force_sidebar(false, false, window, cx);
+    }
+
+    pub(crate) fn open_right_overlay_for_test(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_overlay(
+            super::screen::Side::Right,
+            super::screen::Activation::Quiet,
+            window,
+            cx,
+        );
+    }
+
+    pub(crate) fn dismiss_right_overlay_for_test(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.dismiss_overlay(super::screen::Side::Right, window, cx);
+    }
+
+    pub(crate) fn leave_browser_thread_for_test(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.browser.leave_thread(window, cx);
+    }
+
+    /// The thread driving the browser, if any.
+    pub(crate) fn browser_driver_for_test(&self) -> Option<kg_domain::ThreadId> {
+        self.browser.owner().cloned()
+    }
+
+    /// How many links went to the Browser tab so far.
+    pub(crate) fn browser_tab_opens_for_test() -> usize {
+        super::browser::TAB_OPENS.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Makes `thread` the one driving the browser. No native page is built, so the tests can read the state.
+    pub(crate) fn drive_browser_for_test(&mut self, thread: kg_domain::ThreadId, url: &str) {
+        self.browser.agent = Some(super::browser::Agent {
+            thread,
+            url: url.to_owned(),
+            used: std::time::Instant::now(),
+        });
     }
 
     pub(crate) fn window_handle(&self) -> gpui_kit::AnyWindowHandle {

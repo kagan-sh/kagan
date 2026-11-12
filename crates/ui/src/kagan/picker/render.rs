@@ -12,7 +12,7 @@ use gpui_kit::{
     Pixels, Render, RenderOnce, Role, StatefulInteractiveElement as _, Styled as _, WeakEntity,
     Window, div,
 };
-use kg_domain::ProgramSource;
+use kg_domain::{Program, ProgramSource};
 
 use super::list::{ProgramRow, Version, version_of};
 use super::saved;
@@ -23,20 +23,24 @@ use crate::kagan::controls::{control, dispatch, note};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
+// The text beside a row's name: the path of a saved or shell program, the flags of a recent one.
+fn command_detail(program: &Program) -> Option<String> {
+    match program.source {
+        ProgramSource::Known => None,
+        ProgramSource::Shell | ProgramSource::Saved => Some(program.command.clone()),
+        ProgramSource::Recent => program
+            .command
+            .split_once(char::is_whitespace)
+            .map(|(_, flags)| flags.trim_start().to_owned())
+            .filter(|flags| !flags.is_empty()),
+    }
+}
+
 impl RenderOnce for ProgramRow {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let card = self.program.source == ProgramSource::Known && self.program.installed();
-        let detail = match self.program.source {
-            ProgramSource::Known => None,
-            ProgramSource::Shell | ProgramSource::Saved => Some(self.program.command.clone()),
-            ProgramSource::Recent => self
-                .program
-                .command
-                .split_once(char::is_whitespace)
-                .map(|(_, flags)| flags.trim_start().to_owned())
-                .filter(|flags| !flags.is_empty()),
-        };
+        let detail = command_detail(&self.program);
         let Version {
             shown: version,
             full: full_version,
@@ -51,10 +55,13 @@ impl RenderOnce for ProgramRow {
         } else {
             self.program.label.clone()
         };
-        let mark = mark_slot(&self.program.label, card, cx);
+        // A saved program is marked by its letter too, as the built-in ones are.
+        let marked = card || self.program.source == ProgramSource::Saved;
+        let mark = mark_slot(&self.program.label, marked, cx);
         let (list, first) = (self.list, self.first);
-        let actions = saved::row_actions(&self.program, &self.picker);
         let key = program_key(&self.program);
+        let row_group = format!("program-row-{key}");
+        let actions = saved::row_actions(&self.program, &self.picker, &row_group, self.selected);
         div()
             .on_children_prepainted(move |bounds, window, cx| {
                 if let Some(row) = bounds.first().filter(|_| first) {
@@ -74,8 +81,11 @@ impl RenderOnce for ProgramRow {
                     })
                     .child(
                         self.base
+                            .group(row_group)
                             .when(self.selected, |row| row.bg(cx.theme().secondary))
-                            .px_2()
+                            .pl_2()
+                            // The right gutter keeps the list scrollbar off the version.
+                            .pr_4()
                             .h_7()
                             .rounded(cx.theme().radius)
                             .relative()

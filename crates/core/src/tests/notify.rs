@@ -372,7 +372,7 @@ async fn a_wait_for_the_child_exit_drops_the_line_it_already_told_the_parent(
 }
 
 #[gpui_kit::test]
-async fn a_child_title_stays_out_of_the_parent_line(cx: &mut TestAppContext) {
+async fn a_child_title_names_it_in_plain_words_only(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let (parent, _parent_run) = started(&fixture, SLEEP, cx).await;
     let program = finishing(fixture.dir.path(), "finish");
@@ -380,7 +380,7 @@ async fn a_child_title_stays_out_of_the_parent_line(cx: &mut TestAppContext) {
         &fixture,
         &program,
         &parent,
-        Some("x\" ; $(echo hi) ; \""),
+        Some("reviewer two \u{202e}\" ; $(echo hi) ; \""),
         false,
         cx,
     )
@@ -388,8 +388,20 @@ async fn a_child_title_stays_out_of_the_parent_line(cx: &mut TestAppContext) {
     wait_for_waiting(&child_id, 1, cx).await;
     let sent = sent_to(&parent, cx).await;
     assert_eq!(sent.len(), 1, "{sent:?}");
-    assert!(!sent[0].contains("echo hi"), "{}", sent[0]);
-    assert!(sent[0].contains(&child_id.to_string()), "{}", sent[0]);
+    assert!(
+        sent[0].contains(&format!("reviewer two echo hi ({child_id})")),
+        "{}",
+        sent[0]
+    );
+    for shell_or_control in ['"', '$', ';', '(', '\u{202e}'] {
+        assert!(
+            !sent[0]
+                .replace(&format!("({child_id})"), "")
+                .contains(shell_or_control),
+            "{}",
+            sent[0]
+        );
+    }
 }
 
 #[gpui_kit::test]

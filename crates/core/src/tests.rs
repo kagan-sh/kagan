@@ -34,6 +34,7 @@ mod terminal;
 mod thread;
 mod turn;
 mod update;
+mod usage;
 mod variables;
 mod workspace;
 mod worktree;
@@ -593,6 +594,7 @@ async fn kinds_of(id: &ThreadId, cx: &mut TestAppContext) -> Vec<EventKind> {
         .collect()
 }
 
+#[cfg(unix)]
 fn busy_of(fixture: &Fixture, id: &ThreadId, cx: &mut TestAppContext) -> bool {
     cx.read(|cx| fixture.workspace.read(cx).thread(id).unwrap().read(cx).busy)
 }
@@ -610,6 +612,7 @@ async fn wait_for_status(id: &ThreadId, status: ThreadStatus, cx: &mut TestAppCo
     panic!("the thread never became {status:?}");
 }
 
+#[cfg(unix)]
 fn turn_counts(kinds: &[EventKind]) -> (usize, usize) {
     let started = kinds
         .iter()
@@ -755,6 +758,7 @@ async fn settle(id: &ThreadId, timeout_ms: u64, cx: &mut TestAppContext) -> Wait
     )
 }
 
+#[cfg(unix)]
 fn outcome(result: &OpResult) -> WaitOutcome {
     let OpResult::Wait(outcome) = result else {
         panic!("wait returned {result:?}");
@@ -938,6 +942,7 @@ async fn ask_refused(id: &ThreadId, fields: Vec<AskField>, cx: &mut TestAppConte
     .to_string()
 }
 
+#[cfg(unix)]
 fn text_field(id: &str, label: &str) -> AskField {
     AskField::String {
         id: id.into(),
@@ -947,6 +952,7 @@ fn text_field(id: &str, label: &str) -> AskField {
     }
 }
 
+#[cfg(unix)]
 fn select_field(choices: Vec<InteractionOption>, default: Option<&str>) -> AskField {
     AskField::Select {
         id: "mode".into(),
@@ -1670,6 +1676,7 @@ fn assert_diagnostics_keeps_secrets_out(text: &str) {
     assert!(!text.contains("removed"), "{text}");
 }
 
+#[cfg(unix)]
 fn worktree_run(fixture: &Fixture, title: Option<&str>, base: Option<&str>) -> Op {
     Op::Thread(ThreadOp::Run(Run {
         project_id: fixture.project.clone(),
@@ -1708,6 +1715,7 @@ fn commit_file(repo: &Path, rel: &str, body: &str) {
     );
 }
 
+#[cfg(unix)]
 fn tracks_upstream(path: &Path) -> bool {
     std::process::Command::new("git")
         .arg("-C")
@@ -1721,11 +1729,14 @@ fn repo_dir(fixture: &Fixture) -> std::path::PathBuf {
     dunce::canonicalize(fixture.dir.path()).unwrap()
 }
 
+#[cfg(unix)]
 struct GitTrack {
     cwd: std::path::PathBuf,
 }
 
+#[cfg(unix)]
 impl GitTrack {
+    #[cfg(unix)]
     fn install(cwd: &Path) -> (std::path::PathBuf, Self) {
         let log = cwd.join("git-argv.log");
         let program = cwd.join("git-track.sh");
@@ -1763,6 +1774,7 @@ impl GitTrack {
     }
 }
 
+#[cfg(unix)]
 fn which_git() -> std::path::PathBuf {
     let output = std::process::Command::new("which")
         .arg("git")
@@ -1772,12 +1784,14 @@ fn which_git() -> std::path::PathBuf {
     std::path::PathBuf::from(String::from_utf8(output.stdout).unwrap().trim())
 }
 
+#[cfg(unix)]
 impl Drop for GitTrack {
     fn drop(&mut self) {
         crate::host::git::set_program(&self.cwd, "git", None);
     }
 }
 
+#[cfg(unix)]
 fn worktree_count(data: &Path) -> usize {
     let Ok(entries) = std::fs::read_dir(data.join("worktrees")) else {
         return 0;
