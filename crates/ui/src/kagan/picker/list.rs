@@ -1,3 +1,4 @@
+use gpui_kit::component::FocusableExt as _;
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::v_flex;
 use gpui_kit::{
@@ -78,7 +79,11 @@ pub(super) fn custom_field(
                 .w_full()
                 .gap_1()
                 .child(div().type_small(cx).text_color(muted).child(title))
-                .child(Input::new(input).text_size(gpui_kit::px(crate::theme::type_body(cx))))
+                .child(
+                    Input::new(input)
+                        .focus_ring(false)
+                        .text_size(gpui_kit::px(crate::theme::type_body(cx))),
+                )
                 .children(note.map(|(id, text)| {
                     div()
                         .id(id)

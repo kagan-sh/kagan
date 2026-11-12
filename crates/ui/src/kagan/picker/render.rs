@@ -1,6 +1,7 @@
 use crate::theme::{SpaceStep, TypeScale as _, space};
 use gpui_kit::base::actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp};
 use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::component::FocusableExt as _;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::input::Input;
 use gpui_kit::component::tooltip::Tooltip;
@@ -279,6 +280,9 @@ impl Render for Picker {
                 "program-search",
                 Facts::input("Search programs", &self.search, cx),
                 Input::new(&self.search)
+                    // One ring: the field's own border in the focus token, inside its bounds, so no
+                    // parent clips it. The outer ring doubled it.
+                    .focus_ring(false)
                     .text_size(gpui_kit::px(crate::theme::type_body(cx)))
                     .small(),
             ))
