@@ -37,6 +37,9 @@ pub(super) struct Agent {
 pub(super) struct Browser {
     address: Entity<InputState>,
     page: Option<Entity<WebPage>>,
+    // Whether the page was last told to show. Tests read it, since they build no native page.
+    #[cfg(test)]
+    pub(super) shown: bool,
     pub(super) agent: Option<Agent>,
     driven_focus: FocusHandle,
     follow: u64,
@@ -56,6 +59,8 @@ impl Browser {
         Self {
             address,
             page: None,
+            #[cfg(test)]
+            shown: false,
             agent: None,
             driven_focus: cx.focus_handle().tab_stop(true),
             follow: 0,
@@ -115,7 +120,11 @@ impl Browser {
         self.agent.as_ref().map(|agent| &agent.thread)
     }
 
-    fn sync_page(&self, shown: bool, cx: &mut App) {
+    fn sync_page(&mut self, shown: bool, cx: &mut App) {
+        #[cfg(test)]
+        {
+            self.shown = shown;
+        }
         let Some(page) = &self.page else { return };
         if page.read(cx).visible(cx) != shown {
             page.update(cx, |page, cx| {
@@ -131,6 +140,7 @@ impl Browser {
     // Closing the tab ends the drive. The thread's page goes with it.
     pub(super) fn close(&mut self, window: &mut Window, cx: &mut App) {
         {
+            self.sync_page(false, cx);
             self.page = None;
             self.agent = None;
             self.follow = self.follow.wrapping_add(1);
@@ -143,6 +153,7 @@ impl Browser {
 
     pub(super) fn leave_thread(&mut self, window: &mut Window, cx: &mut App) {
         {
+            self.sync_page(false, cx);
             self.follow = self.follow.wrapping_add(1);
             if self.agent.is_none() {
                 self.page = None;
@@ -204,11 +215,27 @@ impl Kagan {
     pub(super) fn browser_drawn(&self, cx: &App) -> bool {
         self.right_drawn()
             && super::right::selected_tab(self, cx) == Some(super::right::Tab::Browser)
+            && self.held_elsewhere(cx).is_none()
     }
 
-    pub(super) fn sync_browser(&self, cx: &mut App) {
+    // The thread driving the browser, when the thread on screen is not that one. Its page is not
+    // this thread's to show or to navigate.
+    pub(super) fn held_elsewhere(&self, cx: &App) -> Option<ThreadId> {
+        let owner = self.browser.owner()?;
+        (self.shown_thread(cx).as_ref() != Some(owner)).then(|| owner.clone())
+    }
+
+    pub(super) fn sync_browser(&mut self, cx: &mut App) {
         let shown = self.browser_drawn(cx);
         self.browser.sync_page(shown, cx);
+    }
+
+    // Hides the page in the step that stops drawing it. Showing waits for the render, which places
+    // the page at its final bounds.
+    pub(super) fn hide_browser(&mut self, cx: &mut App) {
+        if !self.browser_drawn(cx) {
+            self.browser.sync_page(false, cx);
+        }
     }
 
     pub(super) fn stop_agent(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -219,6 +246,9 @@ impl Kagan {
     }
 
     pub(super) fn render_browser(&self, cx: &mut Context<Self>) -> AnyElement {
+        if let Some(owner) = self.held_elsewhere(cx) {
+            return self.render_held(&owner, cx);
+        }
         if self.browser.agent.is_some() {
             return self.render_driven(cx);
         }
@@ -257,6 +287,31 @@ impl Kagan {
             .into_any_element()
     }
 
+    fn render_held(&self, owner: &ThreadId, cx: &mut Context<Self>) -> AnyElement {
+        let thread = self
+            .record(owner, cx)
+            .map_or_else(|| owner.to_string(), |thread| thread.title.clone());
+        let text =
+            format!("Thread {thread} is driving the browser. Stop its agent there to use it here.");
+        v_flex()
+            .id("browser")
+            .ui_container()
+            .size_full()
+            .p_2()
+            .child(
+                div()
+                    .id("browser-held")
+                    .ui_observe_as(Facts {
+                        role: Role::Label,
+                        ..Facts::button(text.clone())
+                    })
+                    .type_small(cx)
+                    .text_color(cx.theme().muted_foreground)
+                    .child(text),
+            )
+            .into_any_element()
+    }
+
     fn render_driven(&self, cx: &mut Context<Self>) -> AnyElement {
         let Some(agent) = &self.browser.agent else {
             return div().into_any_element();
@@ -267,7 +322,7 @@ impl Kagan {
         let row = h_flex()
             .id("browser-driven")
             .flex_none()
-            .gap_2()
+            .gap_1()
             .px_2()
             .pt_2()
             .items_center()
@@ -276,7 +331,8 @@ impl Kagan {
             .child(self.browser_nav(cx))
             .child(
                 div()
-                    .flex_none()
+                    .min_w_0()
+                    .truncate()
                     .type_small(cx)
                     .text_color(cx.theme().muted_foreground)
                     .child(format!("Driven by {thread}")),
@@ -295,15 +351,17 @@ impl Kagan {
                 row.child(Self::secure_mark(cx))
             })
             .child(self.external_button(cx))
-            .child(control(
-                "browser-stop-agent",
-                Facts::button("Stop agent"),
-                Button::new("browser-stop-agent-button")
-                    .small()
-                    .outline()
-                    .label("Stop agent")
-                    .on_click(cx.listener(|this, _, window, cx| this.stop_agent(window, cx))),
-            ));
+            .child(
+                div().flex_none().child(control(
+                    "browser-stop-agent",
+                    Facts::button("Stop agent"),
+                    Button::new("browser-stop-agent-button")
+                        .small()
+                        .outline()
+                        .label("Stop agent")
+                        .on_click(cx.listener(|this, _, window, cx| this.stop_agent(window, cx))),
+                )),
+            );
         let page = self.browser.page.clone();
         v_flex()
             .id("browser")
@@ -311,7 +369,24 @@ impl Kagan {
             .size_full()
             .min_h_0()
             .child(row)
-            .child(div().flex_1().min_h_0().children(page).into_any_element())
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .px_2()
+                    .pb_2()
+                    .child(
+                        div()
+                            .id("browser-page")
+                            .size_full()
+                            .children(page)
+                            .ui_observe_as(Facts {
+                                role: Role::Unknown,
+                                ..Facts::button("Browser page")
+                            }),
+                    )
+                    .into_any_element(),
+            )
             .into_any_element()
     }
 
@@ -322,6 +397,10 @@ impl Kagan {
             cx.open_url(link);
             return;
         };
+        if self.held_elsewhere(cx).is_some() {
+            cx.open_url(link);
+            return;
+        }
         #[cfg(test)]
         TAB_OPENS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let Ok(page) = self.browser.page_for(&url, window, cx) else {

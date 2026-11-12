@@ -241,6 +241,7 @@ impl Kagan {
     ) {
         if self.screen.drawn(side) {
             self.screen.draw = None;
+            self.hide_browser(cx);
             self.return_focus(
                 match side {
                     Side::Left => FocusReturn::LeftOverlay,
@@ -301,6 +302,7 @@ impl Kagan {
             self.dismiss_overlay(Side::Right, window, cx);
         }
         self.screen.open(center);
+        self.hide_browser(cx);
         self.read_shown(cx);
     }
 

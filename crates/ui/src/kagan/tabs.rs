@@ -252,7 +252,10 @@ impl Kagan {
 
     fn close_browser(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.tabs.browser = false;
-        self.browser.close(window, cx);
+        self.hide_browser(cx);
+        if self.held_elsewhere(cx).is_none() {
+            self.browser.close(window, cx);
+        }
         if self.right.tab == Some(Tab::Browser) {
             self.right.tab = self.default_right_tab(cx);
         }

@@ -319,6 +319,8 @@ impl Kagan {
                 page.read(cx).arm();
             }
             #[cfg(not(target_os = "linux"))]
+            self.browser.sync_page(false, cx);
+            #[cfg(not(target_os = "linux"))]
             let previous = self.browser.page.take();
             #[cfg(target_os = "linux")]
             let previous = None;
