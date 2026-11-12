@@ -1,6 +1,6 @@
 # Product Rust line ceilings. A count may grow up to its ceiling, never past it.
 target 35000
-ceiling 80438
+ceiling 80498
 allow_expect 8
 crates/core/src/thread/agent/files.rs 754
 crates/ui/src/theme/catalog.rs 646

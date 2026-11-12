@@ -15,6 +15,7 @@ use gpui_kit::{
 use kg_domain::ProgramSource;
 
 use super::list::{ProgramRow, Version, version_of};
+use super::mark::program_mark;
 use super::saved;
 use super::{CONTEXT, Close, LIST_ROWS, Mode, Picker, Programs, Rows};
 use super::{CloseCustomCommand, RetryPrograms, ToggleCustomCommand};
@@ -51,7 +52,7 @@ impl RenderOnce for ProgramRow {
         } else {
             self.program.label.clone()
         };
-        let mark = mark_slot(&self.program.label, card, cx);
+        let mark = program_mark(&self.program, cx);
         let (list, first) = (self.list, self.first);
         let actions = saved::row_actions(&self.program, &self.picker);
         let key = program_key(&self.program);
@@ -130,30 +131,6 @@ impl RenderOnce for ProgramRow {
 
 const MARK_SLOT: f32 = 20.;
 const MARK_GAP: f32 = 8.;
-
-// Other rows keep an empty slot, so the names line up.
-fn mark_slot(label: &str, card: bool, cx: &App) -> AnyElement {
-    let slot = div().flex_shrink_0().size(gpui_kit::px(MARK_SLOT));
-    if !card {
-        return slot.into_any_element();
-    }
-    let letter = label
-        .chars()
-        .next()
-        .map(|letter| letter.to_uppercase().to_string())
-        .unwrap_or_default();
-    slot.id(format!("program-mark-{label}"))
-        .ui_container()
-        .rounded(cx.theme().radius)
-        .bg(cx.theme().muted)
-        .flex()
-        .items_center()
-        .justify_center()
-        .type_small(cx)
-        .text_color(cx.theme().foreground)
-        .child(letter)
-        .into_any_element()
-}
 
 fn card_border(cx: &App) -> impl IntoElement {
     div()

@@ -1123,19 +1123,18 @@ fn enter_in_the_search_starts_the_selected_program_not_the_custom_command(cx: &m
 
 #[cfg(unix)]
 #[gpui_kit::test]
-fn an_installed_agent_is_a_card_with_its_letter_mark_and_a_missing_one_has_none(
-    cx: &mut TestAppContext,
-) {
+fn an_agent_shows_its_icon_and_an_unknown_program_keeps_its_letter(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
     fixture_programs(cx, data.path(), &["claude"]);
     start_in_plain_folder(cx, window, data.path());
     wait_until(cx, |cx| {
         label(cx, window, "program-version-claude") == "1.2.3"
     });
-    assert!(shows(cx, window, "program-mark-Claude Code"));
-    // Codex is listed as a row while it is missing, so it has no card and no mark.
-    assert!(!shows(cx, window, "program-mark-Codex"));
-    assert!(!shows(cx, window, "program-mark-Shell"));
+    assert!(shows(cx, window, "program-icon-Claude Code"));
+    assert!(!shows(cx, window, "program-mark-Claude Code"));
+    assert!(shows(cx, window, "program-icon-Shell"));
+    // An unknown program keeps its letter: a saved line whose command has no mark.
+    assert!(!shows(cx, window, "program-icon-Aider"));
 }
 
 #[cfg(unix)]

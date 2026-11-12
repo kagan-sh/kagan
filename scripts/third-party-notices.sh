@@ -36,6 +36,17 @@ notice=$(dirname "$stdlib")/NOTICE
   cat assets/fonts/JetBrainsMono-OFL.txt
   echo
   echo "--------------------------------------------------------------------------------"
+  echo "Agent marks in the program picker"
+  echo "--------------------------------------------------------------------------------"
+  cat assets/agents/README.md
+  echo
+  echo "--- Primer Octicons (copilot.svg) ---"
+  cat assets/agents/Primer-MIT.txt
+  echo
+  echo "--- OpenCode (opencode.svg) ---"
+  cat assets/agents/OpenCode-MIT.txt
+  echo
+  echo "--------------------------------------------------------------------------------"
   echo "NOTICE of quickjs-jit-stdlib, which includes LLRT's"
   echo "--------------------------------------------------------------------------------"
   cat "$notice"
