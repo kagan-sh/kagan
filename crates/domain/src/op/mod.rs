@@ -311,6 +311,9 @@ pub enum OpError {
     Changed(String),
     #[error("{0}")]
     Full(String),
+    /// A keymap chord is already bound to the named action.
+    #[error("the chord is already bound to {0}")]
+    Conflict(String),
 }
 
 impl From<std::io::Error> for OpError {
@@ -339,6 +342,7 @@ enum Body {
     SetupChanged(String),
     Changed(String),
     Full(String),
+    Conflict(String),
 }
 
 impl From<OpError> for Wire {
@@ -350,6 +354,7 @@ impl From<OpError> for Wire {
             OpError::SetupChanged(message) => Body::SetupChanged(message),
             OpError::Changed(message) => Body::Changed(message),
             OpError::Full(message) => Body::Full(message),
+            OpError::Conflict(action) => Body::Conflict(action),
         };
         Self { error }
     }
@@ -364,6 +369,7 @@ impl From<Wire> for OpError {
             Body::SetupChanged(message) => Self::SetupChanged(message),
             Body::Changed(message) => Self::Changed(message),
             Body::Full(message) => Self::Full(message),
+            Body::Conflict(action) => Self::Conflict(action),
         }
     }
 }

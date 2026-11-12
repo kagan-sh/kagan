@@ -316,9 +316,7 @@ async fn set_built_in(
     } else {
         let key = chord(key)?;
         if let Some(conflict) = keymap_conflict(action, &key, &overrides) {
-            return Ok(OpResult::Setting(
-                serde_json::json!({ "ok": false, "conflict": conflict }),
-            ));
+            return Err(OpError::Conflict(conflict));
         }
         overrides.set(action.to_owned(), key);
     }

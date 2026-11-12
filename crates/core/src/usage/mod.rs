@@ -1,4 +1,4 @@
-//! Provider usage limits, read live and kept in memory only (decision 267). A token is read for
+//! Provider usage limits, read live and kept in memory only (decision 268). A token is read for
 //! one request to its own provider and is never written, copied, cached or logged.
 
 mod codex;

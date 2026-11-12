@@ -4,7 +4,7 @@ What each `Op` does, one rule per line, for a reader who has the `Op` signatures
 
 Sources, in order: [CONTEXT], [decision N], [book:page], [docs:file], [op/] (the `crates/domain/src/op/` modules), [event.rs], [record.rs]. Help text is the CLI contract in [book:cli].
 
-A missing id is `not-found`. A bad argument is `invalid`. A pinned setup script that changed before Start is `setup-changed` [decision 192]. A write past a program's input budget is `full` [decision 252]. Every other refusal is `failed` [op/]. An `Op` request uses the kebab-case name and camelCase fields, like the `OpResult` reply.
+A missing id is `not-found`. A bad argument is `invalid`. A pinned setup script that changed before Start is `setup-changed` [decision 192]. A keymap chord another action holds is `conflict`, and names that action [decision 267]. A write past a program's input budget is `full` [decision 252]. Every other refusal is `failed` [op/]. An `Op` request uses the kebab-case name and camelCase fields, like the `OpResult` reply.
 
 ## Questions for the person
 
@@ -713,8 +713,8 @@ Built-in shortcut overrides, and the keys of plugin commands, named `<plugin-id>
 ### `Set`
 
 - **Allowed when**: the action is one of those defaults, or a command of an enabled plugin [op/] [book:cli] [decision 102].
-- **Changes**: records the chord for this machine [book:cli]. `--reset` drops the saved chord and uses the default key [book:cli]. A conflicting chord is not stored; the result names the other action [op/]. A plugin command's key is refused when it overlaps a window key or another plugin command's key [docs:plugin-api]. It is stored with that plugin and applies while the app is in front [decision 102].
-- **Refused when**: an unknown action, or a plugin that is not enabled or has no such command — `invalid` or `not-found` [op/]. An empty key or an unknown key name — `invalid` [op/].
+- **Changes**: records the chord for this machine [book:cli]. `--reset` drops the saved chord and uses the default key [book:cli]. A conflicting chord is not stored; the Op fails with `conflict` naming the other action [op/], so the window, the command line and MCP all see it [decision 267]. A plugin command's key is refused when it overlaps a window key or another plugin command's key [docs:plugin-api]. It is stored with that plugin and applies while the app is in front [decision 102].
+- **Refused when**: an unknown action, or a plugin that is not enabled or has no such command — `invalid` or `not-found` [op/]. An empty key or an unknown key name — `invalid` [op/]. The command line needs a KEY unless `--reset` is given; clap refuses the rest [book:cli] [decision 264].
 
 ### `Remove`
 
@@ -724,7 +724,7 @@ Built-in shortcut overrides, and the keys of plugin commands, named `<plugin-id>
 
 ## Preference
 
-Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integration`, `notify` [decision 212], `plugin-status` [decision 157], `update-check` [decision 113], `usage-limits` [decision 267], `setup-guide` [decision 218], `sidebar-order`, `sidebar-hide-empty-projects`, `sidebar-unread-first` [decision 232], `terminal-font-size`, `branch-prefix`, `density`, `font-ui`, `font-terminal`, `terminal-copy-on-select`, `terminal-links-browser`, `review-viewed`, `rail-hidden` [decision 239], `slot.threads` and `slot.review` (a plugin id, or `kagan` for the built-in; set from the window or with `kg plugin use`) [docs:plugin-api], and the layout of each window, `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a lowercase id such as `main` [decision 48]. `row-actions` and `footer` were removed as unused: the window never read them. The bare `right-sidebar` name was removed as unused (decision 48). The dock layout is not a preference and not an `Op`; it is `{dataDir}/layout.json` [decision 15]. `predict` still loads and no longer hides hunks; it is not one of these keys [decision 43].
+Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integration`, `notify` [decision 212], `plugin-status` [decision 157], `update-check` [decision 113], `usage-limits` [decision 268], `setup-guide` [decision 218], `sidebar-order`, `sidebar-hide-empty-projects`, `sidebar-unread-first` [decision 232], `terminal-font-size`, `branch-prefix`, `density`, `font-ui`, `font-terminal`, `terminal-copy-on-select`, `terminal-links-browser`, `review-viewed`, `rail-hidden` [decision 239], `slot.threads` and `slot.review` (a plugin id, or `kagan` for the built-in; set from the window or with `kg plugin use`) [docs:plugin-api], and the layout of each window, `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a lowercase id such as `main` [decision 48]. `row-actions` and `footer` were removed as unused: the window never read them. The bare `right-sidebar` name was removed as unused (decision 48). The dock layout is not a preference and not an `Op`; it is `{dataDir}/layout.json` [decision 15]. `predict` still loads and no longer hides hunks; it is not one of these keys [decision 43].
 
 ### `Get`
 
@@ -855,10 +855,10 @@ Finds a newer kagan on the GitHub releases page (decision 113). Installing is no
 
 ## Usage
 
-- **Shows**: for each signed-in provider, its email, plan, and windows with percent and the time to reset. Codex is read from its sign-in file; Claude is not read yet [decision 267]. `kg usage show` prints the same readings as text, or JSON with `--json`.
-- **Changes**: `refresh` asks Codex again now, but never sooner than thirty seconds after the last request, so repeated clicks make one request. After a 429 or a 5xx, requests wait one minute, then five. `show` asks again only when the last answer is over two minutes old, and obeys the same waits [decision 267].
+- **Shows**: for each signed-in provider, its email, plan, and windows with percent and the time to reset. Codex is read from its sign-in file; Claude is not read yet [decision 268]. `kg usage show` prints the same readings as text, or JSON with `--json`.
+- **Changes**: `refresh` asks Codex again now, but never sooner than thirty seconds after the last request, so repeated clicks make one request. After a 429 or a 5xx, requests wait one minute, then five. `show` asks again only when the last answer is over two minutes old, and obeys the same waits [decision 268].
 - **Allowed when**: always. The reads happen only while `usage-limits` is on.
-- **Off**: while the `usage-limits` preference is off, `show` and `refresh` answer `enabled: false` with no accounts, read no file, make no request, and the sidebar draws no button. Saving the preference off drops the readings from memory at once [decision 267].
+- **Off**: while the `usage-limits` preference is off, `show` and `refresh` answer `enabled: false` with no accounts, read no file, make no request, and the sidebar draws no button. Saving the preference off drops the readings from memory at once [decision 268].
 - **Refused when**: nothing. A provider with no sign-in file has no account, and a provider that answers with an error shows that error, never 0% [decision 267].
 - **Button**: the sidebar footer, next to Add project, opens a popup with an All tab and one tab per signed-in provider. A stale reading shows "Couldn't refresh. Showing last update." and Retry. The popup refreshes every two minutes while it is open, and the shortcut is `secondary-alt-u` [decision 267].
 

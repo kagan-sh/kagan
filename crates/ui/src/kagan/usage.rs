@@ -1,4 +1,4 @@
-//! The provider usage button in the sidebar footer and its popup (decision 267). The window only
+//! The provider usage button in the sidebar footer and its popup (decision 268). The window only
 //! shows what the `Op` returns; the popup refreshes itself while it is open.
 
 use std::time::Duration;

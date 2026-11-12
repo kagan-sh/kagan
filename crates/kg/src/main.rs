@@ -67,10 +67,11 @@ fn plugin_cli(arguments: Vec<OsString>) -> Result<Op, OpError> {
             .map_err(|_| OpError::Invalid("plugin command arguments need UTF-8".into()))
     });
     let name = words.next().transpose()?.unwrap_or_default();
-    let command = words
-        .next()
-        .transpose()?
-        .ok_or_else(|| OpError::Invalid(format!("kg {name} needs a command")))?;
+    let command = words.next().transpose()?.ok_or_else(|| {
+        OpError::Invalid(format!(
+            "kg {name} needs a command after it, or is not a kg command. Run kg --help."
+        ))
+    })?;
     let id = |key| std::env::var(key).ok().filter(|value| !value.is_empty());
     Ok(Op::Plugin(PluginOp::Cli {
         name,
