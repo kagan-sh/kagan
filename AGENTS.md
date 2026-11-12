@@ -39,7 +39,7 @@ Keep `CLAUDE.md` and `CLAUDE.local.md` out of this repo: Claude Code reads `AGEN
 - No clippy job runs on Windows; the Windows test jobs are the only build of `cfg(windows)` code. Read that code twice, and wait for `windows-tests` before you call a change done.
 - `#[cfg(...)]` covers the one item below it. When you delete a gated line, check what the attribute now covers: a leftover gate on a `use` passes on macOS and Linux and fails Windows with an unresolved name.
 - A test that starts a shell is `#[cfg(unix)]`. Keep the rest of the logic in a test without a gate, so Windows runs it.
-- A Windows-only failure has a cause. Find it; do not change behaviour until the test passes again.
+- A Windows-only failure has a cause. Find it; do not change behaviour just to make the test pass.
 
 ## Crates
 
@@ -47,7 +47,7 @@ Keep `CLAUDE.md` and `CLAUDE.local.md` out of this repo: Claude Code reads `AGEN
 - Every user-visible feature is an `Op` dispatched by `Workspace::dispatch`, and a changed `Op` updates `docs/behaviour.md`. Check: review.
 - `scripts/crate-boundaries.sh` enforces the graph in its `EXPECTED` table. The diagram in `docs/architecture.md` is a picture of that table, and review checks that they match.
 
-Known override of outside skills: no tokio in kagan's own code. Async runs on GPUI's executors (`cx.spawn`, `cx.background_spawn`); see decision 90. `.agents/skills/kagan-fork-sync` merges upstream into the forks `Cargo.toml` pins by rev (gpui-kit, gpui-fast, wry).
+The GPUI Kit coding and design skills are in the `skills/` folder of [gpui-kit](https://github.com/aorumbayev/gpui-kit). Where a skill disagrees with this file, this file wins. Known override: no tokio in kagan's own code. Async runs on GPUI's executors (`cx.spawn`, `cx.background_spawn`); see decision 90. `.agents/skills/kagan-fork-sync` merges upstream into the forks `Cargo.toml` pins by rev (gpui-kit, gpui-fast, wry).
 
 ## Laconic
 
@@ -80,7 +80,7 @@ Each rule came from a real failure. A rule with a script names it; the others ar
 - `docs/decisions.md` records why. A replaced entry starts with "Superseded by N". Entry numbers only go up, with no gaps except the retired ones named in the script, and every "decision N" reference names a real entry. Check: `scripts/decisions-check.sh` checks the numbers and that each "Superseded by N" names a real entry; review checks that the words sit at the top.
 - When `main` moves, your new entry's number can now belong to another entry, and `decisions-check.sh` still passes. After each merge, renumber your entries and every reference to them (`docs/`, code comments, the Cost sentence).
 - Product Rust is the `.rs` files under `crates`, except `tests.rs`, `*_test.rs`, and anything in a `tests/` folder, counted with `wc -l`. `.config/size-budget.txt` holds `target`, `ceiling`, `allow_expect` (the count of `#[allow(` and `#[expect(` markers), and a ceiling for each file already over 600 lines. `scripts/size-budget.sh` fails above any ceiling, or on an unlisted file over 600 lines. The end target is 35,000 lines.
-- A PR under the ceilings does not edit that file. A PR over it raises `ceiling` to its count and adds one sentence to its decision: `Cost: product Rust went from main's N to M (+K).` After each merge with `main`, run the script again and correct N, M and the ceiling.
+- A PR under the ceilings does not edit that file. A PR over it raises `ceiling` to its count and adds one sentence to its decision: `Cost: product Rust went from main's N to M (+K).` After each merge with `main`, run the script again and correct N, M and the ceiling. Lowering a ceiling is a deliberate ratchet.
 
 ## Attribution
 
@@ -100,7 +100,7 @@ Push with the hooks on, so `.githooks/pre-push` runs. Mutation testing (`scripts
 
 ## Enforced
 
-- `.github/workflows/ci.yml` runs on every pull request and every push to `main` (decision 30): the hook checks, jscpd, cargo-deny, cargo-shear; `cargo clippy --workspace --all-targets -- -D warnings` on Linux and macOS; and the tests on Linux, macOS and Windows. A diff with no Rust input skips the Rust jobs; `scripts/ci-changes.sh` lists the paths that skip. `docs/behaviour.md`, `docs/CONTEXT.md`, `book/src/cli.md`, `book/src/start.md` and `docs/themes/` are read by tests or checks, so they do not skip.
+- `.github/workflows/ci.yml` runs on every pull request and every push to `main` (decision 30): the hook checks, jscpd, cargo-deny, cargo-shear; `cargo clippy --workspace --all-targets -- -D warnings` on Linux and macOS; and the tests on Linux, macOS and Windows. A diff with no Rust input skips the Rust jobs; `scripts/ci-changes.sh` lists the paths that skip. Some docs that tests or checks read do not skip, and neither does any `crates/*/AGENTS.md`.
 - Merges into `main` are squashed, and the squash commit takes the PR title, so `.github/workflows/pr-title.yml` fails any title that is not a Conventional Commit (`type(scope)?: summary`).
 - Workspace lints in the root `Cargo.toml` (`[workspace.lints]`) deny `unwrap_used`, `expect_used` (tests excepted), `dbg_macro`, `todo`, and `print_stdout` in every crate (`kg` prints through `out.rs`), and warn on `clippy::pedantic`.
 - Every pull request into `main` is reviewed against this file and the folder files, and anything that breaks them is sent back.
