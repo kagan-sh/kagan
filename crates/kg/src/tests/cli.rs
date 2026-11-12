@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use kg_domain::{
     AutomationId, AutomationOp, ConfigOp, DiffOp, DiffQuery, DiffScope, EnvironmentSpec, Metadata,
-    Op, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, ProjectSection, SavedPromptId,
+    Op, OpError, OpResult, PluginId, PluginOp, ProgramOp, ProjectId, ProjectSection, SavedPromptId,
     SavedPromptOp, SectionId, SectionOp, SettingsOp, SkillOp, TerminalOp, ThreadId, ThreadOp,
 };
 use serde_json::{Value, json};
@@ -1036,5 +1036,34 @@ fn cli_settings_project_can_open_its_automations() {
             id: ProjectId("prj_1".into()),
             section: Some(ProjectSection::Automations),
         })
+    );
+}
+
+#[test]
+fn keymap_reset_needs_no_key_but_setting_a_chord_does() {
+    assert_eq!(
+        parse(&["keymap", "set", "NewThread", "--reset"]),
+        Op::Keymap(kg_domain::KeymapOp::Set {
+            action: "NewThread".into(),
+            key: String::new(),
+            reset: true,
+        })
+    );
+}
+
+#[test]
+fn setting_a_chord_needs_a_key_unless_reset() {
+    assert!(Cli::try_parse_from(["kg", "keymap", "set", "NewThread"]).is_err());
+    assert!(Cli::try_parse_from(["kg", "keymap", "set", "NewThread", "--reset"]).is_ok());
+}
+
+#[test]
+fn an_unknown_word_says_it_is_not_a_command() {
+    let Err(OpError::Invalid(text)) = crate::plugin_cli(vec!["nosuch".into()]) else {
+        panic!("expected an invalid-command error");
+    };
+    assert_eq!(
+        text,
+        "kg nosuch needs a command after it, or is not a kg command. Run kg --help."
     );
 }

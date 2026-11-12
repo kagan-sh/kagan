@@ -522,8 +522,8 @@ fn keymap_sets_removes_and_reads_plugin_keys_and_they_survive_reload(cx: &mut Te
     assert!(run(cx, set("ping", "ctrl-alt-junk")).is_err());
     assert!(run(cx, remove("missing")).is_err());
     assert_eq!(
-        run(cx, set("ping", "ctrl-alt-o")).unwrap(),
-        OpResult::Setting(json!({ "ok": false, "conflict": format!("{ID}:other") }))
+        run(cx, set("ping", "ctrl-alt-o")),
+        Err(OpError::Conflict(format!("{ID}:other")))
     );
     run(cx, remove("other")).unwrap();
     run(cx, remove("third")).unwrap();
