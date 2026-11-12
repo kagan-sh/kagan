@@ -228,7 +228,10 @@ async fn shortcut_keys_are_checked_before_they_are_saved(cx: &mut TestAppContext
             cx,
         )
         .await;
-        assert!(result.is_ok(), "refused {key}");
+        assert!(
+            !matches!(result, Err(OpError::Invalid(_) | OpError::Failed(_))),
+            "refused {key}"
+        );
     }
 }
 

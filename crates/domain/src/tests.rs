@@ -283,6 +283,13 @@ fn error_wire() {
         json!({ "error": { "kind": "full", "message": "the program is not reading its input" } });
     assert_eq!(serde_json::to_value(&full).unwrap(), full_wire);
     assert_eq!(serde_json::from_value::<OpError>(full_wire).unwrap(), full);
+    let conflict = OpError::Conflict("NewThread".into());
+    let conflict_wire = json!({ "error": { "kind": "conflict", "message": "NewThread" } });
+    assert_eq!(serde_json::to_value(&conflict).unwrap(), conflict_wire);
+    assert_eq!(
+        serde_json::from_value::<OpError>(conflict_wire).unwrap(),
+        conflict
+    );
     assert!(
         serde_json::from_value::<OpError>(json!({ "error": { "kind": "odd", "message": "" } }))
             .is_err()

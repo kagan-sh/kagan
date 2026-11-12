@@ -143,25 +143,7 @@ pub(crate) fn location() -> io::Result<std::ffi::OsString> {
 pub(crate) fn name(location: &std::ffi::OsStr) -> io::Result<Name<'static>> {
     use interprocess::local_socket::{GenericNamespaced, ToNsName};
 
-    pipe_leaf(location)
-        .to_os_string()
-        .to_ns_name::<GenericNamespaced>()
-}
-
-// A pipe is `\\.\pipe\<name>`, but the namespaced name is only `<name>`: the prefix is added
-// for us, so a `KG_SOCKET` written as the full path must lose it.
-#[cfg(any(windows, test))]
-pub(crate) fn pipe_leaf(location: &std::ffi::OsStr) -> &std::ffi::OsStr {
-    const PREFIX: &str = r"\\.\pipe\";
-    let Some(text) = location.to_str() else {
-        return location;
-    };
-    match text.get(..PREFIX.len()) {
-        Some(head) if head.eq_ignore_ascii_case(PREFIX) => {
-            std::ffi::OsStr::new(&text[PREFIX.len()..])
-        }
-        _ => location,
-    }
+    location.to_os_string().to_ns_name::<GenericNamespaced>()
 }
 
 /// Checks a `/tmp/kagan-<id>` folder before a client connects to it.

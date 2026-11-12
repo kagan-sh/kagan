@@ -4,9 +4,8 @@ target 35000
 # and their review rounds. The merged count is 80700, and the ceiling is set to it. The end
 # target of 35000 is unchanged.
 # The terminal input cap adds 118 lines on top of that. The merged count is 80818, and the ceiling is set to it.
-# The CLI and Windows fixes (pipe prefix, handle inheritance, keymap reset and conflict, unknown word) add 68 lines. The count is 81004, and the ceiling is set to it.
-ceiling 81004
+# The CLI and Windows fixes add 28 lines on top of main (80936). The count is 80964, and the ceiling is set to it.
+ceiling 80964
 allow_expect 8
 crates/core/src/thread/agent/files.rs 754
 crates/ui/src/theme/catalog.rs 646
-crates/kg/src/cli.rs 605

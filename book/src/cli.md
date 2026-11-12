@@ -3080,8 +3080,6 @@ Arguments:
 
   [KEY]
           Chord to record. Empty with `--reset`
-          
-          [default: ""]
 
 Options:
       --reset

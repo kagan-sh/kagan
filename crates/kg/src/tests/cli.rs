@@ -1012,24 +1012,9 @@ fn keymap_reset_needs_no_key_but_setting_a_chord_does() {
 }
 
 #[test]
-fn setting_a_chord_without_a_key_is_refused_before_the_app_is_asked() {
-    let op = parse(&["keymap", "set", "NewThread"]);
-    assert!(
-        matches!(crate::cli::run(op, false), Err(OpError::Invalid(text)) if text == "a KEY is needed unless --reset is given")
-    );
-}
-
-#[test]
-fn a_taken_chord_is_a_failure_on_the_command_line() {
-    let op = parse(&["keymap", "set", "ToggleSidebar", "secondary-j"]);
-    let taken = OpResult::Setting(json!({ "ok": false, "conflict": "NewThread" }));
-    let error = crate::cli::refuse_conflict(&op, &taken).unwrap_err();
-    assert!(
-        matches!(&error, OpError::Invalid(text) if text == "secondary-j is already bound to NewThread"),
-        "{error:?}"
-    );
-    let saved = OpResult::Setting(json!({ "ok": true }));
-    assert!(crate::cli::refuse_conflict(&op, &saved).is_ok());
+fn setting_a_chord_needs_a_key_unless_reset() {
+    assert!(Cli::try_parse_from(["kg", "keymap", "set", "NewThread"]).is_err());
+    assert!(Cli::try_parse_from(["kg", "keymap", "set", "NewThread", "--reset"]).is_ok());
 }
 
 #[test]

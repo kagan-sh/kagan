@@ -705,8 +705,8 @@ Built-in shortcut overrides, and the keys of plugin commands, named `<plugin-id>
 ### `Set`
 
 - **Allowed when**: the action is one of those defaults, or a command of an enabled plugin [op/] [book:cli] [decision 102].
-- **Changes**: records the chord for this machine [book:cli]. `--reset` drops the saved chord and uses the default key [book:cli]. A conflicting chord is not stored; the result names the other action [op/], and the command line exits 1 with that as its error [decision 255]. A plugin command's key is refused when it overlaps a window key or another plugin command's key [docs:plugin-api]. It is stored with that plugin and applies while the app is in front [decision 102].
-- **Refused when**: an unknown action, or a plugin that is not enabled or has no such command — `invalid` or `not-found` [op/]. An empty key or an unknown key name — `invalid` [op/]. The command line needs a KEY unless `--reset` is given [book:cli] [decision 255].
+- **Changes**: records the chord for this machine [book:cli]. `--reset` drops the saved chord and uses the default key [book:cli]. A conflicting chord is not stored; the Op fails with `conflict` naming the other action [op/], so the window, the command line and MCP all see it [decision 255]. A plugin command's key is refused when it overlaps a window key or another plugin command's key [docs:plugin-api]. It is stored with that plugin and applies while the app is in front [decision 102].
+- **Refused when**: an unknown action, or a plugin that is not enabled or has no such command — `invalid` or `not-found` [op/]. An empty key or an unknown key name — `invalid` [op/]. The command line needs a KEY unless `--reset` is given; clap refuses the rest [book:cli] [decision 255].
 
 ### `Remove`
 
@@ -869,7 +869,7 @@ Finds a newer kagan on the GitHub releases page (decision 113). Installing is no
 
 ## Cross-Op rules
 
-- `KG_SOCKET` names the socket. When it is unset and `KG_DATA_DIR` is set, that folder is made absolute and the socket follows it: `<data>/kg.sock` on macOS and Linux, or `/tmp/kagan-<sha256>/kg.sock` when that path does not fit a local socket. The `/tmp` folder must be mode `0700`, owned by this user, and not a symlink, or the connection is refused. On Windows the pipe name is derived from the absolute folder. A file that is not a socket is not removed. It is not the default socket of the app that uses `~/.kagan` [decision 124] [book:data]. `KG_SOCKET` still overrides. On Windows it may be the full pipe path `\\.\pipe\<name>`; the prefix is dropped, so both forms name the same pipe [decision 255]. With both unset, the socket stays the platform default.
+- `KG_SOCKET` names the socket. When it is unset and `KG_DATA_DIR` is set, that folder is made absolute and the socket follows it: `<data>/kg.sock` on macOS and Linux, or `/tmp/kagan-<sha256>/kg.sock` when that path does not fit a local socket. The `/tmp` folder must be mode `0700`, owned by this user, and not a symlink, or the connection is refused. On Windows the pipe name is derived from the absolute folder. A file that is not a socket is not removed. It is not the default socket of the app that uses `~/.kagan` [decision 124] [book:data]. `KG_SOCKET` still overrides. With both unset, the socket stays the platform default.
 - Only a person answers a pending question. Answering is not an `Op`. `kg ui` cannot answer, and synthetic `kg ui` cannot answer [decision 10]. A plugin cannot answer either. An answer removes the pending row and writes `answered`. Deleting the row is not an answer [docs:plugin-api]. Every answer appends `answered` with the interaction's title, the chosen option, and the field values when the question declared fields. That is the trace of an approval on the thread [docs:architecture] [event.rs].
 - Archive, unarchive, and stop never ask [decision 12] [docs:architecture] [docs:plugin-api].
 - The database is the truth for thread rows and the event log [decision 5] [docs:architecture].

@@ -4,7 +4,7 @@ use kg_core::Workspace;
 use std::path::Path;
 
 use gpui_kit::{TestAppContext, px, size};
-use kg_domain::{KeymapOp, Op, OpResult, Plugin, PluginId, PluginOp, ProjectId};
+use kg_domain::{KeymapOp, Op, OpError, OpResult, Plugin, PluginId, PluginOp, ProjectId};
 
 use super::{
     add_project, click, grid_text, install_navigator, open_surface, open_with_plugins_then,
@@ -404,26 +404,27 @@ fn a_saved_plugin_key_is_refused_where_the_window_refuses_it(cx: &mut TestAppCon
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_navigator);
     cx.run_until_parked();
     let set = |cx: &mut TestAppContext, command: &str, key: &str| {
-        run_op(
-            cx,
-            Op::Keymap(KeymapOp::Set {
-                action: format!("{NAVIGATOR}:{command}"),
-                key: key.into(),
-                reset: false,
-            }),
-        )
+        let task = cx.update(|cx| {
+            Workspace::dispatch(
+                Op::Keymap(KeymapOp::Set {
+                    action: format!("{NAVIGATOR}:{command}"),
+                    key: key.into(),
+                    reset: false,
+                }),
+                cx,
+            )
+        });
+        cx.foreground_executor().block_test(task)
     };
     // A key that starts with New Thread's key is refused.
     assert_eq!(
         set(cx, "panel", &format!("{} x", chord("NewThread"))),
-        OpResult::Setting(serde_json::json!({ "ok": false, "conflict": "NewThread" }))
+        Err(OpError::Conflict("NewThread".into()))
     );
     // A key that overlaps another plugin command is refused until that command's key is removed.
     assert_eq!(
         set(cx, "panel", "secondary-shift-k z"),
-        OpResult::Setting(
-            serde_json::json!({ "ok": false, "conflict": format!("{NAVIGATOR}:prefixed") })
-        )
+        Err(OpError::Conflict(format!("{NAVIGATOR}:prefixed")))
     );
     run_op(
         cx,
@@ -433,7 +434,7 @@ fn a_saved_plugin_key_is_refused_where_the_window_refuses_it(cx: &mut TestAppCon
     );
     assert_eq!(
         set(cx, "panel", "secondary-shift-k"),
-        OpResult::Setting(serde_json::json!({ "ok": true }))
+        Ok(OpResult::Setting(serde_json::json!({ "ok": true })))
     );
     cx.run_until_parked();
 

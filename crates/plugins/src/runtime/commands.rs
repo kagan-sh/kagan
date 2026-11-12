@@ -275,9 +275,7 @@ pub(crate) async fn keymap(
             store_bindings(host, plugin, &bindings, cx).await?;
             Ok(OpResult::Setting(json!({ "ok": true })))
         }
-        Err(conflict) => Ok(OpResult::Setting(
-            json!({ "ok": false, "conflict": conflict }),
-        )),
+        Err(conflict) => Err(kg_domain::OpError::Conflict(conflict)),
     }
 }
 
