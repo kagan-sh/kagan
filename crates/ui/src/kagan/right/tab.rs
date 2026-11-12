@@ -98,6 +98,7 @@ impl Kagan {
             return;
         }
         self.right.tab = Some(tab);
+        self.hide_browser(cx);
         self.supersede_surface();
         cx.notify();
     }
