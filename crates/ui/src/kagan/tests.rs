@@ -96,6 +96,58 @@ impl Kagan {
         self.select_right_tab(right::Tab::Changes, cx);
     }
 
+    pub(crate) fn open_settings_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_center(super::screen::Center::Settings, window, cx);
+    }
+
+    /// Closes the right sidebar the way its button does: the setting goes shut, so a frame keeps it shut.
+    pub(crate) fn close_right_sidebar_for_test(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.force_sidebar(false, false, window, cx);
+    }
+
+    pub(crate) fn open_right_overlay_for_test(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_overlay(
+            super::screen::Side::Right,
+            super::screen::Activation::Quiet,
+            window,
+            cx,
+        );
+    }
+
+    pub(crate) fn dismiss_right_overlay_for_test(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.dismiss_overlay(super::screen::Side::Right, window, cx);
+    }
+
+    pub(crate) fn leave_browser_thread_for_test(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.browser.leave_thread(window, cx);
+    }
+
+    /// The thread driving the browser, if any.
+    pub(crate) fn browser_driver_for_test(&self) -> Option<kg_domain::ThreadId> {
+        self.browser.owner().cloned()
+    }
+
+    /// How many links went to the Browser tab so far.
+    pub(crate) fn browser_tab_opens_for_test() -> usize {
+        super::browser::TAB_OPENS.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
     /// Makes `thread` the one driving the browser. No native page is built, so the tests can read the state.
     pub(crate) fn drive_browser_for_test(&mut self, thread: kg_domain::ThreadId, url: &str) {
         self.browser.agent = Some(super::browser::Agent {

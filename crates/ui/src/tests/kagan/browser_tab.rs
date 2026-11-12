@@ -79,7 +79,8 @@ fn left_edge(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> f3
     f32::from(bounds_of(cx, window, name).origin.x)
 }
 
-// The divider's band reaches 4 px into the panel it edges. The page must start past that.
+// The divider's band reaches 4 px into the panel it edges (gpui-base keeps that private, so the
+// number is repeated here on purpose). The page's box must start past it.
 #[gpui_kit::test]
 fn the_page_starts_clear_of_the_divider_band(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);
@@ -115,5 +116,105 @@ fn the_stop_button_stays_inside_the_narrowest_panel(cx: &mut TestAppContext) {
         stop_right <= panel_right,
         "Stop agent ends {} px past the panel edge",
         stop_right - panel_right
+    );
+}
+
+#[gpui_kit::test]
+fn opening_settings_hides_the_page_in_that_step(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    driven_browser(cx, window, &kagan);
+    assert!(kagan.read_with(cx, |kagan, _| kagan.browser_shown_for_test()));
+    let shown = cx.update_window(window, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| {
+            kagan.open_settings_for_test(window, cx);
+            kagan.browser_shown_for_test()
+        })
+    });
+    assert!(!shown.unwrap());
+}
+
+#[gpui_kit::test]
+fn switching_threads_hides_the_page_in_that_step(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    driven_browser(cx, window, &kagan);
+    let shown = cx.update_window(window, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| {
+            kagan.leave_browser_thread_for_test(window, cx);
+            kagan.browser_shown_for_test()
+        })
+    });
+    assert!(!shown.unwrap());
+}
+
+#[gpui_kit::test]
+fn dismissing_the_right_overlay_hides_the_page_in_that_step(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    driven_browser(cx, window, &kagan);
+    cx.update_window(window, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| {
+            kagan.close_right_sidebar_for_test(window, cx);
+        });
+        kagan.update(cx, |kagan, cx| {
+            kagan.open_right_overlay_for_test(window, cx);
+        });
+        crate::ui_dispatch::render_frame(window, cx);
+    })
+    .unwrap();
+    assert!(kagan.read_with(cx, |kagan, _| kagan.browser_shown_for_test()));
+    let shown = cx.update_window(window, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| {
+            kagan.dismiss_right_overlay_for_test(window, cx);
+            kagan.browser_shown_for_test()
+        })
+    });
+    assert!(!shown.unwrap());
+}
+
+// A held tab's close leaves the other thread's drive running.
+#[gpui_kit::test]
+fn closing_a_held_browser_tab_leaves_the_drive_running(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let driver = run_shell(cx);
+    let here = run_shell(cx);
+    click(cx, window, &format!("thread-{}", here.0));
+    cx.update(|cx| {
+        kagan.update(cx, |kagan, _| {
+            kagan.drive_browser_for_test(driver.clone(), "http://localhost:1/");
+        });
+    });
+    click(cx, window, "right-tab-add");
+    click(cx, window, "right-add-browser");
+    click(cx, window, "right-tab-close-browser");
+    assert_eq!(
+        kagan.read_with(cx, |kagan, _| kagan.browser_driver_for_test()),
+        Some(driver)
+    );
+}
+
+// A terminal link in a held tab opens in the system browser, never in the other thread's page.
+#[gpui_kit::test]
+fn a_link_in_a_held_tab_never_reaches_the_other_page(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let driver = run_shell(cx);
+    let here = run_shell(cx);
+    click(cx, window, &format!("thread-{}", here.0));
+    cx.update(|cx| {
+        kagan.update(cx, |kagan, _| {
+            kagan.drive_browser_for_test(driver.clone(), "http://localhost:1/");
+        });
+    });
+    click(cx, window, "right-tab-add");
+    click(cx, window, "right-add-browser");
+    let before = Kagan::browser_tab_opens_for_test();
+    cx.update_window(window, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| {
+            kagan.open_link("https://example.com/x", window, cx);
+        });
+    })
+    .unwrap();
+    assert_eq!(Kagan::browser_tab_opens_for_test(), before);
+    assert_eq!(
+        kagan.read_with(cx, |kagan, _| kagan.browser_driver_for_test()),
+        Some(driver)
     );
 }
