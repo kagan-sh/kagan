@@ -18,7 +18,8 @@ use crate::kagan::{ArchiveThread, StopThread};
 use super::{add_project, approvals_waiting, click, open, send, shows, wait_until};
 #[cfg(unix)]
 use super::{
-    commit_setup, committed_repo, environment_of, label, set_program, shell, shown, thread_record,
+    commit_setup, committed_repo, environment_of, label, scroll_form_to_end, set_program, shell,
+    shown, thread_record,
 };
 
 #[cfg(unix)]
@@ -28,6 +29,7 @@ fn a_blocked_removal_is_shown_and_can_be_tried_again(cx: &mut TestAppContext) {
     let (repo, project) = committed_repo(cx, data.path());
     commit_setup(&repo, "touch kept-marker\n");
     click(cx, window, &format!("project-new-{}", project.id.0));
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-script"));
     set_program(cx, window, &kagan, shell());
     click(cx, window, "start");

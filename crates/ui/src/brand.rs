@@ -48,6 +48,34 @@ const BRAND: &[(&str, &[u8])] = &[
         APP_ICON,
         include_bytes!("../../../assets/brand/png/kagan-app-icon-256.png"),
     ),
+    (
+        "agents/claude.svg",
+        include_bytes!("../../../assets/agents/claude.svg"),
+    ),
+    (
+        "agents/codex.svg",
+        include_bytes!("../../../assets/agents/codex.svg"),
+    ),
+    (
+        "agents/gemini.svg",
+        include_bytes!("../../../assets/agents/gemini.svg"),
+    ),
+    (
+        "agents/copilot.svg",
+        include_bytes!("../../../assets/agents/copilot.svg"),
+    ),
+    (
+        "agents/cursor.svg",
+        include_bytes!("../../../assets/agents/cursor.svg"),
+    ),
+    (
+        "agents/kimi.svg",
+        include_bytes!("../../../assets/agents/kimi.svg"),
+    ),
+    (
+        "agents/opencode.svg",
+        include_bytes!("../../../assets/agents/opencode.svg"),
+    ),
 ];
 
 #[derive(Clone, Copy, Debug, Default)]

@@ -7,8 +7,8 @@ use kg_core::Workspace;
 use kg_domain::EnvironmentStatus;
 
 use super::{
-    click, committed_repo, environment_of, git, head_commit, label, open, set_program, shell,
-    shown, shows, wait_until,
+    click, committed_repo, environment_of, git, head_commit, label, open, scroll_form_to_end,
+    set_program, shell, shown, shows, wait_until,
 };
 #[cfg(unix)]
 use super::{only_worktree, worktree_dirs};
@@ -67,11 +67,14 @@ fn the_project_folder_choice_does_not_name_setup(cx: &mut TestAppContext) {
     let (repo, project) = committed_repo(cx, data.path());
     commit_setup(&repo, "exit 0\n");
     click(cx, window, &format!("project-new-{}", project.id.0));
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-script"));
     click(cx, window, "folder-project");
     cx.run_until_parked();
     assert!(!shows(cx, window, "setup-script"));
+    scroll_form_to_end(cx, window);
     click(cx, window, "folder-worktree");
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-script"));
     let _ = kagan;
 }
@@ -115,6 +118,7 @@ fn retry_runs_a_failed_setup_again_without_a_second_worktree(cx: &mut TestAppCon
         "if [ -f .kagan/once ]; then exit 0; fi\ntouch .kagan/once\nexit 1\n",
     );
     click(cx, window, &format!("project-new-{}", project.id.0));
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-script"));
     set_program(cx, window, &kagan, shell());
     click(cx, window, "start");
@@ -217,6 +221,7 @@ fn the_start_screen_can_show_the_pinned_setup_script(cx: &mut TestAppContext) {
     commit_setup(&repo, "echo from-commit\n");
     std::fs::write(repo.join(".kagan/setup"), "echo from-worktree\n").unwrap();
     click(cx, window, &format!("project-new-{}", project.id.0));
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-disclose"));
     assert_eq!(label(cx, window, "setup-disclose"), "Show script");
     assert!(!shows(cx, window, "setup-body"));
@@ -238,6 +243,7 @@ fn a_long_setup_script_is_capped(cx: &mut TestAppContext) {
     }
     commit_setup(&repo, &body);
     click(cx, window, &format!("project-new-{}", project.id.0));
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-disclose"));
     click(cx, window, "setup-disclose");
     wait_until(cx, |cx| !label(cx, window, "setup-body").is_empty());
@@ -258,6 +264,7 @@ fn a_changed_script_hides_retry_and_leaves_start(cx: &mut TestAppContext) {
     let (repo, project) = committed_repo(cx, data.path());
     commit_setup(&repo, "exit 1\n");
     click(cx, window, &format!("project-new-{}", project.id.0));
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-script"));
     set_program(cx, window, &kagan, shell());
     click(cx, window, "start");

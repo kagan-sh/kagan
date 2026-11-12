@@ -202,10 +202,10 @@ const FORM_STOPS: [&str; 7] = [
 fn tab_visits_each_control_of_the_form_in_order_then_escape_leaves(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open_git_form(cx);
     click(cx, window, "program-search");
-    // Shell is a custom command, so its three text fields (program, arguments, name) sit between
-    // the toggle and its Save button, and Save sits before the folder.
+    // The program grid is one stop: its cards take the arrow keys. Save sits before the folder.
     let mut order = Vec::new();
-    for _ in 0..FORM_STOPS.len() + 3 {
+    // The program grid is a stop too, so one more press than the controls reaches the last one.
+    for _ in 0..FORM_STOPS.len() + 4 {
         press_key(cx, window, "tab");
         order.extend(
             FORM_STOPS
@@ -461,6 +461,7 @@ fn show_script_starts_on_the_spine_of_the_note_above_it(cx: &mut TestAppContext)
     let (repo, project) = committed_repo(cx, data.path());
     commit_setup(&repo, "echo from-commit\n");
     click(cx, window, &format!("project-new-{}", project.id.0));
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-disclose"));
     let (note_x, _, _, _) = bounds(cx, window, "setup-script").unwrap();
     let (disclose_x, _, _, _) = bounds(cx, window, "setup-disclose").unwrap();

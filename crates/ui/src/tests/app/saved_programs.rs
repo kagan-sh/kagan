@@ -1,6 +1,4 @@
-#[cfg(unix)]
-use gpui_kit::AppContext as _;
-use gpui_kit::{AnyWindowHandle, TestAppContext};
+use gpui_kit::{AnyWindowHandle, AppContext as _, TestAppContext};
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, Program, ProgramOp, ProgramSource};
 
@@ -312,18 +310,32 @@ fn a_reopened_picker_starts_with_an_empty_search(cx: &mut TestAppContext) {
     );
 }
 
+// The arrow keys move the grid once it has the focus; the search box keeps Left and Right.
+fn focus_grid(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    kagan: &gpui_kit::Entity<crate::kagan::Kagan>,
+) {
+    let picker = cx.update(|cx| kagan.read(cx).picker_entity());
+    cx.update_window(window, |_, window, cx| {
+        picker.update(cx, |picker, cx| picker.focus_list(window, cx));
+    })
+    .unwrap();
+}
+
 #[gpui_kit::test]
 fn a_saved_row_shows_its_buttons_only_while_it_is_selected(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open(cx);
+    let (kagan, window, data) = open(cx);
     save(cx, "Alpha", "codex --alpha");
     save(cx, "Zulu", "codex --zulu");
     start_in_plain_folder(cx, window, data.path());
     search(cx, window, "codex");
+    focus_grid(cx, window, &kagan);
     for _ in 0..10 {
         if label(cx, window, &row_id("Zulu")).contains("selected") {
             break;
         }
-        cx.simulate_keystrokes(window, "down");
+        cx.simulate_keystrokes(window, "right");
     }
     assert!(label(cx, window, &row_id("Zulu")).contains("selected"));
     assert!(
@@ -343,7 +355,7 @@ fn a_saved_program_has_a_letter_mark_like_a_built_in_one(cx: &mut TestAppContext
     start_in_plain_folder(cx, window, data.path());
     search(cx, window, "Alpha");
     assert!(
-        shows(cx, window, "program-mark-Alpha"),
+        shows(cx, window, "program-mark-saved-Alpha"),
         "the saved row has its letter mark"
     );
 }
@@ -371,7 +383,7 @@ fn inside_list(cx: &mut TestAppContext, window: AnyWindowHandle, row: &str) -> b
 #[cfg(unix)]
 #[gpui_kit::test]
 fn pinning_the_picked_row_keeps_it_selected_and_on_screen(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open(cx);
+    let (kagan, window, data) = open(cx);
     // An installed agent is the default, so a reload that picks the default would show it.
     fixture_programs(cx, data.path(), &["codex"]);
     for n in 0..12 {
@@ -379,11 +391,12 @@ fn pinning_the_picked_row_keeps_it_selected_and_on_screen(cx: &mut TestAppContex
     }
     start_in_plain_folder(cx, window, data.path());
     search(cx, window, "codex");
+    focus_grid(cx, window, &kagan);
     for _ in 0..40 {
         if label(cx, window, &row_id("Prog10")).contains("selected") {
             break;
         }
-        cx.simulate_keystrokes(window, "down");
+        cx.simulate_keystrokes(window, "right");
     }
     cx.run_until_parked();
     assert!(label(cx, window, &row_id("Prog10")).contains("selected"));

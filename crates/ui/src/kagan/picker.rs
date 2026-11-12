@@ -1,16 +1,37 @@
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::input::InputState;
-use gpui_kit::component::list::ListState;
 use gpui_kit::component::v_flex;
 use gpui_kit::{
-    AnyElement, Context, Entity, EventEmitter, IntoElement, ParentElement as _, Pixels,
-    SharedString, Styled as _, Subscription, Task, WeakEntity,
+    AnyElement, Context, Entity, EventEmitter, FocusHandle, Focusable as _, IntoElement,
+    ParentElement as _, ScrollHandle, SharedString, Styled as _, Subscription, Task, Window,
 };
 use kg_domain::{Program, split_program};
 
-use super::{CloseCustomCommand, RetryPrograms, ToggleCustomCommand};
+use super::{CloseCustomCommand, RetryPrograms};
 
 pub(crate) const CONTEXT: &str = "ProgramPicker";
+// The card grid alone takes Enter: a focused button under it keeps its own Enter.
+pub(crate) const GRID_CONTEXT: &str = "ProgramGrid";
+// The Custom command button: the start form binds Enter to nothing in its controls, so the button
+// binds its own.
+pub(crate) const CUSTOM_CONTEXT: &str = "ProgramCustom";
+
+pub(crate) fn bindings() -> [gpui_kit::KeyBinding; 6] {
+    use gpui_kit::KeyBinding;
+    use gpui_kit::base::actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp};
+    [
+        KeyBinding::new("up", SelectUp, Some(CONTEXT)),
+        KeyBinding::new("down", SelectDown, Some(CONTEXT)),
+        KeyBinding::new("left", SelectLeft, Some(CONTEXT)),
+        KeyBinding::new("right", SelectRight, Some(CONTEXT)),
+        KeyBinding::new("enter", Confirm { secondary: false }, Some(GRID_CONTEXT)),
+        KeyBinding::new(
+            "enter",
+            crate::kagan::ToggleCustomCommand,
+            Some(CUSTOM_CONTEXT),
+        ),
+    ]
+}
 
 pub(crate) struct Start;
 pub(crate) struct Close;
@@ -23,7 +44,8 @@ enum Programs {
     Failed(String),
 }
 
-const LIST_ROWS: u16 = 8;
+// The cards in a row, when the grid is at its widest. A narrower grid wraps to fewer.
+const COLUMNS: u16 = 3;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 enum Mode {
@@ -32,29 +54,27 @@ enum Mode {
     Custom,
 }
 
-pub(super) struct Rows {
+// The program cards: the programs that match the search, then the custom command card.
+pub(super) struct Cards {
     all: Vec<Program>,
     matches: Vec<Program>,
-    selected: Option<usize>,
+    // An index into `matches`, or `matches.len()` for the custom command card.
+    cursor: usize,
     query: String,
     loading: bool,
-    mode: Mode,
-    row_height: Option<Pixels>,
-    // The picker that owns these rows, for a saved program's pin, rename and delete buttons.
-    picker: WeakEntity<Picker>,
+    // The cards in a row, as the last paint laid them out. Up and Down move by this many.
+    columns: usize,
 }
 
-impl Rows {
-    fn new(picker: WeakEntity<Picker>) -> Self {
+impl Cards {
+    fn new() -> Self {
         Self {
             all: Vec::new(),
             matches: Vec::new(),
-            selected: None,
+            cursor: 0,
             query: String::new(),
             loading: false,
-            mode: Mode::Catalog,
-            row_height: None,
-            picker,
+            columns: usize::from(COLUMNS),
         }
     }
 
@@ -78,17 +98,20 @@ impl Rows {
             })
             .cloned()
             .collect();
-        self.selected = (!self.matches.is_empty()).then_some(0);
+        self.cursor = 0;
     }
 
     fn selected(&self) -> Option<&Program> {
-        self.selected.and_then(|row| self.matches.get(row))
+        self.matches.get(self.cursor)
     }
 }
 
 pub(crate) struct Picker {
     state: Programs,
-    list: Entity<ListState<Rows>>,
+    cards: Cards,
+    // Keys go to the grid when a card has the focus; the search field keeps its own arrows.
+    grid: FocusHandle,
+    scroll: ScrollHandle,
     search: Entity<InputState>,
     mode: Mode,
     program: Entity<InputState>,
@@ -110,14 +133,16 @@ impl EventEmitter<Start> for Picker {}
 impl EventEmitter<Close> for Picker {}
 
 mod list;
+mod mark;
 
 use list::{Field, custom_command, custom_field};
 mod render;
 pub(crate) mod saved;
 mod state;
 impl Picker {
-    fn render_custom(&self, cx: &mut Context<Self>) -> AnyElement {
+    fn render_custom(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
+        let focused = |input: &Entity<InputState>| input.focus_handle(cx).is_focused(window);
         if self.editing.is_some() {
             return v_flex()
                 .gap_2()
@@ -127,6 +152,7 @@ impl Picker {
                     &self.name,
                     None,
                     muted,
+                    focused(&self.name),
                     cx,
                 ))
                 .child(saved::save_control(true))
@@ -158,6 +184,7 @@ impl Picker {
                 &self.program,
                 program_note,
                 muted,
+                focused(&self.program),
                 cx,
             ))
             .child(custom_field(
@@ -166,6 +193,7 @@ impl Picker {
                 &self.arguments,
                 arguments_note,
                 muted,
+                focused(&self.arguments),
                 cx,
             ))
             .child(custom_field(
@@ -174,6 +202,7 @@ impl Picker {
                 &self.name,
                 None,
                 muted,
+                focused(&self.name),
                 cx,
             ))
             .child(saved::save_control(false))
