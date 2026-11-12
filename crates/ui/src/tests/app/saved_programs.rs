@@ -1,6 +1,4 @@
-#[cfg(unix)]
-use gpui_kit::AppContext as _;
-use gpui_kit::{AnyWindowHandle, TestAppContext};
+use gpui_kit::{AnyWindowHandle, AppContext as _, TestAppContext};
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, Program, ProgramOp, ProgramSource};
 
