@@ -1,4 +1,3 @@
-use gpui_kit::base::actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp};
 use gpui_kit::{
     Action, App, Global, KeyBinding, KeyBindingContextPredicate, NoAction, Subscription,
 };
@@ -155,6 +154,7 @@ pub(crate) fn install_keys(cx: &mut App) {
     cx.bind_keys(super::changes::bindings());
     cx.bind_keys(super::plugin_actions::bindings());
     cx.bind_keys(super::right::bindings());
+    cx.bind_keys(super::picker::bindings());
     cx.bind_keys(super::surface::bindings());
     cx.bind_keys([
         KeyBinding::new("cmd-+", Bigger, Some(CONTEXT)),
@@ -214,15 +214,6 @@ pub(crate) fn install_keys(cx: &mut App) {
             "escape",
             super::review::CloseReview,
             Some(super::review::CONTEXT),
-        ),
-        KeyBinding::new("up", SelectUp, Some(super::picker::CONTEXT)),
-        KeyBinding::new("down", SelectDown, Some(super::picker::CONTEXT)),
-        KeyBinding::new("left", SelectLeft, Some(super::picker::CONTEXT)),
-        KeyBinding::new("right", SelectRight, Some(super::picker::CONTEXT)),
-        KeyBinding::new(
-            "enter",
-            Confirm { secondary: false },
-            Some(super::picker::CONTEXT),
         ),
     ]);
     let workspace = Workspace::global(cx);

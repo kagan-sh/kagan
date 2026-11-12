@@ -27,7 +27,7 @@ use crate::ui_registry::Facts;
 const CARD_HEIGHT: f32 = 130.;
 // The grid shows this many rows of cards, then scrolls. Two keep the worktree hint and Start on
 // screen in a short window.
-const VISIBLE_ROWS: usize = 2;
+const VISIBLE_ROWS: f32 = 2.;
 
 #[derive(IntoElement)]
 struct ProgramCard {
@@ -188,7 +188,7 @@ fn custom_card(
 // The first row's cards share a top edge, so the cards in that row are the columns.
 fn columns_of(bounds: &[Bounds<Pixels>]) -> usize {
     let Some(first) = bounds.first() else {
-        return COLUMNS;
+        return usize::from(COLUMNS);
     };
     bounds
         .iter()
@@ -224,7 +224,7 @@ fn programs_failed(message: &str, muted: Hsla, cx: &App) -> AnyElement {
 impl Picker {
     fn grid(&self, cx: &mut Context<Self>) -> AnyElement {
         let gap = space(SpaceStep::Sm, cx);
-        let height = px(VISIBLE_ROWS as f32 * CARD_HEIGHT + (VISIBLE_ROWS - 1) as f32 * gap);
+        let height = px(VISIBLE_ROWS * CARD_HEIGHT + (VISIBLE_ROWS - 1.) * gap);
         let picker: WeakEntity<Picker> = cx.weak_entity();
         let cards = &self.cards;
         let custom = cards.matches.len();
@@ -242,7 +242,7 @@ impl Picker {
             .overflow_y_scroll()
             .w_full()
             .grid()
-            .grid_cols(COLUMNS as u16)
+            .grid_cols(COLUMNS)
             .gap(px(gap))
             .max_h(height);
         for (index, program) in cards.matches.iter().enumerate() {

@@ -11,6 +11,18 @@ use super::{CloseCustomCommand, RetryPrograms};
 
 pub(crate) const CONTEXT: &str = "ProgramPicker";
 
+pub(crate) fn bindings() -> [gpui_kit::KeyBinding; 5] {
+    use gpui_kit::KeyBinding;
+    use gpui_kit::base::actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp};
+    [
+        KeyBinding::new("up", SelectUp, Some(CONTEXT)),
+        KeyBinding::new("down", SelectDown, Some(CONTEXT)),
+        KeyBinding::new("left", SelectLeft, Some(CONTEXT)),
+        KeyBinding::new("right", SelectRight, Some(CONTEXT)),
+        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
+    ]
+}
+
 pub(crate) struct Start;
 pub(crate) struct Close;
 
@@ -23,7 +35,7 @@ enum Programs {
 }
 
 // The cards in a row, when the grid is at its widest. A narrower grid wraps to fewer.
-const COLUMNS: usize = 3;
+const COLUMNS: u16 = 3;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 enum Mode {
@@ -52,7 +64,7 @@ impl Cards {
             cursor: 0,
             query: String::new(),
             loading: false,
-            columns: COLUMNS,
+            columns: usize::from(COLUMNS),
         }
     }
 
