@@ -823,7 +823,7 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 
 ### `Close`
 
-- **Changes**: closes the window. On macOS programs keep running [decision 46] [docs:look], and clicking the Dock icon opens the window again [decision 66]. On Windows and Linux, closing the last window quits kagan as `Quit` does, without the question, once the programs have stopped and their threads are kept to resume [decision 264]. The title-bar button and Alt+F4 do the same as this action. A window that opened in a headless app counts too; an app that never opened a window is not affected [decision 264].
+- **Changes**: closes the window. On macOS programs keep running [decision 46] [docs:look], and clicking the Dock icon opens the window again [decision 66]. On Windows and Linux, closing the last window quits kagan as `Quit` does, without the question, once the programs have stopped and their threads are kept to resume [decision 264]. The title-bar button and Alt+F4 do the same as this action. An app the CLI started headless also quits once a window it opened is closed; an app that never opened a window is not affected [decision 264].
 
 ### `CommandList`, `SearchThreads`, `SavedPrompts`
 
