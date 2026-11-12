@@ -47,7 +47,7 @@ impl Picker {
         Self {
             state: Programs::default(),
             cards: Cards::new(),
-            grid: cx.focus_handle(),
+            grid: cx.focus_handle().tab_stop(true),
             scroll: gpui_kit::ScrollHandle::new(),
             search,
             mode: Mode::Catalog,

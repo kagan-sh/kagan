@@ -683,6 +683,24 @@ fn assert_close(actual: f32, expected: f32, what: &str) {
 
 #[cfg(unix)]
 #[gpui_kit::test]
+fn tab_from_the_search_reaches_the_grid_where_the_arrows_move_the_cards(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    fixture_programs(cx, data.path(), &["codex", "gemini"]);
+    start_in_plain_folder(cx, window, data.path());
+    let picker = picker(cx, &kagan);
+    cx.update_window(window, |_, window, cx| {
+        picker.update(cx, |picker, cx| picker.focus(window, cx));
+    })
+    .unwrap();
+    cx.simulate_keystrokes(window, "tab");
+    cx.simulate_keystrokes(window, "right");
+    wait_until(cx, |cx| {
+        selected_of(cx, window, "program-gemini") == Some(true)
+    });
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
 fn a_search_leaves_only_its_matching_cards_and_the_custom_card(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
     fixture_programs(cx, data.path(), &ROW_NAMES);

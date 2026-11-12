@@ -235,9 +235,11 @@ impl Picker {
                 _ = measured.update(cx, |this, _| this.cards.columns = columns);
             })
             .id("program-list")
-            .ui_container()
-            .track_focus(&self.grid)
-            .tab_stop(true)
+            .ui_observe_as(Facts {
+                role: Role::ListBox,
+                focus: Some(self.grid.clone()),
+                ..Facts::button("Programs")
+            })
             .track_scroll(&self.scroll)
             .overflow_y_scroll()
             .w_full()
