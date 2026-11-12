@@ -31,6 +31,7 @@ mod support;
 mod surfaces;
 mod terminal;
 mod threads;
+mod usage;
 mod worktree;
 
 pub(in crate::tests) use approvals::approvals_waiting;

@@ -145,7 +145,7 @@ pub enum Op {
     /// Keyboard shortcuts: built-in ones and plugin commands
     #[command(subcommand)]
     Keymap(KeymapOp),
-    /// Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+    /// Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, usage-limits, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
     #[command(subcommand)]
     Preference(PreferenceOp),
     /// Agent rules: the global rules, or one project's, that a thread's program is told
@@ -172,6 +172,9 @@ pub enum Op {
     /// Check for a newer kagan
     #[command(subcommand)]
     Update(crate::UpdateOp),
+    /// Provider usage limits, read live from each signed-in provider when the `usage-limits` preference is on
+    #[command(subcommand)]
+    Usage(crate::UsageOp),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -290,6 +293,7 @@ pub enum OpResult {
     Details(crate::ThreadDetails),
     Links(Vec<String>),
     Update(crate::UpdateStatus),
+    Usage(crate::UsageView),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]

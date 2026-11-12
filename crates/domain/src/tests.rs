@@ -1612,3 +1612,12 @@ fn bidi_overrides_are_refused_in_names_like_control_characters() {
     assert!(crate::unsafe_char('\u{2069}'));
     assert!(!crate::unsafe_char('é'));
 }
+
+#[test]
+fn a_reset_reads_in_days_hours_or_minutes() {
+    let now = 1_000;
+    assert_eq!(crate::resets_in(now + 3 * 86_400 + 4 * 3_600, now), "3d 4h");
+    assert_eq!(crate::resets_in(now + 2 * 3_600 + 10 * 60, now), "2h 10m");
+    assert_eq!(crate::resets_in(now + 5 * 60, now), "5m");
+    assert_eq!(crate::resets_in(now - 60, now), "0m");
+}

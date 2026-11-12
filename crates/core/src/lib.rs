@@ -17,6 +17,7 @@ mod skill;
 mod tests;
 mod thread;
 mod update;
+mod usage;
 mod workspace;
 
 pub use dispatch::ui::{UiDispatch, UiJob};
@@ -25,6 +26,8 @@ pub use plugin_folder::{plugin_data_dir, plugin_dir, plugin_log_file, plugins_di
 pub use preview::{human_size, image_size, preview_image, preview_note};
 pub use settings::keys::{host_os, parse_key};
 pub use update::{Target, Updater};
+#[cfg(any(test, feature = "test"))]
+pub use usage::use_codex_source;
 pub use workspace::approval::{Approval, Requester};
 pub use workspace::entity::{Environment, Project, Thread};
 

@@ -14,6 +14,7 @@ mod tests;
 mod text;
 mod theme;
 mod update;
+mod usage;
 
 pub use diff::{
     BaseBranch, DiffCommit, DiffFile, DiffFileView, DiffHunk, DiffLine, DiffLineKind, DiffList,
@@ -61,3 +62,6 @@ pub use theme::{
     ThemeFileError, TypeSizes,
 };
 pub use update::{InstallKind, UpdateOp, UpdateState, UpdateStatus};
+pub use usage::{
+    UsageAccount, UsageOp, UsageProvider, UsageStatus, UsageView, UsageWindow, resets_in,
+};

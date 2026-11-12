@@ -78,6 +78,7 @@ const PREFERENCES: &[(&str, Kind)] = &[
     (prefs::NOTIFY, Kind::Notify),
     (prefs::PLUGIN_STATUS, Kind::Flag),
     (prefs::UPDATE_CHECK, Kind::Flag),
+    (prefs::USAGE_LIMITS, Kind::Flag),
     (prefs::SETUP_GUIDE, Kind::Flag),
     (prefs::SIDEBAR_ORDER, Kind::SidebarOrder),
     (prefs::SIDEBAR_HIDE_EMPTY_PROJECTS, Kind::Flag),

@@ -5,6 +5,7 @@ pub const AGENT_INTEGRATION: &str = "agent-integration";
 pub const NOTIFY: &str = "notify";
 pub const PLUGIN_STATUS: &str = "plugin-status";
 pub const UPDATE_CHECK: &str = "update-check";
+pub const USAGE_LIMITS: &str = "usage-limits";
 pub const BRANCH_PREFIX: &str = "branch-prefix";
 pub const TERMINAL_COPY_ON_SELECT: &str = "terminal-copy-on-select";
 pub const TERMINAL_LINKS_BROWSER: &str = "terminal-links-browser";

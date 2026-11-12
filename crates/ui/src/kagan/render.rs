@@ -135,6 +135,10 @@ impl Render for Kagan {
             .on_action(cx.listener(|_, _: &super::OpenSkills, _, cx| {
                 super::dispatch::logged(kg_domain::Op::Skill(kg_domain::SkillOp::Open), cx);
             }))
+            .on_action(cx.listener(|this, _: &super::OpenUsage, _, cx| {
+                let usage = this.sidebar.read(cx).usage.clone();
+                usage.update(cx, super::usage::Usage::toggle);
+            }))
             .on_action(cx.listener(Self::use_project_folder))
             .on_action(cx.listener(Self::use_worktree_folder))
             .on_action(cx.listener(Self::retry_branches_action))

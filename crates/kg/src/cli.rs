@@ -119,6 +119,14 @@ fn print_result(
     next: Option<(bool, PathBuf)>,
     json: bool,
 ) -> Result<(), OpError> {
+    if let OpResult::Usage(view) = result
+        && !json
+    {
+        return Ok(out::line(crate::usage::format(
+            view,
+            crate::usage::unix_now(),
+        ))?);
+    }
     if !json && let Some((created, path)) = next {
         if created {
             out::line(format!(

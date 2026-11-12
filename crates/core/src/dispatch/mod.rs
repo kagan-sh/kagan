@@ -123,6 +123,7 @@ pub(crate) async fn execute(
         Op::Preview(op) => crate::preview::run(database, op, cx).await,
         Op::Diagnostics(op) => crate::dispatch::diagnostics::export(this, op, cx).await,
         Op::Update(op) => crate::update::run(&database, op, cx).await,
+        Op::Usage(op) => crate::usage::run(this, &database, op, cx).await,
         Op::Thread(op) => dispatch_thread(this, database, op, requester, cx).await,
         Op::Automation(op) => crate::automation::run(this, database, op, requester, cx).await,
         Op::Section(op) => section(this, database, op, cx).await,
@@ -244,6 +245,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Diagnostics(_)
         | Op::Browser(_)
         | Op::Update(_)
+        | Op::Usage(_)
         | Op::SavedPrompt(
             kg_domain::SavedPromptOp::Search { .. } | kg_domain::SavedPromptOp::Send { .. },
         ) => false,

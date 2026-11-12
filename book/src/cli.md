@@ -32,7 +32,7 @@ Commands:
   window        The application menu and the window
   surface       Plugin surfaces in the window
   keymap        Keyboard shortcuts: built-in ones and plugin commands
-  preference    Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+  preference    Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, usage-limits, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
   instructions  Agent rules: the global rules, or one project's, that a thread's program is told
   ui            Native window for QA and agents
   notify        System notifications
@@ -41,6 +41,7 @@ Commands:
   preview       One file in the Preview tab, read-only
   diagnostics   Write a local diagnostics file
   update        Check for a newer kagan
+  usage         Provider usage limits, read live from each signed-in provider when the `usage-limits` preference is on
   help          Print this message or the help of the given subcommand(s)
 
 Options:
@@ -3103,7 +3104,7 @@ Options:
 ## `kg preference`
 
 ```text
-Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, usage-limits, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
 
 Usage: kg preference [OPTIONS] <COMMAND>
 
@@ -3942,6 +3943,50 @@ Options:
 The running version, how this copy was installed, and what the last check found. Only a person installs an update, from the window
 
 Usage: kg update status
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg usage`
+
+```text
+Provider usage limits, read live from each signed-in provider when the `usage-limits` preference is on
+
+Usage: kg usage [OPTIONS] <COMMAND>
+
+Commands:
+  show     The usage each signed-in provider reported. Asks again when the last answer is over two minutes old
+  refresh  Ask each signed-in provider for its usage now
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Print compact JSON; failures print the error envelope
+
+  -h, --help
+          Print help
+```
+
+## `kg usage show`
+
+```text
+The usage each signed-in provider reported. Asks again when the last answer is over two minutes old
+
+Usage: kg usage show
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg usage refresh`
+
+```text
+Ask each signed-in provider for its usage now
+
+Usage: kg usage refresh
 
 Options:
   -h, --help
