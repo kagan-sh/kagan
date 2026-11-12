@@ -21,7 +21,9 @@ struct Quitting;
 impl Global for Quitting {}
 struct Ended;
 impl Global for Ended {}
-struct LastWindow(Subscription);
+struct LastWindow {
+    _closed: Subscription,
+}
 impl Global for LastWindow {}
 
 static CONFIRMED: AtomicBool = AtomicBool::new(false);
@@ -37,7 +39,7 @@ pub(crate) fn prepare(cx: &mut App) {
     #[cfg(target_os = "macos")]
     install_should_terminate();
     let closed = cx.on_window_closed(|cx, _| quit_if_none_left(cx));
-    cx.set_global(LastWindow(closed));
+    cx.set_global(LastWindow { _closed: closed });
 }
 
 // macOS keeps the app in the Dock when its last window closes. Elsewhere that close ends kagan
