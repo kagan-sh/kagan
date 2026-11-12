@@ -189,6 +189,20 @@ fn closing_the_last_window_quits_except_on_macos(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     let before = crate::kagan::quit::quit_requests();
     cx.simulate_keystrokes(window, "cmd-w");
+    assert_last_close_quits(cx, before);
+}
+
+// The title-bar close button and Alt+F4 remove the window without the Close action.
+#[gpui_kit::test]
+fn removing_the_last_window_quits_except_on_macos(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let before = crate::kagan::quit::quit_requests();
+    cx.update_window(window, |_, window, _| window.remove_window())
+        .expect("the window is open");
+    assert_last_close_quits(cx, before);
+}
+
+fn assert_last_close_quits(cx: &mut TestAppContext, before: usize) {
     cx.run_until_parked();
     assert!(cx.update(|cx| cx.windows().is_empty()));
     if cfg!(target_os = "macos") {
