@@ -232,6 +232,7 @@ Backend	Provider
 
 ```glossary-exceptions
 # term	path_contains	line_contains	reason
+Backend	usage/codex.rs	backend-api	ChatGPT's own usage endpoint path
 Badge	plugin-api.md	Badge	gpui-kit component name
 Sandbox	picker.rs	sandbox	Provider permission sandbox wording
 Sandbox	tests/app/commands.rs	sandbox	Provider permission test copy
