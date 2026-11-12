@@ -373,7 +373,8 @@ fn window_row(
                 .id(ElementId::Name(format!("usage-reset-{index}").into()))
                 .type_caption(cx)
                 .text_color(muted)
-                .w(px(70.0))
+                .w(px(96.0))
+                .whitespace_nowrap()
                 .child(reset)
                 .tooltip(move |window, cx| {
                     Tooltip::new(format!("Resets {absolute}")).build(window, cx)
