@@ -23,3 +23,8 @@ fn the_token_never_goes_to_another_host() {
         assert!(!allowed(url), "{url} must not get the token");
     }
 }
+
+#[test]
+fn the_live_source_reads_the_pinned_endpoint() {
+    assert_eq!(super::Source::live().url, URL);
+}
