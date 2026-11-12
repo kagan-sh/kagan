@@ -3,7 +3,6 @@
 //! then `get_usage`. kagan never reads Claude's sign-in or token. `get_usage` is experimental in
 //! Claude Code, so a reply kagan cannot read shows as an error, never as 0%.
 
-use std::ffi::OsString;
 use std::io;
 use std::path::Path;
 use std::process::Command;
@@ -39,7 +38,7 @@ pub(super) enum Search {
     Login,
     /// Find `claude` on this PATH. `None` means no PATH, so nothing is found.
     #[cfg(any(test, feature = "test"))]
-    Path(Option<OsString>),
+    Path(Option<std::ffi::OsString>),
 }
 
 #[derive(Clone)]
