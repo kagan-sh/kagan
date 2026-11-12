@@ -1,48 +1,82 @@
 //! Codex's usage: the sign-in file in `CODEX_HOME` (default `~/.codex`) and the `ChatGPT` usage
-//! endpoint. The token is sent to that endpoint only, and it is never refreshed.
+//! endpoint. The token goes only to that endpoint, and it is never refreshed.
 
 use std::io::Read as _;
-use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::path::PathBuf;
+use std::time::Duration;
 
 use base64::Engine as _;
 use kg_domain::{UsageAccount, UsageProvider, UsageStatus, UsageWindow};
 use serde_json::Value;
 
-pub(super) const URL: &str = match option_env!("KG_USAGE_CODEX_URL") {
-    Some(url) => url,
-    None => "https://chatgpt.com/backend-api/wham/usage",
-};
+pub(super) const HOST: &str = "chatgpt.com";
+pub(super) const URL: &str = "https://chatgpt.com/backend-api/wham/usage";
 const TIMEOUT: Duration = Duration::from_secs(15);
 const LIMIT: u64 = 1024 * 1024;
 const AUTH_CLAIM: &str = "https://api.openai.com/auth";
 const PROFILE_CLAIM: &str = "https://api.openai.com/profile";
 
-pub(super) fn home() -> Option<PathBuf> {
+#[cfg(debug_assertions)]
+const DEV_URL: Option<&str> = option_env!("KG_USAGE_CODEX_URL");
+
+#[derive(Clone)]
+pub(super) struct Source {
+    pub(super) home: Option<PathBuf>,
+    pub(super) url: String,
+    pub(super) timeout: Duration,
+}
+
+impl Source {
+    pub(super) fn live() -> Self {
+        #[cfg(debug_assertions)]
+        let url = DEV_URL.unwrap_or(URL).to_owned();
+        #[cfg(not(debug_assertions))]
+        let url = URL.to_owned();
+        Self {
+            home: home(),
+            url,
+            timeout: TIMEOUT,
+        }
+    }
+
+    pub(super) fn initial() -> Self {
+        if cfg!(any(test, feature = "test")) {
+            Self::dead()
+        } else {
+            Self::live()
+        }
+    }
+
+    pub(super) fn dead() -> Self {
+        Self {
+            home: None,
+            url: "https://127.0.0.1:1/wham/usage".to_owned(),
+            timeout: TIMEOUT,
+        }
+    }
+}
+
+pub(super) struct Answer {
+    pub(super) account: UsageAccount,
+    pub(super) busy: bool,
+}
+
+fn home() -> Option<PathBuf> {
     std::env::var_os("CODEX_HOME")
         .filter(|dir| !dir.is_empty())
         .map(PathBuf::from)
         .or_else(|| crate::host::program::user_home().map(|home| home.join(".codex")))
 }
 
-pub(super) fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .and_then(|elapsed| i64::try_from(elapsed.as_secs()).ok())
-        .unwrap_or(0)
-}
-
-/// The Codex account, or `None` when no sign-in file exists, so there is no tab for Codex.
-pub(super) fn read(home: Option<&Path>, url: &str, now: i64) -> Option<UsageAccount> {
-    let path = home?.join("auth.json");
+pub(super) fn read(source: &Source, now: i64) -> Option<Answer> {
+    let path = source.home.as_deref()?.join("auth.json");
     let text = match std::fs::read_to_string(path) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
-        Err(_) => return Some(bare(error("Could not read the Codex sign-in."), now)),
+        Err(_) => return Some(plain(error("Could not read the Codex sign-in."), now)),
     };
     let Ok(file) = serde_json::from_str::<Value>(&text) else {
-        return Some(bare(error("The Codex sign-in file is not valid."), now));
+        return Some(plain(error("The Codex sign-in file is not valid."), now));
     };
     let tokens = file.get("tokens");
     let token = tokens
@@ -54,20 +88,22 @@ pub(super) fn read(home: Option<&Path>, url: &str, now: i64) -> Option<UsageAcco
         } else {
             UsageStatus::Expired
         };
-        return Some(bare(status, now));
+        return Some(plain(status, now));
     };
     let login = Login::new(tokens, token);
     if login.expires_at.is_some_and(|expires| now >= expires) {
-        return Some(login.account(Vec::new(), UsageStatus::Expired, now));
+        return Some(login.answer(Vec::new(), UsageStatus::Expired, now, false));
     }
-    Some(match fetch(&login, url) {
-        Ok(body) => parse(&body, &login, now),
-        Err(status) => login.account(Vec::new(), status, now),
+    Some(match fetch(&login, source) {
+        Ok(body) => {
+            let (status, windows) = parse(&body);
+            login.answer(windows, status, now, false)
+        }
+        Err(Refused::Status(status)) => login.answer(Vec::new(), status, now, false),
+        Err(Refused::Busy(status)) => login.answer(Vec::new(), status, now, true),
     })
 }
 
-/// What the sign-in file and its token say about the account. The token itself is never stored
-/// here in a form that prints, and this type has no `Debug`.
 struct Login {
     token: String,
     account_id: Option<String>,
@@ -113,26 +149,38 @@ impl Login {
         }
     }
 
-    fn account(&self, windows: Vec<UsageWindow>, status: UsageStatus, now: i64) -> UsageAccount {
-        UsageAccount {
-            provider: UsageProvider::Codex,
-            email: self.email.clone(),
-            plan: self.plan.clone(),
-            windows,
-            status,
-            fetched_at: Some(now),
+    fn answer(
+        &self,
+        windows: Vec<UsageWindow>,
+        status: UsageStatus,
+        now: i64,
+        busy: bool,
+    ) -> Answer {
+        Answer {
+            account: UsageAccount {
+                provider: UsageProvider::Codex,
+                email: self.email.clone(),
+                plan: self.plan.clone(),
+                windows,
+                status,
+                fetched_at: Some(now),
+            },
+            busy,
         }
     }
 }
 
-fn bare(status: UsageStatus, now: i64) -> UsageAccount {
-    UsageAccount {
-        provider: UsageProvider::Codex,
-        email: None,
-        plan: None,
-        windows: Vec::new(),
-        status,
-        fetched_at: Some(now),
+fn plain(status: UsageStatus, now: i64) -> Answer {
+    Answer {
+        account: UsageAccount {
+            provider: UsageProvider::Codex,
+            email: None,
+            plan: None,
+            windows: Vec::new(),
+            status,
+            fetched_at: Some(now),
+        },
+        busy: false,
     }
 }
 
@@ -149,7 +197,6 @@ fn as_text(value: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// The payload of a JWT, read without checking its signature.
 fn claims(jwt: &str) -> Option<Value> {
     let payload = jwt.split('.').nth(1)?;
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -158,51 +205,73 @@ fn claims(jwt: &str) -> Option<Value> {
     serde_json::from_slice(&bytes).ok()
 }
 
-fn allowed(url: &str) -> bool {
-    reqwest::Url::parse(url).is_ok_and(|url| {
-        url.scheme() == "https"
-            || (url.scheme() == "http" && matches!(url.host_str(), Some("127.0.0.1" | "localhost")))
-    })
+pub(super) fn allowed(url: &str) -> bool {
+    let Ok(url) = reqwest::Url::parse(url) else {
+        return false;
+    };
+    match url.scheme() {
+        "https" => url.host_str() == Some(HOST),
+        "http" => {
+            cfg!(any(test, debug_assertions))
+                && matches!(url.host_str(), Some("127.0.0.1" | "localhost"))
+        }
+        _ => false,
+    }
 }
 
-fn fetch(login: &Login, url: &str) -> Result<Vec<u8>, UsageStatus> {
-    if !allowed(url) {
-        return Err(error("Usage only loads over HTTPS."));
+enum Refused {
+    Status(UsageStatus),
+    Busy(UsageStatus),
+}
+
+fn fetch(login: &Login, source: &Source) -> Result<Vec<u8>, Refused> {
+    if !allowed(&source.url) {
+        return Err(Refused::Status(error(
+            "Usage is only sent to the provider.",
+        )));
     }
     let client = reqwest::blocking::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
-        .timeout(TIMEOUT)
+        .timeout(source.timeout)
         .user_agent(concat!("kagan/", env!("CARGO_PKG_VERSION")))
         .build()
-        .map_err(|_| error("Could not start the usage request."))?;
-    let mut request = client.get(url).bearer_auth(&login.token);
+        .map_err(|_| Refused::Status(error("Could not start the usage request.")))?;
+    let mut request = client.get(&source.url).bearer_auth(&login.token);
     if let Some(account) = &login.account_id {
         request = request.header("chatgpt-account-id", account);
     }
     let response = request
         .send()
-        .map_err(|_| error("Could not reach Codex."))?;
+        .map_err(|_| Refused::Status(error("Could not reach Codex.")))?;
     let status = response.status();
     if status == reqwest::StatusCode::UNAUTHORIZED {
-        return Err(UsageStatus::Expired);
+        return Err(Refused::Status(UsageStatus::Expired));
+    }
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
+        return Err(Refused::Busy(error(&format!(
+            "Codex answered {}.",
+            status.as_u16()
+        ))));
     }
     if !status.is_success() {
-        return Err(error(&format!("Codex answered {}.", status.as_u16())));
+        return Err(Refused::Status(error(&format!(
+            "Codex answered {}.",
+            status.as_u16()
+        ))));
     }
     let mut body = Vec::new();
     response
         .take(LIMIT)
         .read_to_end(&mut body)
-        .map_err(|_| error("Codex's reply stopped early."))?;
+        .map_err(|_| Refused::Status(error("Codex's reply stopped early.")))?;
     Ok(body)
 }
 
-fn parse(body: &[u8], login: &Login, now: i64) -> UsageAccount {
+fn parse(body: &[u8]) -> (UsageStatus, Vec<UsageWindow>) {
     let Ok(reply) = serde_json::from_slice::<Value>(body) else {
-        return login.account(
-            Vec::new(),
+        return (
             error("Codex sent a reply kagan could not read."),
-            now,
+            Vec::new(),
         );
     };
     let windows: Vec<UsageWindow> = ["primary_window", "secondary_window"]
@@ -218,11 +287,7 @@ fn parse(body: &[u8], login: &Login, now: i64) -> UsageAccount {
     } else {
         UsageStatus::Ok
     };
-    let mut account = login.account(windows, status, now);
-    if let Some(plan) = reply.get("plan_type").and_then(as_text) {
-        account.plan = Some(plan);
-    }
-    account
+    (status, windows)
 }
 
 fn window(value: &Value) -> Option<UsageWindow> {
@@ -243,3 +308,7 @@ fn label(seconds: Option<i64>) -> String {
         _ => "Limit".to_owned(),
     }
 }
+
+#[cfg(test)]
+#[path = "codex_test.rs"]
+mod codex_test;

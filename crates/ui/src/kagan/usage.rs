@@ -1,7 +1,7 @@
-//! The provider usage button in the sidebar footer and its popup (decision 249). The window only
+//! The provider usage button in the sidebar footer and its popup (decision 267). The window only
 //! shows what the `Op` returns; the popup refreshes itself while it is open.
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -19,7 +19,7 @@ use kg_domain::{
 };
 
 use super::controls::control;
-use crate::theme::{SpaceStep, Tone, TypeScale as _, space};
+use crate::theme::{SpaceStep, Tone, TypeScale as _, radius_xs, space};
 use crate::ui_registry::Facts;
 
 const FRESH_FOR: Duration = Duration::from_secs(120);
@@ -38,7 +38,6 @@ pub(crate) struct Usage {
 }
 
 impl Usage {
-    /// Turning the preference off drops the readings, so nothing is shown or kept.
     pub(crate) fn set_enabled(&mut self, on: bool, cx: &mut Context<Self>) {
         if self.enabled == on {
             return;
@@ -120,7 +119,6 @@ impl Usage {
     }
 }
 
-/// The footer button, with its popup. The caller draws nothing when the preference is off.
 pub(super) fn control_for(usage: &Entity<Usage>, cx: &mut App) -> AnyElement {
     let open = usage.read(cx).open;
     let owner = usage.clone();
@@ -145,7 +143,10 @@ pub(super) fn control_for(usage: &Entity<Usage>, cx: &mut App) -> AnyElement {
             .content(move |_, _, cx| {
                 control(
                     "usage-panel",
-                    Facts::button("Provider usage"),
+                    Facts {
+                        role: gpui_kit::Role::Group,
+                        ..Facts::button("Provider usage")
+                    },
                     panel(&content, cx),
                 )
             }),
@@ -186,7 +187,7 @@ fn panel(usage: &Entity<Usage>, cx: &mut App) -> AnyElement {
         return body.child(refresh_row(usage)).into_any_element();
     }
     body = body.child(tabs(usage, &view.accounts, tab, cx));
-    let now = now_secs();
+    let now = kg_domain::unix_now();
     for account in view
         .accounts
         .iter()
@@ -340,6 +341,7 @@ fn window_row(
         reason = "a percentage is exact in f32"
     )]
     let fraction = (window.percent / 100.0) as f32;
+    let radius = px(radius_xs(cx));
     let track = cx.theme().secondary;
     h_flex()
         .id(ElementId::Name(format!("usage-window-{index}").into()))
@@ -353,11 +355,11 @@ fn window_row(
                 .child(window.label.clone()),
         )
         .child(
-            div().flex_1().h(px(6.0)).rounded(px(3.0)).bg(track).child(
+            div().flex_1().h(px(6.0)).rounded(radius).bg(track).child(
                 div()
                     .h_full()
                     .w(relative(fraction))
-                    .rounded(px(3.0))
+                    .rounded(radius)
                     .bg(fill),
             ),
         )
@@ -423,23 +425,30 @@ fn refresh_row(usage: &Entity<Usage>) -> AnyElement {
 }
 
 fn absolute_reset(at: i64) -> String {
+    reset_text(at, &chrono::Local)
+}
+
+fn reset_text<Zone: chrono::TimeZone>(at: i64, zone: &Zone) -> String
+where
+    Zone::Offset: std::fmt::Display,
+{
     chrono::DateTime::from_timestamp(at, 0).map_or_else(
         || "at an unknown time".to_owned(),
-        |time| time.format("%b %-d, %H:%M UTC").to_string(),
+        |time| {
+            time.with_timezone(zone)
+                .format("%b %-d, %-I:%M %p")
+                .to_string()
+        },
     )
 }
+
+#[cfg(test)]
+#[path = "usage_test.rs"]
+mod usage_test;
 
 fn title_case(text: &str) -> String {
     let mut chars = text.chars();
     chars.next().map_or_else(String::new, |first| {
         first.to_uppercase().chain(chars).collect()
     })
-}
-
-fn now_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .and_then(|elapsed| i64::try_from(elapsed.as_secs()).ok())
-        .unwrap_or(0)
 }

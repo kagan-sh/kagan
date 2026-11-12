@@ -1,7 +1,7 @@
 use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Subcommand)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Subcommand)]
 #[serde(rename_all = "kebab-case")]
 pub enum UsageOp {
     /// The usage each signed-in provider reported. Asks again when the last answer is over two
@@ -14,7 +14,6 @@ pub enum UsageOp {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum UsageProvider {
-    Claude,
     Codex,
 }
 
@@ -22,10 +21,19 @@ impl UsageProvider {
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
-            Self::Claude => "Claude",
             Self::Codex => "Codex",
         }
     }
+}
+
+/// Unix seconds now, or 0 when the clock is before 1970.
+#[must_use]
+pub fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|elapsed| i64::try_from(elapsed.as_secs()).ok())
+        .unwrap_or(0)
 }
 
 /// How long until a reset, in the words the window and `kg usage` show: `3d 4h`, `2h 10m` or `5m`.

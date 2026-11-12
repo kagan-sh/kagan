@@ -1,8 +1,9 @@
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::net::TcpListener;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use base64::Engine as _;
 use gpui_kit::TestAppContext;
@@ -15,14 +16,12 @@ use serde_json::{Value, json};
 use super::Fixture;
 use crate::Workspace;
 
-/// A local stand-in for the usage endpoint. It records every request head and answers with the
-/// status and body the test last set.
 #[derive(Clone)]
 struct Endpoint {
     url: String,
     hits: Arc<AtomicUsize>,
     heads: Arc<Mutex<Vec<String>>>,
-    reply: Arc<Mutex<(u16, String)>>,
+    reply: Arc<Mutex<(u16, String, Option<String>)>>,
 }
 
 impl Endpoint {
@@ -32,7 +31,7 @@ impl Endpoint {
             url: format!("http://{}/wham/usage", listener.local_addr().unwrap()),
             hits: Arc::default(),
             heads: Arc::default(),
-            reply: Arc::new(Mutex::new((200, usage_reply()))),
+            reply: Arc::new(Mutex::new((200, usage_reply(), None))),
         };
         let shared = endpoint.clone();
         std::thread::spawn(move || {
@@ -49,9 +48,10 @@ impl Endpoint {
                 }
                 shared.hits.fetch_add(1, Ordering::SeqCst);
                 shared.heads.lock().unwrap().push(head);
-                let (status, body) = shared.reply.lock().unwrap().clone();
+                let (status, body, location) = shared.reply.lock().unwrap().clone();
+                let location = location.map_or(String::new(), |to| format!("Location: {to}\r\n"));
                 let response = format!(
-                    "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    "HTTP/1.1 {status} X\r\n{location}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
                     body.len()
                 );
                 let _ = stream.write_all(response.as_bytes());
@@ -61,7 +61,11 @@ impl Endpoint {
     }
 
     fn answer(&self, status: u16, body: &str) {
-        *self.reply.lock().unwrap() = (status, body.to_owned());
+        *self.reply.lock().unwrap() = (status, body.to_owned(), None);
+    }
+
+    fn redirect(&self, to: &str) {
+        *self.reply.lock().unwrap() = (302, String::new(), Some(to.to_owned()));
     }
 
     fn hits(&self) -> usize {
@@ -76,6 +80,19 @@ impl Endpoint {
             .cloned()
             .unwrap_or_default()
     }
+}
+
+/// A server that accepts a request and never answers, so only the client's timeout ends it.
+fn silent() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/wham/usage", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            std::thread::sleep(Duration::from_secs(3));
+            drop(stream);
+        }
+    });
+    url
 }
 
 fn usage_reply() -> String {
@@ -97,7 +114,6 @@ fn usage_reply() -> String {
     .to_string()
 }
 
-/// An unsigned JWT with the given payload, which is all kagan reads from it.
 fn jwt(payload: &Value) -> String {
     let body = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(payload.to_string());
     format!("eyJhbGciOiJub25lIn0.{body}.signature")
@@ -150,14 +166,29 @@ async fn show(cx: &mut TestAppContext, usage: UsageOp) -> UsageView {
 }
 
 fn point_at(cx: &mut TestAppContext, home: Option<&Path>, url: &str) {
-    let usage = cx.update(|cx| Workspace::global(cx).read(cx).usage.clone());
-    usage.use_sources(home.map(Path::to_path_buf), url.to_owned());
+    let home: Option<PathBuf> = home.map(Path::to_path_buf);
+    cx.update(|cx| crate::use_codex_source(cx, home, url.to_owned()));
+}
+
+fn advance(cx: &mut TestAppContext, by: Duration) {
+    cx.update(|cx| crate::advance_usage_clock(cx, by));
+}
+
+fn cached(cx: &mut TestAppContext) -> Vec<UsageAccount> {
+    cx.update(|cx| Workspace::global(cx).read(cx).usage.accounts())
 }
 
 fn codex(view: &UsageView) -> Option<&UsageAccount> {
     view.accounts
         .iter()
         .find(|account| account.provider == UsageProvider::Codex)
+}
+
+fn error_text(view: &UsageView) -> String {
+    match &codex(view).unwrap().status {
+        UsageStatus::Error { message } => message.clone(),
+        other => panic!("expected an error, got {other:?}"),
+    }
 }
 
 #[gpui_kit::test]
@@ -198,12 +229,10 @@ async fn a_signed_in_codex_reading_shows_its_windows(cx: &mut TestAppContext) {
     assert_eq!(endpoint.hits(), 1);
 
     let head = endpoint.last_head();
-    assert!(
-        head.contains(&format!("uthorization: Bearer {token}"))
-            || head.contains(&format!("uthorization: bearer {token}"))
-    );
+    assert!(head.to_ascii_lowercase().contains("authorization: bearer "));
+    assert!(head.contains(&token));
     assert!(head.contains("chatgpt-account-id: acct-1"));
-    assert!(!format!("{view:?}").contains(&token));
+    assert!(!serde_json::to_string(&view).unwrap().contains(&token));
 }
 
 #[gpui_kit::test]
@@ -216,8 +245,76 @@ async fn show_asks_again_only_after_two_minutes(cx: &mut TestAppContext) {
     set_enabled(cx, true).await;
 
     show(cx, UsageOp::Show).await;
+    advance(cx, Duration::from_secs(60));
     show(cx, UsageOp::Show).await;
+    assert_eq!(
+        endpoint.hits(),
+        1,
+        "a reading under two minutes old is kept"
+    );
+    advance(cx, Duration::from_secs(61));
+    show(cx, UsageOp::Show).await;
+    assert_eq!(endpoint.hits(), 2);
+}
+
+#[gpui_kit::test]
+async fn refresh_waits_thirty_seconds_between_requests(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let endpoint = Endpoint::start();
+    let home = fixture.dir.path().join("codex");
+    sign_in(&home, far_future());
+    point_at(cx, Some(&home), &endpoint.url);
+    set_enabled(cx, true).await;
+
+    show(cx, UsageOp::Refresh).await;
+    show(cx, UsageOp::Refresh).await;
+    show(cx, UsageOp::Refresh).await;
+    assert_eq!(endpoint.hits(), 1, "ten clicks are one request");
+    advance(cx, Duration::from_secs(31));
+    show(cx, UsageOp::Refresh).await;
+    assert_eq!(endpoint.hits(), 2);
+}
+
+#[gpui_kit::test]
+async fn a_busy_answer_backs_off_one_minute_then_five(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let endpoint = Endpoint::start();
+    endpoint.answer(429, "{}");
+    let home = fixture.dir.path().join("codex");
+    sign_in(&home, far_future());
+    point_at(cx, Some(&home), &endpoint.url);
+    set_enabled(cx, true).await;
+
+    show(cx, UsageOp::Refresh).await;
     assert_eq!(endpoint.hits(), 1);
+    advance(cx, Duration::from_secs(59));
+    show(cx, UsageOp::Refresh).await;
+    assert_eq!(endpoint.hits(), 1, "no request inside the first minute");
+    advance(cx, Duration::from_secs(2));
+    show(cx, UsageOp::Refresh).await;
+    assert_eq!(endpoint.hits(), 2);
+    advance(cx, Duration::from_secs(240));
+    show(cx, UsageOp::Refresh).await;
+    assert_eq!(endpoint.hits(), 2, "the second back-off is five minutes");
+    advance(cx, Duration::from_secs(61));
+    show(cx, UsageOp::Refresh).await;
+    assert_eq!(endpoint.hits(), 3);
+}
+
+#[gpui_kit::test]
+async fn a_server_error_backs_off_too(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let endpoint = Endpoint::start();
+    endpoint.answer(503, "{}");
+    let home = fixture.dir.path().join("codex");
+    sign_in(&home, far_future());
+    point_at(cx, Some(&home), &endpoint.url);
+    set_enabled(cx, true).await;
+
+    show(cx, UsageOp::Refresh).await;
+    show(cx, UsageOp::Refresh).await;
+    assert_eq!(endpoint.hits(), 1);
+    advance(cx, Duration::from_secs(61));
     show(cx, UsageOp::Refresh).await;
     assert_eq!(endpoint.hits(), 2);
 }
@@ -258,7 +355,7 @@ async fn a_rejected_token_is_expired_and_never_refreshed(cx: &mut TestAppContext
         std::fs::read_to_string(home.join("auth.json")).unwrap(),
         before
     );
-    assert!(!format!("{view:?}").contains(&token));
+    assert!(!serde_json::to_string(&view).unwrap().contains(&token));
 }
 
 #[gpui_kit::test]
@@ -271,7 +368,8 @@ async fn a_failed_refresh_keeps_the_last_reading_as_stale(cx: &mut TestAppContex
     set_enabled(cx, true).await;
     show(cx, UsageOp::Refresh).await;
 
-    endpoint.answer(500, "boom");
+    endpoint.answer(400, "boom");
+    advance(cx, Duration::from_secs(31));
     let view = show(cx, UsageOp::Refresh).await;
     let account = codex(&view).unwrap();
     assert_eq!(account.status, UsageStatus::Stale);
@@ -282,7 +380,7 @@ async fn a_failed_refresh_keeps_the_last_reading_as_stale(cx: &mut TestAppContex
 async fn a_failed_first_reading_is_an_error_not_zero(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let endpoint = Endpoint::start();
-    endpoint.answer(500, "boom");
+    endpoint.answer(400, "boom");
     let home = fixture.dir.path().join("codex");
     sign_in(&home, far_future());
     point_at(cx, Some(&home), &endpoint.url);
@@ -292,6 +390,62 @@ async fn a_failed_first_reading_is_an_error_not_zero(cx: &mut TestAppContext) {
     let account = codex(&view).unwrap();
     assert!(matches!(account.status, UsageStatus::Error { .. }));
     assert!(account.windows.is_empty());
+}
+
+#[gpui_kit::test]
+async fn a_redirect_is_not_followed_so_the_token_stays_home(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let first = Endpoint::start();
+    let second = Endpoint::start();
+    first.redirect(&second.url);
+    let home = fixture.dir.path().join("codex");
+    let token = sign_in(&home, far_future());
+    point_at(cx, Some(&home), &first.url);
+    set_enabled(cx, true).await;
+
+    let view = show(cx, UsageOp::Refresh).await;
+    assert_eq!(error_text(&view), "Codex answered 302.");
+    assert_eq!(first.hits(), 1);
+    assert_eq!(second.hits(), 0, "the redirect target never sees the token");
+    assert!(!serde_json::to_string(&view).unwrap().contains(&token));
+}
+
+#[gpui_kit::test]
+async fn an_oversized_reply_is_cut_off_at_one_mebibyte(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let endpoint = Endpoint::start();
+    let mut reply: Value = serde_json::from_str(&usage_reply()).unwrap();
+    reply["padding"] = json!("x".repeat(1_100_000));
+    endpoint.answer(200, &reply.to_string());
+    let home = fixture.dir.path().join("codex");
+    sign_in(&home, far_future());
+    point_at(cx, Some(&home), &endpoint.url);
+    set_enabled(cx, true).await;
+
+    let view = show(cx, UsageOp::Refresh).await;
+    assert!(matches!(
+        codex(&view).unwrap().status,
+        UsageStatus::Error { .. }
+    ));
+}
+
+#[gpui_kit::test]
+async fn a_silent_endpoint_times_out_quickly(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = fixture.dir.path().join("codex");
+    let token = sign_in(&home, far_future());
+    point_at(cx, Some(&home), &silent());
+    cx.update(|cx| crate::use_codex_timeout(cx, Duration::from_millis(300)));
+    set_enabled(cx, true).await;
+
+    let started = std::time::Instant::now();
+    let view = show(cx, UsageOp::Refresh).await;
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "the request was not cut off"
+    );
+    assert_eq!(error_text(&view), "Could not reach Codex.");
+    assert!(!serde_json::to_string(&view).unwrap().contains(&token));
 }
 
 #[gpui_kit::test]
@@ -305,6 +459,19 @@ async fn no_sign_in_means_no_account_and_no_request(cx: &mut TestAppContext) {
     assert!(view.enabled);
     assert!(view.accounts.is_empty());
     assert_eq!(endpoint.hits(), 0);
+}
+
+#[gpui_kit::test]
+async fn an_unset_source_reads_no_real_sign_in(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    set_enabled(cx, true).await;
+
+    let view = show(cx, UsageOp::Refresh).await;
+    assert!(view.enabled);
+    assert!(
+        view.accounts.is_empty(),
+        "a test without a source reads nothing"
+    );
 }
 
 #[gpui_kit::test]
@@ -335,16 +502,11 @@ async fn an_endpoint_that_is_not_https_is_refused(cx: &mut TestAppContext) {
     set_enabled(cx, true).await;
 
     let view = show(cx, UsageOp::Refresh).await;
-    assert_eq!(
-        codex(&view).unwrap().status,
-        UsageStatus::Error {
-            message: "Usage only loads over HTTPS.".into()
-        }
-    );
+    assert_eq!(error_text(&view), "Usage is only sent to the provider.");
 }
 
 #[gpui_kit::test]
-async fn turning_the_preference_off_drops_the_readings(cx: &mut TestAppContext) {
+async fn turning_the_preference_off_drops_the_readings_at_once(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let endpoint = Endpoint::start();
     let home = fixture.dir.path().join("codex");
@@ -352,12 +514,13 @@ async fn turning_the_preference_off_drops_the_readings(cx: &mut TestAppContext) 
     point_at(cx, Some(&home), &endpoint.url);
     set_enabled(cx, true).await;
     show(cx, UsageOp::Refresh).await;
+    assert_eq!(cached(cx).len(), 1);
 
     set_enabled(cx, false).await;
-    let view = show(cx, UsageOp::Show).await;
-    assert!(!view.enabled);
-    assert!(view.accounts.is_empty());
-
+    assert!(
+        cached(cx).is_empty(),
+        "the saved setting clears the cache without a usage op"
+    );
     set_enabled(cx, true).await;
     show(cx, UsageOp::Show).await;
     assert_eq!(

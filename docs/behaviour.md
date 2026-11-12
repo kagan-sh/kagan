@@ -856,9 +856,9 @@ Finds a newer kagan on the GitHub releases page (decision 113). Installing is no
 ## Usage
 
 - **Shows**: for each signed-in provider, its email, plan, and windows with percent and the time to reset. Codex is read from its sign-in file; Claude is not read yet [decision 267]. `kg usage show` prints the same readings as text, or JSON with `--json`.
-- **Changes**: `refresh` asks each signed-in provider again now. `show` asks again only when the last answer is over two minutes old [decision 267].
+- **Changes**: `refresh` asks Codex again now, but never sooner than thirty seconds after the last request, so repeated clicks make one request. After a 429 or a 5xx, requests wait one minute, then five. `show` asks again only when the last answer is over two minutes old, and obeys the same waits [decision 267].
 - **Allowed when**: always. The reads happen only while `usage-limits` is on.
-- **Off**: while the `usage-limits` preference is off, `show` and `refresh` answer `enabled: false` with no accounts, read no file, make no request, and the sidebar draws no button. Turning it off drops the readings from memory [decision 267].
+- **Off**: while the `usage-limits` preference is off, `show` and `refresh` answer `enabled: false` with no accounts, read no file, make no request, and the sidebar draws no button. Saving the preference off drops the readings from memory at once [decision 267].
 - **Refused when**: nothing. A provider with no sign-in file has no account, and a provider that answers with an error shows that error, never 0% [decision 267].
 - **Button**: the sidebar footer, next to Add project, opens a popup with an All tab and one tab per signed-in provider. A stale reading shows "Couldn't refresh. Showing last update." and Retry. The popup refreshes every two minutes while it is open, and the shortcut is `secondary-alt-u` [decision 267].
 

@@ -2,14 +2,6 @@
 
 use kg_domain::{UsageAccount, UsageStatus, UsageView, resets_in};
 
-pub(crate) fn unix_now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()
-        .and_then(|elapsed| i64::try_from(elapsed.as_secs()).ok())
-        .unwrap_or(0)
-}
-
 pub(crate) fn format(view: &UsageView, now: i64) -> String {
     if !view.enabled {
         return "Provider usage is off. Turn it on with: kg preference set usage-limits true"

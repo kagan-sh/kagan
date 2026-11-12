@@ -6,7 +6,7 @@ use serde_json::json;
 use super::{click, open, present, set_preference, wait_until};
 
 /// Nothing listens on port 1, so the usage request is refused at once and reaches no provider.
-const REFUSED: &str = "https://127.0.0.1:1/wham/usage";
+const REFUSED: &str = "http://127.0.0.1:1/wham/usage";
 
 fn sign_in(dir: &Path) -> PathBuf {
     let home = dir.join("codex");

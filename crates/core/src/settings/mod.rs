@@ -219,11 +219,16 @@ pub(crate) async fn preference(
         }
         PreferenceOp::Set { key, value } => {
             preference_value(&key, &value)?;
+            let usage_off = key == prefs::USAGE_LIMITS && value == serde_json::Value::Bool(false);
             let key = key.clone();
             let saved = value.clone();
             database
                 .call(move |store| store.set_setting(&key, &saved))
                 .await?;
+            if usage_off {
+                this.update(cx, |workspace, _| workspace.usage.clear())
+                    .map_err(crate::workspace::closed)?;
+            }
             crate::workspace::changed(this, cx)?;
             Ok(OpResult::Setting(value))
         }

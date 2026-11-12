@@ -27,7 +27,7 @@ pub use preview::{human_size, image_size, preview_image, preview_note};
 pub use settings::keys::{host_os, is_known_key, parse_key};
 pub use update::{Target, Updater};
 #[cfg(any(test, feature = "test"))]
-pub use usage::use_codex_source;
+pub use usage::{advance_usage_clock, use_codex_source, use_codex_timeout};
 pub use workspace::approval::{Approval, Requester};
 pub use workspace::entity::{Environment, Project, Thread};
 

@@ -124,7 +124,7 @@ fn print_result(
     {
         return Ok(out::line(crate::usage::format(
             view,
-            crate::usage::unix_now(),
+            kg_domain::unix_now(),
         ))?);
     }
     if !json && let Some((created, path)) = next {

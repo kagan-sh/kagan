@@ -63,5 +63,5 @@ pub use theme::{
 };
 pub use update::{InstallKind, UpdateOp, UpdateState, UpdateStatus};
 pub use usage::{
-    UsageAccount, UsageOp, UsageProvider, UsageStatus, UsageView, UsageWindow, resets_in,
+    UsageAccount, UsageOp, UsageProvider, UsageStatus, UsageView, UsageWindow, resets_in, unix_now,
 };
