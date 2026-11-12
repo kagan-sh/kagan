@@ -325,6 +325,8 @@ fn quit_finishes_when_the_screen_save_never_completes(cx: &mut TestAppContext) {
     drop(release);
 }
 
+#[cfg(target_os = "macos")]
+// Reopening in this process after the last window closes is macOS only: elsewhere that close quits kagan (decision 269).
 #[gpui_kit::test]
 fn closing_the_window_during_the_question_asks_again(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
@@ -349,6 +351,20 @@ fn closing_the_window_during_the_question_asks_again(cx: &mut TestAppContext) {
     assert!(pid(cx, &id).is_some());
 }
 
+#[cfg(not(target_os = "macos"))]
+#[gpui_kit::test]
+fn closing_the_window_during_the_question_quits(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    run_shell(cx);
+    cx.simulate_keystrokes(window, "cmd-q");
+    cx.run_until_parked();
+    assert!(dialog(cx, window));
+    let before = crate::kagan::quit::quit_requests();
+    cx.simulate_keystrokes(window, "cmd-w");
+    wait_until(cx, |_| crate::kagan::quit::quit_requests() > before);
+    assert_eq!(crate::kagan::quit::quit_requests(), before + 1);
+}
+
 #[gpui_kit::test]
 fn the_socket_quit_does_not_ask(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
@@ -364,6 +380,8 @@ fn the_socket_quit_does_not_ask(cx: &mut TestAppContext) {
     );
 }
 
+#[cfg(target_os = "macos")]
+// Reopening in this process after the last window closes is macOS only: elsewhere that close quits kagan (decision 269).
 #[gpui_kit::test]
 fn closing_the_window_and_reopening_shows_it_again(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
