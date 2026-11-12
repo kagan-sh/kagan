@@ -840,7 +840,7 @@ The strip is the host's. Its one `Op` is `WindowOp::ToggleActivityLog` [decision
 
 ## Update
 
-Finds a newer kagan on the GitHub releases page (decision 113). Installing is not an `Op`: only the person installs, from the window.
+Finds a newer kagan on the GitHub releases page (decision 113). Installing is not an `Op`: only the person installs, from the window. On Windows the installer starts only after kagan's process has ended, through a hidden waiter, and `/R` opens kagan again for Restart and install [decision 270].
 
 ### `Check`
 
