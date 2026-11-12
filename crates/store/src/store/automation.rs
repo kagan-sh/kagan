@@ -1,4 +1,6 @@
-use kg_domain::{Automation, AutomationId, ProjectId, ThreadId, Timestamp};
+use kg_domain::{
+    Automation, AutomationId, FAILED_RUNS_LIMIT, ProjectId, ThreadId, ThreadStatus, Timestamp,
+};
 use rusqlite::{OptionalExtension as _, Row, params};
 
 use super::{found, not_found};
@@ -38,7 +40,7 @@ impl super::Store {
             .query_map(params![project.map(Text)], automation_row)?
             .collect::<Result<Vec<_>, _>>()?;
         for automation in &mut automations {
-            automation.threads = self.runs(&automation.id)?;
+            self.fill_runs(automation)?;
         }
         Ok(automations)
     }
@@ -54,7 +56,7 @@ impl super::Store {
             .query_map([now.0], automation_row)?
             .collect::<Result<Vec<_>, _>>()?;
         for automation in &mut automations {
-            automation.threads = self.runs(&automation.id)?;
+            self.fill_runs(automation)?;
         }
         Ok(automations)
     }
@@ -70,15 +72,23 @@ impl super::Store {
             )
             .optional()?;
         if let Some(automation) = &mut automation {
-            automation.threads = self.runs(&automation.id)?;
+            self.fill_runs(automation)?;
         }
         Ok(automation)
     }
 
-    pub fn set_automation_paused(&self, id: &AutomationId, paused: bool) -> Result<()> {
+    // Resuming starts a new streak of runs, so the failures before it no longer count.
+    pub fn set_automation_paused(
+        &self,
+        id: &AutomationId,
+        paused: bool,
+        at: Timestamp,
+    ) -> Result<()> {
         let changed = self.conn.execute(
-            "UPDATE automations SET paused = ?2 WHERE id = ?1",
-            params![Text(id), paused],
+            "UPDATE automations
+             SET paused = ?2, streak_from = CASE WHEN ?2 THEN streak_from ELSE ?3 END
+             WHERE id = ?1",
+            params![Text(id), paused, at.0],
         )?;
         found(changed, "automation", id)
     }
@@ -128,6 +138,37 @@ impl super::Store {
         found(changed, "automation", id)
     }
 
+    fn fill_runs(&self, automation: &mut Automation) -> Result<()> {
+        automation.threads = self.runs(&automation.id)?;
+        automation.failing = self.failing(&automation.id)?;
+        Ok(())
+    }
+
+    fn failing(&self, id: &AutomationId) -> Result<bool> {
+        let mut statement = self.conn.prepare(
+            "SELECT threads.status FROM automation_runs
+             JOIN automations ON automations.id = automation_runs.automation_id
+             JOIN threads ON threads.id = automation_runs.thread_id
+             WHERE automation_runs.automation_id = ?1
+               AND automation_runs.started_at >= automations.streak_from
+             ORDER BY automation_runs.started_at DESC, automation_runs.thread_id DESC
+             LIMIT ?2",
+        )?;
+        let statuses = statement
+            .query_map(
+                params![
+                    Text(id),
+                    i64::try_from(FAILED_RUNS_LIMIT).unwrap_or(i64::MAX)
+                ],
+                |row| row.get::<_, Text<ThreadStatus>>("status"),
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(statuses.len() == FAILED_RUNS_LIMIT
+            && statuses
+                .iter()
+                .all(|status| status.0 == ThreadStatus::Error))
+    }
+
     fn runs(&self, id: &AutomationId) -> Result<Vec<ThreadId>> {
         let mut statement = self.conn.prepare(
             "SELECT thread_id FROM automation_runs
@@ -153,5 +194,6 @@ fn automation_row(row: &Row<'_>) -> rusqlite::Result<Automation> {
         next_at: row.get::<_, Option<i64>>("next_at")?.map(Timestamp),
         last_error: row.get("last_error")?,
         threads: Vec::new(),
+        failing: false,
     })
 }

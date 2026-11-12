@@ -46,8 +46,8 @@ pub fn init(cx: &mut App) {
             kg_core::WorkspaceEvent::Settings => kagan::show_settings(cx),
             kg_core::WorkspaceEvent::SettingsPlugins => kagan::show_plugin_settings(cx),
             kg_core::WorkspaceEvent::Skills => kagan::show_skills(cx),
-            kg_core::WorkspaceEvent::ProjectSettings(id) => {
-                kagan::show_project_settings(id.clone(), cx)
+            kg_core::WorkspaceEvent::ProjectSettings(id, section) => {
+                kagan::show_project_settings(id.clone(), *section, cx)
             }
             kg_core::WorkspaceEvent::NewPlugin => kagan::start_plugin(cx),
             _ => return,

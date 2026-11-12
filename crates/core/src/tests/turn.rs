@@ -1,17 +1,19 @@
 use gpui_kit::TestAppContext;
 use kg_domain::*;
 
+#[cfg(unix)]
 use crate::Workspace;
 
-use super::{
-    Fixture, ask_op, ask_options, busy_of, kinds_of, op, outcome, screen_with, started, thread,
-    turn_counts, wait_for_status,
-};
+use super::{Fixture, ask_op, ask_options, op};
 #[cfg(unix)]
 use super::{
     assert_quit_leaves_the_turn, begin_wait, busy_and_unread, finish_quit, finish_wait, pending,
     row_end_after_its_event, script, set_row_status, settle, sleeping, wait_for_waiting,
     wait_until_busy, waiting_count,
+};
+#[cfg(unix)]
+use super::{
+    busy_of, kinds_of, outcome, screen_with, started, thread, turn_counts, wait_for_status,
 };
 
 #[cfg(unix)]

@@ -66,7 +66,7 @@ impl super::Terminal {
         }
         #[cfg(windows)]
         {
-            if let Some(job) = &self.job {
+            if let super::Containment::Job(job) = &self.containment {
                 job.terminate();
             }
             if let Some(child) = lock(&self.child).as_mut() {

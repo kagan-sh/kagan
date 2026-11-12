@@ -291,11 +291,18 @@ fn the_center_keeps_its_room_at_every_window_size(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn a_saved_width_beyond_its_range_is_clamped(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = open(cx);
-    set_preference(cx, "main.left-width", json!(9999.));
-    let (_, width) = span(cx, window, "sidebar-pane").unwrap();
-    assert!((width - 420.).abs() < 1., "shown {width}");
+fn a_width_beyond_its_range_is_refused_when_saved(cx: &mut TestAppContext) {
+    let (_kagan, _window, _data) = open(cx);
+    let save = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Preference(PreferenceOp::Set {
+                key: "main.left-width".into(),
+                value: json!(9999.),
+            }),
+            cx,
+        )
+    });
+    assert!(cx.foreground_executor().block_test(save).is_err());
 }
 
 /// Paints the window again, so the bounds read afterwards are the ones on screen.

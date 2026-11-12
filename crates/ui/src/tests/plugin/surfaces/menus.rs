@@ -1,13 +1,16 @@
+#[cfg(unix)]
 use std::path::Path;
 
 use gpui_kit::{AnyWindowHandle, TestAppContext};
 
-use super::{height_of, install_pair, origin_x, origin_y, use_environment, wide, width_of};
+#[cfg(unix)]
+use super::use_environment;
+use super::{height_of, install_pair, origin_x, origin_y, wide, width_of};
 #[cfg(unix)]
 use super::{plugin_agent, wait_for_plugin};
-use crate::tests::kagan::{
-    click, label, open, open_with_plugins_then, run_shell, shows, thread_record, wait_until,
-};
+use crate::tests::kagan::{click, open_with_plugins_then, run_shell, shows, wait_until};
+#[cfg(unix)]
+use crate::tests::kagan::{label, open, thread_record};
 use crate::tests::sidebar::layout::focus_row;
 
 #[cfg(unix)]

@@ -523,6 +523,56 @@ fn a_turn_hook_never_starts_an_app_and_never_fails() {
     assert!(started.elapsed() < std::time::Duration::from_secs(1));
 }
 
+#[cfg(unix)]
+#[test]
+fn a_socket_path_over_the_limit_says_to_set_a_shorter_one() {
+    let long = std::path::PathBuf::from(format!("/tmp/{}/kg.sock", "a".repeat(200)));
+    let error = socket::name(long.as_os_str()).expect_err("the path is too long");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(
+        error
+            .to_string()
+            .contains("set KG_SOCKET to a shorter path")
+    );
+}
+
+#[test]
+fn a_request_line_over_the_cap_is_refused_and_the_connection_closes() {
+    use std::io::{BufRead as _, BufReader, Write as _};
+    use std::sync::{Arc, mpsc};
+
+    const CAP: usize = 16 << 20;
+    let (_dir, name) = test_name("long-line");
+    let listener = socket::bind(name.borrow()).unwrap().unwrap();
+    socket::serve(listener, |_, _, _| Ok(OpResult::Done));
+    let stream = Arc::new(
+        <interprocess::local_socket::Stream as interprocess::local_socket::traits::Stream>::connect(
+            name.borrow(),
+        )
+        .unwrap(),
+    );
+    let writing = Arc::clone(&stream);
+    std::thread::spawn(move || {
+        // Exactly the cap plus one byte, with no newline: the server must read all of it.
+        let _ = (&*writing).write_all(&vec![b'x'; CAP + 1]);
+    });
+    let (sent, answer) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut reader = BufReader::new(&*stream);
+        let mut line = String::new();
+        let first = reader.read_line(&mut line).map(|_| line);
+        let mut rest = String::new();
+        let after = reader.read_line(&mut rest);
+        let _ = sent.send((first, after));
+    });
+    let (first, after) = answer
+        .recv_timeout(std::time::Duration::from_secs(30))
+        .expect("the server never answered the long line");
+    let reply: serde_json::Value = serde_json::from_str(&first.unwrap()).unwrap();
+    assert_eq!(reply["error"]["kind"], "invalid", "{reply}");
+    assert_eq!(after.unwrap(), 0, "the connection stayed open");
+}
+
 #[test]
 fn a_question_is_announced_then_the_reply_says_how_it_ended() {
     let (_dir, name) = test_name("waiting");

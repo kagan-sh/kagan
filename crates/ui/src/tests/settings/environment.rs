@@ -1,8 +1,12 @@
-use gpui_kit::{Role, TestAppContext};
+#[cfg(unix)]
+use gpui_kit::Role;
+use gpui_kit::TestAppContext;
 use kg_core::Workspace;
 use kg_domain::{EnvOp, Op, OpResult, ProjectId, ProjectOp, SettingsOp};
 
-use crate::tests::kagan::{click, label, open, present, role_of, selected_of, shows, wait_until};
+use crate::tests::kagan::{click, label, open, present, selected_of, wait_until};
+#[cfg(unix)]
+use crate::tests::kagan::{role_of, shows};
 
 fn names(cx: &mut TestAppContext, project: Option<&str>) -> Vec<String> {
     let task = cx.update(|cx| {
@@ -55,6 +59,7 @@ fn a_project_page_sets_its_own_variables_and_leaves_the_global_ones(cx: &mut Tes
         Workspace::dispatch(
             Op::Settings(SettingsOp::Project {
                 id: ProjectId("prj_kagan".into()),
+                section: None,
             }),
             cx,
         )
@@ -80,6 +85,7 @@ fn open_project_page(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Settings(SettingsOp::Project {
                 id: ProjectId("prj_kagan".into()),
+                section: None,
             }),
             cx,
         )

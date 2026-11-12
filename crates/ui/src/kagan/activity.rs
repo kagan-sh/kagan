@@ -130,6 +130,10 @@ impl Strip {
         self.say(format!("{title}: needs you"));
     }
 
+    pub(super) fn automation_paused(&mut self, name: &str, reason: &str) {
+        self.say(format!("Automation “{name}” paused: {reason}"));
+    }
+
     pub(super) fn plugin_command(&mut self, plugin: &str) {
         self.say(format!("{plugin}: ran a command"));
     }

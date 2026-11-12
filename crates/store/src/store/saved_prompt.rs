@@ -20,6 +20,16 @@ impl super::Store {
         Ok(())
     }
 
+    pub fn saved_prompt_titled(&self, title: &str) -> Result<bool> {
+        self.conn
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM saved_prompts WHERE title = :title COLLATE NOCASE)",
+                named_params! { ":title": title },
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
     pub fn saved_prompt(&self, id: &SavedPromptId) -> Result<Option<SavedPrompt>> {
         self.conn
             .query_row(
@@ -43,6 +53,18 @@ impl super::Store {
             .query_map(named_params! { ":pattern": pattern }, read_saved_prompt)?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(prompts)
+    }
+
+    pub fn update_saved_prompt(&self, id: &SavedPromptId, title: &str, body: &str) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE saved_prompts SET title = :title, body = :body WHERE id = :id",
+            named_params! {
+                ":id": Text(id),
+                ":title": title,
+                ":body": body,
+            },
+        )?;
+        found(changed, "saved prompt", id)
     }
 
     pub fn set_saved_prompt_starred(&self, id: &SavedPromptId, starred: bool) -> Result<()> {

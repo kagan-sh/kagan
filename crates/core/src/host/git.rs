@@ -32,7 +32,7 @@ fn overrides() -> &'static Mutex<Programs> {
     CELL.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn set_program(cwd: &Path, name: &str, path: Option<PathBuf>) {
     let mut map = overrides()
         .lock()

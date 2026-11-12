@@ -5,7 +5,9 @@ use kg_core::Workspace;
 use kg_domain::{Op, Plugin, PluginId, PluginOp, SettingsOp, SurfaceOp, ThreadId, ThreadOp};
 use serde_json::json;
 
-use super::{THROWING_OVERLAY, TINT, TINT_OVERLAY, narrow, run, wide};
+#[cfg(unix)]
+use super::THROWING_OVERLAY;
+use super::{TINT, TINT_OVERLAY, narrow, run, wide};
 use crate::tests::kagan::{
     click, install_overlay, open_with_plugins_then, plugin_log, present, run_shell, shows,
     wait_until,

@@ -1,6 +1,6 @@
 use std::io::{self, Read, Write};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -14,12 +14,47 @@ use super::shared::Shared;
 use super::shared::lock;
 use crate::screen::MIN_COLS;
 
+/// Most input the writer may hold for the program's pty. A write past it is refused until the writer hands bytes over.
+pub(super) const INPUT_MAX: usize = 4 << 20;
+
 pub(super) enum Outgoing {
-    Bytes(Vec<u8>),
-    Checked {
+    /// The program's own query answers and the writer's wake-up. Never refused.
+    Reply(Vec<u8>),
+    /// Input from a person or an agent, counted against `INPUT_MAX` until the writer hands it to the pty.
+    Input {
         bytes: Vec<u8>,
-        done: Sender<io::Result<()>>,
+        done: Option<Sender<io::Result<()>>>,
+        charge: Charge,
     },
+}
+
+/// Bytes queued for the program. Dropping it gives them back, so every path that ends a message frees them.
+pub(super) struct Charge {
+    queued: Arc<AtomicUsize>,
+    bytes: usize,
+}
+
+impl Drop for Charge {
+    fn drop(&mut self) {
+        self.queued.fetch_sub(self.bytes, Ordering::AcqRel);
+    }
+}
+
+pub(super) fn reserve(queued: &Arc<AtomicUsize>, bytes: usize) -> io::Result<Charge> {
+    queued
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |total| {
+            total.checked_add(bytes).filter(|total| *total <= INPUT_MAX)
+        })
+        .map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::QuotaExceeded,
+                "the program is not reading its input",
+            )
+        })?;
+    Ok(Charge {
+        queued: Arc::clone(queued),
+        bytes,
+    })
 }
 
 pub(super) fn thread_read(
@@ -41,7 +76,7 @@ pub(super) fn thread_read(
                     let reply = shared.feed(&buf[..n]);
                     if !reply.is_empty() {
                         // The writer is gone, so the program no longer hears replies.
-                        let _ = replies.send(Outgoing::Bytes(reply));
+                        let _ = replies.send(Outgoing::Reply(reply));
                     }
                 }
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
@@ -124,9 +159,13 @@ pub(super) fn thread_write(
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
         while let Ok(outgoing) = queued.recv() {
-            let (bytes, done) = match outgoing {
-                Outgoing::Bytes(bytes) => (bytes, None),
-                Outgoing::Checked { bytes, done } => (bytes, Some(done)),
+            let (bytes, done, charge) = match outgoing {
+                Outgoing::Reply(bytes) => (bytes, None, None),
+                Outgoing::Input {
+                    bytes,
+                    done,
+                    charge,
+                } => (bytes, done, Some(charge)),
             };
             let result = if bytes.is_empty() {
                 Err(io::Error::other("terminal is closed"))
@@ -154,6 +193,8 @@ pub(super) fn thread_write(
                     )
                 }
             };
+            // The budget is back before a caller hears the write finished, so its next write can fit.
+            drop(charge);
             if let Some(done) = done {
                 // The caller stopped waiting for the write.
                 let _ = done.send(match &result {
@@ -165,7 +206,10 @@ pub(super) fn thread_write(
                 // Finish may have queued several checked writes; settle each instead of
                 // dropping the channel and leaving the caller with Disconnected.
                 while let Ok(leftover) = queued.try_recv() {
-                    if let Outgoing::Checked { done, .. } = leftover {
+                    if let Outgoing::Input {
+                        done: Some(done), ..
+                    } = leftover
+                    {
                         // The caller stopped waiting for the write.
                         let _ = done.send(Err(io::Error::other("terminal is closed")));
                     }
@@ -185,7 +229,7 @@ pub(super) fn write_bytes(
     #[cfg(not(unix))]
     {
         let _ = write_stop;
-        return writer.write_all(bytes).and_then(|()| writer.flush());
+        writer.write_all(bytes).and_then(|()| writer.flush())
     }
     #[cfg(unix)]
     {

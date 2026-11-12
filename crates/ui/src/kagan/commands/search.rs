@@ -189,6 +189,7 @@ fn found_item(found: Found) -> CommandItem {
 }
 
 #[cfg(test)]
+#[cfg(unix)]
 pub(crate) fn found(kagan: &Kagan) -> Option<Vec<(kg_domain::ThreadId, bool)>> {
     kagan.commands.as_ref().map(|list| {
         list.found

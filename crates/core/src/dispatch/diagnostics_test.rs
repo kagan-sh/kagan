@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use kg_domain::{LogCounts, Plugin, PluginId, PluginLog};
+use kg_domain::{LogCounts, Plugin, PluginId, PluginLog, ThreadId};
 
 use super::{Facts, render};
 
@@ -30,11 +30,44 @@ fn each_plugin_shows_its_own_log_counts() {
         id: PluginId("b".into()),
         counts: LogCounts::Counted { warn: 2, error: 1 },
     }];
-    let text = render(&facts, Path::new("/data"), &logs);
+    let text = render(&facts, Path::new("/data"), &[], &logs);
     let shown: Vec<&str> = text.lines().filter(|line| line.contains("log:")).collect();
     assert_eq!(
         shown,
         ["  log: not read, no plugin host", "  log: 2 warn, 1 error"],
+        "{text}"
+    );
+}
+
+#[test]
+fn each_live_terminal_shows_its_containment() {
+    let facts = Facts {
+        schema: 1,
+        threads: Vec::new(),
+        endings: Vec::new(),
+        screens: Vec::new(),
+        plugins: Vec::new(),
+    };
+    let thread = ThreadId("thr_a".into());
+    let terminals = [
+        (thread.clone(), None, "job".to_string()),
+        (
+            thread,
+            Some(2),
+            "unavailable: access is denied (os error 5)".to_string(),
+        ),
+    ];
+    let text = render(&facts, Path::new("/data"), &terminals, &[]);
+    let shown: Vec<&str> = text
+        .lines()
+        .filter(|line| line.contains("containment="))
+        .collect();
+    assert_eq!(
+        shown,
+        [
+            "thr_a program containment=job",
+            "thr_a terminal 2 containment=unavailable: access is denied (os error 5)",
+        ],
         "{text}"
     );
 }
