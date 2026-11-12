@@ -27,7 +27,7 @@ fn the_usage_reply_becomes_five_hour_week_and_per_model_bars() {
         [
             ("5h".to_owned(), 37.0),
             ("7d".to_owned(), 12.0),
-            ("7d Sonnet".to_owned(), 9.0),
+            ("7d · Sonnet".to_owned(), 9.0),
         ]
     );
     assert!(

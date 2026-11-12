@@ -24,7 +24,10 @@ const ARGS: &[&str] = &[
     "stream-json",
     "--no-session-persistence",
     "--setting-sources",
-    "user,project,local",
+    "",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
 ];
 const INITIALIZE: &str = "initialize";
 const USAGE: &str = "usage";
@@ -34,7 +37,10 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 pub(super) enum Search {
     /// No search at all: the source is not wired up, as in a test.
     Off,
+    /// Find `claude` on the person's PATH, resolved when a read starts.
+    Login,
     /// Find `claude` on this PATH. `None` means no PATH, so nothing is found.
+    #[cfg(any(test, feature = "test"))]
     Path(Option<OsString>),
 }
 
@@ -47,7 +53,7 @@ pub(super) struct Source {
 impl Source {
     pub(super) fn live() -> Self {
         Self {
-            search: Search::Path(kg_process::user_path()),
+            search: Search::Login,
             timeout: TIMEOUT,
         }
     }
@@ -69,8 +75,11 @@ impl Source {
 }
 
 pub(super) fn read(source: &Source, now: i64) -> Option<Answer> {
-    let Search::Path(path) = &source.search else {
-        return None;
+    let path = match &source.search {
+        Search::Off => return None,
+        Search::Login => kg_process::user_path(),
+        #[cfg(any(test, feature = "test"))]
+        Search::Path(path) => path.clone(),
     };
     let Some(program) = kg_process::find_program(
         Path::new(PROGRAM),
@@ -206,7 +215,7 @@ fn parse(usage: &Value) -> (UsageStatus, Vec<UsageWindow>) {
             .flatten()
             .filter_map(|model| {
                 let name = model.get("display_name").and_then(as_text)?;
-                window(model, format!("7d {name}"))
+                window(model, format!("7d · {name}"))
             }),
     );
     let status = if windows.is_empty() {

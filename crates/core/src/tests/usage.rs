@@ -545,7 +545,7 @@ fn fake_claude(folder: &Path, body: &str) -> PathBuf {
 
     std::fs::create_dir_all(folder).unwrap();
     let script = format!(
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{dir}/args.txt'\ncat > '{dir}/stdin.txt'\ncat <<'REPLY'\n{body}\nREPLY\n",
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{dir}/args.txt'\npwd > '{dir}/cwd.txt'\necho start >> '{dir}/starts.txt'\ncat > '{dir}/stdin.txt'\ncat <<'REPLY'\n{body}\nREPLY\n",
         dir = folder.display(),
     );
     let path = folder.join("claude");
@@ -575,12 +575,20 @@ async fn claude_bars_come_from_the_installed_cli(cx: &mut TestAppContext) {
     assert_eq!(account.status, UsageStatus::Ok);
     assert_eq!(account.plan.as_deref(), Some("Max"));
     let labels: Vec<_> = account.windows.iter().map(|w| w.label.as_str()).collect();
-    assert_eq!(labels, ["5h", "7d", "7d Sonnet"]);
+    assert_eq!(labels, ["5h", "7d", "7d · Sonnet"]);
     let stdin = std::fs::read_to_string(folder.join("stdin.txt")).unwrap();
     assert!(stdin.contains(r#""subtype":"get_usage""#));
     assert!(stdin.contains(r#""skip_behaviors":true"#));
     let args = std::fs::read_to_string(folder.join("args.txt")).unwrap();
-    assert!(args.contains("stream-json"));
+    let args: Vec<&str> = args.lines().collect();
+    assert_eq!(args, CLAUDE_ARGS, "the exact flags, one per argument");
+    let cwd = std::fs::read_to_string(folder.join("cwd.txt")).unwrap();
+    let home = crate::host::program::user_home().unwrap();
+    assert_eq!(
+        std::fs::canonicalize(cwd.trim()).unwrap(),
+        std::fs::canonicalize(home).unwrap(),
+        "claude runs in the home folder, never in a project"
+    );
 }
 
 #[cfg(unix)]
@@ -661,5 +669,41 @@ async fn a_reply_kagan_cannot_read_is_a_message(cx: &mut TestAppContext) {
         UsageStatus::Error {
             message: "Claude sent a reply kagan could not read.".to_owned()
         }
+    );
+}
+
+#[cfg(unix)]
+const CLAUDE_ARGS: &[&str] = &[
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--input-format",
+    "stream-json",
+    "--no-session-persistence",
+    "--setting-sources",
+    "",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}",
+];
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn two_quick_asks_start_one_claude(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let folder = fake_claude(&fixture.dir.path().join("bin"), CLAUDE_REPLY);
+    cx.update(|cx| crate::use_claude_path(cx, Some(folder.clone().into_os_string())));
+    set_enabled(cx, true).await;
+
+    let first = cx.update(|cx| Workspace::dispatch(Op::Usage(UsageOp::Show), cx));
+    let second = cx.update(|cx| Workspace::dispatch(Op::Usage(UsageOp::Show), cx));
+    let (first, second) = futures::join!(first, second);
+    first.unwrap();
+    second.unwrap();
+    let starts = std::fs::read_to_string(folder.join("starts.txt")).unwrap();
+    assert_eq!(
+        starts.lines().count(),
+        1,
+        "the second ask waits for the first"
     );
 }

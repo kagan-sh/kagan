@@ -7,10 +7,10 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::popover::Popover;
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{IconName, Selectable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     Anchor, AnyElement, App, Context, Div, ElementId, Entity, InteractiveElement as _, IntoElement,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _, Task, div, px, relative,
+    ParentElement as _, StatefulInteractiveElement as _, Styled as _, Task, div, px, relative, svg,
 };
 use kg_core::Workspace;
 use kg_domain::{
@@ -19,6 +19,7 @@ use kg_domain::{
 };
 
 use super::controls::control;
+use crate::kagan::picker::mark::command_mark;
 use crate::theme::{SpaceStep, Tone, TypeScale as _, radius_xs, space};
 use crate::ui_registry::Facts;
 
@@ -232,6 +233,7 @@ fn tabs(
             .small()
             .ghost()
             .label(provider.label())
+            .icon(Icon::empty().path(provider_mark(provider)))
             .selected(tab == Some(provider))
             .on_click(move |_, _, cx| {
                 owner.update(cx, |usage, cx| usage.select(Some(provider), cx));
@@ -249,6 +251,12 @@ fn account_block(
 ) -> AnyElement {
     let muted = cx.theme().muted_foreground;
     let mut heading = h_flex().gap(px(space(SpaceStep::Xs, cx))).items_center();
+    heading = heading.child(
+        svg()
+            .path(provider_mark(account.provider))
+            .size(px(14.0))
+            .text_color(muted),
+    );
     heading = heading.child(
         div().type_small(cx).child(
             account
@@ -268,15 +276,15 @@ fn account_block(
                 .child(title_case(plan)),
         );
     }
-    let mut block = v_flex()
-        .gap(px(space(SpaceStep::Xs, cx)))
-        .child(heading)
-        .child(
+    let mut block = v_flex().gap(px(space(SpaceStep::Xs, cx))).child(heading);
+    if account.email.is_some() {
+        block = block.child(
             div()
                 .type_caption(cx)
                 .text_color(muted)
                 .child(account.provider.label()),
         );
+    }
     block = match &account.status {
         UsageStatus::Ok => windows(&account.windows, false, now, block, cx),
         UsageStatus::Stale => {
@@ -316,6 +324,15 @@ fn windows(windows: &[UsageWindow], stale: bool, now: i64, block: Div, cx: &mut 
         })
 }
 
+/// The agent mark the thread picker draws for a provider, from the picker's one table.
+fn provider_mark(provider: UsageProvider) -> &'static str {
+    let command = match provider {
+        UsageProvider::Claude => "claude",
+        UsageProvider::Codex => "codex",
+    };
+    command_mark(command).unwrap_or_default()
+}
+
 fn window_row(
     index: usize,
     window: &UsageWindow,
@@ -332,6 +349,7 @@ fn window_row(
     };
     let fill = tone.color(cx);
     let muted = cx.theme().muted_foreground;
+    let full_label = window.label.clone();
     let (reset, absolute) = match window.resets_at {
         Some(at) => (format!("{} left", resets_in(at, now)), absolute_reset(at)),
         None => (
@@ -353,9 +371,12 @@ fn window_row(
         .opacity(if stale { 0.6 } else { 1.0 })
         .child(
             div()
+                .id(ElementId::Name(format!("usage-label-{index}").into()))
                 .type_caption(cx)
-                .w(px(36.0))
-                .child(window.label.clone()),
+                .w(px(96.0))
+                .truncate()
+                .child(window.label.clone())
+                .tooltip(move |window, cx| Tooltip::new(full_label.clone()).build(window, cx)),
         )
         .child(
             div().flex_1().h(px(6.0)).rounded(radius).bg(track).child(

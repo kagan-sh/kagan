@@ -40,6 +40,8 @@ pub(super) struct Sources {
 
 pub(crate) struct Cache {
     entries: BTreeMap<UsageProvider, Entry>,
+    /// The floor of a provider that has no answer yet: its first ask, or a no-sign-in answer.
+    waiting: BTreeMap<UsageProvider, Instant>,
     sources: Sources,
     skew: Duration,
 }
@@ -48,6 +50,7 @@ impl Cache {
     pub(crate) fn new() -> Self {
         Self {
             entries: BTreeMap::new(),
+            waiting: BTreeMap::new(),
             sources: Sources {
                 claude: claude::Source::initial(),
                 codex: codex::Source::initial(),
@@ -60,29 +63,38 @@ impl Cache {
         Instant::now() + self.skew
     }
 
-    /// The providers to ask now. A provider that is asked gets its floor at once, so a click
-    /// that lands before its answer comes back does not ask again.
+    /// The providers to ask now. A provider that is asked gets its floor before its answer comes
+    /// back, so an ask that lands while the first one runs waits for it.
     fn plan(&mut self, op: UsageOp, now: Instant) -> Vec<UsageProvider> {
         let mut asks = Vec::new();
         for provider in UsageProvider::ALL {
-            let Some(entry) = self.entries.get_mut(&provider) else {
-                asks.push(provider);
-                continue;
-            };
-            if now < entry.next_ask
-                || (op == UsageOp::Show && now.duration_since(entry.read_at) < FRESH_FOR)
-            {
-                continue;
+            if let Some(entry) = self.entries.get_mut(&provider) {
+                if now < entry.next_ask
+                    || (op == UsageOp::Show && now.duration_since(entry.read_at) < FRESH_FOR)
+                {
+                    continue;
+                }
+                entry.next_ask = now + FLOOR;
+            } else {
+                if self
+                    .waiting
+                    .get(&provider)
+                    .is_some_and(|until| now < *until)
+                {
+                    continue;
+                }
+                self.waiting.insert(provider, now + FLOOR);
             }
-            entry.next_ask = now + FLOOR;
             asks.push(provider);
         }
         asks
     }
 
     fn apply(&mut self, provider: UsageProvider, answer: Option<Answer>, started: Instant) {
+        self.waiting.remove(&provider);
         let Some(Answer { account, busy }) = answer else {
             self.entries.remove(&provider);
+            self.waiting.insert(provider, started + FLOOR);
             return;
         };
         let previous = self.entries.remove(&provider);
@@ -127,6 +139,7 @@ impl Cache {
 
     pub(crate) fn clear(&mut self) {
         self.entries.clear();
+        self.waiting.clear();
     }
 
     #[cfg(any(test, feature = "test"))]
