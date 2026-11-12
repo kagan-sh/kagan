@@ -192,12 +192,20 @@ fn error_text(view: &UsageView) -> String {
 }
 
 #[gpui_kit::test]
+async fn the_preference_is_on_until_someone_saves_it(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    let view = show(cx, UsageOp::Show).await;
+    assert!(view.enabled, "usage is on when nothing is saved");
+}
+
+#[gpui_kit::test]
 async fn nothing_is_read_while_the_preference_is_off(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let endpoint = Endpoint::start();
     let home = fixture.dir.path().join("codex");
     sign_in(&home, far_future());
     point_at(cx, Some(&home), &endpoint.url);
+    set_enabled(cx, false).await;
 
     let view = show(cx, UsageOp::Show).await;
     assert!(!view.enabled);

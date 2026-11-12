@@ -205,7 +205,7 @@ pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
         confirm_archive: false,
         notify: NotifyLevel::default(),
         plugin_status: true,
-        usage_limits: false,
+        usage_limits: kg_domain::prefs::USAGE_LIMITS_DEFAULT,
         update_check: false,
         copy_on_select: true,
         links_in_tab: false,
@@ -400,7 +400,11 @@ impl Kagan {
         let prefs = self.prefs.clone();
         cx.spawn(async move |_, cx| {
             let list_order = list_order.await.ok().flatten();
-            let usage_on = usage_limits.await.ok().flatten().unwrap_or(false);
+            let usage_on = usage_limits
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or(kg_domain::prefs::USAGE_LIMITS_DEFAULT);
             let hide_empty_projects = hide_empty.await.ok().flatten().unwrap_or(false);
             let unread_first = unread.await.ok().flatten().unwrap_or(false);
             let hidden_rail = hidden_rail.await.ok().flatten().unwrap_or_default();

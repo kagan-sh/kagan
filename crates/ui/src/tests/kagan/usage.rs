@@ -23,8 +23,6 @@ fn point_at(cx: &mut TestAppContext, home: PathBuf) {
 #[gpui_kit::test]
 fn the_usage_button_follows_the_preference(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
-    assert!(!present(cx, window, "usage"));
-    set_preference(cx, "usage-limits", json!(true));
     wait_until(cx, |cx| present(cx, window, "usage"));
     set_preference(cx, "usage-limits", json!(false));
     wait_until(cx, |cx| !present(cx, window, "usage"));

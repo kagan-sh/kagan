@@ -149,7 +149,7 @@ async fn enabled(database: &Database) -> bool {
         .ok()
         .flatten()
         .and_then(|value| value.as_bool())
-        .unwrap_or(false)
+        .unwrap_or(prefs::USAGE_LIMITS_DEFAULT)
 }
 
 pub(crate) async fn run(
