@@ -1254,8 +1254,8 @@ Options:
       --minutes <MINUTES>
           Whole minutes between runs, from 1 to 1440
 
-      --at <AT>
-          When to run once, as milliseconds since the Unix epoch
+      --in <IN_MINUTES>
+          Run once, this many minutes from now, from 1 to 1440
 
   -h, --help
           Print help
@@ -1454,10 +1454,10 @@ Programs a new thread can run, as the new-thread picker lists them
 Usage: kg program [OPTIONS] <COMMAND>
 
 Commands:
-  list    Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed one
+  list    Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed known agent
   save    Save a program line under a name. A name already saved takes the new line and keeps its pin
   rename  Give a saved program another name
-  remove  Delete a saved program. The project and threads that used its line keep the line
+  remove  Delete a saved program after the person approves it in kagan. The project and threads that used its line keep the line
   pin     Pin or unpin a saved program. Pinned ones are listed first among the saved programs
   help    Print this message or the help of the given subcommand(s)
 
@@ -1472,7 +1472,7 @@ Options:
 ## `kg program list`
 
 ```text
-Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed one
+Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed known agent
 
 Usage: kg program list [OPTIONS]
 
@@ -1525,7 +1525,7 @@ Options:
 ## `kg program remove`
 
 ```text
-Delete a saved program. The project and threads that used its line keep the line
+Delete a saved program after the person approves it in kagan. The project and threads that used its line keep the line
 
 Usage: kg program remove <NAME>
 
@@ -1550,6 +1550,8 @@ Arguments:
           
 
   <PINNED>
+          true to pin, false to unpin
+          
           [possible values: true, false]
 
 Options:
@@ -2182,7 +2184,7 @@ Usage: kg plugin rail <ID> <ACTION>
 
 Arguments:
   <ID>
-          
+          The plugin id, then hide or show
 
   <ACTION>
           [possible values: hide, show]
@@ -2411,10 +2413,11 @@ Saved prompts: stored text the person can send
 Usage: kg saved-prompt [OPTIONS] <COMMAND>
 
 Commands:
-  add     Save text the person can send later
+  add     Save text the person can send later. Give the text, or --file (`-` for stdin)
+  edit    Change a saved prompt's title and text. Its star stays
   search  Saved prompts whose title or body contains this text. An empty search lists them all
   star    Star or unstar a saved prompt
-  delete  Delete a saved prompt
+  delete  Delete a saved prompt after the person approves it in kagan
   send    Type a saved prompt into a thread and press Enter
   help    Print this message or the help of the given subcommand(s)
 
@@ -2429,11 +2432,36 @@ Options:
 ## `kg saved-prompt add`
 
 ```text
-Save text the person can send later
+Save text the person can send later. Give the text, or --file (`-` for stdin)
 
-Usage: kg saved-prompt add <TITLE> <BODY>
+Usage: kg saved-prompt add [OPTIONS] <TITLE> [BODY]
 
 Arguments:
+  <TITLE>
+          
+
+  [BODY]
+          The text to save. Omit it when `--file` is set
+
+Options:
+      --file <PATH>
+          Read the text from this path, or `-` for stdin
+
+  -h, --help
+          Print help
+```
+
+## `kg saved-prompt edit`
+
+```text
+Change a saved prompt's title and text. Its star stays
+
+Usage: kg saved-prompt edit <ID> <TITLE> <BODY>
+
+Arguments:
+  <ID>
+          
+
   <TITLE>
           
 
@@ -2483,7 +2511,7 @@ Options:
 ## `kg saved-prompt delete`
 
 ```text
-Delete a saved prompt
+Delete a saved prompt after the person approves it in kagan
 
 Usage: kg saved-prompt delete <ID>
 
@@ -2612,7 +2640,7 @@ Usage: kg settings [OPTIONS] <COMMAND>
 Commands:
   open     Show the settings page, opening the window if it is closed
   plugins  Show the plugin management section
-  project  Show a project's page: its environment variables, default program, and agent rules
+  project  Show a project's page: its environment variables, default program, agent rules, and automations
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -2650,15 +2678,20 @@ Options:
 ## `kg settings project`
 
 ```text
-Show a project's page: its environment variables, default program, and agent rules
+Show a project's page: its environment variables, default program, agent rules, and automations
 
-Usage: kg settings project <ID>
+Usage: kg settings project [OPTIONS] <ID>
 
 Arguments:
   <ID>
           
 
 Options:
+      --section <SECTION>
+          Scroll the page to this section once it is open
+          
+          [possible values: automations]
+
   -h, --help
           Print help
 ```
@@ -3240,7 +3273,7 @@ Commands:
   click       Click the center of an element. `--within` picks the one inside that element, when several match
   type        Send text to the focused control
   key         Send a keystroke such as escape or cmd-,
-  scroll      Scroll an element by dy pixels
+  scroll      Scroll an element by dy pixels: a negative dy scrolls down, a positive dy scrolls up
   drag        Press an element, drag it onto another, and release. `--at` picks the target's top quarter, middle or bottom quarter. `--hold` keeps the button down: finish with `kg ui drop`, or cancel with `kg ui key escape`
   drop        Release a drag that `kg ui drag --hold` left held, where the pointer is
   screenshot  Save a PNG without focusing the window
@@ -3332,7 +3365,7 @@ Options:
 ## `kg ui scroll`
 
 ```text
-Scroll an element by dy pixels
+Scroll an element by dy pixels: a negative dy scrolls down, a positive dy scrolls up
 
 Usage: kg ui scroll [OPTIONS] <ELEMENT_ID> <DY>
 

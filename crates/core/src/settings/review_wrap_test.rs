@@ -9,7 +9,7 @@ fn each_window_layout_key_has_its_own_kind() {
     );
     assert_eq!(
         kind(&format!("main.{}", prefs::LEFT_WIDTH)),
-        Some(Kind::Pixels)
+        Some(Kind::LeftWidth)
     );
     assert_eq!(
         kind(&format!("main.{}", prefs::RIGHT_SIDEBAR)),
@@ -17,7 +17,7 @@ fn each_window_layout_key_has_its_own_kind() {
     );
     assert_eq!(
         kind(&format!("main.{}", prefs::RIGHT_WIDTH)),
-        Some(Kind::Pixels)
+        Some(Kind::RightWidth)
     );
     assert_eq!(
         kind(&format!("main.{}", prefs::REVIEW_WRAP)),

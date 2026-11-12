@@ -23,7 +23,7 @@ use crate::ui_registry::Facts;
 impl Picker {
     // Saves the custom command under the typed name, or renames the saved program being edited.
     pub(crate) fn save_program(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.mode != Mode::Custom {
+        if self.mode != Mode::Custom || self.saving {
             return;
         }
         let name = self.name.read(cx).value().trim().to_owned();
@@ -44,6 +44,7 @@ impl Picker {
             }
         };
         let task = Workspace::dispatch(Op::Program(op), cx);
+        self.saving = true;
         self.after_change(task, window, cx);
     }
 
@@ -117,14 +118,17 @@ impl Picker {
         self.notice = None;
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
-            _ = this.update_in(cx, |this, window, cx| match result {
-                Ok(_) => {
-                    this.name
-                        .update(cx, |state, cx| state.set_value("", window, cx));
-                    let project = this.project.clone();
-                    this.load(project, window, cx);
+            _ = this.update_in(cx, |this, window, cx| {
+                this.saving = false;
+                match result {
+                    Ok(_) => {
+                        this.name
+                            .update(cx, |state, cx| state.set_value("", window, cx));
+                        let project = this.project.clone();
+                        this.reload(project, window, cx);
+                    }
+                    Err(error) => this.fail(error.to_string(), cx),
                 }
-                Err(error) => this.fail(error.to_string(), cx),
             });
         })
         .detach();
@@ -162,7 +166,12 @@ pub(super) fn notice(text: SharedString, cx: &gpui_kit::App) -> impl IntoElement
 
 // A saved program's card buttons: pin or unpin, rename, and delete. Other cards have none. They are
 // icons, always shown, so the card keeps its size.
-pub(super) fn card_actions(program: &Program, picker: &WeakEntity<Picker>) -> Option<AnyElement> {
+pub(super) fn card_actions(
+    program: &Program,
+    picker: &WeakEntity<Picker>,
+    card_group: &str,
+    selected: bool,
+) -> Option<AnyElement> {
     if program.source != ProgramSource::Saved {
         return None;
     }
@@ -175,10 +184,15 @@ pub(super) fn card_actions(program: &Program, picker: &WeakEntity<Picker>) -> Op
         ("Pin", true)
     };
     let (pin_name, rename_name, delete_name) = (name.clone(), name.clone(), name.clone());
+    // The buttons show on the selected card or the one under the pointer, so a grid of names is
+    // not a grid of buttons.
+    let shown = h_flex()
+        .gap_1()
+        .flex_shrink_0()
+        .invisible()
+        .group_hover(card_group.to_owned(), gpui_kit::Styled::visible);
     Some(
-        h_flex()
-            .gap_1()
-            .flex_shrink_0()
+        if selected { shown.visible() } else { shown }
             .child(card_button(
                 format!("program-pin-{key}"),
                 pin_label,

@@ -280,6 +280,7 @@ actions!(kagan, [LeaveStart, StartThread]);
 
 #[cfg(test)]
 impl Kagan {
+    #[cfg(unix)]
     pub(crate) fn focus_start_form(&self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(form) = &self.start.form_focus {
             window.focus(form, cx);

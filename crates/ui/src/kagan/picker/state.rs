@@ -59,6 +59,7 @@ impl Picker {
             _subscriptions: subscriptions,
             load_task: None,
             project: None,
+            saving: false,
         }
     }
 
@@ -66,9 +67,24 @@ impl Picker {
         self.project.clone()
     }
 
-    // Each opening of the screen starts with the program list, so a custom command stays closed.
-    // The search is kept, as the docs say.
+    // Opening the picker: a search from an earlier visit is cleared, and the grid shows a loading
+    // line until the programs arrive.
     pub(crate) fn load(
+        &mut self,
+        project: Option<kg_domain::ProjectId>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.search
+            .update(cx, |state, cx| state.set_value("", window, cx));
+        self.state = Programs::Loading;
+        self.cards.loading = true;
+        self.reload(project, window, cx);
+    }
+
+    // A change to the saved programs: the grid stays on screen, and the card the person had
+    // selected stays selected if it is still there.
+    pub(super) fn reload(
         &mut self,
         project: Option<kg_domain::ProjectId>,
         window: &mut Window,
@@ -77,8 +93,6 @@ impl Picker {
         self.project.clone_from(&project);
         self.set_mode(Mode::Catalog, cx);
         self.notice = None;
-        self.state = Programs::Loading;
-        self.cards.loading = true;
         let task = Workspace::dispatch(
             Op::Program(ProgramOp::Discover {
                 project_id: project.clone(),
@@ -169,11 +183,24 @@ impl Picker {
     }
 
     fn show(&mut self, list: ProgramList, cx: &mut Context<Self>) {
+        let reloading = matches!(self.state, Programs::Loaded);
+        let kept = reloading
+            .then(|| self.cards.selected().map(|p| (p.command.clone(), p.source)))
+            .flatten();
         self.state = Programs::Loaded;
         self.cards.loading = false;
         self.cards.all = list.programs;
         self.cards.filter();
-        if let Some(default) = &list.default
+        let place = kept.and_then(|(command, source)| {
+            self.cards
+                .matches
+                .iter()
+                .position(|p| p.command == command && p.source == source)
+        });
+        if let Some(row) = place {
+            self.cards.cursor = row;
+            self.scroll.scroll_to_item(row);
+        } else if let Some(default) = &list.default
             && let Some(row) = self
                 .cards
                 .matches

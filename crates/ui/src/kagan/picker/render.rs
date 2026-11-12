@@ -25,8 +25,9 @@ use crate::ui_registry::Facts;
 
 // A card fills its column and is this tall: the mark on top, the name, then its caption.
 const CARD_HEIGHT: f32 = 130.;
-// The grid shows this many rows of cards, then scrolls.
-const VISIBLE_ROWS: usize = 4;
+// The grid shows this many rows of cards, then scrolls. Two keep the worktree hint and Start on
+// screen in a short window.
+const VISIBLE_ROWS: usize = 2;
 
 #[derive(IntoElement)]
 struct ProgramCard {
@@ -71,7 +72,8 @@ impl RenderOnce for ProgramCard {
         } else {
             label.clone()
         };
-        let actions = saved::card_actions(&self.program, &self.picker);
+        let card_group = format!("program-card-{key}");
+        let actions = saved::card_actions(&self.program, &self.picker, &card_group, self.selected);
         let picker = self.picker.clone();
         let index = self.index;
         div()
@@ -84,6 +86,7 @@ impl RenderOnce for ProgramCard {
                 selected: Some(self.selected),
                 ..Facts::button(name.clone())
             })
+            .group(card_group)
             .w_full()
             .h(px(CARD_HEIGHT))
             .p_2()
@@ -304,7 +307,11 @@ impl Render for Picker {
             }))
             .on_action(cx.listener(|this, _: &SelectLeft, _, cx| this.move_by(-1, cx)))
             .on_action(cx.listener(|this, _: &SelectRight, _, cx| this.move_by(1, cx)))
+            // Enter in the custom fields is theirs: it saves or starts from the field itself.
             .on_action(cx.listener(|this, _: &Confirm, window, cx| {
+                if this.mode == Mode::Custom {
+                    return;
+                }
                 if this.cards.custom_selected() {
                     this.toggle_custom(window, cx);
                 } else {

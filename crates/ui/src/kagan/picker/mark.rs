@@ -41,7 +41,10 @@ pub(crate) fn program_mark(program: &Program, cx: &App) -> AnyElement {
             .child(Icon::new(IconName::SquareTerminal).text_color(color))
             .into_any_element();
     }
-    if let Some(path) = agent_path(&program.command) {
+    // A saved program keeps its letter, as main decided: its name is its own, not the agent's.
+    if let Some(path) =
+        agent_path(&program.command).filter(|_| program.source != ProgramSource::Saved)
+    {
         return frame
             .id(format!("program-icon-{label}"))
             .ui_container()

@@ -1,5 +1,5 @@
 use gpui_kit::{AsyncApp, WeakEntity};
-use kg_domain::{OpResult, SavedPrompt, SavedPromptId, SavedPromptOp};
+use kg_domain::{OpError, OpResult, SavedPrompt, SavedPromptId, SavedPromptOp};
 
 use crate::Workspace;
 use crate::host::database::{Database, Result};
@@ -9,10 +9,14 @@ pub(crate) async fn run(
     this: &WeakEntity<Workspace>,
     database: Database,
     op: SavedPromptOp,
+    requester: Option<crate::Requester>,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     match op {
-        SavedPromptOp::Add { title, body } => {
+        SavedPromptOp::Add { title, body, .. } => {
+            let Some(body) = body else {
+                return Err(OpError::Invalid("give the prompt text, or --file".into()));
+            };
             let prompt = SavedPrompt {
                 id: SavedPromptId(id("svp")),
                 title: title.trim().to_owned(),
@@ -21,8 +25,29 @@ pub(crate) async fn run(
             };
             let stored = prompt.clone();
             database
-                .call(move |store| store.insert_saved_prompt(&stored))
+                .call(move |store| {
+                    // A title is one name, as a saved program's is, so the same title is refused.
+                    if store.saved_prompt_titled(&stored.title)? {
+                        return Err(kg_store::Error::Conflict(format!(
+                            "a saved prompt named {} already exists",
+                            stored.title
+                        )));
+                    }
+                    store.insert_saved_prompt(&stored)
+                })
                 .await?;
+            Ok(OpResult::SavedPrompt(prompt))
+        }
+        SavedPromptOp::Edit { id, title, body } => {
+            let title = title.trim().to_owned();
+            let shown = id.clone();
+            let prompt = database
+                .call(move |store| {
+                    store.update_saved_prompt(&id, &title, &body)?;
+                    store.saved_prompt(&id)
+                })
+                .await?
+                .ok_or_else(|| missing("saved prompt", &shown))?;
             Ok(OpResult::SavedPrompt(prompt))
         }
         SavedPromptOp::Search { text } => {
@@ -44,8 +69,21 @@ pub(crate) async fn run(
             Ok(OpResult::SavedPrompt(prompt))
         }
         SavedPromptOp::Delete { id } => {
+            let lookup = id.clone();
+            let prompt = database
+                .call(move |store| store.saved_prompt(&lookup))
+                .await?
+                .ok_or_else(|| missing("saved prompt", &id))?;
+            crate::workspace::approve(
+                None,
+                requester,
+                format!("Delete the saved prompt “{}”?", prompt.title),
+                "Delete",
+                cx,
+            )
+            .await?;
             database
-                .call(move |store| store.delete_saved_prompt(&id))
+                .call(move |store| store.delete_saved_prompt(&prompt.id))
                 .await?;
             Ok(OpResult::Done)
         }

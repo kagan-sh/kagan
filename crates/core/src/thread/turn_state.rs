@@ -84,7 +84,7 @@ impl TurnState {
         self.source
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn plain_since(self) -> Option<Instant> {
         self.plain_since
     }

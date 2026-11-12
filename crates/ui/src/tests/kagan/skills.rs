@@ -2,7 +2,8 @@ use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, TestAppContext};
 
 use crate::kagan::Kagan;
 use crate::tests::kagan::{
-    chord, click, focused_of, grid_text, label, open, selected_of, shell, shows, wait_until,
+    chord, click, focused_of, grid_text, label, open, selected_of, shell, shows, wait_for_screen,
+    wait_until,
 };
 
 fn show_skills(cx: &mut TestAppContext, kagan: &Entity<Kagan>, window: AnyWindowHandle) {
@@ -190,7 +191,9 @@ fn a_forked_thread_gets_the_prompt_typed_in(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
     fork_to_start(cx, &kagan, window, data.path());
     start_with_program(cx, &kagan, window, shell());
-    wait_until(cx, |cx| grid_text(cx, &kagan).contains("Make a new skill"));
+    wait_for_screen(cx, &kagan, |cx| {
+        grid_text(cx, &kagan).contains("Make a new skill")
+    });
 }
 
 #[gpui_kit::test]

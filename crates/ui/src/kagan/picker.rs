@@ -106,6 +106,9 @@ pub(crate) struct Picker {
     load_task: Option<Task<()>>,
     // The project the program list was read for: its default, and the default of a retry.
     project: Option<kg_domain::ProjectId>,
+    // A save or rename is in flight. A second submit meanwhile is ignored, so Enter twice cannot
+    // rename the same program twice.
+    saving: bool,
 }
 
 impl EventEmitter<Start> for Picker {}

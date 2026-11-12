@@ -1,4 +1,6 @@
-use gpui_kit::{AnyWindowHandle, TestAppContext};
+#[cfg(unix)]
+use gpui_kit::AppContext as _;
+use gpui_kit::{AnyWindowHandle, Entity, TestAppContext};
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, Program, ProgramOp, ProgramSource};
 
@@ -9,7 +11,7 @@ use super::picker::start_in_plain_folder;
 use crate::tests::kagan::shown;
 #[cfg(unix)]
 use crate::tests::kagan::thread_record;
-use crate::tests::kagan::{chord, click, label, open, shows, wait_until};
+use crate::tests::kagan::{chord, click, label, open, shows, value_of, wait_until};
 
 fn save(cx: &mut TestAppContext, name: &str, line: &str) {
     let task = cx.update(|cx| {
@@ -42,6 +44,22 @@ fn pinned(cx: &mut TestAppContext, name: &str) -> bool {
     saved(cx)
         .iter()
         .any(|program| program.label == name && program.pinned)
+}
+
+// Deleting a saved program asks the person first, so the test answers the question.
+fn approve_delete(cx: &mut TestAppContext) {
+    let id = cx
+        .read(|cx| {
+            Workspace::global(cx)
+                .read(cx)
+                .approvals()
+                .next()
+                .map(|a| a.id.clone())
+        })
+        .expect("the delete is waiting for the person");
+    let answer = cx.update(|cx| Workspace::answer_standalone(id, "approve".into(), cx));
+    cx.foreground_executor().block_test(answer).unwrap();
+    cx.run_until_parked();
 }
 
 fn row_id(name: &str) -> String {
@@ -117,6 +135,7 @@ fn two_names_sharing_a_line_each_pin_rename_and_delete_their_own_row(cx: &mut Te
     });
 
     click(cx, window, "program-delete-saved-Zulu");
+    approve_delete(cx);
     wait_until(cx, |cx| {
         saved(cx).iter().all(|program| program.label != "Zulu")
     });
@@ -153,7 +172,7 @@ fn a_refused_save_says_why_and_the_notice_clears_when_the_name_changes(cx: &mut 
     wait_until(cx, |cx| shows(cx, window, "saved-program-notice"));
     assert_eq!(
         label(cx, window, "saved-program-notice"),
-        "A saved program needs a name."
+        "a saved program needs a name"
     );
     click(cx, window, "custom-name");
     cx.simulate_input(window, "Named");
@@ -221,5 +240,175 @@ fn the_delete_chord_deletes_the_selected_saved_program(cx: &mut TestAppContext) 
     start_in_plain_folder(cx, window, data.path());
     search(cx, window, "Zulu");
     cx.simulate_keystrokes(window, &chord("DeleteSavedProgram"));
+    approve_delete(cx);
     wait_until(cx, |cx| saved(cx).is_empty());
+}
+
+#[gpui_kit::test]
+fn enter_in_the_rename_box_renames_once_and_leaves_no_error(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    save(cx, "Second", "codex --second");
+    start_in_plain_folder(cx, window, data.path());
+    search(cx, window, "second");
+    click(cx, window, "program-rename-saved-Second");
+    wait_until(cx, |cx| shows(cx, window, "custom-name"));
+    for _ in 0.."Second".len() {
+        cx.simulate_keystrokes(window, "backspace");
+    }
+    cx.simulate_input(window, "Third");
+    cx.simulate_keystrokes(window, "enter enter");
+    wait_until(cx, |cx| {
+        saved(cx).iter().any(|program| program.label == "Third")
+    });
+    cx.run_until_parked();
+    assert!(
+        !shows(cx, window, "saved-program-notice"),
+        "a rename that worked leaves no error"
+    );
+    assert!(!shows(cx, window, "custom-name"), "the rename box closes");
+}
+
+#[gpui_kit::test]
+fn pinning_keeps_the_selected_row_in_place(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    save(cx, "Alpha", "codex --alpha");
+    save(cx, "Mid", "codex --mid");
+    save(cx, "Zulu", "codex --zulu");
+    start_in_plain_folder(cx, window, data.path());
+    search(cx, window, "codex");
+    for _ in 0..10 {
+        if label(cx, window, &row_id("Zulu")).contains("selected") {
+            break;
+        }
+        cx.simulate_keystrokes(window, "down");
+    }
+    assert!(label(cx, window, &row_id("Zulu")).contains("selected"));
+
+    click(cx, window, "program-pin-saved-Alpha");
+    wait_until(cx, |cx| pinned(cx, "Alpha"));
+    cx.run_until_parked();
+    assert!(
+        label(cx, window, &row_id("Zulu")).contains("selected"),
+        "the row the person picked stays selected after a pin"
+    );
+}
+
+#[gpui_kit::test]
+fn a_reopened_picker_starts_with_an_empty_search(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    save(cx, "Zulu", "codex --zulu");
+    let project = start_in_plain_folder(cx, window, data.path());
+    search(cx, window, "zulu");
+    wait_until(cx, |cx| {
+        value_of(cx, window, "program-search").as_deref() == Some("zulu")
+    });
+    click(cx, window, &format!("project-new-{}", project.0));
+    wait_until(cx, |cx| shows(cx, window, "program-list"));
+    cx.run_until_parked();
+    assert_eq!(
+        value_of(cx, window, "program-search").unwrap_or_default(),
+        "",
+        "a search from an earlier visit is cleared"
+    );
+}
+
+// The arrow keys move the grid once it has the focus; the search box keeps Left and Right.
+#[cfg(unix)]
+fn focus_grid(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    kagan: &gpui_kit::Entity<crate::kagan::Kagan>,
+) {
+    let picker = cx.update(|cx| kagan.read(cx).picker_entity());
+    cx.update_window(window, |_, window, cx| {
+        picker.update(cx, |picker, cx| picker.focus_list(window, cx));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn a_saved_row_shows_its_buttons_only_while_it_is_selected(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    save(cx, "Alpha", "codex --alpha");
+    save(cx, "Zulu", "codex --zulu");
+    start_in_plain_folder(cx, window, data.path());
+    search(cx, window, "codex");
+    focus_grid(cx, window, &kagan);
+    for _ in 0..10 {
+        if label(cx, window, &row_id("Zulu")).contains("selected") {
+            break;
+        }
+        cx.simulate_keystrokes(window, "right");
+    }
+    assert!(label(cx, window, &row_id("Zulu")).contains("selected"));
+    assert!(
+        shows(cx, window, "program-pin-saved-Zulu"),
+        "the selected row shows its buttons"
+    );
+    assert!(
+        !shows(cx, window, "program-pin-saved-Alpha"),
+        "a row that is not selected or under the pointer shows none"
+    );
+}
+
+#[gpui_kit::test]
+fn a_saved_program_has_a_letter_mark_like_a_built_in_one(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    save(cx, "Alpha", "codex --alpha");
+    start_in_plain_folder(cx, window, data.path());
+    search(cx, window, "Alpha");
+    assert!(
+        shows(cx, window, "program-mark-Alpha"),
+        "the saved row has its letter mark"
+    );
+}
+
+// Whether an element lies inside the picker list, top and bottom.
+#[cfg(unix)]
+fn inside_list(cx: &mut TestAppContext, window: AnyWindowHandle, row: &str) -> bool {
+    cx.update_window(window, |_, window, _| {
+        let within = crate::ui_registry::find(
+            window,
+            &gpui_kit::ElementId::Name("program-list".to_owned().into()),
+        )
+        .expect("the program list");
+        let element =
+            crate::ui_registry::find(window, &gpui_kit::ElementId::Name(row.to_owned().into()))
+                .expect("the row");
+        element.bounds.top() >= within.bounds.top()
+            && element.bounds.bottom() <= within.bounds.bottom()
+    })
+    .unwrap()
+}
+
+// A long list scrolls. Pinning the picked row with the keyboard moves it to the top and reloads the
+// list, and the row stays selected and on screen.
+#[cfg(unix)]
+#[gpui_kit::test]
+fn pinning_the_picked_row_keeps_it_selected_and_on_screen(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    // An installed agent is the default, so a reload that picks the default would show it.
+    fixture_programs(cx, data.path(), &["codex"]);
+    for n in 0..12 {
+        save(cx, &format!("Prog{n:02}"), &format!("codex --p{n:02}"));
+    }
+    start_in_plain_folder(cx, window, data.path());
+    search(cx, window, "codex");
+    focus_grid(cx, window, &kagan);
+    for _ in 0..40 {
+        if label(cx, window, &row_id("Prog10")).contains("selected") {
+            break;
+        }
+        cx.simulate_keystrokes(window, "right");
+    }
+    cx.run_until_parked();
+    assert!(label(cx, window, &row_id("Prog10")).contains("selected"));
+    cx.simulate_keystrokes(window, &chord("PinSavedProgram"));
+    wait_until(cx, |cx| pinned(cx, "Prog10"));
+    cx.run_until_parked();
+    assert!(label(cx, window, &row_id("Prog10")).contains("selected"));
+    assert!(
+        inside_list(cx, window, &row_id("Prog10")),
+        "the picked row is still in the visible list"
+    );
 }

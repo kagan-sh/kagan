@@ -1,8 +1,8 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use gpui_kit::TestAppContext;
+use gpui_kit::{AppContext as _, TestAppContext, px};
 use kg_core::Workspace;
-use kg_domain::{AutomationOp, Op, OpResult, ProjectId, ProjectOp, SettingsOp, Timestamp};
+use kg_domain::{AutomationOp, Op, OpResult, ProjectId, ProjectOp, ProjectSection, SettingsOp};
 
 use crate::tests::kagan::{click, label, open, present, value_of, wait_until};
 
@@ -30,6 +30,7 @@ fn open_project_page(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Settings(SettingsOp::Project {
                 id: ProjectId("prj_kagan".into()),
+                section: None,
             }),
             cx,
         )
@@ -66,12 +67,14 @@ fn the_project_page_counts_the_runs_an_automation_started(cx: &mut TestAppContex
                 project_id: ProjectId("prj_kagan".into()),
                 program: program().into(),
                 minutes: None,
-                at: Some(Timestamp(now_ms() + 1_000)),
+                in_minutes: Some(1),
             }),
             cx,
         )
     })
     .detach();
+    cx.run_until_parked();
+    cx.executor().advance_clock(Duration::from_mins(1));
     wait_until(cx, |cx| {
         rows(cx).first().is_some_and(|row| !row.threads.is_empty())
     });
@@ -106,9 +109,9 @@ fn once_in_saves_a_one_time_automation_that_is_due_in_that_many_minutes(cx: &mut
     type_into(cx, window, "automation-name", "Lunch");
     type_into(cx, window, "automation-body", "ping");
     type_into(cx, window, "automation-program", program());
-    type_into(cx, window, "automation-at", "1");
+    type_into(cx, window, "automation-in", "1");
     assert_eq!(
-        value_of(cx, window, "automation-at").as_deref(),
+        value_of(cx, window, "automation-in").as_deref(),
         Some("1"),
         "the typed minutes reached the field"
     );
@@ -120,8 +123,9 @@ fn once_in_saves_a_one_time_automation_that_is_due_in_that_many_minutes(cx: &mut
     let row = rows(cx).remove(0);
     assert_eq!(row.minutes, None);
     let due = row.at.expect("a one-time run").0;
+    // The core reads the test executor's clock, which can run a second behind the wall clock.
     assert!(
-        (before + 60_000..=after + 60_000).contains(&due),
+        (before + 59_000..=after + 60_000).contains(&due),
         "due at {due}, expected one minute after {before}..{after}"
     );
 }
@@ -149,6 +153,42 @@ fn an_empty_program_uses_the_project_default(cx: &mut TestAppContext) {
     assert_eq!(rows(cx).remove(0).program, program());
 }
 
+// The project menu's Automations item opens the page with its automations in view.
+#[gpui_kit::test]
+fn the_automations_item_opens_the_project_page_at_its_automations(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    cx.run_until_parked();
+    cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Settings(SettingsOp::Project {
+                id: ProjectId("prj_kagan".into()),
+                section: Some(ProjectSection::Automations),
+            }),
+            cx,
+        )
+    })
+    .detach();
+    cx.run_until_parked();
+    cx.run_until_parked();
+    assert!(
+        in_view(cx, window, "automation-add"),
+        "the add form is scrolled into view"
+    );
+}
+
+fn in_view(cx: &mut TestAppContext, window: gpui_kit::AnyWindowHandle, name: &str) -> bool {
+    cx.update_window(window, |_, window, _| {
+        let viewport = window.viewport_size();
+        crate::ui_registry::find(window, &gpui_kit::ElementId::Name(name.to_owned().into()))
+            .is_some_and(|element| {
+                element.visible
+                    && element.bounds.top() >= px(0.)
+                    && element.bounds.bottom() <= viewport.height
+            })
+    })
+    .unwrap()
+}
+
 #[gpui_kit::test]
 fn a_failed_start_reaches_the_open_project_page_without_a_reopen(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
@@ -160,8 +200,8 @@ fn a_failed_start_reaches_the_open_project_page_without_a_reopen(cx: &mut TestAp
                 body: "ping".into(),
                 project_id: ProjectId("prj_kagan".into()),
                 program: "kg-no-such-program".into(),
-                minutes: Some(1),
-                at: None,
+                minutes: None,
+                in_minutes: Some(1),
             }),
             cx,
         )

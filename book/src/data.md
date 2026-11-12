@@ -22,6 +22,7 @@ The socket is the connection between `kg` and the window. You need this when `kg
 - Else on Linux: `$XDG_DATA_HOME/kagan/kg.sock`, or `~/.local/share/kagan/kg.sock`.
 - Otherwise on Windows: a named pipe, `kagan-<your user name>`. It is not a file.
 - `KG_SOCKET` names a different socket. It wins over the data folder.
+- One request is one line of JSON, at most 16 MiB. A longer line is answered `invalid` and the connection is closed [decision 252].
 
 ## Network
 

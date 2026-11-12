@@ -4,7 +4,7 @@ use crate::kagan::changes::POLL;
 use crate::kagan::{NewTerminal, OpenLocalLink};
 use crate::tests::kagan::{
     cell_point, click, grid_text, label, open, present, press, release, run_shell, shown_row,
-    wait_for_shell, wait_until,
+    wait_for_output, wait_for_screen, wait_until,
 };
 
 #[gpui_kit::test]
@@ -13,7 +13,7 @@ fn a_secondary_click_on_a_printed_link_opens_it(cx: &mut TestAppContext) {
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, "printf 'at http%s now\\n' '://localhost:4321/x'\n");
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         grid_text(cx, &kagan).contains("http://localhost:4321/x")
     });
     let (row, column) = shown_row(cx, &kagan, "http://localhost:4321/x");
@@ -31,7 +31,7 @@ fn a_secondary_click_on_a_printed_link_opens_it(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn the_row_over_the_terminal_offers_the_newest_local_link(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = open(cx);
+    let (kagan, window, _data) = open(cx);
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
     assert!(!present(cx, window, "open-local-link"));
@@ -39,7 +39,7 @@ fn the_row_over_the_terminal_offers_the_newest_local_link(cx: &mut TestAppContex
         window,
         "printf 'Local: http%s\\nDocs: https://example.com\\n' '://localhost:3000/'\n",
     );
-    wait_for_shell(cx, |cx| {
+    wait_for_output(cx, &kagan, |cx| {
         cx.executor().advance_clock(POLL);
         present(cx, window, "open-local-link")
     });
@@ -48,9 +48,9 @@ fn the_row_over_the_terminal_offers_the_newest_local_link(cx: &mut TestAppContex
     assert_eq!(cx.opened_url().as_deref(), Some("http://localhost:3000/"));
 
     cx.dispatch_action(window, NewTerminal);
-    wait_for_shell(cx, |cx| present(cx, window, "right-tab-terminal-1"));
+    wait_for_output(cx, &kagan, |cx| present(cx, window, "right-tab-terminal-1"));
     cx.simulate_input(window, "printf 'http%s\\n' '://127.0.0.1:5173'\n");
-    wait_for_shell(cx, |cx| {
+    wait_for_output(cx, &kagan, |cx| {
         cx.executor().advance_clock(POLL);
         label(cx, window, "open-local-link") == "Open 127.0.0.1:5173"
     });
@@ -65,7 +65,7 @@ fn a_link_opens_in_the_browser_tab_when_the_switch_is_on(cx: &mut TestAppContext
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, "printf 'at http%s now\\n' '://localhost:4321/x'\n");
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         grid_text(cx, &kagan).contains("http://localhost:4321/x")
     });
     let set = kg_domain::Op::Preference(kg_domain::PreferenceOp::Set {
@@ -111,7 +111,7 @@ fn a_link_with_the_switch_off_opens_the_system_browser(cx: &mut TestAppContext) 
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, "printf 'at http%s now\\n' '://localhost:4321/x'\n");
-    wait_until(cx, |cx| {
+    wait_for_screen(cx, &kagan, |cx| {
         grid_text(cx, &kagan).contains("http://localhost:4321/x")
     });
     let (row, column) = shown_row(cx, &kagan, "http://localhost:4321/x");
