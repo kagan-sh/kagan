@@ -27,11 +27,25 @@ thread_local! {
     static REQUESTS: Cell<usize> = const { Cell::new(0) };
 }
 
-pub(crate) fn prepare(cx: &App) {
+pub(crate) fn prepare(cx: &mut App) {
     let app = cx.to_async();
     APP.with(|slot| *slot.borrow_mut() = Some(app));
     #[cfg(target_os = "macos")]
     install_should_terminate();
+    // The hook lives as long as the app, so it is detached rather than kept in a global.
+    cx.on_window_closed(|cx, _| quit_if_none_left(cx)).detach();
+}
+
+// macOS keeps the app in the Dock when its last window closes. Elsewhere that close ends kagan
+// as Quit does, without the prompt: no window is left to ask in.
+fn quit_if_none_left(cx: &mut App) {
+    if cfg!(target_os = "macos") {
+        return;
+    }
+    if cx.windows().is_empty() && !cx.has_global::<Quitting>() && !CONFIRMED.load(Ordering::SeqCst)
+    {
+        accept(cx);
+    }
 }
 
 pub(crate) fn ask(cx: &mut App) {
