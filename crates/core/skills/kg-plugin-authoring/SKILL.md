@@ -17,12 +17,9 @@ Build a plugin in this order. Each step names the command to run.
 
 5. **Check it.** `kg plugin check <path>` reads the manifest, the entry, and each contribution the same way install does, and reports a refused contribution by name. It also refuses a missing host export and a field constructor the component schema rejects. Fix every error before install.
 
-6. **Install, and wait for the person.** `kg plugin install <path>` (or `git:<url>@<ref>`) blocks until the person approves the plugin's powers in the app. A declined install fails the command. Do not approve it yourself, with `kg ui` or the operating system.
-
-7. **Test the command and the log.** Run `kg plugin command <id> hello`, then `kg plugin logs <id>`. The line `hello from the starter plugin` means the command ran. `kg plugin logs <id> --follow` streams new lines.
-
-8. **Iterate.** `kg plugin dev <path>` watches a local plugin and reloads it on each change. Find and click the panel's controls with `kg ui snapshot` and `kg ui click <id>`. Check the screen with `kg ui screenshot`.
-
+6. **Preview it first.** `kg plugin preview start <path>` starts a hidden kagan with the plugin. It blocks until the person approves, once, in their window. Never approve it yourself.
+7. **Test in the preview, never in the person's window.** Put the `KG_DATA_DIR` and `KG_SOCKET` it prints before each command: `… kg ui snapshot`, `… kg ui click <id>`, `… kg plugin logs <id>`. A save reloads it; errors go to `watch.log`. Added powers fail the reload with `powers grew`: run `kg plugin preview start <path>` again. In the preview, `kg thread run` takes `--project-id personal --environment personal`. Stop with `kg plugin preview stop <id>`, no variables.
+8. **Install, last.** `kg plugin install <path>` runs without the variables and adds it to the person's kagan. The person approves again.
 9. **Share it.** Commit and push the plugin, then run `kg plugin share <path>`. The index entry, the team index, and how teammates install the plugin are in `references/share.md`.
 
 Unavailable host areas fail explicitly. Do not invent an API: if a call is not in `kagan.d.ts`, it does not exist in this version.

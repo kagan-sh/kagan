@@ -9,6 +9,7 @@ mod install;
 mod jobs;
 mod manifest;
 mod page;
+mod preview;
 mod rail;
 mod runtime;
 mod schedule;
@@ -218,6 +219,13 @@ fn open_kept(cx: &mut TestAppContext, data: &Path, keep: TempDir, plugins: &[Plu
         crate::init(cx, gpui_shell::components::components().unwrap())
     });
     cx.foreground_executor().block_test(started).unwrap();
+    // Previews start a kagan from `kg`; a test has none, so a start fails at once instead.
+    cx.update(|cx| {
+        let host = cx.global::<PluginHostGlobal>().0.clone();
+        host.update(cx, |host, _| {
+            host.previews.exe = "/nonexistent/kagan-test-kg".into();
+        });
+    });
     cx.update(|cx| cx.set_global(Opened { _data: keep }));
 }
 

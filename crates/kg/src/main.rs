@@ -6,6 +6,7 @@ mod mcp;
 mod out;
 #[cfg(windows)]
 mod pipe;
+mod preview;
 mod socket;
 #[cfg(test)]
 mod tests;

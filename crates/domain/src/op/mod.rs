@@ -59,7 +59,11 @@ pub use keymap::{
     ShortcutScope, ShortcutWhen, default_chord, expand_secondary,
 };
 pub use notify::NotifyOp;
-pub use plugin::{OutdatedPlugin, PluginOp, RailAction, UpdateTarget};
+#[cfg(unix)]
+pub use plugin::SOCKET_PATH_MAX;
+pub use plugin::{
+    OutdatedPlugin, PluginOp, PluginPreview, PluginPreviewOp, RailAction, UpdateTarget,
+};
 pub use preference::PreferenceOp;
 pub use program::ProgramOp;
 pub use project::ProjectOp;
@@ -205,6 +209,8 @@ pub enum OpResult {
     },
     Files(Vec<PathBuf>),
     Plugins(Vec<Plugin>),
+    PluginPreview(PluginPreview),
+    PluginPreviews(Vec<PluginPreview>),
     /// The git plugins behind their ref, and one line for each plugin that could not be checked
     Outdated {
         plugins: Vec<OutdatedPlugin>,

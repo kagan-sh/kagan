@@ -81,6 +81,9 @@ pub(crate) async fn ask(
     fields: Option<Vec<kg_domain::AskField>>,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
+    if cx.update(|cx| Workspace::global(cx).read(cx).is_preview()) {
+        return Err(OpError::Invalid(crate::NO_ONE_HERE.into()));
+    }
     let title = title.trim();
     if title.is_empty() {
         return Err(OpError::Invalid("ask needs a title".into()));

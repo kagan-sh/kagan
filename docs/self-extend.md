@@ -63,18 +63,19 @@ Short, and each points at `kg guide` chapters and the generated `.d.ts` files in
 - `kg plugin new <name> [--dir <path>]`: scaffolds `kagan.json`, `main.js` with the job loop, `jsconfig.json`, `kagan.d.ts` and `gpui-kit.d.ts`.
 - `kg plugin check [path]`: checks the manifest (unknown keys, schemas, declared views exported) and refuses a script that imports a missing host export or builds a field the component schema rejects, without loading it.
 - `kg plugin install <path>`: a local path is linked, not copied, so edits take effect on reload.
-- `kg plugin reload <id>`, and `kg plugin dev [path]`: watches the folder and reloads on every change. There is no build step.
+- `kg plugin reload <id>`: reloads an installed plugin. `kg plugin dev [path]` is a `kg` loop over `Reload` that watches a local folder and reloads on every change, so a `PluginOp::Dev` call on its own reads the record once and does not watch. There is no build step.
+- `kg plugin preview start [path]`, `kg plugin preview stop <id>`, `kg plugin preview list`: run the plugin in a hidden kagan of its own, on its own data folder and socket. The person approves it once in their own window; their window does not change view. `start` prints the two variables `KG_DATA_DIR` and `KG_SOCKET` to put in front of each command that drives it, and a `stop` line [decision 274].
 - `kg plugin logs <id> [--follow]`: `host.log` output, crashes, slow marks.
 - `kg plugin types [path]`: rewrites the `.d.ts` files for the running version.
 - `kg plugin list`, `kg plugin remove <id>`.
 
 **Approval.** Installing, or reloading a local plugin whose powers grew, raises a pending interaction on the thread that ran the command. The person approves the powers screen; the command waits and fails if they decline. A `downloads` key or `powers.spawn` is refused.
 
-**An agent building a plugin:** `kg plugin new` → edit → `kg plugin check` → `kg plugin install ./<name>` (person approves) → `kg plugin dev` → call its tools and commands → read `kg plugin logs`.
+**An agent building a plugin:** `kg plugin new` → edit → `kg plugin check` → `kg plugin preview start ./<name>` (the person approves once, in their window) → put the two variables it printed in front of each command that drives it: `kg ui`, `kg thread run`, and the plugin's own commands → read `kg plugin logs` against the preview → when it works, `kg plugin install ./<name>` into the person's kagan (the person approves again). An agent never drives the person's window to test a plugin.
 
 ## Ops added
 
-`Status`, `Guide { chapter? }`, `Skill(SkillOp)` (`List`, `Show`, `Files`, `New`, `Add`, `Remove`), and on `PluginOp`: `New`, `Check`, `Reload`, `Logs`, `Types`, `List`, `Remove`. `kg plugin dev` is a client-side loop over `Reload`.
+`Status`, `Guide { chapter? }`, `Skill(SkillOp)` (`List`, `Show`, `Files`, `New`, `Add`, `Remove`), and on `PluginOp`: `New`, `Check`, `Reload`, `Logs`, `Types`, `List`, `Remove`. `kg plugin dev` is a client-side loop over `Reload`, and `kg plugin preview` is an Op that starts a hidden kagan.
 
 ## Not in v1
 

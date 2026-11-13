@@ -79,6 +79,9 @@ impl Workspace {
         options: Vec<InteractionOption>,
         cx: &mut App,
     ) -> Task<Result<String>> {
+        if Self::global(cx).read(cx).is_preview() {
+            return Task::ready(Err(OpError::Invalid(NO_ONE_HERE.into())));
+        }
         if let Some(requester) = &requester {
             requester.waiting_for(&title);
         }
@@ -138,6 +141,9 @@ impl Workspace {
             .is_some_and(|waiting| waiting.for_a_person)
     }
 }
+
+/// What a question in a preview says: no one can see it there, so it is refused where it starts.
+pub const NO_ONE_HERE: &str = "this is a preview kagan; no one can answer here. Run this without KG_DATA_DIR and KG_SOCKET set";
 
 pub(crate) async fn approve(
     thread_id: Option<ThreadId>,
