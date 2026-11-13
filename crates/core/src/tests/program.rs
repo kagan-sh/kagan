@@ -82,11 +82,6 @@ fn the_program_list_finds_known_agents_and_defaults_to_the_first_installed() {
         Some(std::ffi::OsStr::new("/bin/sh")),
         None,
         &[],
-        &[
-            "codex --resume".into(),
-            "claude".into(),
-            "'unfinished".into(),
-        ],
         None,
     );
     let claude = list
@@ -103,31 +98,6 @@ fn the_program_list_finds_known_agents_and_defaults_to_the_first_installed() {
             .iter()
             .any(|p| p.source == kg_domain::ProgramSource::Shell && p.installed())
     );
-    let recent = list
-        .programs
-        .iter()
-        .find(|p| p.command == "codex --resume")
-        .unwrap();
-    assert_eq!(recent.source, kg_domain::ProgramSource::Recent);
-    assert!(list.programs.iter().all(|p| p.command != "'unfinished"));
-    assert_eq!(list.default.as_deref(), Some("claude"));
-}
-
-#[cfg(unix)]
-#[test]
-fn a_recent_program_never_becomes_the_default() {
-    let dir = tempfile::tempdir().unwrap();
-    fake_program(dir.path(), "claude", "true");
-    fake_program(dir.path(), "tool", "true");
-    let list = crate::host::program::discover(
-        Some(dir.path().as_os_str()),
-        None,
-        None,
-        None,
-        &[],
-        &["tool --fast".into(), "claude".into()],
-        None,
-    );
     assert_eq!(list.default.as_deref(), Some("claude"));
 }
 
@@ -143,8 +113,11 @@ fn the_default_is_the_project_program_only_while_it_is_installed() {
             None,
             None,
             None,
-            &[],
-            &[project.to_owned()],
+            &[kg_domain::SavedProgram {
+                name: "Fast".into(),
+                line: project.to_owned(),
+                pinned: false,
+            }],
             Some(project),
         )
         .default
@@ -164,8 +137,11 @@ fn only_installed_known_agents_get_a_version() {
         None,
         None,
         None,
-        &[],
-        &["tool".into()],
+        &[kg_domain::SavedProgram {
+            name: "Tool".into(),
+            line: "tool".into(),
+            pinned: false,
+        }],
         None,
     );
     crate::host::program::versions(&mut list);
@@ -191,6 +167,15 @@ async fn a_projects_installed_program_is_its_new_thread_default(cx: &mut TestApp
     fixture.workspace.update(cx, |workspace, _| {
         workspace.use_program_environment(&bin, std::path::Path::new("/bin/sh"));
     });
+    op(
+        Op::Program(ProgramOp::Save {
+            name: "Fast".into(),
+            line: "tool --fast".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
     op(
         Op::Project(ProjectOp::SetProgram {
             id: fixture.project.clone(),
@@ -223,7 +208,7 @@ async fn a_projects_installed_program_is_its_new_thread_default(cx: &mut TestApp
 }
 
 #[test]
-fn saved_programs_sit_after_the_shell_and_before_recent_ones_and_fold_a_repeat() {
+fn pinned_saved_programs_come_first_and_the_rest_keep_their_order() {
     // Nothing is installed on this PATH, so the order does not depend on the machine.
     let dir = tempfile::tempdir().unwrap();
     let saved = |name: &str, line: &str, pinned: bool| kg_domain::SavedProgram {
@@ -237,81 +222,23 @@ fn saved_programs_sit_after_the_shell_and_before_recent_ones_and_fold_a_repeat()
         Some(std::ffi::OsStr::new("/bin/sh")),
         None,
         &[
-            saved("Pinned", "tool --pinned", true),
             saved("Fast", "tool --fast", false),
+            saved("Pinned", "tool --pinned", true),
             saved("Missing", "kg-no-such-program", false),
         ],
-        &["tool --fast".into(), "tool --recent".into()],
         None,
     );
-    let order: Vec<_> = list
-        .programs
-        .iter()
-        .map(|program| (program.source, program.label.as_str()))
-        .collect();
-    let position = |label: &str| order.iter().position(|(_, found)| *found == label).unwrap();
-    assert!(position("Pinned") < position("Fast"));
-    assert!(
-        position("Fast") < position("tool"),
-        "recent ones follow the pinned ones"
-    );
-    assert!(position("tool") < position("Shell"), "then the rest");
-    assert!(position("tool") < position("Missing"));
+    let labels: Vec<_> = list.programs.iter().map(|p| p.label.as_str()).collect();
     assert_eq!(
-        order
-            .iter()
-            .filter(|(source, _)| *source == kg_domain::ProgramSource::Saved)
-            .map(|(_, label)| *label)
-            .collect::<Vec<_>>(),
-        ["Pinned", "Fast", "Missing"],
-        "saved programs keep the order the store gives them"
+        labels,
+        ["Pinned", "Claude Code", "Codex", "Shell", "Fast", "Missing"]
     );
-    let fast: Vec<_> = list
-        .programs
-        .iter()
-        .filter(|program| program.command == "tool --fast")
-        .collect();
-    assert_eq!(
-        fast.len(),
-        1,
-        "a saved line that was also recent is one row"
-    );
-    assert_eq!(fast[0].label, "Fast");
     let missing = list
         .programs
         .iter()
         .find(|program| program.label == "Missing")
         .unwrap();
     assert!(!missing.installed());
-    assert!(list.programs.iter().any(|p| p.command == "tool --recent"));
-}
-
-#[test]
-fn a_recent_command_is_named_by_its_program_and_keeps_its_flags() {
-    let dir = tempfile::tempdir().unwrap();
-    let list = crate::host::program::discover(
-        Some(dir.path().as_os_str()),
-        None,
-        None,
-        None,
-        &[],
-        &[
-            "cursor-agent --model grok-4.7-high --trust --force".into(),
-            "/opt/tools/mytool --fast".into(),
-        ],
-        None,
-    );
-    let label = |command: &str| {
-        list.programs
-            .iter()
-            .find(|p| p.command == command)
-            .map(|p| p.label.clone())
-    };
-    assert_eq!(
-        label("cursor-agent --model grok-4.7-high --trust --force").as_deref(),
-        Some("Cursor Agent")
-    );
-    assert_eq!(label("/opt/tools/mytool --fast").as_deref(), Some("mytool"));
 }
 
 #[cfg(unix)]
@@ -325,7 +252,7 @@ fn a_known_program_in_its_install_folder_is_found_without_the_login_path() {
     let empty = dir.path().join("empty");
     std::fs::create_dir(&empty).unwrap();
     let installed = |home: Option<&std::path::Path>| {
-        crate::host::program::discover(Some(empty.as_os_str()), None, None, home, &[], &[], None)
+        crate::host::program::discover(Some(empty.as_os_str()), None, None, home, &[], None)
             .programs
             .into_iter()
             .find(|p| p.command == "opencode")
@@ -355,26 +282,6 @@ fn a_run_finds_a_known_program_in_its_install_folder() {
             .unwrap();
     assert_eq!(found.path, bin.join("opencode"));
     assert!(crate::thread::resolve_program("opencode", Some(&environment), None).is_err());
-}
-
-#[test]
-fn a_recent_command_with_an_exe_suffix_is_named_by_its_program() {
-    let dir = tempfile::tempdir().unwrap();
-    let list = crate::host::program::discover(
-        Some(dir.path().as_os_str()),
-        None,
-        None,
-        None,
-        &[],
-        &["claude.exe --fast".into()],
-        None,
-    );
-    let label = list
-        .programs
-        .iter()
-        .find(|p| p.command == "claude.exe --fast")
-        .map(|p| p.label.clone());
-    assert_eq!(label.as_deref(), Some("Claude Code"));
 }
 
 #[cfg(unix)]
@@ -425,15 +332,8 @@ fn more_documented_folders_find_cursor_goose_and_amp_without_the_login_path() {
         std::fs::create_dir_all(&bin).unwrap();
         fake_program(&bin, command, "true");
     }
-    let list = crate::host::program::discover(
-        Some(empty.as_os_str()),
-        None,
-        None,
-        Some(&home),
-        &[],
-        &[],
-        None,
-    );
+    let list =
+        crate::host::program::discover(Some(empty.as_os_str()), None, None, Some(&home), &[], None);
     for (command, folder) in folders {
         let found = list
             .programs
@@ -454,15 +354,8 @@ fn a_version_is_read_from_a_program_in_its_documented_folder() {
     fake_program(&bin, "opencode", "echo 'opencode 1.4.2'");
     let empty = dir.path().join("empty");
     std::fs::create_dir(&empty).unwrap();
-    let mut list = crate::host::program::discover(
-        Some(empty.as_os_str()),
-        None,
-        None,
-        Some(&home),
-        &[],
-        &[],
-        None,
-    );
+    let mut list =
+        crate::host::program::discover(Some(empty.as_os_str()), None, None, Some(&home), &[], None);
     crate::host::program::versions(&mut list);
     let version = list
         .programs
@@ -554,24 +447,6 @@ async fn saved_names(cx: &mut TestAppContext) -> Vec<String> {
 }
 
 #[cfg(unix)]
-#[test]
-fn a_recent_known_agent_does_not_become_the_default_either() {
-    let dir = tempfile::tempdir().unwrap();
-    fake_program(dir.path(), "claude", "true");
-    fake_program(dir.path(), "codex", "true");
-    let list = crate::host::program::discover(
-        Some(dir.path().as_os_str()),
-        None,
-        None,
-        None,
-        &[],
-        &["codex".into()],
-        None,
-    );
-    assert_eq!(list.default.as_deref(), Some("claude"));
-}
-
-#[cfg(unix)]
 #[gpui_kit::test]
 async fn a_thread_from_a_saved_program_takes_its_saved_name_and_stays_renamable(
     cx: &mut TestAppContext,
@@ -612,4 +487,35 @@ async fn a_thread_from_a_saved_program_takes_its_saved_name_and_stays_renamable(
         !started.title_locked,
         "a thread the program named can still be renamed"
     );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_thread_started_with_flags_adds_no_card(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    fake_program(fixture.dir.path(), "claude", "true");
+    let line = format!("{} --model x", fixture.dir.path().join("claude").display());
+    op(
+        Op::Thread(kg_domain::ThreadOp::Run(kg_domain::Run {
+            project_id: fixture.project.clone(),
+            program: line.clone(),
+            title: None,
+            environment: kg_domain::EnvironmentSpec::ProjectDefault,
+            visibility: None,
+            parent_thread_id: None,
+            quiet: true,
+            lifecycle_owner_thread_id: None,
+            metadata: None,
+        })),
+        cx,
+    )
+    .await
+    .unwrap();
+    let OpResult::Programs(list) = op(Op::Program(ProgramOp::List { project_id: None }), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("programs")
+    };
+    assert!(list.programs.iter().all(|p| p.command != line));
 }

@@ -47,26 +47,18 @@ impl RenderOnce for ProgramCard {
             full: full_version,
         } = version_of(&self.program);
         let tooltip = match self.program.source {
-            ProgramSource::Recent | ProgramSource::Saved => Some(self.program.command.clone()),
+            ProgramSource::Saved => Some(self.program.command.clone()),
             _ => full_version,
         };
         let key = program_key(&self.program);
         let label = self.program.label.clone();
-        // One caption under the name: an agent's version, or a program's command. A recent
-        // command shows its flags, since its name is already the program's.
+        // One caption under the name: an agent's version, or a program's command.
         let caption = match self.program.source {
             ProgramSource::Known => Some((format!("program-version-{key}"), version)),
             ProgramSource::Shell | ProgramSource::Saved => Some((
                 format!("program-command-{key}"),
                 self.program.command.clone(),
             )),
-            ProgramSource::Recent => self
-                .program
-                .command
-                .split_once(char::is_whitespace)
-                .map(|(_, flags)| flags.trim_start().to_owned())
-                .filter(|flags| !flags.is_empty())
-                .map(|flags| (format!("program-command-{key}"), flags)),
         };
         // The selected card says so in words too, not only by its fill.
         let name = if self.selected {
