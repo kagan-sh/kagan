@@ -173,6 +173,11 @@ pub enum PluginPreviewOp {
     List,
 }
 
+// `sockaddr_un.sun_path` holds the path and a trailing NUL. Linux gives the path 108 bytes;
+// macOS gives it 104.
+#[cfg(unix)]
+pub const SOCKET_PATH_MAX: usize = if cfg!(target_os = "linux") { 107 } else { 103 };
+
 /// A plugin preview: its id, the plugin, the folder it watches, and the two variables that point a
 /// `kg` command at it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

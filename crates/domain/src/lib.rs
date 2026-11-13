@@ -28,6 +28,8 @@ pub use id::{
     ProjectId, SavedPromptId, SectionId, ThreadId, Timestamp,
 };
 pub use notify::{NotifyLevel, NotifyReason, ThreadNotify};
+#[cfg(unix)]
+pub use op::SOCKET_PATH_MAX;
 pub use op::{
     Appearance, Automation, AutomationOp, BranchList, BrowserControl, BrowserOp, BrowserSnapshot,
     BrowserView, CommandGroup, ConfigOp, DiagnosticsOp, DiffOp, DiffQuery, DiffScope, DropSide,

@@ -341,8 +341,8 @@ fn plugin_thread(op: &PluginOp) -> Option<&ThreadId> {
         | PluginOp::Update { thread_id, .. }
         | PluginOp::Config { thread_id, .. }
         | PluginOp::Use { thread_id, .. }
-        | PluginOp::Remove { thread_id, .. } => thread_id.as_ref(),
-        PluginOp::Preview {
+        | PluginOp::Remove { thread_id, .. }
+        | PluginOp::Preview {
             op: PluginPreviewOp::Start { thread_id, .. },
         } => thread_id.as_ref(),
         PluginOp::Start

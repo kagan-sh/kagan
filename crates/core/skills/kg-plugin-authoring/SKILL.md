@@ -17,12 +17,9 @@ Build a plugin in this order. Each step names the command to run.
 
 5. **Check it.** `kg plugin check <path>` reads the manifest, the entry, and each contribution the same way install does, and reports a refused contribution by name. It also refuses a missing host export and a field constructor the component schema rejects. Fix every error before install.
 
-6. **Install, and wait for the person.** `kg plugin install <path>` (or `git:<url>@<ref>`) blocks until the person approves the plugin's powers in the app. A declined install fails the command. Do not approve it yourself, with `kg ui` or the operating system.
-
-7. **Test the command and the log.** Run `kg plugin command <id> hello`, then `kg plugin logs <id>`. The line `hello from the starter plugin` means the command ran. `kg plugin logs <id> --follow` streams new lines.
-
-8. **Iterate.** `kg plugin dev <path>` watches a local plugin and reloads it on each change. Find and click the panel's controls with `kg ui snapshot` and `kg ui click <id>`. Check the screen with `kg ui screenshot`.
-
+6. **Preview it first.** `kg plugin preview start <path>` starts a hidden kagan with the plugin in it. It blocks until the person approves the plugin's powers in their own window, once. It prints `export KG_DATA_DIR=… KG_SOCKET=…` and a `stop` line. Do not approve it yourself, with `kg ui` or the operating system.
+7. **Test in the preview, never in the person's window.** Export the two variables the preview printed, then run the commands against it: `kg plugin command <id> hello`, `kg plugin logs <id>`, `kg ui snapshot`, `kg ui click <id>`, `kg ui screenshot`. The line `hello from the starter plugin` means the command ran. Each save reloads the preview. Its reload errors go to `watch.log` in the preview folder. If your edit adds powers, the reload fails with `powers grew (…)`, and the last approved code keeps running; run `kg plugin preview start <path>` again so the person can approve them. Stop it with `kg plugin preview stop <id>` when you are done.
+8. **Install, last.** When the preview works, `kg plugin install <path>` (or `git:<url>@<ref>`) adds the plugin to the person's kagan. It blocks until the person approves the powers again. A declined install fails the command.
 9. **Share it.** Commit and push the plugin, then run `kg plugin share <path>`. The index entry, the team index, and how teammates install the plugin are in `references/share.md`.
 
 Unavailable host areas fail explicitly. Do not invent an API: if a call is not in `kagan.d.ts`, it does not exist in this version.

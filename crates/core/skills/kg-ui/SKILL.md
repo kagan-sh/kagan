@@ -8,3 +8,5 @@ Read `kg guide ui`. Use `kg ui snapshot` to find element ids, then `click`, `typ
 Drive the instance `kg status --json` just confirmed. Snapshot that window. A second app is the wrong tree.
 
 `kg plugin install` waits for the person. `kg ui` cannot approve powers. The Op returns `person-only approvals cannot be answered with kg ui`.
+
+For plugin QA, do not drive the person's window. Run `kg plugin preview start <path>`, export the `KG_DATA_DIR` and `KG_SOCKET` it prints, and then use `kg ui` against that preview [decision 274].

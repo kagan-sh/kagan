@@ -22,7 +22,7 @@ mod workspace;
 
 pub use dispatch::ui::{UiDispatch, UiJob};
 pub use kg_terminal::{Ansi, Cell, Color, Cursor, Grid, Motion, Mouse, Weight};
-pub use plugin_folder::{plugin_data_dir, plugin_dir, plugin_log_file, plugins_dir};
+pub use plugin_folder::{plugin_data_dir, plugin_dir, plugin_log_file, plugins_dir, previews_dir};
 pub use preview::{human_size, image_size, preview_image, preview_note};
 pub use settings::keys::{host_os, is_known_key, parse_key};
 pub use update::{Target, Updater};

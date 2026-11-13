@@ -13,6 +13,7 @@ pub mod keys;
 pub(crate) mod log;
 pub(crate) mod ops;
 pub(crate) mod page;
+pub(crate) mod preview;
 pub(crate) mod process;
 pub(crate) mod secret;
 pub(crate) mod strip;

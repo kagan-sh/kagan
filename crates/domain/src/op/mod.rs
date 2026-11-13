@@ -59,6 +59,8 @@ pub use keymap::{
     ShortcutScope, ShortcutWhen, default_chord, expand_secondary,
 };
 pub use notify::NotifyOp;
+#[cfg(unix)]
+pub use plugin::SOCKET_PATH_MAX;
 pub use plugin::{
     OutdatedPlugin, PluginOp, PluginPreview, PluginPreviewOp, RailAction, UpdateTarget,
 };

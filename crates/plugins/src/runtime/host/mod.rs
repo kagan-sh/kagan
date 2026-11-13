@@ -65,6 +65,7 @@ pub fn init(cx: &mut App, components: gpui_shell::FrozenComponentRegistry) -> Ta
         records: BTreeMap::new(),
         started: false,
         active: BTreeMap::new(),
+        previews: BTreeMap::new(),
         next_activation: 0,
         permits: BTreeMap::new(),
         components,
@@ -196,6 +197,8 @@ pub struct PluginHost {
     // Set once every enabled plugin found at launch has had its start.
     pub(crate) started: bool,
     pub(crate) active: BTreeMap<PluginId, Active>,
+    /// Previews this app started, each with its own hidden app and reload watch.
+    pub(crate) previews: BTreeMap<kg_domain::PreviewId, crate::runtime::preview::Running>,
     pub(crate) next_activation: u64,
     pub(crate) permits: BTreeMap<PluginId, Arc<Mutex<Option<u64>>>>,
     pub(crate) components: gpui_shell::FrozenComponentRegistry,
@@ -215,6 +218,7 @@ pub(crate) enum Hold {
     Write,
     Activation,
     Lifecycle,
+    PreviewStart,
 }
 
 /// Waits at `which` when a test set a hold there. Says whether it waited.
@@ -515,15 +519,42 @@ impl PluginHost {
     }
 }
 impl PluginHost {
+    // A thread that is archived or deleted takes its previews with it.
+    fn end_previews(&mut self, thread_id: &kg_domain::ThreadId, cx: &mut Context<Self>) {
+        let ended = crate::runtime::preview::take_for_thread(&mut self.previews, thread_id);
+        if ended.is_empty() {
+            return;
+        }
+        let folders: Vec<_> = ended.iter().map(|running| running.folder.clone()).collect();
+        drop(ended);
+        cx.background_spawn(async move {
+            for folder in folders {
+                // A folder that stays is swept on the next start.
+                let _ = crate::runtime::preview::remove(&folder);
+            }
+        })
+        .detach();
+    }
+
     pub(crate) fn deliver_workspace_event(event: &kg_core::WorkspaceEvent, cx: &mut Context<Self>) {
         let kg_core::WorkspaceEvent::Event { event, project_id } = event else {
             return;
         };
+        let ended = matches!(
+            event.kind,
+            kg_domain::EventKind::Archived | kg_domain::EventKind::Deleted
+        )
+        .then(|| event.thread_id.clone());
         let event = event.clone();
         let project_id = project_id.clone();
         cx.spawn(async move |host, cx| {
             // The host is gone when kagan is closing.
-            let _ = host.update(cx, |host, cx| host.deliver_event(&event, &project_id, cx));
+            let _ = host.update(cx, |host, cx| {
+                host.deliver_event(&event, &project_id, cx);
+                if let Some(thread_id) = &ended {
+                    host.end_previews(thread_id, cx);
+                }
+            });
         })
         .detach();
     }
@@ -532,6 +563,8 @@ impl PluginHost {
         &mut self,
         cx: &mut Context<Self>,
     ) -> impl std::future::Future<Output = ()> + use<> {
+        // Dropping a preview kills its processes. Its folder is swept on the next start.
+        self.previews.clear();
         let finished: Vec<_> = self
             .active
             .values()

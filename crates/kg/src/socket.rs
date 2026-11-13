@@ -14,10 +14,8 @@ use serde::Deserialize;
 
 const START_TIMEOUT: Duration = Duration::from_secs(10);
 
-// `sockaddr_un.sun_path` holds the path and a trailing NUL. Linux gives the path 108 bytes;
-// macOS gives it 104.
 #[cfg(unix)]
-const SOCKET_PATH_MAX: usize = if cfg!(target_os = "linux") { 107 } else { 103 };
+use kg_domain::SOCKET_PATH_MAX;
 
 pub(crate) fn non_empty(value: Option<std::ffi::OsString>) -> Option<std::ffi::OsString> {
     value.filter(|value| !value.is_empty())
