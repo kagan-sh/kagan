@@ -71,8 +71,7 @@ fn present(cx: &mut App) {
         decline(cx);
     }
     let running = running(cx);
-    // A preview has no one to answer the prompt, so it quits as it would with nothing running.
-    if running == 0 || kg_core::Workspace::global(cx).read(cx).is_preview() {
+    if running == 0 {
         finish(cx);
         return;
     }
