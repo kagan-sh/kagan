@@ -286,6 +286,8 @@ A `secret` setting (decision 104):
 
 ## Packaging and install
 
+`kg plugin preview start <path>` runs a local plugin in a hidden kagan, approved once by the person, and prints the variables that point `kg ui` at it [decision 274].
+
 - **Plain JavaScript, no build step.** Files start with `// @ts-check`; kagan generates `kagan.d.ts` beside gpui-shell's `gpui-kit.d.ts`. A plugin's CI may run `tsc --noEmit --checkJs`. What is in git is what runs.
 - **Install from git**: `kg plugin install git:<url>@<ref> --plugin <name>`, or `kg plugin install <path>` for a local folder.
 - **Repo index** `.kagan/plugins.json` lists the plugins in a repository. Tag releases per plugin: `canvas/v1.2.3`.
