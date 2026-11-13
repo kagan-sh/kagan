@@ -58,6 +58,10 @@ pub(crate) fn show(cx: &mut App) {
     }
 }
 
+pub(crate) fn shown(cx: &App) -> Option<AnyWindowHandle> {
+    cx.try_global::<Shown>().map(|&Shown(handle)| handle)
+}
+
 pub(crate) fn options(cx: &mut App) -> WindowOptions {
     crate::prepare_window(
         WindowOptions {
