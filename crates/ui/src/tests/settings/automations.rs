@@ -1,4 +1,4 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use gpui_kit::{AppContext as _, TestAppContext, px};
 use kg_core::Workspace;
@@ -45,14 +45,8 @@ fn type_into(cx: &mut TestAppContext, window: gpui_kit::AnyWindowHandle, field: 
     cx.run_until_parked();
 }
 
-fn now_ms() -> i64 {
-    i64::try_from(
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis(),
-    )
-    .unwrap()
+fn clock(cx: &mut TestAppContext) -> i64 {
+    cx.update(|cx| Workspace::global(cx).read(cx).clock_now(cx).0)
 }
 
 #[gpui_kit::test]
@@ -116,16 +110,15 @@ fn once_in_saves_a_one_time_automation_that_is_due_in_that_many_minutes(cx: &mut
         "the typed minutes reached the field"
     );
 
-    let before = now_ms();
+    let before = clock(cx);
     click(cx, window, "automation-add");
     wait_until(cx, |cx| !rows(cx).is_empty());
-    let after = now_ms();
+    let after = clock(cx);
     let row = rows(cx).remove(0);
     assert_eq!(row.minutes, None);
     let due = row.at.expect("a one-time run").0;
-    // The core reads the test executor's clock, which can run a second behind the wall clock.
     assert!(
-        (before + 59_000..=after + 60_000).contains(&due),
+        (before + 60_000..=after + 60_000).contains(&due),
         "due at {due}, expected one minute after {before}..{after}"
     );
 }

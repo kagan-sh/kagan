@@ -158,6 +158,8 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # The release build has no test cfg, so lint the product without --all-targets too.
+      - run: cargo clippy --workspace --locked -- -D warnings
 
   linux-tests:
     needs: [scope, checks]

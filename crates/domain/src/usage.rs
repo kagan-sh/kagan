@@ -14,13 +14,17 @@ pub enum UsageOp {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum UsageProvider {
+    Claude,
     Codex,
 }
 
 impl UsageProvider {
+    pub const ALL: [Self; 2] = [Self::Claude, Self::Codex];
+
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
+            Self::Claude => "Claude",
             Self::Codex => "Codex",
         }
     }

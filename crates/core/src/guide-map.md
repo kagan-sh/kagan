@@ -54,7 +54,7 @@ preview: `kg preview show` prints one file with the same rules as the Preview ta
 
 diagnostics: `kg diagnostics export`.
 
-usage: `kg usage show` reads each signed-in provider's usage limits now, if the `usage-limits` preference is on; `kg usage refresh` asks again. Nothing is saved.
+usage: `kg usage show` reads each signed-in provider's usage limits now, if the `usage-limits` preference is on (on when unset) [decision 272]; `kg usage refresh` asks again. Nothing is saved.
 update: `kg update check` reads the GitHub release list now; `kg update status` prints the version, the install kind and what the last check found. Only a person installs, from the window.
 
 Preferences and keys: `kg guide customize`.
