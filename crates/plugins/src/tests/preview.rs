@@ -332,6 +332,7 @@ fn replacing_a_thread_preview_returns_the_one_it_replaces(cx: &mut TestAppContex
 fn quitting_the_person_app_ends_each_watch_at_once_and_asks_each_preview_to_quit(
     cx: &mut TestAppContext,
 ) {
+    cx.executor().allow_parking();
     let data = tempfile::tempdir().unwrap();
     let path = data.path().to_path_buf();
     open_kept(cx, &path, data, &[]);
@@ -351,8 +352,16 @@ fn quitting_the_person_app_ends_each_watch_at_once_and_asks_each_preview_to_quit
         host.previews.exe = exe.clone();
         host.previews
             .replace(Running::new(info, folder.clone(), app, watch));
-        host.previews.quit_all();
     });
+    // The app's own quit runs the handler that ends the previews. It must not wait for them: a
+    // preview's app is given three seconds to exit, and the quit has to return well before that.
+    let quitting = Instant::now();
+    cx.quit();
+    assert!(
+        quitting.elapsed() < Duration::from_secs(2),
+        "the quit waited {:?} for the previews",
+        quitting.elapsed()
+    );
 
     std::thread::sleep(Duration::from_millis(100));
     // A killed child is a zombie until it is reaped; a zombie has ended, so it is not running.
