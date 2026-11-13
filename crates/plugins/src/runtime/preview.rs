@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use async_channel::Receiver;
 use gpui_kit::{BackgroundExecutor, Context, Entity, Subscription};
 use kg_core::{Workspace, WorkspaceEvent};
-use kg_domain::{EventKind, OpError, PluginId, PluginPreview, PreviewId, ThreadId};
+use kg_domain::{EventKind, OpError, PluginPreview, PreviewId};
 use kg_process::Process;
 
 use crate::{PluginHost, Result};
@@ -30,6 +30,14 @@ pub(crate) struct Running {
 }
 
 impl Running {
+    pub(crate) fn app_exited(&mut self) -> bool {
+        self.app.child().try_status().ok().flatten().is_some()
+    }
+
+    pub(crate) fn watch_exited(&mut self) -> bool {
+        self.watch.child().try_status().ok().flatten().is_some()
+    }
+
     pub(crate) fn new(info: PluginPreview, folder: PathBuf, app: Process, watch: Process) -> Self {
         Self {
             info,
@@ -40,10 +48,12 @@ impl Running {
     }
 }
 
-// The previews this app runs, and the ids a start has reserved before its folder exists.
+// The previews this app runs, the ids a start has reserved before its folder exists, and the
+// `kg` the previews run as.
 pub(crate) struct Previews {
     running: BTreeMap<PreviewId, Running>,
     starting: BTreeSet<PreviewId>,
+    pub(crate) exe: PathBuf,
     _events: Subscription,
     _quit: Subscription,
 }
@@ -53,24 +63,15 @@ impl Previews {
         Self {
             running: BTreeMap::new(),
             starting: BTreeSet::new(),
+            exe: std::env::current_exe().unwrap_or_default(),
             _events: cx.subscribe(workspace, |host, _, event: &WorkspaceEvent, cx| {
                 end_on(&mut host.previews, event, cx);
             }),
-            _quit: cx.on_app_quit(|host, cx| {
-                let ended: Vec<_> = host
-                    .previews
-                    .take_all()
-                    .into_iter()
-                    .map(|running| shut_down_later(running, cx.background_executor()))
-                    .collect();
-                async move {
-                    futures::future::join_all(
-                        ended
-                            .into_iter()
-                            .map(|ended| async move { ended.recv().await }),
-                    )
-                    .await;
-                }
+            // The app is quitting and cannot wait, so each preview is asked to quit and its
+            // watch ends at once. Each preview's own quit ends its programs.
+            _quit: cx.on_app_quit(|host, _| {
+                host.previews.quit_all();
+                std::future::ready(())
             }),
         }
     }
@@ -95,68 +96,45 @@ impl Previews {
         self.starting.remove(id);
     }
 
-    pub(crate) fn insert(&mut self, running: Running) {
-        self.running.insert(running.info.id.clone(), running);
-    }
-
     pub(crate) fn remove(&mut self, id: &PreviewId) -> Option<Running> {
         self.running.remove(id)
     }
 
-    // The preview a thread started for this plugin, which a new start replaces.
-    pub(crate) fn take_for(
+    // Takes every preview the test returns true for. It may look at a preview's processes, so it
+    // gets them mutably.
+    pub(crate) fn take_where(
         &mut self,
-        thread_id: Option<&ThreadId>,
-        plugin: &PluginId,
-    ) -> Option<Running> {
-        take_matching(&mut self.running, thread_id, plugin)
-    }
-
-    fn take_for_thread(&mut self, thread_id: &ThreadId) -> Vec<Running> {
+        mut take: impl FnMut(&mut Running) -> bool,
+    ) -> Vec<Running> {
         let ids: Vec<PreviewId> = self
             .running
-            .values()
-            .filter(|running| running.info.thread_id.as_ref() == Some(thread_id))
-            .map(|running| running.info.id.clone())
+            .iter_mut()
+            .filter_map(|(id, running)| take(running).then(|| id.clone()))
             .collect();
         ids.iter()
             .filter_map(|id| self.running.remove(id))
             .collect()
     }
 
-    pub(crate) fn take_all(&mut self) -> Vec<Running> {
-        std::mem::take(&mut self.running).into_values().collect()
+    // Puts a started preview in place of the one its thread had for this plugin, and returns that
+    // one. Taking and inserting happen in one call, so no other start sees the gap.
+    pub(crate) fn replace(&mut self, running: Running) -> Option<Running> {
+        let thread = running.info.thread_id.clone();
+        let plugin = running.info.plugin.clone();
+        let old =
+            self.take_where(|other| other.info.thread_id == thread && other.info.plugin == plugin);
+        self.running.insert(running.info.id.clone(), running);
+        old.into_iter().next()
     }
 
-    // The previews whose app or reload watch has exited. Their processes are already gone.
-    pub(crate) fn take_dead(&mut self) -> Vec<Running> {
-        let dead: Vec<PreviewId> = self
-            .running
-            .iter_mut()
-            .filter_map(|(id, running)| {
-                let exited = running.app.child().try_status().ok().flatten().is_some()
-                    || running.watch.child().try_status().ok().flatten().is_some();
-                exited.then(|| id.clone())
-            })
-            .collect();
-        dead.iter()
-            .filter_map(|id| self.running.remove(id))
-            .collect()
+    // Ends every preview's watch at once and asks each app to quit, without waiting for it.
+    pub(crate) fn quit_all(&mut self) {
+        let exe = self.exe.clone();
+        for running in self.running.values_mut() {
+            running.watch.kill();
+            drop(ask_quit_detached(&exe, &running.info));
+        }
     }
-}
-
-pub(crate) fn take_matching(
-    running: &mut BTreeMap<PreviewId, Running>,
-    thread_id: Option<&ThreadId>,
-    plugin: &PluginId,
-) -> Option<Running> {
-    let id = running
-        .values()
-        .find(|running| {
-            running.info.thread_id.as_ref() == thread_id && running.info.plugin == *plugin
-        })
-        .map(|running| running.info.id.clone())?;
-    running.remove(&id)
 }
 
 fn end_on(previews: &mut Previews, event: &WorkspaceEvent, cx: &mut Context<PluginHost>) {
@@ -166,8 +144,10 @@ fn end_on(previews: &mut Previews, event: &WorkspaceEvent, cx: &mut Context<Plug
     if !matches!(event.kind, EventKind::Archived | EventKind::Deleted) {
         return;
     }
-    for running in previews.take_for_thread(&event.thread_id) {
-        drop(shut_down_later(running, cx.background_executor()));
+    let exe = previews.exe.clone();
+    let thread = event.thread_id.clone();
+    for running in previews.take_where(|running| running.info.thread_id.as_ref() == Some(&thread)) {
+        drop(shut_down_later(running, &exe, cx.background_executor()));
     }
 }
 
@@ -186,21 +166,8 @@ fn is_preview_name(name: &str) -> bool {
         .is_some_and(|hex| hex.len() == 6 && hex.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
-// The `kg` this app runs. Tests have no kg binary of their own, so they get a path that does not
-// exist: a spawn fails at once instead of running the test binary as a kagan.
-pub(crate) fn exe() -> PathBuf {
-    #[cfg(test)]
-    {
-        PathBuf::from("/nonexistent/kagan-test-kg")
-    }
-    #[cfg(not(test))]
-    {
-        std::env::current_exe().unwrap_or_default()
-    }
-}
-
 #[cfg(unix)]
-pub(crate) fn socket_for(folder: &Path, _id: &PreviewId) -> Result<PathBuf> {
+pub(crate) fn socket_for(folder: &Path) -> Result<PathBuf> {
     use kg_domain::SOCKET_PATH_MAX;
     let socket = folder.join("kg.sock");
     if socket.as_os_str().len() > SOCKET_PATH_MAX {
@@ -213,8 +180,9 @@ pub(crate) fn socket_for(folder: &Path, _id: &PreviewId) -> Result<PathBuf> {
 }
 
 #[cfg(windows)]
-pub(crate) fn socket_for(_folder: &Path, id: &PreviewId) -> Result<PathBuf> {
-    Ok(PathBuf::from(format!("kagan-preview-{id}")))
+pub(crate) fn socket_for(folder: &Path) -> Result<PathBuf> {
+    let name = folder.file_name().unwrap_or_default().to_string_lossy();
+    Ok(PathBuf::from(format!("kagan-preview-{name}")))
 }
 
 // A `kg` aimed at one preview. It never starts an app: a preview that is gone stays gone.
@@ -321,34 +289,29 @@ fn answers(exe: &Path, data_dir: &Path, socket: &Path) -> bool {
         .is_ok_and(|status| status.success())
 }
 
-// Asks the preview's kagan to quit, as its own window does. The reply is not needed: the wait
-// after it says whether the app went.
-fn ask_quit(exe: &Path, data_dir: &Path, socket: &Path) {
-    let _ = kg(exe, data_dir, socket)
+// Asks a preview's kagan to quit over its socket. The reply is not waited for.
+fn ask_quit_detached(exe: &Path, info: &PluginPreview) -> io::Result<std::process::Child> {
+    kg(exe, &info.data_dir, &info.socket)
         .args(["window", "quit"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .status();
+        .spawn()
 }
 
-fn wait_gone(exe: &Path, data_dir: &Path, socket: &Path, limit: Duration) -> bool {
-    let started = Instant::now();
-    while answers(exe, data_dir, socket) {
-        if started.elapsed() >= limit {
-            return false;
-        }
-        std::thread::sleep(POLL);
-    }
-    true
-}
-
-// Ends everything a preview started. The app quits over its socket, so its own programs and
-// terminals end, and the processes it still holds are killed after the wait. The folder goes last.
+// Ends everything a preview started. The watch dies first, since it has nothing to save. The app
+// is asked to quit over its socket, so its own programs end, and the app is killed when it is
+// still running after the wait. The folder goes last.
 pub(crate) fn shut_down(mut running: Running, exe: &Path) -> io::Result<()> {
+    running.watch.kill();
     let data_dir = running.info.data_dir.clone();
     let socket = running.info.socket.clone();
-    ask_quit(exe, &data_dir, &socket);
-    // Stops at once when the app has exited, and kills the app's group when it has not.
+    drop(
+        kg(exe, &data_dir, &socket)
+            .args(["window", "quit"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status(),
+    );
     drop(running.app.wait_within(QUIT_WITHIN, || false));
     let folder = running.folder.clone();
     drop(running);
@@ -356,9 +319,13 @@ pub(crate) fn shut_down(mut running: Running, exe: &Path) -> io::Result<()> {
 }
 
 // Runs `shut_down` off the caller's thread. The receiver closes once the preview is gone.
-pub(crate) fn shut_down_later(running: Running, executor: &BackgroundExecutor) -> Receiver<()> {
+pub(crate) fn shut_down_later(
+    running: Running,
+    exe: &Path,
+    executor: &BackgroundExecutor,
+) -> Receiver<()> {
     let (done, ended) = async_channel::bounded::<()>(1);
-    let exe = exe();
+    let exe = exe.to_path_buf();
     executor
         .spawn(async move {
             // A folder that stays is swept on the next start.
@@ -369,8 +336,8 @@ pub(crate) fn shut_down_later(running: Running, executor: &BackgroundExecutor) -
     ended
 }
 
-// Removes the folders of previews that are not kept. A folder whose app still answers gets a
-// quit first, and is kept when the quit does not take.
+// Removes the folders of previews that are not kept. A folder whose app still answers is kept:
+// it belongs to a kagan that is running, or that a person must end by hand.
 pub(crate) fn sweep(exe: &Path, data_dir: &Path, keep: &[PreviewId]) -> io::Result<()> {
     let Ok(entries) = fs::read_dir(kg_core::previews_dir(data_dir)) else {
         return Ok(());
@@ -384,25 +351,13 @@ pub(crate) fn sweep(exe: &Path, data_dir: &Path, keep: &[PreviewId]) -> io::Resu
         if !is_preview_name(&name) || keep.iter().any(|id| id.0 == name) {
             continue;
         }
-        if answers_from(exe, &folder, &PreviewId(name)) {
-            continue;
+        let answering =
+            socket_for(&folder).is_ok_and(|socket| answers(exe, &folder.join("data"), &socket));
+        if !answering {
+            fs::remove_dir_all(&folder)?;
         }
-        fs::remove_dir_all(&folder)?;
     }
     Ok(())
-}
-
-// True when a leftover folder's app still answers after a quit, so the folder must stay.
-fn answers_from(exe: &Path, folder: &Path, id: &PreviewId) -> bool {
-    let Ok(socket) = socket_for(folder, id) else {
-        return false;
-    };
-    let data_dir = folder.join("data");
-    if !answers(exe, &data_dir, &socket) {
-        return false;
-    }
-    ask_quit(exe, &data_dir, &socket);
-    !wait_gone(exe, &data_dir, &socket, QUIT_WITHIN)
 }
 
 pub(crate) fn remove(folder: &Path) -> io::Result<()> {

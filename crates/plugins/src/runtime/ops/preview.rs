@@ -9,10 +9,10 @@ use kg_process::Process;
 use crate::host::{Hold, hold};
 use crate::manifest::Grant;
 use crate::runtime::preview::{self, Running};
-use crate::source::{Fetched, Source, fetch};
 use crate::{PluginHost, Result};
 
 use super::approve::{approve, refuse_in_preview};
+use super::develop::fetch_local;
 
 pub(in crate::runtime::ops) async fn run(
     host: &Entity<PluginHost>,
@@ -39,12 +39,16 @@ async fn start(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     refuse_in_preview(cx)?;
-    let (fetched, data_dir) = read_plugin(host, path, cx).await?;
+    let root = cx
+        .background_spawn(async move { dunce::canonicalize(path) })
+        .await?;
+    let fetched = fetch_local(host, root, cx).await?;
     let manifest = &fetched.discovered.manifest;
     let grant = Grant::of(manifest, &fetched.root);
+    let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
     let id = preview::new_id();
     let folder = preview::folder(&data_dir, &id);
-    let socket = preview::socket_for(&folder, &id)?;
+    let socket = preview::socket_for(&folder)?;
     approve(
         thread_id.as_ref(),
         requester,
@@ -72,15 +76,15 @@ async fn start(
         id: id.clone(),
         plugin: manifest.id.clone(),
         name: manifest.name.clone(),
-        thread_id: thread_id.clone(),
+        thread_id,
         path: fetched.root.clone(),
         data_dir: folder.join("data"),
-        socket: socket.clone(),
+        socket,
     };
     host.update(cx, |host, _| host.previews.reserve(id.clone()));
-    let launched = launch(host, &info, &folder, plugin, cx).await;
+    let built = build(host, &info, &folder, plugin, cx).await;
     host.update(cx, |host, _| host.previews.release(&id));
-    let (app, watch) = match launched {
+    let (app, watch) = match built {
         Ok(processes) => processes,
         Err(error) => {
             // The error already says what the log ends with, so the folder can go.
@@ -88,89 +92,87 @@ async fn start(
             return Err(error);
         }
     };
-    let replaced = host.update(cx, |host, _| {
-        host.previews.take_for(thread_id.as_ref(), &manifest.id)
+    let (exe, old) = host.update(cx, |host, _| {
+        let exe = host.previews.exe.clone();
+        let old = host
+            .previews
+            .replace(Running::new(info.clone(), folder, app, watch));
+        (exe, old)
     });
-    if let Some(old) = replaced {
-        drop(preview::shut_down_later(old, cx.background_executor()));
+    if let Some(old) = old {
+        drop(preview::shut_down_later(
+            old,
+            &exe,
+            cx.background_executor(),
+        ));
     }
-    host.update(cx, |host, _| {
-        host.previews
-            .insert(Running::new(info.clone(), folder, app, watch));
-    });
     Ok(OpResult::PluginPreview(info))
 }
 
-// The plugin's folder read the way reload reads it, and the data folder the person's app keeps.
-async fn read_plugin(
-    host: &Entity<PluginHost>,
-    path: PathBuf,
-    cx: &mut AsyncApp,
-) -> Result<(Fetched, PathBuf)> {
-    let root = cx
-        .background_spawn(async move { dunce::canonicalize(path) })
-        .await?;
-    let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
-    let fetched = cx
-        .background_spawn({
-            let data_dir = data_dir.clone();
-            async move {
-                let (_keep, never) = async_channel::bounded::<()>(1);
-                fetch(
-                    &Source::Local(root),
-                    None,
-                    &PathBuf::new(),
-                    &data_dir,
-                    &never,
-                )
-            }
-        })
-        .await?;
-    Ok((fetched, data_dir))
-}
-
-// Sweeps leftovers, seeds the folder, then starts the app and its watch. The app must answer
-// `kg open` before the watch starts. A failure in any step returns with its reason.
-async fn launch(
+// Prepares the folder, then starts the preview's app and its watch.
+async fn build(
     host: &Entity<PluginHost>,
     info: &PluginPreview,
     folder: &Path,
     plugin: Plugin,
     cx: &mut AsyncApp,
 ) -> Result<(Process, Process)> {
-    let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
-    let keep = host.read_with(cx, |host, _| host.previews.ids());
-    let exe = preview::exe();
-    {
-        let (exe, data_dir, folder, preview_data) = (
-            exe.clone(),
-            data_dir.clone(),
-            folder.to_path_buf(),
-            info.data_dir.clone(),
-        );
-        cx.background_spawn(async move {
-            preview::sweep(&exe, &data_dir, &keep)?;
-            std::fs::create_dir_all(&folder)?;
-            seed_preview(&preview_data, &plugin)
-        })
-        .await?;
-    }
+    prepare(host, info, folder, plugin, cx).await?;
+    boot(host, info, folder, cx).await
+}
 
+// Sweeps leftover folders, makes this one and seeds it with the plugin. A sweep keeps every folder
+// a start has reserved, so it cannot remove this one or another start's.
+async fn prepare(
+    host: &Entity<PluginHost>,
+    info: &PluginPreview,
+    folder: &Path,
+    plugin: Plugin,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    let (data_dir, keep, exe) = host.read_with(cx, |host, _| {
+        (
+            host.data_dir.clone(),
+            host.previews.ids(),
+            host.previews.exe.clone(),
+        )
+    });
+    let folder = folder.to_path_buf();
+    let preview_data = info.data_dir.clone();
+    cx.background_spawn(async move {
+        preview::sweep(&exe, &data_dir, &keep)?;
+        std::fs::create_dir_all(&folder)?;
+        seed_preview(&preview_data, &plugin)
+    })
+    .await
+}
+
+// Starts the app, waits for it to answer `kg open`, then starts the reload watch. The watch must
+// still be running a moment later, or the start fails with its log.
+async fn boot(
+    host: &Entity<PluginHost>,
+    info: &PluginPreview,
+    folder: &Path,
+    cx: &mut AsyncApp,
+) -> Result<(Process, Process)> {
     hold(host, Hold::PreviewStart, cx).await;
-    let mut app = preview::spawn_app(&exe, folder, &info.data_dir, &info.socket)?;
-    let (app, ready) = {
-        let (exe, data, socket, log_folder) = (
-            exe.clone(),
-            info.data_dir.clone(),
-            info.socket.clone(),
-            folder.to_path_buf(),
-        );
-        cx.background_spawn(async move {
-            let ready = preview::wait_ready(&exe, &data, &socket, &log_folder, &mut app);
-            (app, ready)
+    let exe = host.read_with(cx, |host, _| host.previews.exe.clone());
+    let app = preview::spawn_app(&exe, folder, &info.data_dir, &info.socket)?;
+    let (app, ready) = cx
+        .background_spawn({
+            let (exe, data, socket, log) = (
+                exe.clone(),
+                info.data_dir.clone(),
+                info.socket.clone(),
+                folder.to_path_buf(),
+            );
+            async move {
+                let mut app = app;
+                let ready = preview::wait_ready(&exe, &data, &socket, &log, &mut app);
+                (app, ready)
+            }
         })
-        .await
-    };
+        .await;
     ready?;
     let mut watch = preview::spawn_watch(&exe, &info.path, folder, &info.data_dir, &info.socket)?;
     cx.background_executor()
@@ -188,7 +190,11 @@ async fn launch(
 // Ends the preview under this id, and says which ones run when it is not one of them.
 async fn stop(host: &Entity<PluginHost>, id: PreviewId, cx: &mut AsyncApp) -> Result<OpResult> {
     refuse_in_preview(cx)?;
-    let Some(running) = host.update(cx, |host, _| host.previews.remove(&id)) else {
+    let (removed, exe) = host.update(cx, |host, _| {
+        let exe = host.previews.exe.clone();
+        (host.previews.remove(&id), exe)
+    });
+    let Some(running) = removed else {
         let running: Vec<String> = host.read_with(cx, |host, _| {
             host.previews
                 .infos()
@@ -203,17 +209,19 @@ async fn stop(host: &Entity<PluginHost>, id: PreviewId, cx: &mut AsyncApp) -> Re
         };
         return Err(OpError::NotFound(format!("no preview {id}; {listed}")));
     };
-    let exe = preview::exe();
     cx.background_spawn(async move { preview::shut_down(running, &exe) })
         .await?;
     Ok(OpResult::Done)
 }
 
-// Shows only previews that still run. One that has exited is ended and its folder removed.
+// Shows only previews that still run. One whose app or watch has exited is ended and its folder
+// removed.
 fn list(host: &Entity<PluginHost>, cx: &mut AsyncApp) -> OpResult {
-    let dead = host.update(cx, |host, _| host.previews.take_dead());
+    let (dead, exe) = host.update(cx, |host, _| {
+        let exe = host.previews.exe.clone();
+        (host.previews.take_where(exited), exe)
+    });
     if !dead.is_empty() {
-        let exe = preview::exe();
         cx.background_spawn(async move {
             for running in dead {
                 drop(preview::shut_down(running, &exe));
@@ -222,4 +230,9 @@ fn list(host: &Entity<PluginHost>, cx: &mut AsyncApp) -> OpResult {
         .detach();
     }
     OpResult::PluginPreviews(host.read_with(cx, |host, _| host.previews.infos()))
+}
+
+// Whether a preview's app or its watch has exited.
+fn exited(running: &mut Running) -> bool {
+    running.app_exited() || running.watch_exited()
 }

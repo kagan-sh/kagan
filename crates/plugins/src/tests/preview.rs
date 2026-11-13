@@ -15,7 +15,7 @@ use serde_json::json;
 use crate::PluginHost;
 use crate::host::Hold;
 use crate::manifest::Grant;
-use crate::runtime::preview::{self, Running, take_matching};
+use crate::runtime::preview::{self, Running};
 use kg_core::NO_ONE_HERE;
 
 use super::{
@@ -248,7 +248,7 @@ fn stop_ends_the_preview_and_its_app(cx: &mut TestAppContext) {
     let host = host_of(cx);
     host.update(cx, |host, _| {
         host.previews
-            .insert(Running::new(info, folder.clone(), app, watch));
+            .replace(Running::new(info, folder.clone(), app, watch));
     });
 
     let stopped = plugin_op(
@@ -294,34 +294,81 @@ fn stop_of_an_unknown_id_says_what_is_running(cx: &mut TestAppContext) {
     assert_eq!(message, "no preview p-ffffff; none is running");
 }
 
-#[test]
-fn taking_a_preview_takes_only_the_threads_preview_of_that_plugin() {
-    let dir = tempfile::tempdir().unwrap();
-    let mut running = std::collections::BTreeMap::new();
-    let mine = sleeping(
-        dir.path(),
-        preview_at(dir.path(), "p-000001", Some(thread()), "dev.a"),
-    );
-    let other_thread = sleeping(
-        dir.path(),
-        preview_at(
-            dir.path(),
-            "p-000002",
-            Some(ThreadId("other".into())),
-            "dev.a",
-        ),
-    );
-    running.insert(mine.info.id.clone(), mine);
-    running.insert(other_thread.info.id.clone(), other_thread);
+// A second preview for the same thread and plugin replaces the first, and the first comes back.
+#[gpui_kit::test]
+fn replacing_a_thread_preview_returns_the_one_it_replaces(cx: &mut TestAppContext) {
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    open_kept(cx, &path, data, &[]);
+    let first = sleeping(&path, preview_at(&path, "p-000001", Some(thread()), ID));
+    let second = sleeping(&path, preview_at(&path, "p-000002", Some(thread()), ID));
+    let (first_back, kept) = host_of(cx).update(cx, |host, _| {
+        let none = host.previews.replace(first);
+        let back = host.previews.replace(second);
+        (
+            none.is_none(),
+            (back.map(|old| old.info.id), host.previews.infos()),
+        )
+    });
+    assert!(first_back, "the first preview replaced something");
+    let (replaced, infos) = kept;
+    assert_eq!(replaced, Some(PreviewId("p-000001".into())));
+    let ids: Vec<PreviewId> = infos.into_iter().map(|info| info.id).collect();
+    assert_eq!(ids, [PreviewId("p-000002".into())]);
+}
 
-    let taken = take_matching(&mut running, Some(&thread()), &PluginId("dev.a".into()));
-
-    assert_eq!(
-        taken.map(|preview| preview.info.id),
-        Some(PreviewId("p-000001".into()))
+#[cfg(unix)]
+#[gpui_kit::test]
+fn quitting_the_person_app_ends_each_watch_at_once_and_asks_each_preview_to_quit(
+    cx: &mut TestAppContext,
+) {
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    open_kept(cx, &path, data, &[]);
+    let folder = previews_dir(&path).join("p-777777");
+    std::fs::create_dir_all(&folder).unwrap();
+    let asked = path.join("asked.log");
+    let exe = fake_kg(
+        &path,
+        &format!("printf '%s\\n' \"$*\" >> '{}'", asked.display()),
     );
-    assert_eq!(running.len(), 1);
-    assert!(running.contains_key(&PreviewId("p-000002".into())));
+    let (app, _app_pid) = sleeping_app();
+    let mut watch =
+        Process::spawn(sleep_command(), Stdio::null(), Stdio::null(), Stdio::null()).unwrap();
+    let watch_pid = watch.child().id();
+    let info = preview_at(&folder, "p-777777", Some(thread()), ID);
+    host_of(cx).update(cx, |host, _| {
+        host.previews.exe = exe.clone();
+        host.previews
+            .replace(Running::new(info, folder.clone(), app, watch));
+        host.previews.quit_all();
+    });
+
+    std::thread::sleep(Duration::from_millis(100));
+    // A killed child is a zombie until it is reaped; a zombie has ended, so it is not running.
+    let state = std::process::Command::new("ps")
+        .args(["-o", "stat=", "-p", &watch_pid.to_string()])
+        .output()
+        .unwrap();
+    let state = String::from_utf8_lossy(&state.stdout).trim().to_owned();
+    assert!(
+        state.is_empty() || state.starts_with('Z'),
+        "the watch outlived the quit: {state}"
+    );
+    let started = Instant::now();
+    while !std::fs::read_to_string(&asked)
+        .unwrap_or_default()
+        .contains("window quit")
+    {
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "the preview was never asked to quit"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    host_of(cx).update(cx, |host, _| {
+        host.previews.remove(&PreviewId("p-777777".into()));
+    });
 }
 
 #[cfg(unix)]
@@ -338,7 +385,7 @@ fn archiving_a_thread_ends_its_previews(cx: &mut TestAppContext) {
     let info = preview_at(&folder, "p-111111", Some(thread()), ID);
     host_of(cx).update(cx, |host, _| {
         host.previews
-            .insert(Running::new(info, folder.clone(), app, watch));
+            .replace(Running::new(info, folder.clone(), app, watch));
     });
 
     run(cx, Op::Thread(ThreadOp::Archive { id: thread() })).unwrap();
@@ -373,7 +420,7 @@ fn list_shows_only_previews_that_still_run(cx: &mut TestAppContext) {
     let info = preview_at(&folder, "p-222222", Some(thread()), ID);
     host_of(cx).update(cx, |host, _| {
         host.previews
-            .insert(Running::new(info, folder.clone(), app, watch));
+            .replace(Running::new(info, folder.clone(), app, watch));
     });
 
     let listed = run(
@@ -460,9 +507,8 @@ fn a_preview_app_that_exits_at_once_fails_the_wait_with_its_log() {
 #[test]
 fn a_socket_path_longer_than_the_platform_limit_is_refused() {
     let folder = PathBuf::from(format!("/{}", "a".repeat(120)));
-    let id = PreviewId("p-444444".into());
     assert!(matches!(
-        preview::socket_for(&folder, &id),
+        preview::socket_for(&folder),
         Err(OpError::Invalid(message)) if message.contains("socket path longer")
     ));
 }
