@@ -61,6 +61,20 @@ pub(crate) fn front(cx: &App) -> Option<(AnyWindowHandle, Entity<Kagan>)> {
     Some((open.handle, open.kagan.upgrade()?))
 }
 
+// Kagan's own windows: the main window and the About window, sorted by WindowId. A plugin's
+// windows are never among them, hidden or not.
+pub(crate) fn kagan_windows(cx: &App) -> Vec<AnyWindowHandle> {
+    let open = cx.windows();
+    let mut handles: Vec<_> = front(cx)
+        .map(|(handle, _)| handle)
+        .into_iter()
+        .chain(crate::about::shown(cx))
+        .filter(|handle| open.contains(handle))
+        .collect();
+    handles.sort_by_key(AnyWindowHandle::window_id);
+    handles
+}
+
 pub(crate) fn show_settings(cx: &mut App) -> gpui_kit::Result<()> {
     show(cx)?;
     with_front(cx, Kagan::open_settings);

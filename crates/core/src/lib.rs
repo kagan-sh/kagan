@@ -22,16 +22,20 @@ mod workspace;
 
 pub use dispatch::ui::{UiDispatch, UiJob};
 pub use kg_terminal::{Ansi, Cell, Color, Cursor, Grid, Motion, Mouse, Weight};
-pub use plugin_folder::{plugin_data_dir, plugin_dir, plugin_log_file, plugins_dir};
+pub use plugin_folder::{plugin_data_dir, plugin_dir, plugin_log_file, plugins_dir, previews_dir};
 pub use preview::{human_size, image_size, preview_image, preview_note};
 pub use settings::keys::{host_os, is_known_key, parse_key};
 pub use update::{Target, Updater};
 #[cfg(any(test, feature = "test"))]
-pub use usage::{advance_usage_clock, use_codex_source, use_codex_timeout};
+pub use usage::{
+    advance_usage_clock, use_claude_path, use_claude_timeout, use_codex_source, use_codex_timeout,
+};
 pub use workspace::approval::{Approval, Requester};
 pub use workspace::entity::{Environment, Project, Thread};
 
-pub use workspace::{Permit, PluginDispatch, PluginRequest, Workspace, WorkspaceEvent};
+pub use workspace::{
+    NO_ONE_HERE, Permit, PluginDispatch, PluginRequest, Workspace, WorkspaceEvent, seed_preview,
+};
 
 // How long the person must stop typing before held questions show, and before a child's line
 // follows their Enter. A design value, not a number from the research.

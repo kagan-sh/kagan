@@ -1455,7 +1455,7 @@ Programs a new thread can run, as the new-thread picker lists them
 Usage: kg program [OPTIONS] <COMMAND>
 
 Commands:
-  list    Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed known agent
+  list    Programs found on the PATH, the shell, and the saved programs. The default is the project's program when it is installed, else the first installed known agent
   save    Save a program line under a name. A name already saved takes the new line and keeps its pin
   rename  Give a saved program another name
   remove  Delete a saved program after the person approves it in kagan. The project and threads that used its line keep the line
@@ -1473,7 +1473,7 @@ Options:
 ## `kg program list`
 
 ```text
-Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed known agent
+Programs found on the PATH, the shell, and the saved programs. The default is the project's program when it is installed, else the first installed known agent
 
 Usage: kg program list [OPTIONS]
 
@@ -1776,6 +1776,7 @@ Commands:
   share           Check a committed, pushed plugin and print its index entry and install line
   reload          Reload installed code, asking a person about new powers
   dev             Watch an installed local plugin and reload on changes
+  preview         Run a local plugin in a hidden kagan of its own, so this window stays free
   logs            Read plugin logs
   types           Write declarations for this version
   list            Installed plugins
@@ -1934,6 +1935,73 @@ Options:
       --thread-id <THREAD_ID>
           [env: KG_THREAD_ID=]
 
+  -h, --help
+          Print help
+```
+
+## `kg plugin preview`
+
+```text
+Run a local plugin in a hidden kagan of its own, so this window stays free
+
+Usage: kg plugin preview <COMMAND>
+
+Commands:
+  start  Start a hidden kagan with a local plugin. The person approves it in their own window
+  stop   Stop a preview and remove its folder
+  list   Running previews
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg plugin preview start`
+
+```text
+Start a hidden kagan with a local plugin. The person approves it in their own window
+
+Usage: kg plugin preview start [OPTIONS] [PATH]
+
+Arguments:
+  [PATH]
+          [default: .]
+
+Options:
+      --thread-id <THREAD_ID>
+          The thread that asks. A second start for the same plugin on this thread replaces the first
+          
+          [env: KG_THREAD_ID=]
+
+  -h, --help
+          Print help
+```
+
+## `kg plugin preview stop`
+
+```text
+Stop a preview and remove its folder
+
+Usage: kg plugin preview stop <ID>
+
+Arguments:
+  <ID>
+          
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg plugin preview list`
+
+```text
+Running previews
+
+Usage: kg plugin preview list
+
+Options:
   -h, --help
           Print help
 ```

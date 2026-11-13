@@ -65,6 +65,7 @@ pub fn init(cx: &mut App, components: gpui_shell::FrozenComponentRegistry) -> Ta
         records: BTreeMap::new(),
         started: false,
         active: BTreeMap::new(),
+        previews: crate::runtime::preview::Previews::new(&workspace, cx),
         next_activation: 0,
         permits: BTreeMap::new(),
         components,
@@ -196,6 +197,7 @@ pub struct PluginHost {
     // Set once every enabled plugin found at launch has had its start.
     pub(crate) started: bool,
     pub(crate) active: BTreeMap<PluginId, Active>,
+    pub(crate) previews: crate::runtime::preview::Previews,
     pub(crate) next_activation: u64,
     pub(crate) permits: BTreeMap<PluginId, Arc<Mutex<Option<u64>>>>,
     pub(crate) components: gpui_shell::FrozenComponentRegistry,
@@ -215,6 +217,7 @@ pub(crate) enum Hold {
     Write,
     Activation,
     Lifecycle,
+    PreviewStart,
 }
 
 /// Waits at `which` when a test set a hold there. Says whether it waited.

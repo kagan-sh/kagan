@@ -13,7 +13,7 @@ mod tree;
 #[cfg(test)]
 mod tests;
 
-pub use capture::{Captured, capture};
+pub use capture::{Captured, capture, capture_with_input};
 pub use path::{find_program, pathext, user_path, warm_user_path};
 pub use process::Process;
 

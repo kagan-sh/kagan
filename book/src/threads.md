@@ -6,7 +6,7 @@ A thread is one program in one folder, shown as a terminal in the center of the 
 
 Click **+** next to a project, or press Cmd+N.
 
-The New thread screen lists Claude Code and Codex even when they are not installed, other known agents on your `PATH`, your login shell, and recent programs. Use the arrow keys, then Enter. **Custom command…** types a different command.
+The New thread screen lists Claude Code and Codex even when they are not installed, other known agents on your `PATH`, your login shell, and the programs you saved. Use the arrow keys, then Enter. **Custom command…** types a different command.
 
 ```bash
 kg thread run --project-id <project-id> --program claude

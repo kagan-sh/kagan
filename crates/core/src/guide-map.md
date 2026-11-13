@@ -22,7 +22,7 @@ env: `kg env list`, `kg env set`, `kg env remove`. A variable is set for every p
 
 environment: `kg environment get`, `kg environment restore`, `kg environment branches`, `kg environment setup`, `kg environment set-base`, `kg environment remove`.
 
-plugin: `kg plugin cancel-install`, `kg plugin start`, `kg plugin command`, `kg plugin new`, `kg plugin check`, `kg plugin share`, `kg plugin reload`, `kg plugin dev`, `kg plugin logs`, `kg plugin types`, `kg plugin list`, `kg plugin remove`, `kg plugin install`, `kg plugin update`, `kg plugin outdated`, `kg plugin index add`, `kg plugin index list`, `kg plugin index remove`, `kg plugin search`, `kg plugin enable`, `kg plugin disable`, `kg plugin config get`, `kg plugin config set`, `kg plugin config clear`, `kg plugin use`, `kg plugin rail`.
+plugin: `kg plugin cancel-install`, `kg plugin start`, `kg plugin command`, `kg plugin new`, `kg plugin check`, `kg plugin share`, `kg plugin reload`, `kg plugin dev`, `kg plugin preview start`, `kg plugin preview stop`, `kg plugin preview list`, `kg plugin logs`, `kg plugin types`, `kg plugin list`, `kg plugin remove`, `kg plugin install`, `kg plugin update`, `kg plugin outdated`, `kg plugin index add`, `kg plugin index list`, `kg plugin index remove`, `kg plugin search`, `kg plugin enable`, `kg plugin disable`, `kg plugin config get`, `kg plugin config set`, `kg plugin config clear`, `kg plugin use`, `kg plugin rail`.
 
 sidebar: `kg sidebar`.
 
@@ -54,7 +54,7 @@ preview: `kg preview show` prints one file with the same rules as the Preview ta
 
 diagnostics: `kg diagnostics export`.
 
-usage: `kg usage show` reads each signed-in provider's usage limits now, if the `usage-limits` preference is on; `kg usage refresh` asks again. Nothing is saved.
+usage: `kg usage show` reads each signed-in provider's usage limits now, if the `usage-limits` preference is on (on when unset) [decision 272]; `kg usage refresh` asks again. Nothing is saved.
 update: `kg update check` reads the GitHub release list now; `kg update status` prints the version, the install kind and what the last check found. Only a person installs, from the window.
 
 Preferences and keys: `kg guide customize`.

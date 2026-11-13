@@ -3,9 +3,11 @@ use crate::kagan::screen_read;
 
 use gpui_kit::TestAppContext;
 use kg_core::Workspace;
+use kg_domain::{Op, ProgramOp, ProjectId, ProjectOp};
 
 use crate::kagan::{ArchiveThread, TogglePinned, ToggleSidebar};
 
+use super::terminal::shell;
 use super::{
     click, focused_of, open, press_key, run_shell, selected_of, shows, thread_record, wait_until,
 };
@@ -29,6 +31,20 @@ fn the_restore_shortcut_brings_an_archived_thread_back(cx: &mut TestAppContext) 
 fn the_sidebar_selects_a_project_and_opens_a_thread_from_the_keyboard(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);
     let id = run_shell(cx);
+    // No agent is installed here, so the project's program is the shell, saved by name.
+    for op in [
+        Op::Program(ProgramOp::Save {
+            name: "Shell here".into(),
+            line: shell().into(),
+        }),
+        Op::Project(ProjectOp::SetProgram {
+            id: ProjectId("prj_kagan".into()),
+            program: Some(shell().into()),
+        }),
+    ] {
+        let task = cx.update(|cx| Workspace::dispatch(op, cx));
+        cx.foreground_executor().block_test(task).unwrap();
+    }
     cx.run_until_parked();
 
     cx.simulate_keystrokes(window, &chord("FocusSidebar"));

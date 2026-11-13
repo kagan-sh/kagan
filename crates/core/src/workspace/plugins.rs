@@ -118,6 +118,12 @@ impl Workspace {
     pub fn plugins(&self) -> impl Future<Output = Result<Vec<Plugin>>> + use<> {
         self.call(|store| store.plugins())
     }
+    /// Whether this data folder is a preview's, which `seed_preview` made.
+    #[must_use]
+    pub fn is_preview(&self) -> bool {
+        self.preview
+    }
+
     /// # Errors
     /// When the database is closed, the id exists, or the query fails.
     pub fn insert_plugin(&self, plugin: Plugin) -> impl Future<Output = Result<()>> + use<> {

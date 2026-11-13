@@ -476,7 +476,7 @@ fn an_archived_program_is_not_the_default(cx: &mut TestAppContext) {
     });
     cx.foreground_executor().block_test(archive).unwrap();
     cx.run_until_parked();
-    // A recent program never becomes the default: the first installed agent does.
+    // A program a thread ran never becomes the default: the first installed agent does.
     assert_eq!(default_program(cx), Some("codex".to_owned()));
     // A restart reopens the same data folder, and the archived program is still not the default.
     let reopened = cx.update(|cx| {
@@ -1135,96 +1135,6 @@ fn an_agent_shows_its_icon_and_an_unknown_program_keeps_its_letter(cx: &mut Test
     assert!(shows(cx, window, &format!("program-icon-{shell}")));
     // Codex is listed as a row while it is missing, and it has its icon all the same.
     assert!(shows(cx, window, "program-icon-codex"));
-}
-
-#[cfg(unix)]
-#[gpui_kit::test]
-fn a_recent_command_is_named_by_its_program_with_its_flags_under_it(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open(cx);
-    let data = data.path().to_path_buf();
-    fixture_programs(cx, &data, &["codex"]);
-    let run = Run {
-        project_id: ProjectId("personal".into()),
-        program: "codex --model fast".into(),
-        title: None,
-        environment: EnvironmentSpec::Personal,
-        visibility: None,
-        parent_thread_id: None,
-        quiet: false,
-        lifecycle_owner_thread_id: None,
-        metadata: None,
-    };
-    let started = cx.update(|cx| Workspace::dispatch(Op::Thread(ThreadOp::Run(run)), cx));
-    cx.foreground_executor().block_test(started).unwrap();
-    cx.run_until_parked();
-    start_in_plain_folder(cx, window, &data);
-    wait_until(cx, |cx| {
-        label(cx, window, "program-command-codex --model fast") == "--model fast"
-    });
-    // The default is the first installed agent, so that row is selected, not the recent run.
-    assert_eq!(label(cx, window, "program-name-codex"), "Codex, selected");
-    assert_eq!(
-        label(cx, window, "program-name-codex --model fast"),
-        "Codex"
-    );
-}
-
-#[cfg(unix)]
-#[gpui_kit::test]
-fn a_search_for_a_recent_commands_flag_finds_its_row(cx: &mut TestAppContext) {
-    let (kagan, window, data) = open(cx);
-    let data = data.path().to_path_buf();
-    fixture_programs(cx, &data, &["codex"]);
-    let run = Run {
-        project_id: ProjectId("personal".into()),
-        program: "codex --model fast".into(),
-        title: None,
-        environment: EnvironmentSpec::Personal,
-        visibility: None,
-        parent_thread_id: None,
-        quiet: false,
-        lifecycle_owner_thread_id: None,
-        metadata: None,
-    };
-    let started = cx.update(|cx| Workspace::dispatch(Op::Thread(ThreadOp::Run(run)), cx));
-    cx.foreground_executor().block_test(started).unwrap();
-    cx.run_until_parked();
-    start_in_plain_folder(cx, window, &data);
-    search(cx, window, &kagan, "--model");
-    wait_until(cx, |cx| {
-        shows(cx, window, "program-command-codex --model fast")
-    });
-    assert!(!shows(cx, window, "program-codex"));
-}
-
-#[cfg(unix)]
-#[gpui_kit::test]
-fn a_recent_command_shows_its_flags_with_the_quotes_it_was_started_with(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open(cx);
-    let data = data.path().to_path_buf();
-    fixture_programs(cx, &data, &["codex"]);
-    let run = Run {
-        project_id: ProjectId("personal".into()),
-        program: "codex -p 'deep think'".into(),
-        title: None,
-        environment: EnvironmentSpec::Personal,
-        visibility: None,
-        parent_thread_id: None,
-        quiet: false,
-        lifecycle_owner_thread_id: None,
-        metadata: None,
-    };
-    let started = cx.update(|cx| Workspace::dispatch(Op::Thread(ThreadOp::Run(run)), cx));
-    cx.foreground_executor().block_test(started).unwrap();
-    cx.run_until_parked();
-    start_in_plain_folder(cx, window, &data);
-    wait_until(cx, |cx| {
-        shows(cx, window, "program-name-codex -p 'deep think'")
-    });
-    assert_eq!(
-        label(cx, window, "program-command-codex -p 'deep think'"),
-        "-p 'deep think'"
-    );
 }
 
 // The border colour the window paints around the element with this id, from the quad that

@@ -7,16 +7,15 @@ use gpui_kit::{AsyncApp, WeakEntity};
 use crate::Workspace;
 use kg_domain::{
     KNOWN_PROGRAMS, LISTED_WHEN_MISSING, OpError, OpResult, PROGRAM_INSTALL_FOLDERS, Program,
-    ProgramList, ProgramSource, ProjectId, SavedProgram, Visibility, split_program,
+    ProgramList, ProgramSource, ProjectId, SavedProgram, split_program,
 };
 use kg_process::{find_program, pathext, user_path};
 
 use crate::host::database::{Database, Result};
 
 const VERSION_LIMIT: Duration = Duration::from_secs(3);
-const RECENT_LIMIT: usize = 5;
 
-/// The programs a new thread can run: the known agents, the shell, then the recent programs.
+/// The programs a new thread can run: the known agents, the shell, then the saved programs.
 /// Only the known agents get a version, because only they are safe to run for one.
 pub(crate) async fn list(
     this: &WeakEntity<Workspace>,
@@ -46,20 +45,6 @@ pub(crate) async fn list(
         }
         None => None,
     };
-    let recent = database
-        .call(|store| store.all_threads())
-        .await?
-        .into_iter()
-        .filter(|thread| thread.visibility == Visibility::Visible && !thread.provider.is_empty())
-        .map(|thread| thread.provider);
-    // The project's program goes first, so it is listed among the recent ones.
-    let recent = project_program.iter().cloned().chain(recent);
-    let recent: Vec<String> = recent.fold(Vec::new(), |mut distinct, command| {
-        if !distinct.contains(&command) && distinct.len() < RECENT_LIMIT {
-            distinct.push(command);
-        }
-        distinct
-    });
     let saved = database.call(|store| store.saved_programs()).await?;
     let programs = cx
         .background_executor()
@@ -71,7 +56,6 @@ pub(crate) async fn list(
                 shell.as_deref(),
                 home.as_deref(),
                 &saved,
-                &recent,
                 project_program.as_deref(),
             );
             if include_versions {
@@ -83,9 +67,9 @@ pub(crate) async fn list(
     Ok(OpResult::Programs(programs))
 }
 
-/// The programs found with `path`, `pathext` and `home`, the `shell`, the `saved` programs, and the
-/// `recent` commands, newest first. The default is the `project` program when it is installed,
-/// else the first installed known agent. Versions are filled in separately, so this reads nothing
+/// The programs found with `path`, `pathext` and `home`, the `shell`, and the `saved` programs.
+/// The default is the `project` program when it is installed, else the first installed known
+/// agent. Versions are filled in separately, so this reads nothing
 /// but the filesystem.
 pub(crate) fn discover(
     path: Option<&OsStr>,
@@ -93,7 +77,6 @@ pub(crate) fn discover(
     shell: Option<&OsStr>,
     home: Option<&Path>,
     saved: &[SavedProgram],
-    recent: &[String],
     project: Option<&str>,
 ) -> ProgramList {
     let mut programs = Vec::new();
@@ -141,24 +124,6 @@ pub(crate) fn discover(
             pinned: saved.pinned,
         });
     }
-    for command in recent {
-        if programs.iter().any(|program| &program.command == command) {
-            continue;
-        }
-        let Ok((name, _)) = split_program(command) else {
-            continue;
-        };
-        programs.push(Program {
-            command: command.clone(),
-            label: label_of(&name),
-            source: ProgramSource::Recent,
-            path: locate(Path::new(&name), path, pathext, home),
-            version: None,
-            pinned: false,
-        });
-    }
-    // The default is decided before the order below, so a recent run of a known agent cannot take
-    // the first known agent's place.
     let default = project
         .and_then(|project| {
             programs
@@ -171,22 +136,9 @@ pub(crate) fn discover(
                 .find(|program| program.source == ProgramSource::Known && program.installed())
         })
         .map(|program| program.command.clone());
-    // Pinned saved programs first, then the recent ones newest first, then the rest in the order
-    // above. The window and `kg program list` both show this order.
-    let mut ordered: Vec<(usize, Program)> = programs.into_iter().enumerate().collect();
-    ordered.sort_by_key(|(index, program)| {
-        if program.pinned {
-            (0, *index)
-        } else if let Some(newest) = recent
-            .iter()
-            .position(|command| *command == program.command)
-        {
-            (1, newest)
-        } else {
-            (2, *index)
-        }
-    });
-    let programs: Vec<Program> = ordered.into_iter().map(|(_, program)| program).collect();
+    // Pinned saved programs first, then the rest in the order above. The window and
+    // `kg program list` both show this order.
+    programs.sort_by_key(|program| !program.pinned);
     ProgramList { programs, default }
 }
 

@@ -189,7 +189,7 @@ fn saved_right(cx: &mut TestAppContext) -> f64 {
     saved(cx, "main.right-width").as_f64().unwrap()
 }
 
-// Decision 272: the right sidebar grows past the old 560 cap, until the center hits its minimum,
+// Decision 278: the right sidebar grows past the old 560 cap, until the center hits its minimum,
 // and a drag past that takes no room from the left sidebar.
 #[gpui_kit::test]
 fn the_right_sidebar_drags_wide_until_the_center_minimum(cx: &mut TestAppContext) {
@@ -215,7 +215,7 @@ fn the_right_sidebar_drags_wide_until_the_center_minimum(cx: &mut TestAppContext
     );
 }
 
-// Decision 272: with less room than its saved width, the right sidebar is drawn narrower and
+// Decision 278: with less room than its saved width, the right sidebar is drawn narrower and
 // keeps the saved width for when the room comes back.
 #[gpui_kit::test]
 fn the_right_sidebar_shrinks_to_the_room_before_it_hides(cx: &mut TestAppContext) {
@@ -256,7 +256,7 @@ fn the_right_sidebar_shrinks_to_the_room_before_it_hides(cx: &mut TestAppContext
     assert!((saved_right(cx) - 1300.).abs() < 1.);
 }
 
-// Decision 272: a width the room set is not the person's choice, so dragging the left sidebar
+// Decision 278: a width the room set is not the person's choice, so dragging the left sidebar
 // beside a narrowed right one saves the left width only.
 #[gpui_kit::test]
 fn dragging_the_left_beside_a_narrowed_right_keeps_the_right_width(cx: &mut TestAppContext) {

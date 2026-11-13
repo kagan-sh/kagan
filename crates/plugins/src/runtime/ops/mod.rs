@@ -22,6 +22,7 @@ mod approve;
 mod config;
 mod develop;
 mod install;
+mod preview;
 mod rail;
 
 pub(crate) fn approved(record: &Plugin) -> Result<Grant> {
@@ -70,6 +71,7 @@ pub(crate) async fn run(
             }
         }
         PluginOp::Logs { id, after, .. } => logs(host, id, after, cx).await,
+        PluginOp::Preview { op } => preview::run(host, op, requester, cx).await,
         PluginOp::Cli {
             name,
             command,

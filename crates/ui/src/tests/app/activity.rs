@@ -156,9 +156,9 @@ export default class Plugin extends View {{
 }
 
 const TIMER: &str = "dev.test.push";
-const TIMER_ITEM: &str = "activity-plugin-dev.test.push";
+pub(super) const TIMER_ITEM: &str = "activity-plugin-dev.test.push";
 
-fn install_timer_status(data: &std::path::Path) {
+pub(super) fn install_timer_status(data: &std::path::Path) {
     let root = data.join("timer");
     std::fs::create_dir(&root).unwrap();
     let manifest = serde_json::json!({

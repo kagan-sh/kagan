@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -31,6 +31,29 @@ pub const PROGRAM_INSTALL_FOLDERS: &[(&str, &str)] = &[
     ("amp", ".amp/bin"),
 ];
 
+/// The command name of each agent kagan bundles a mark for, and the mark's path in its assets.
+pub const AGENT_MARKS: &[(&str, &str)] = &[
+    ("claude", "agents/claude.svg"),
+    ("codex", "agents/codex.svg"),
+    ("gemini", "agents/gemini.svg"),
+    ("copilot", "agents/copilot.svg"),
+    ("opencode", "agents/opencode.svg"),
+    ("cursor-agent", "agents/cursor.svg"),
+    ("kimi", "agents/kimi.svg"),
+];
+
+/// The [`AGENT_MARKS`] entry, command name and mark path, of the agent `line` runs. A path or a
+/// file extension on the command is dropped; the arguments are never read.
+#[must_use]
+pub fn agent_mark(line: &str) -> Option<(&'static str, &'static str)> {
+    let (command, _) = split_program(line).ok()?;
+    let stem = Path::new(&command).file_stem()?.to_str()?;
+    AGENT_MARKS
+        .iter()
+        .copied()
+        .find(|(known, _)| *known == stem)
+}
+
 /// The known programs the picker lists even when they are not installed.
 pub const LISTED_WHEN_MISSING: &[&str] = &["claude", "codex"];
 
@@ -41,7 +64,6 @@ pub enum ProgramSource {
     Known,
     Shell,
     Saved,
-    Recent,
 }
 
 /// The longest name a saved program can have, in characters.
@@ -108,8 +130,8 @@ pub struct ProgramList {
 }
 
 impl ProgramList {
-    /// The first installed known agent, in the order the picker lists them. A shell or a recent
-    /// command is never an agent.
+    /// The first installed known agent, in the order the picker lists them. A shell or a saved
+    /// program is never an agent.
     #[must_use]
     pub fn agent(&self) -> Option<&Program> {
         self.programs
@@ -165,9 +187,42 @@ mod tests {
     use proptest::prelude::*;
 
     use super::{
-        KNOWN_PROGRAMS, PROGRAM_INSTALL_FOLDERS, SAVED_NAME_MAX, SplitProgramError, saved_name,
-        split_program,
+        AGENT_MARKS, KNOWN_PROGRAMS, PROGRAM_INSTALL_FOLDERS, SAVED_NAME_MAX, SplitProgramError,
+        agent_mark, saved_name, split_program,
     };
+
+    #[test]
+    fn an_agent_is_found_by_its_command_alone() {
+        let claude = Some(("claude", "agents/claude.svg"));
+        assert_eq!(agent_mark("claude"), claude);
+        assert_eq!(agent_mark("claude --model x --api-key y"), claude);
+        assert_eq!(
+            agent_mark("/usr/local/bin/codex"),
+            Some(("codex", "agents/codex.svg"))
+        );
+        assert_eq!(
+            agent_mark("'/opt/my tools/cursor-agent' -p"),
+            Some(("cursor-agent", "agents/cursor.svg"))
+        );
+    }
+
+    #[test]
+    fn a_shell_an_unmarked_program_or_a_bad_line_has_no_agent() {
+        assert_eq!(agent_mark("bash"), None);
+        assert_eq!(agent_mark("aider"), None);
+        assert_eq!(agent_mark("my-tool --flag claude"), None);
+        assert_eq!(agent_mark("'claude"), None);
+        assert_eq!(agent_mark(""), None);
+    }
+
+    #[test]
+    fn every_marked_agent_is_a_known_program() {
+        assert!(
+            AGENT_MARKS
+                .iter()
+                .all(|(agent, _)| KNOWN_PROGRAMS.iter().any(|(known, _)| known == agent))
+        );
+    }
 
     #[test]
     fn a_saved_name_is_trimmed_and_bounded() {

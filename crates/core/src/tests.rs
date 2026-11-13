@@ -27,6 +27,7 @@ mod saved_program;
 mod saved_prompt;
 mod screen;
 mod search;
+mod seeded_preview;
 mod settings;
 mod skill;
 mod skill_names;

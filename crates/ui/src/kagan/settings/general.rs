@@ -177,7 +177,7 @@ pub(super) fn usage_row(on: bool) -> Row {
     row(
         "usage-limits",
         "Provider usage",
-        "Show how much of your Claude and Codex limits you have used, in the sidebar footer. Reads your sign-in on this computer and asks each provider for its usage. Nothing is saved or shared.",
+        "Show how much of your Claude and Codex limits you have used, in the sidebar footer. Claude: kagan runs the installed `claude` for a moment to ask your usage. Codex: kagan reads Codex's sign-in file and asks chatgpt.com. Nothing is saved.",
         switch("usage-limits", "Provider usage", on, |on, _, cx| {
             set_flag(kg_domain::prefs::USAGE_LIMITS, on, cx);
         }),

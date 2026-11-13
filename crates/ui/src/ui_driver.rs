@@ -232,13 +232,14 @@ fn window_index(op: &UiOp) -> u32 {
 }
 
 fn window_at(cx: &App, index: u32) -> Option<AnyWindowHandle> {
-    let mut handles = cx.windows();
-    handles.sort_by_key(AnyWindowHandle::window_id);
-    handles.get(index as usize).copied()
+    crate::kagan::kagan_windows(cx).get(index as usize).copied()
 }
 
 fn missing_window(cx: &App, index: u32) -> OpError {
-    OpError::NotFound(no_window_message(index, cx.windows().len()))
+    OpError::NotFound(no_window_message(
+        index,
+        crate::kagan::kagan_windows(cx).len(),
+    ))
 }
 
 // An offscreen app starts with no window until `kg open` makes one, so say that when there is none.
