@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::Duration;
 
 use gpui_kit::TestAppContext;
 use kg_core::{previews_dir, seed_preview};
@@ -109,8 +110,17 @@ fn a_preview_refuses_a_reload_whose_powers_grew_and_keeps_the_approved_code(
             },
         );
         cx.run_until_parked();
-        let Err(OpError::Invalid(message)) = cx.foreground_executor().block_test(reloaded) else {
-            panic!("a preview reload with grown powers did not fail");
+        let timeout = cx.executor().timer(Duration::from_secs(5));
+        let outcome = cx.foreground_executor().block_test(async move {
+            match futures::future::select(reloaded, timeout).await {
+                futures::future::Either::Left((result, _)) => Some(result),
+                futures::future::Either::Right(_) => None,
+            }
+        });
+        let Some(Err(OpError::Invalid(message))) = outcome else {
+            panic!(
+                "a preview reload with grown powers was not refused within 5 seconds: {outcome:?}"
+            );
         };
         assert!(
             message.contains("run kg plugin preview start again so the person can approve them"),

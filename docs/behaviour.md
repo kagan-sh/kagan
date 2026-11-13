@@ -577,7 +577,7 @@ One file, read-only, in the Preview tab of the right sidebar [docs:look] [decisi
 
 ## Ui
 
-`kg ui` drives the native window without the operating system's mouse or keyboard, including while the window is in the background [docs:ui-driver]. Input goes through the window's own event dispatch [docs:ui-driver] [docs:architecture]. `--window` is a zero-based index into open windows; the default is 0 [docs:ui-driver]. The app must already be running with a window; `Open` installs the driver [docs:ui-driver]. Synthetic input cannot answer a person-only approval [decision 10] [docs:ui-driver].
+`kg ui` drives the native window without the operating system's mouse or keyboard, including while the window is in the background [docs:ui-driver]. Input goes through the window's own event dispatch [docs:ui-driver] [docs:architecture]. `--window` is a zero-based index into kagan's own open windows (the main and About windows); plugin windows are not counted; the default is 0 [docs:ui-driver]. The app must already be running with a window; `Open` installs the driver [docs:ui-driver]. Synthetic input cannot answer a person-only approval [decision 10] [docs:ui-driver].
 
 ### `Snapshot`
 
