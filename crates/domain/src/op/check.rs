@@ -6,9 +6,9 @@ use super::env::{shell_name, variable_name, variable_value};
 use super::instructions::InstructionsOp;
 use super::saved_prompt::TITLE_MAX;
 use super::{
-    DiffOp, EnvOp, EnvironmentOp, Op, PluginOp, PreviewOp, ProgramOp, ProjectOp, SEARCH_LIMIT,
-    SEARCH_TEXT_MAX, SavedPromptOp, SectionOp, SurfaceOp, TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX,
-    TerminalOp, ThreadOp, TurnOp, WindowOp,
+    DiffOp, EnvOp, EnvironmentOp, Op, PluginOp, PluginPreviewOp, PreviewOp, ProgramOp, ProjectOp,
+    SEARCH_LIMIT, SEARCH_TEXT_MAX, SavedPromptOp, SectionOp, SurfaceOp, TERMINAL_COLS,
+    TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThreadOp, TurnOp, WindowOp,
 };
 use crate::{saved_name, split_program, unsafe_char};
 
@@ -342,6 +342,9 @@ fn plugin_thread(op: &PluginOp) -> Option<&ThreadId> {
         | PluginOp::Config { thread_id, .. }
         | PluginOp::Use { thread_id, .. }
         | PluginOp::Remove { thread_id, .. } => thread_id.as_ref(),
+        PluginOp::Preview {
+            op: PluginPreviewOp::Start { thread_id, .. },
+        } => thread_id.as_ref(),
         PluginOp::Start
         | PluginOp::CancelInstall
         | PluginOp::New { .. }
@@ -355,6 +358,7 @@ fn plugin_thread(op: &PluginOp) -> Option<&ThreadId> {
         | PluginOp::Search { .. }
         | PluginOp::Enable { .. }
         | PluginOp::Disable { .. }
-        | PluginOp::Rail { .. } => None,
+        | PluginOp::Rail { .. }
+        | PluginOp::Preview { .. } => None,
     }
 }

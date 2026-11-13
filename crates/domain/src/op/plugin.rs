@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::{Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 
-use crate::{PluginId, ProjectId, ThreadId};
+use crate::{PluginId, PreviewId, ProjectId, ThreadId};
 
 use super::{ConfigOp, IndexOp, Slot, SlotChoice};
 
@@ -62,6 +62,11 @@ pub enum PluginOp {
         path: PathBuf,
         #[arg(long, env = "KG_THREAD_ID")]
         thread_id: Option<ThreadId>,
+    },
+    /// Run a local plugin in a hidden kagan of its own, so this window stays free
+    Preview {
+        #[command(subcommand)]
+        op: PluginPreviewOp,
     },
     /// Read plugin logs
     Logs {
@@ -147,6 +152,39 @@ pub enum PluginOp {
         #[serde(default)]
         thread_id: Option<ThreadId>,
     },
+}
+
+/// The hidden kagan a plugin is built and driven in, beside the person's own.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
+#[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
+pub enum PluginPreviewOp {
+    /// Start a hidden kagan with a local plugin. The person approves it in their own window
+    Start {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// The thread that asks. A second start for the same plugin on this thread replaces the first
+        #[arg(long, env = "KG_THREAD_ID")]
+        #[serde(default)]
+        thread_id: Option<ThreadId>,
+    },
+    /// Stop a preview and remove its folder
+    Stop { id: PreviewId },
+    /// Running previews
+    List,
+}
+
+/// A plugin preview: its id, the plugin, the folder it watches, and the two variables that point a
+/// `kg` command at it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginPreview {
+    pub id: PreviewId,
+    pub plugin: PluginId,
+    pub name: String,
+    pub thread_id: Option<ThreadId>,
+    pub path: PathBuf,
+    pub data_dir: PathBuf,
+    pub socket: PathBuf,
 }
 
 /// Whether a plugin's rail icons are drawn.

@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use kg_domain::{
     BrowserOp, BrowserSnapshot, ConfigOp, EnvOp, InstructionsOp, Op, OpError, OpResult, PluginOp,
-    PreviewKind, SavedPromptOp, TEXT_MAX, ThreadOp, UiSnapshot, is_git_source,
+    PluginPreviewOp, PreviewKind, SavedPromptOp, TEXT_MAX, ThreadOp, UiSnapshot, is_git_source,
 };
 
 use crate::out;
@@ -168,6 +168,8 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
                 return Ok(());
             }
             OpResult::Text(text) => return print_text(text),
+            OpResult::PluginPreview(preview) => return crate::preview::started(preview),
+            OpResult::PluginPreviews(previews) => return crate::preview::listed(previews),
             OpResult::Logs { text, .. } => return print_logs(text),
             OpResult::Wait(outcome) => {
                 out::line(outcome)?;
@@ -543,7 +545,10 @@ pub(crate) fn paths(mut op: Op) -> Result<Op, OpError> {
             PluginOp::Check { path }
             | PluginOp::Share { path }
             | PluginOp::Dev { path, .. }
-            | PluginOp::Types { path },
+            | PluginOp::Types { path }
+            | PluginOp::Preview {
+                op: PluginPreviewOp::Start { path, .. },
+            },
         )
         | Op::Skill(kg_domain::SkillOp::Add { path, .. })
         | Op::Project(kg_domain::ProjectOp::Add { path })

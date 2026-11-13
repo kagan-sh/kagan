@@ -32,7 +32,8 @@ ids!(
     PendingInteractionId,
     PluginId,
     AutomationId,
-    SavedPromptId
+    SavedPromptId,
+    PreviewId
 );
 
 impl ProjectId {
