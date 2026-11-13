@@ -34,6 +34,7 @@ pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
     };
     let op = paths(op)?;
     let mut client = Client::connect_or_start()?;
+    say_waiting(&op);
     match op {
         Op::Plugin(PluginOp::Dev { path, thread_id }) => {
             let result = client.call(&Op::Plugin(PluginOp::Dev {
@@ -104,13 +105,6 @@ pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
             }
             Ok(())
         }
-        op @ Op::Plugin(PluginOp::Preview {
-            op: PluginPreviewOp::Start { .. },
-        }) => {
-            eprintln!("waiting for approval in your kagan window…");
-            let result = client.call(&op)?;
-            print_result(&result, next, json)
-        }
         op => {
             if let Some(notice) = notice {
                 eprintln!("{notice}. kagan may ask for your OK in its window.");
@@ -118,6 +112,18 @@ pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
             let result = client.call(&op)?;
             print_result(&result, next, json)
         }
+    }
+}
+
+// A start blocks until the person answers its question, so the wait is said on stderr first.
+fn say_waiting(op: &Op) {
+    if matches!(
+        op,
+        Op::Plugin(PluginOp::Preview {
+            op: PluginPreviewOp::Start { .. }
+        })
+    ) {
+        eprintln!("waiting for approval in your kagan window…");
     }
 }
 

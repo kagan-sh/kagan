@@ -25,7 +25,7 @@ pub(in crate::runtime::ops) async fn run(
             start(host, path, thread_id, requester, cx).await
         }
         PluginPreviewOp::Stop { id } => stop(host, id, cx).await,
-        PluginPreviewOp::List => list(host, cx),
+        PluginPreviewOp::List => Ok(list(host, cx)),
     }
 }
 
@@ -140,7 +140,7 @@ async fn launch(
 ) -> Result<(Process, Process)> {
     let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
     let keep = host.read_with(cx, |host, _| host.previews.ids());
-    let exe = preview::exe()?;
+    let exe = preview::exe();
     {
         let (exe, data_dir, folder, preview_data) = (
             exe.clone(),
@@ -203,17 +203,17 @@ async fn stop(host: &Entity<PluginHost>, id: PreviewId, cx: &mut AsyncApp) -> Re
         };
         return Err(OpError::NotFound(format!("no preview {id}; {listed}")));
     };
-    let exe = preview::exe()?;
+    let exe = preview::exe();
     cx.background_spawn(async move { preview::shut_down(running, &exe) })
         .await?;
     Ok(OpResult::Done)
 }
 
 // Shows only previews that still run. One that has exited is ended and its folder removed.
-fn list(host: &Entity<PluginHost>, cx: &mut AsyncApp) -> Result<OpResult> {
+fn list(host: &Entity<PluginHost>, cx: &mut AsyncApp) -> OpResult {
     let dead = host.update(cx, |host, _| host.previews.take_dead());
     if !dead.is_empty() {
-        let exe = preview::exe().unwrap_or_default();
+        let exe = preview::exe();
         cx.background_spawn(async move {
             for running in dead {
                 drop(preview::shut_down(running, &exe));
@@ -221,7 +221,5 @@ fn list(host: &Entity<PluginHost>, cx: &mut AsyncApp) -> Result<OpResult> {
         })
         .detach();
     }
-    Ok(OpResult::PluginPreviews(
-        host.read_with(cx, |host, _| host.previews.infos()),
-    ))
+    OpResult::PluginPreviews(host.read_with(cx, |host, _| host.previews.infos()))
 }

@@ -190,14 +190,14 @@ fn is_preview_name(name: &str) -> bool {
 
 // The `kg` this app runs. Tests have no kg binary of their own, so they get a path that does not
 // exist: a spawn fails at once instead of running the test binary as a kagan.
-pub(crate) fn exe() -> io::Result<PathBuf> {
+pub(crate) fn exe() -> PathBuf {
     #[cfg(test)]
     {
-        Ok(PathBuf::from("/nonexistent/kagan-test-kg"))
+        PathBuf::from("/nonexistent/kagan-test-kg")
     }
     #[cfg(not(test))]
     {
-        std::env::current_exe()
+        std::env::current_exe().unwrap_or_default()
     }
 }
 
@@ -361,7 +361,7 @@ pub(crate) fn shut_down(mut running: Running, exe: &Path) -> io::Result<()> {
 // Runs `shut_down` off the caller's thread. The receiver closes once the preview is gone.
 pub(crate) fn shut_down_later(running: Running, executor: &BackgroundExecutor) -> Receiver<()> {
     let (done, ended) = async_channel::bounded::<()>(1);
-    let exe = exe().unwrap_or_default();
+    let exe = exe();
     executor
         .spawn(async move {
             // A folder that stays is swept on the next start.

@@ -49,7 +49,7 @@ async fn kg_preference_refuses_the_preview_marker(cx: &mut TestAppContext) {
         error: None,
     };
     seed_preview(dir.path(), &plugin).unwrap();
-    let workspace = open_at(&dir, cx, |_| {}).await.unwrap();
+    let _workspace = open_at(&dir, cx, |_| {}).await.unwrap();
 
     let read = Op::Preference(kg_domain::PreferenceOp::Get {
         key: prefs::PREVIEW.into(),
