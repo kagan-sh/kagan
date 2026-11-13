@@ -201,6 +201,12 @@ fn the_right_sidebar_drags_wide_until_the_center_minimum(cx: &mut TestAppContext
         })
         .unwrap();
     assert!(center >= 479.5, "center {center}");
+    let right = cx.update(|cx| kagan.read(cx).right_width_now(cx));
+    let stored = saved(cx, "main.right-width").as_f64().unwrap();
+    assert!(
+        (stored - f64::from(right)).abs() < 1.,
+        "saved {stored}, shown {right}"
+    );
 }
 
 #[gpui_kit::test]
