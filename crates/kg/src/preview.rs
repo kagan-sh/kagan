@@ -5,21 +5,24 @@ use std::path::Path;
 use kg_domain::{Op, OpError, PluginOp, PluginPreview, PluginPreviewOp};
 
 use crate::out;
-
-// A start blocks until the person answers its question, so the wait is said on stderr first.
-pub(crate) fn say_waiting(op: &Op) {
-    if matches!(
-        op,
-        Op::Plugin(PluginOp::Preview {
-            op: PluginPreviewOp::Start { .. }
-        })
-    ) {
-        eprintln!("waiting for approval in your kagan window…");
-    }
-}
+use crate::socket::Client;
 
 pub(crate) fn started(preview: &PluginPreview) -> Result<(), OpError> {
     out::line(started_text(preview))?;
+    Ok(())
+}
+
+// A start asks the person, so the wait is said just before that question: once the folder checks
+// as a plugin. A start that fails earlier says nothing about waiting.
+pub(crate) fn check_start(client: &mut Client, op: &Op) -> Result<(), OpError> {
+    let Op::Plugin(PluginOp::Preview {
+        op: PluginPreviewOp::Start { path, .. },
+    }) = op
+    else {
+        return Ok(());
+    };
+    client.call(&Op::Plugin(PluginOp::Check { path: path.clone() }))?;
+    eprintln!("waiting for approval in your kagan window…");
     Ok(())
 }
 

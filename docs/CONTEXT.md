@@ -163,7 +163,6 @@ _Avoid_: Viewer, file opener, page, browser
 
 **Panel**:
 A titled block a plugin declares, or one of Questions, Changes, Details and Preview. Questions lists pending questions. A thread mark that says needs you is attention, not that panel. A plugin panel is a left tool, a center page, or a right sidebar tab. A panel placed on the bottom is refused. The right sidebar is a tab bar: built-in panels, closable plugin tabs, the Browser, extra terminals, Preview, and a + that opens one of them.
-
 _Avoid_: Pane, dock
 
 **Plugin preview**:

@@ -4,7 +4,7 @@ use gpui_kit::TestAppContext;
 use kg_domain::{InteractionOption, Op, OpError, Plugin, PluginId, ThreadId, ThreadOp, prefs};
 use serde_json::json;
 
-use super::{Fixture, idle_thread, op, open_at};
+use super::{Fixture, idle_thread, open_at};
 use crate::{NO_ONE_HERE, Workspace, seed_preview};
 
 // The same open the app does at start, on a folder made by `seed_preview`.

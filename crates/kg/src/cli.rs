@@ -34,7 +34,7 @@ pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
     };
     let op = paths(op)?;
     let mut client = Client::connect_or_start()?;
-    crate::preview::say_waiting(&op);
+    crate::preview::check_start(&mut client, &op)?;
     match op {
         Op::Plugin(PluginOp::Dev { path, thread_id }) => {
             let result = client.call(&Op::Plugin(PluginOp::Dev {
