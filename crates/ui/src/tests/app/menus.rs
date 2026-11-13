@@ -14,9 +14,10 @@ use kg_domain::{Op, SelectMode, ThreadOp, WindowOp};
 
 use crate::kagan::menus::{About, Close, Hide, HideOthers, Minimize, Quit, ShowAll, Zoom};
 
+use super::activity::install_timer_status;
 use crate::tests::kagan::{
-    chord, click, focused_of, grid_text, open, run_shell, shows, wait_for_output, wait_for_screen,
-    wait_until,
+    chord, click, focused_of, grid_text, host_then, open, run_shell, shows, wait_for_output,
+    wait_for_screen, wait_until,
 };
 
 #[gpui_kit::test]
@@ -212,6 +213,19 @@ fn assert_last_close_quits(cx: &mut TestAppContext, before: usize) {
         wait_until(cx, |_| crate::kagan::quit::quit_requests() > before);
         assert_eq!(crate::kagan::quit::quit_requests(), before + 1);
     }
+}
+
+// A plugin's window stays open after kagan's last window closes, so it must not count as kagan's.
+#[gpui_kit::test]
+fn a_plugin_window_alone_leaves_no_kagan_window(cx: &mut TestAppContext) {
+    let _data = host_then(cx, install_timer_status);
+    cx.run_until_parked();
+    assert_eq!(
+        cx.update(|cx| cx.windows().len()),
+        1,
+        "the plugin's window is open"
+    );
+    assert!(cx.update(|cx| crate::kagan::quit::none_left(cx)));
 }
 
 #[gpui_kit::test]
