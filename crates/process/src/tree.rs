@@ -50,7 +50,7 @@ fn sid_of(pid: Pid) -> Option<Pid> {
 }
 
 // Every process under `leader`, by parent pid, as it is now. A program that starts its own
-// session or group leaves its parent's group, so this list is what catches it.
+// terminal or group leaves its parent's group, so this list is what catches it.
 #[must_use]
 pub fn descendants(leader: u32) -> Vec<u32> {
     let Ok(listed) = Command::new("ps")
