@@ -15,6 +15,7 @@ use gpui_shell::{
 };
 
 use super::component_error::ComponentError;
+use super::{Set, apply, plain_method};
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     registry
@@ -48,8 +49,8 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                     colour_method("warning", Button::warning, "Uses the warning variant."),
                     colour_method("ghost", Button::ghost, "Uses the quiet ghost variant."),
                     colour_method("link", Button::link, "Uses the link-like visual variant."),
-                    plain_method("outline", |props| props.outline = true, "Uses the outline presentation."),
-                    plain_method("compact", |props| props.compact = true, "Uses compact internal spacing."),
+                    plain_method::<Props>("outline", |props| props.outline = true, "Uses the outline presentation."),
+                    plain_method::<Props>("compact", |props| props.compact = true, "Uses compact internal spacing."),
                     // The shell records these itself and reads them through the request.
                     shell_call("disabled", ArgumentSchema::Boolean, "Stops the button responding to clicks."),
                     shell_call("selected", ArgumentSchema::Boolean, "Marks the button as the current choice."),
@@ -66,7 +67,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
         .map(|_| ())
 }
 
-type Prop = Arc<dyn Fn(&mut Props) + Send + Sync>;
+type Prop = Set<Props>;
 
 fn payload(set: impl Fn(&mut Props) + Send + Sync + 'static) -> ComponentPayload {
     let prop: Prop = Arc::new(set);
@@ -140,23 +141,11 @@ fn colour_method(
     colour: fn(Button) -> Button,
     documentation: &'static str,
 ) -> MethodDescriptor {
-    plain_method(
+    plain_method::<Props>(
         name,
         move |props| props.colour = Some(colour),
         documentation,
     )
-}
-
-fn plain_method(
-    name: &'static str,
-    set: impl Fn(&mut Props) + Send + Sync + 'static,
-    documentation: &'static str,
-) -> MethodDescriptor {
-    let prop: Prop = Arc::new(set);
-    MethodDescriptor::new(name, Vec::new(), move |_| {
-        Ok(ComponentPayload::new(prop.clone()))
-    })
-    .with_documentation(documentation)
 }
 
 // A call the shell records itself on every component. The declaration lets a script make the
@@ -183,12 +172,7 @@ impl ComponentMaterializer for KgButton {
             .downcast_ref::<String>()
             .ok_or_else(|| ComponentError::new("KgButton received an incompatible id"))?
             .clone();
-        let mut props = Props::default();
-        for method in request.methods() {
-            if let Some(prop) = method.payload().downcast_ref::<Prop>() {
-                prop(&mut props);
-            }
-        }
+        let props: Props = apply(&request);
         let disabled = request.disabled();
         let selected = request.selected();
         let click = request.on_click();

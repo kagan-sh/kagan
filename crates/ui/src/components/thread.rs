@@ -14,6 +14,8 @@ use gpui_shell::{
 use kg_core::{Thread, Workspace};
 use kg_domain::ThreadId;
 
+use super::{apply, plain_method};
+
 #[derive(Clone, Copy)]
 enum Part {
     Title,
@@ -23,6 +25,7 @@ enum Part {
 struct ThreadComponent {
     thread: Entity<Thread>,
     part: Part,
+    compact: bool,
     _changes: Subscription,
 }
 
@@ -49,7 +52,7 @@ impl Render for ThreadComponent {
                     .gap_2()
                     .type_body(cx)
                     .child(tone.mark(cx))
-                    .child(tone.word())
+                    .children((!self.compact).then(|| tone.word()))
             }
         }
     }
@@ -69,6 +72,7 @@ impl ComponentMaterializer for Part {
                 )
             })?
             .clone();
+        let compact = apply::<bool>(&request);
         let key = request.element_id().clone();
         let part = *self;
         let view = request.with_window_app(|window, cx| {
@@ -87,12 +91,16 @@ impl ComponentMaterializer for Part {
             };
             let view = window
                 .use_keyed_state(
-                    gpui_kit::SharedString::from(format!("kagan-thread:{key:?}:{kind}:{}", id.0)),
+                    gpui_kit::SharedString::from(format!(
+                        "kagan-thread:{key:?}:{kind}:{}:{compact}",
+                        id.0
+                    )),
                     cx,
                     |_, cx| ThreadComponent {
                         _changes: cx.observe(&thread, |_, _, cx| cx.notify()),
                         thread,
                         part,
+                        compact,
                     },
                 )
                 .clone();
@@ -103,16 +111,22 @@ impl ComponentMaterializer for Part {
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    for (name, part, documentation) in [
+    for (name, part, documentation, methods) in [
         (
             "ThreadTitle",
             Part::Title,
             "A thread title, observed from core by thread id.",
+            Vec::new(),
         ),
         (
             "ThreadStatus",
             Part::Status,
             "A thread status bar and status word, observed from core in the active Workbench theme.",
+            vec![plain_method::<bool>(
+                "compact",
+                |compact| *compact = true,
+                "Draws only the status bar, with no word. The word stays the accessible name.",
+            )],
         ),
     ] {
         registry.register(
@@ -128,6 +142,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                         Ok(ComponentPayload::new(ThreadId(id.clone())))
                     },
                 )])
+                .with_methods(methods)
                 .with_documentation(documentation),
         )?;
     }
