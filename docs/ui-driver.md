@@ -13,7 +13,7 @@ QA and agents drive the native kagan window without OS mouse or keyboard. Input 
 - `kg ui drop` — release a held drag where the pointer is. With no drag held it fails: `no drag is held; start one with kg ui drag --hold`. `kg ui key escape` cancels a held drag instead.
 - `kg ui screenshot <path> [--window N]` — PNG without focusing the window (macOS: `screencapture -l`, and a failure returns its reason as `screencapture failed: <reason>`, and a run that exits 0 without writing a file is a failure too (`screencapture wrote no image to <path>`). The capture goes to a new file beside the destination and replaces it only when that run wrote one, so an older image is never reported as the new capture; Windows: `PrintWindow`). A covered window is not presenting frames, so the capture is the last presented buffer.
 
-`--window` is a zero-based index into kagan's own open windows (the main window and the About window), sorted by `WindowId`. A plugin's window is not counted. Default `0`.
+`--window` is a zero-based index into kagan's own open windows (the main window and the About window), sorted by `WindowId`. A plugin's windows, hidden or not, are not counted. Default `0`.
 
 ## Offscreen windows
 
