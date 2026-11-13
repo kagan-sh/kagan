@@ -1,4 +1,5 @@
-use super::{HOST, URL, allowed};
+use super::{HOST, URL};
+use crate::usage::http::allowed;
 
 #[test]
 fn the_endpoint_is_the_pinned_chatgpt_address() {
@@ -6,7 +7,7 @@ fn the_endpoint_is_the_pinned_chatgpt_address() {
     assert_eq!(parsed.scheme(), "https");
     assert_eq!(parsed.host_str(), Some(HOST));
     assert_eq!(parsed.path(), "/backend-api/wham/usage");
-    assert!(allowed(URL));
+    assert!(allowed(URL, HOST));
 }
 
 #[test]
@@ -20,7 +21,7 @@ fn the_token_never_goes_to_another_host() {
         "ftp://chatgpt.com/backend-api/wham/usage",
         "not a url",
     ] {
-        assert!(!allowed(url), "{url} must not get the token");
+        assert!(!allowed(url, HOST), "{url} must not get the token");
     }
 }
 

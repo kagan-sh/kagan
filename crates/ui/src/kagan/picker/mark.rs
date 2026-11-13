@@ -72,7 +72,12 @@ pub(crate) fn program_mark(program: &Program, cx: &App) -> AnyElement {
 
 fn agent_path(command: &str) -> Option<&'static str> {
     let (name, _) = split_program(command).ok()?;
-    let name = Path::new(&name).file_stem()?.to_str()?;
+    command_mark(Path::new(&name).file_stem()?.to_str()?)
+}
+
+/// The bundled mark of the agent whose command name is `name`, for any surface that shows an
+/// agent, such as the picker or the usage popup.
+pub(crate) fn command_mark(name: &str) -> Option<&'static str> {
     AGENT_MARKS
         .iter()
         .find(|(known, _)| *known == name)

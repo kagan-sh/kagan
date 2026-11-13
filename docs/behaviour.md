@@ -259,8 +259,8 @@ A project is a named body of work, usually one repository, with one folder on th
 
 ### `List`, `Discover`
 
-- **Allowed when**: always. The default is the project's program when `--project` names one and it is installed, else the first installed known agent [decision 221] [decision 255]. A program a thread ran, a failed one, or one an automation started never changes the default [decision 255]. A project's program is the default only when it is listed, so a line with flags must be saved first [decision 272].
-- **Shows**: pinned saved programs first, then the known programs, the shell, and the saved programs that are not pinned, in their stored order [book:cli]. Programs that past threads ran are not listed [decision 272]. The default is marked [decision 258]. An installed known program is a card in the grid with its agent's mark, its name and its version; a missing one is a card marked Not installed, which cannot start. The shell is a row with its path and no mark [decision 237]. A saved program is listed by its name, its line is the command, and it is installed when its first word is found on the same PATH as a known program [decision 240].
+- **Allowed when**: always. The default is the project's program when `--project` names one and it is installed, else the first installed known agent [decision 221] [decision 255]. A program a thread ran, a failed one, or one an automation started never changes the default [decision 255]. A project's program is the default only when it is listed, so a line with flags must be saved first [decision 274].
+- **Shows**: pinned saved programs first, then the known programs, the shell, and the saved programs that are not pinned, in their stored order [book:cli]. Programs that past threads ran are not listed [decision 274]. The default is marked [decision 258]. An installed known program is a card in the grid with its agent's mark, its name and its version; a missing one is a card marked Not installed, which cannot start. The shell is a row with its path and no mark [decision 237]. A saved program is listed by its name, its line is the command, and it is installed when its first word is found on the same PATH as a known program [decision 240].
 - **Refused when**: `--project` names no live project — `not-found` [op/].
 
 ### `Save`, `Rename`, `Remove`, `Pin`
@@ -569,7 +569,7 @@ One file, read-only, in the Preview tab of the right sidebar [docs:look] [decisi
 
 ## Ui
 
-`kg ui` drives the native window without the operating system's mouse or keyboard, including while the window is in the background [docs:ui-driver]. Input goes through the window's own event dispatch [docs:ui-driver] [docs:architecture]. `--window` is a zero-based index into open windows; the default is 0 [docs:ui-driver]. The app must already be running with a window; `Open` installs the driver [docs:ui-driver]. Synthetic input cannot answer a person-only approval [decision 10] [docs:ui-driver].
+`kg ui` drives the native window without the operating system's mouse or keyboard, including while the window is in the background [docs:ui-driver]. Input goes through the window's own event dispatch [docs:ui-driver] [docs:architecture]. `--window` is a zero-based index into kagan's own open windows (the main and About windows); plugin windows are not counted; the default is 0 [docs:ui-driver]. The app must already be running with a window; `Open` installs the driver [docs:ui-driver]. Synthetic input cannot answer a person-only approval [decision 10] [docs:ui-driver].
 
 ### `Snapshot`
 
@@ -855,10 +855,10 @@ Finds a newer kagan on the GitHub releases page (decision 113). Installing is no
 
 ## Usage
 
-- **Shows**: for each signed-in provider, its email, plan, and windows with percent and the time to reset. Codex is read from its sign-in file; Claude is not read yet [decision 268]. `kg usage show` prints the same readings as text, or JSON with `--json`.
-- **Changes**: `refresh` asks Codex again now, but never sooner than thirty seconds after the last request, so repeated clicks make one request. After a 429 or a 5xx, requests wait one minute, then five. `show` asks again only when the last answer is over two minutes old, and obeys the same waits [decision 268].
-- **Allowed when**: always. The reads happen only while `usage-limits` is on.
-- **Off**: while the `usage-limits` preference is off, `show` and `refresh` answer `enabled: false` with no accounts, read no file, make no request, and the sidebar draws no button. Saving the preference off drops the readings from memory at once [decision 268].
+- **Shows**: for each signed-in provider, its email, plan, and windows with percent and the time to reset. Claude: kagan runs the installed `claude` for a moment to ask your usage, with the stream-json control requests `initialize` and `get_usage`; kagan never reads the CLI's sign-in [decision 274]. Codex: kagan reads Codex's sign-in file and asks chatgpt.com [decision 268]. Nothing is saved. The plan and email come from those replies. `kg usage show` prints the same readings as text, or JSON with `--json`.
+- **Changes**: `refresh` asks each provider again now, but never sooner than thirty seconds after the last request, so repeated clicks make one request. After a 429 or a 5xx, requests wait one minute, then five. `show` asks again only when the last answer is over two minutes old, and obeys the same waits [decision 268].
+- **Allowed when**: always. The reads happen only while `usage-limits` is on, which is the default [decision 274]. Starting kagan starts no `claude` and makes no request. A Claude read starts `claude` when the popup opens, on Refresh, or on `kg usage show` [decision 274]. A `claude` that does not answer within twenty seconds is stopped and shows "Claude did not answer in time."
+- **Off**: while the `usage-limits` preference is off (turn it off with `kg preference set usage-limits false`), `show` and `refresh` answer `enabled: false` with no accounts, read no file, make no request, and the sidebar draws no button. Saving the preference off drops the readings from memory at once [decision 268].
 - **Refused when**: nothing. A provider with no sign-in file has no account, and a provider that answers with an error shows that error, never 0% [decision 267].
 - **Button**: the sidebar footer, next to Add project, opens a popup with an All tab and one tab per signed-in provider. A stale reading shows "Couldn't refresh. Showing last update." and Retry. The popup refreshes every two minutes while it is open, and the shortcut is `secondary-alt-u` [decision 267].
 
