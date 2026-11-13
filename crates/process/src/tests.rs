@@ -370,33 +370,3 @@ fn capture_timeout_kills_the_entire_tree() -> std::io::Result<()> {
     }
     Ok(())
 }
-
-#[cfg(unix)]
-#[test]
-fn a_child_of_a_process_is_listed_and_killed_by_its_pid() {
-    use std::process::Command;
-    use std::time::Duration;
-
-    let mut command = Command::new("sh");
-    command.args(["-c", "sleep 10 & wait"]);
-    let mut leader = Process::spawn(
-        command,
-        std::process::Stdio::null(),
-        std::process::Stdio::null(),
-        std::process::Stdio::null(),
-    )
-    .unwrap();
-    let pid = leader.child().id();
-    std::thread::sleep(Duration::from_millis(300));
-    let children = crate::descendants(pid);
-    assert_eq!(children.len(), 1, "{children:?}");
-
-    crate::kill_listed(&children);
-    std::thread::sleep(Duration::from_millis(100));
-    let still_there = Command::new("kill")
-        .args(["-0", &children[0].to_string()])
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success());
-    assert!(!still_there, "the listed child is still running");
-}

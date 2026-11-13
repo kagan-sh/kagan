@@ -10,9 +10,7 @@ use std::time::{Duration, Instant};
 use async_channel::Receiver;
 use gpui_kit::{BackgroundExecutor, Context, Entity, Subscription};
 use kg_core::{Workspace, WorkspaceEvent};
-use kg_domain::{
-    EventKind, OpError, PluginId, PluginPreview, PreviewId, SOCKET_PATH_MAX, ThreadId,
-};
+use kg_domain::{EventKind, OpError, PluginId, PluginPreview, PreviewId, ThreadId};
 use kg_process::Process;
 
 use crate::{PluginHost, Result};
@@ -203,6 +201,7 @@ pub(crate) fn exe() -> PathBuf {
 
 #[cfg(unix)]
 pub(crate) fn socket_for(folder: &Path, _id: &PreviewId) -> Result<PathBuf> {
+    use kg_domain::SOCKET_PATH_MAX;
     let socket = folder.join("kg.sock");
     if socket.as_os_str().len() > SOCKET_PATH_MAX {
         return Err(OpError::Invalid(format!(
@@ -348,11 +347,9 @@ fn wait_gone(exe: &Path, data_dir: &Path, socket: &Path, limit: Duration) -> boo
 pub(crate) fn shut_down(mut running: Running, exe: &Path) -> io::Result<()> {
     let data_dir = running.info.data_dir.clone();
     let socket = running.info.socket.clone();
-    let tree = kg_process::descendants(running.app.child().id());
     ask_quit(exe, &data_dir, &socket);
     // Stops at once when the app has exited, and kills the app's group when it has not.
     drop(running.app.wait_within(QUIT_WITHIN, || false));
-    kg_process::kill_listed(&tree);
     let folder = running.folder.clone();
     drop(running);
     remove(&folder)

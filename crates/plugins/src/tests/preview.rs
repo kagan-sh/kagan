@@ -82,16 +82,13 @@ fn sleeping(folder: &Path, info: PluginPreview) -> Running {
     Running::new(info, folder.to_path_buf(), app, watch)
 }
 
-// An app that starts a child of its own, which a preview must end with it.
+// A sleeping app with a known pid, so a test can see that it ends.
 #[cfg(unix)]
-fn app_with_child() -> (Process, u32, Vec<u32>) {
-    let mut command = Command::new("sh");
-    command.args(["-c", "sleep 10 & wait"]);
-    let mut app = Process::spawn(command, Stdio::null(), Stdio::null(), Stdio::null()).unwrap();
+fn sleeping_app() -> (Process, u32) {
+    let mut app =
+        Process::spawn(sleep_command(), Stdio::null(), Stdio::null(), Stdio::null()).unwrap();
     let pid = app.child().id();
-    std::thread::sleep(Duration::from_millis(300));
-    let children = kg_process::descendants(pid);
-    (app, pid, children)
+    (app, pid)
 }
 
 #[cfg(unix)]
@@ -238,18 +235,13 @@ fn a_sweep_keeps_a_folder_whose_app_still_answers_after_a_quit(cx: &mut TestAppC
 
 #[cfg(unix)]
 #[gpui_kit::test]
-fn stop_ends_the_preview_its_app_and_the_children_of_its_app(cx: &mut TestAppContext) {
+fn stop_ends_the_preview_and_its_app(cx: &mut TestAppContext) {
     let data = tempfile::tempdir().unwrap();
     let path = data.path().to_path_buf();
     open_kept(cx, &path, data, &[]);
     let folder = previews_dir(&path).join("p-eeeeee");
     std::fs::create_dir_all(&folder).unwrap();
-    let (app, pid, children) = app_with_child();
-    assert_eq!(
-        children.len(),
-        1,
-        "the app should have one child: {children:?}"
-    );
+    let (app, pid) = sleeping_app();
     let watch =
         Process::spawn(sleep_command(), Stdio::null(), Stdio::null(), Stdio::null()).unwrap();
     let info = preview_at(&folder, "p-eeeeee", Some(thread()), ID);
@@ -278,10 +270,6 @@ fn stop_ends_the_preview_its_app_and_the_children_of_its_app(cx: &mut TestAppCon
     assert!(
         !alive(&pid.to_string()),
         "the preview's app is still running"
-    );
-    assert!(
-        !alive(&children[0].to_string()),
-        "a child of the preview's app is still running"
     );
 }
 
@@ -344,7 +332,7 @@ fn archiving_a_thread_ends_its_previews(cx: &mut TestAppContext) {
     open_kept(cx, &path, data, &[]);
     let folder = previews_dir(&path).join("p-111111");
     std::fs::create_dir_all(&folder).unwrap();
-    let (app, pid, children) = app_with_child();
+    let (app, pid) = sleeping_app();
     let watch =
         Process::spawn(sleep_command(), Stdio::null(), Stdio::null(), Stdio::null()).unwrap();
     let info = preview_at(&folder, "p-111111", Some(thread()), ID);
@@ -365,10 +353,6 @@ fn archiving_a_thread_ends_its_previews(cx: &mut TestAppContext) {
     assert!(
         !alive(&pid.to_string()),
         "the preview's app outlived its thread"
-    );
-    assert!(
-        !alive(&children[0].to_string()),
-        "a child of the preview's app outlived its thread"
     );
 }
 

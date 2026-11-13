@@ -20,4 +20,4 @@ pub use process::Process;
 #[cfg(windows)]
 pub use job::Job;
 #[cfg(unix)]
-pub use tree::{descendants, kill_leader, kill_listed, kill_tree, pid_of};
+pub use tree::{kill_leader, kill_tree, pid_of};
