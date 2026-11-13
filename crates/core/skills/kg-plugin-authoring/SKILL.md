@@ -17,9 +17,9 @@ Build a plugin in this order. Each step names the command to run.
 
 5. **Check it.** `kg plugin check <path>` reads the manifest, the entry, and each contribution the same way install does, and reports a refused contribution by name. It also refuses a missing host export and a field constructor the component schema rejects. Fix every error before install.
 
-6. **Preview it first.** `kg plugin preview start <path>` starts a hidden kagan with the plugin. It blocks until the person approves the powers, once, in their own window. Do not approve it yourself.
-7. **Test in the preview, never in the person's window.** Export the two variables it printed, then run `kg plugin command <id> hello`, `kg plugin logs <id>`, `kg ui snapshot`, `kg ui click <id>` and `kg ui screenshot`. Each save reloads it; reload errors go to `watch.log` in its folder. If an edit adds powers, the reload fails with `powers grew`: run `kg plugin preview start <path>` again. Stop it with `kg plugin preview stop <id>`.
-8. **Install, last.** `kg plugin install <path>` (or `git:<url>@<ref>`) adds it to the person's kagan. The person approves again; a decline fails the command.
+6. **Preview it first.** `kg plugin preview start <path>` starts a hidden kagan with the plugin. It blocks until the person approves the powers, once, in their window. Do not approve it yourself.
+7. **Test in the preview, never in the person's window.** Put the `KG_DATA_DIR` and `KG_SOCKET` it prints in front of each command: `… kg ui snapshot`, `… kg ui click <id>`, `… kg plugin logs <id>`. A save reloads it; reload errors go to `watch.log`. Added powers fail the reload with `powers grew`: run `kg plugin preview start <path>` again. Stop with `kg plugin preview stop <id>`, no variables.
+8. **Install, last.** `kg plugin install <path>` runs without the variables and adds it to the person's kagan. The person approves again.
 9. **Share it.** Commit and push the plugin, then run `kg plugin share <path>`. The index entry, the team index, and how teammates install the plugin are in `references/share.md`.
 
 Unavailable host areas fail explicitly. Do not invent an API: if a call is not in `kagan.d.ts`, it does not exist in this version.

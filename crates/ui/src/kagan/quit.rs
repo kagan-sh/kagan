@@ -42,7 +42,10 @@ fn quit_if_none_left(cx: &mut App) {
     if cfg!(target_os = "macos") {
         return;
     }
-    if cx.windows().is_empty() && !cx.has_global::<Quitting>() && !CONFIRMED.load(Ordering::SeqCst)
+    // A plugin's window can outlive kagan's last window, so only kagan's own windows count.
+    if super::kagan_windows(cx).is_empty()
+        && !cx.has_global::<Quitting>()
+        && !CONFIRMED.load(Ordering::SeqCst)
     {
         accept(cx);
     }

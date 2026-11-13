@@ -14,9 +14,10 @@ use kg_domain::{Op, SelectMode, ThreadOp, WindowOp};
 
 use crate::kagan::menus::{About, Close, Hide, HideOthers, Minimize, Quit, ShowAll, Zoom};
 
+use super::activity::install_timer_status;
 use crate::tests::kagan::{
-    chord, click, focused_of, grid_text, open, run_shell, shows, wait_for_output, wait_for_screen,
-    wait_until,
+    chord, click, focused_of, grid_text, open, open_with_plugins_then, run_shell, shows,
+    wait_for_output, wait_for_screen, wait_until,
 };
 
 #[gpui_kit::test]
@@ -205,6 +206,30 @@ fn removing_the_last_window_quits_except_on_macos(cx: &mut TestAppContext) {
 fn assert_last_close_quits(cx: &mut TestAppContext, before: usize) {
     cx.run_until_parked();
     assert!(cx.update(|cx| cx.windows().is_empty()));
+    if cfg!(target_os = "macos") {
+        cx.run_until_parked();
+        assert_eq!(crate::kagan::quit::quit_requests(), before);
+    } else {
+        wait_until(cx, |_| crate::kagan::quit::quit_requests() > before);
+        assert_eq!(crate::kagan::quit::quit_requests(), before + 1);
+    }
+}
+
+// A plugin's window stays open when kagan's main window closes, and that close still ends kagan
+// off macOS. The list check fails on a quit that counts every window.
+#[gpui_kit::test]
+fn closing_the_last_kagan_window_quits_with_a_plugin_window_open(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_timer_status);
+    let before = crate::kagan::quit::quit_requests();
+    cx.update_window(window, |_, window, _| window.remove_window())
+        .expect("the window is open");
+    cx.run_until_parked();
+    assert!(cx.update(|cx| crate::kagan::kagan_windows(cx).is_empty()));
+    assert_eq!(
+        cx.update(|cx| cx.windows().len()),
+        1,
+        "the plugin's window is open"
+    );
     if cfg!(target_os = "macos") {
         cx.run_until_parked();
         assert_eq!(crate::kagan::quit::quit_requests(), before);
