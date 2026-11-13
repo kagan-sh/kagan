@@ -7,7 +7,8 @@ target 35000
 # Cost: the Windows update waiter adds 89 product lines on top of main (82692, after #143): one waiter for both Windows install paths, and the tests that run replace and relaunch off Windows. The ceiling is set to the merged count.
 # Cost: provider usage adds 463 product lines on top of main (82781, after #145), tests not counted: the Claude CLI read, the shared usage cache and HTTPS helper, the process capture with input, and the popup's marks and labels. The ceiling is set to the branch count.
 # Cost: the kg ui window numbering fix adds 16 product lines on top of main (83238), in crates/ui/src/ui_driver.rs and about.rs: one list of kagan's own windows and the About window's handle. The merged count is 83254, and the ceiling is set to it.
-ceiling 83254
+# Cost: the quit fix adds 6 product lines on top of main (83254): the shared kagan_windows move, and the check in quit_if_none_left that quit uses. The merged count is 83260, and the ceiling is set to it.
+ceiling 83260
 allow_expect 8
 crates/core/src/thread/agent/files.rs 754
 crates/ui/src/theme/catalog.rs 646

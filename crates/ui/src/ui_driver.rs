@@ -232,25 +232,14 @@ fn window_index(op: &UiOp) -> u32 {
 }
 
 fn window_at(cx: &App, index: u32) -> Option<AnyWindowHandle> {
-    kagan_windows(cx).get(index as usize).copied()
+    crate::kagan::kagan_windows(cx).get(index as usize).copied()
 }
 
 fn missing_window(cx: &App, index: u32) -> OpError {
-    OpError::NotFound(no_window_message(index, kagan_windows(cx).len()))
-}
-
-// The windows `kg ui` numbers: the main window and the About window, sorted by WindowId. A
-// plugin's window is never one of them, so a plugin that loads first cannot take a number.
-fn kagan_windows(cx: &App) -> Vec<AnyWindowHandle> {
-    let open = cx.windows();
-    let mut handles: Vec<_> = crate::kagan::front(cx)
-        .map(|(handle, _)| handle)
-        .into_iter()
-        .chain(crate::about::shown(cx))
-        .filter(|handle| open.contains(handle))
-        .collect();
-    handles.sort_by_key(AnyWindowHandle::window_id);
-    handles
+    OpError::NotFound(no_window_message(
+        index,
+        crate::kagan::kagan_windows(cx).len(),
+    ))
 }
 
 // An offscreen app starts with no window until `kg open` makes one, so say that when there is none.
