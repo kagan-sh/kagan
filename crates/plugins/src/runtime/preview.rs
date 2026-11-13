@@ -111,14 +111,7 @@ impl Previews {
         thread_id: Option<&ThreadId>,
         plugin: &PluginId,
     ) -> Option<Running> {
-        let id = self
-            .running
-            .values()
-            .find(|running| {
-                running.info.thread_id.as_ref() == thread_id && running.info.plugin == *plugin
-            })
-            .map(|running| running.info.id.clone())?;
-        self.running.remove(&id)
+        take_matching(&mut self.running, thread_id, plugin)
     }
 
     fn take_for_thread(&mut self, thread_id: &ThreadId) -> Vec<Running> {
@@ -152,6 +145,20 @@ impl Previews {
             .filter_map(|id| self.running.remove(id))
             .collect()
     }
+}
+
+pub(crate) fn take_matching(
+    running: &mut BTreeMap<PreviewId, Running>,
+    thread_id: Option<&ThreadId>,
+    plugin: &PluginId,
+) -> Option<Running> {
+    let id = running
+        .values()
+        .find(|running| {
+            running.info.thread_id.as_ref() == thread_id && running.info.plugin == *plugin
+        })
+        .map(|running| running.info.id.clone())?;
+    running.remove(&id)
 }
 
 fn end_on(previews: &mut Previews, event: &WorkspaceEvent, cx: &mut Context<PluginHost>) {

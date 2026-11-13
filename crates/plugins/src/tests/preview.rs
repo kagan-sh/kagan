@@ -1,17 +1,26 @@
-use std::path::Path;
-use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
-use gpui_kit::TestAppContext;
+use gpui_kit::{Entity, Task, TestAppContext};
 use kg_core::{previews_dir, seed_preview};
-use kg_domain::{OpError, Plugin, PluginId, PluginOp, PluginPreviewOp, prefs};
+use kg_domain::{
+    Op, OpError, OpResult, Plugin, PluginId, PluginOp, PluginPreview, PluginPreviewOp, PreviewId,
+    ThreadId, ThreadOp, prefs,
+};
+use kg_process::Process;
 use kg_store::Store;
 use serde_json::json;
 
+use crate::PluginHost;
 use crate::host::Hold;
 use crate::manifest::Grant;
+use crate::runtime::ops::NO_ONE_HERE;
+use crate::runtime::preview::{self, Running, take_matching};
 
 use super::{
-    ID, answer, hold_at, open_kept, plugin_dir, plugin_op, read_manifest, records, thread,
+    ID, PluginHostGlobal, alive, answer, call, hold_at, open_kept, plugin_dir, plugin_loaded,
+    plugin_op, read_manifest, records, run, sample_manifest, sleep_command, thread, write_plugin,
 };
 
 fn start(path: &Path) -> PluginOp {
@@ -23,7 +32,7 @@ fn start(path: &Path) -> PluginOp {
     }
 }
 
-fn preview_folders(data: &Path) -> Vec<std::path::PathBuf> {
+fn preview_folders(data: &Path) -> Vec<PathBuf> {
     std::fs::read_dir(previews_dir(data))
         .map(|entries| {
             entries
@@ -33,101 +42,557 @@ fn preview_folders(data: &Path) -> Vec<std::path::PathBuf> {
         .unwrap_or_default()
 }
 
+fn host_of(cx: &mut TestAppContext) -> Entity<PluginHost> {
+    cx.read(|cx| cx.global::<PluginHostGlobal>().0.clone())
+}
+
+// Waits five seconds of test time. Gives None when the task has not finished by then.
+fn within_five_seconds<T: 'static>(cx: &mut TestAppContext, task: Task<T>) -> Option<T> {
+    let timeout = cx.executor().timer(Duration::from_secs(5));
+    cx.foreground_executor().block_test(async move {
+        match futures::future::select(Box::pin(task), Box::pin(timeout)).await {
+            futures::future::Either::Left((value, _)) => Some(value),
+            futures::future::Either::Right(_) => None,
+        }
+    })
+}
+
+// A tool call loads the plugin, the way a person's agent would reach it.
+fn echo(cx: &mut TestAppContext) -> Result<OpResult, OpError> {
+    call(cx, "echo", json!({ "text": "hi" }))
+}
+
+fn preview_at(folder: &Path, id: &str, thread: Option<ThreadId>, plugin: &str) -> PluginPreview {
+    PluginPreview {
+        id: PreviewId(id.into()),
+        plugin: PluginId(plugin.into()),
+        name: "Echo".into(),
+        thread_id: thread,
+        path: folder.to_path_buf(),
+        data_dir: folder.join("data"),
+        socket: folder.join("kg.sock"),
+    }
+}
+
+// A running preview whose app and watch are sleeping processes, so a test can see them end.
+fn sleeping(folder: &Path, info: PluginPreview) -> Running {
+    let app = Process::spawn(sleep_command(), Stdio::null(), Stdio::null(), Stdio::null()).unwrap();
+    let watch =
+        Process::spawn(sleep_command(), Stdio::null(), Stdio::null(), Stdio::null()).unwrap();
+    Running::new(info, folder.to_path_buf(), app, watch)
+}
+
+// An app that starts a child of its own, which a preview must end with it.
+#[cfg(unix)]
+fn app_with_child() -> (Process, u32, Vec<u32>) {
+    let mut command = Command::new("sh");
+    command.args(["-c", "sleep 10 & wait"]);
+    let mut app = Process::spawn(command, Stdio::null(), Stdio::null(), Stdio::null()).unwrap();
+    let pid = app.child().id();
+    std::thread::sleep(Duration::from_millis(300));
+    let children = kg_process::descendants(pid);
+    (app, pid, children)
+}
+
+#[cfg(unix)]
+fn fake_kg(dir: &Path, body: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt as _;
+    let path = dir.join("fake-kg");
+    std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    path
+}
+
 #[gpui_kit::test]
 fn declining_a_preview_writes_nothing_and_starts_nothing(cx: &mut TestAppContext) {
-    {
-        let plugin = plugin_dir();
-        let data = tempfile::tempdir().unwrap();
-        let path = data.path().to_path_buf();
-        open_kept(cx, &path, data, &[]);
+    let plugin = plugin_dir();
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    open_kept(cx, &path, data, &[]);
 
-        let started = plugin_op(cx, start(plugin.path()));
-        answer(cx, "decline");
+    let started = plugin_op(cx, start(plugin.path()));
+    answer(cx, "decline");
 
-        assert!(cx.foreground_executor().block_test(started).is_err());
-        assert!(
-            preview_folders(&path).is_empty(),
-            "a declined preview left a folder"
-        );
-    }
+    assert!(cx.foreground_executor().block_test(started).is_err());
+    assert!(
+        preview_folders(&path).is_empty(),
+        "a declined preview left a folder"
+    );
 }
 
 #[gpui_kit::test]
 fn approving_a_preview_seeds_its_folder_with_the_approved_grant(cx: &mut TestAppContext) {
-    {
-        let plugin = plugin_dir();
-        let root = dunce::canonicalize(plugin.path()).unwrap();
-        let data = tempfile::tempdir().unwrap();
-        let path = data.path().to_path_buf();
-        open_kept(cx, &path, data, &[]);
-        let release = hold_at(cx, Hold::PreviewStart);
+    let plugin = plugin_dir();
+    let root = dunce::canonicalize(plugin.path()).unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    open_kept(cx, &path, data, &[]);
+    let release = hold_at(cx, Hold::PreviewStart);
 
-        let _started = plugin_op(cx, start(&root));
-        answer(cx, "approve");
+    let _started = plugin_op(cx, start(&root));
+    answer(cx, "approve");
 
-        let folders = preview_folders(&path);
-        let [folder] = folders.as_slice() else {
-            panic!("one preview folder: {folders:?}");
+    let folders = preview_folders(&path);
+    let [folder] = folders.as_slice() else {
+        panic!("one preview folder: {folders:?}");
+    };
+    let store = Store::open(folder.join("data").join("kagan.sqlite3")).unwrap();
+    let grant = Grant::of(&read_manifest(&root).unwrap(), &root);
+    let stored = store.plugins().unwrap();
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].id, PluginId(ID.into()));
+    assert_eq!(stored[0].approved, serde_json::to_value(&grant).unwrap());
+    assert_eq!(store.setting(prefs::PREVIEW).unwrap(), Some(json!(true)));
+    drop(release);
+}
+
+#[gpui_kit::test]
+fn a_failed_start_removes_its_folder_and_says_so(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    open_kept(cx, &path, data, &[]);
+
+    let started = plugin_op(cx, start(plugin.path()));
+    answer(cx, "approve");
+
+    assert!(cx.foreground_executor().block_test(started).is_err());
+    assert!(
+        preview_folders(&path).is_empty(),
+        "a failed start left its folder"
+    );
+}
+
+#[gpui_kit::test]
+fn a_second_start_does_not_sweep_a_folder_still_being_made(cx: &mut TestAppContext) {
+    let first = plugin_dir();
+    let mut other = sample_manifest();
+    other["id"] = json!("dev.test.other");
+    let second = tempfile::tempdir().unwrap();
+    write_plugin(second.path(), &other);
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    open_kept(cx, &path, data, &[]);
+
+    let held = hold_at(cx, Hold::PreviewStart);
+    let _first = plugin_op(cx, start(first.path()));
+    answer(cx, "approve");
+    cx.run_until_parked();
+    assert_eq!(
+        preview_folders(&path).len(),
+        1,
+        "the first start did not reach its hold"
+    );
+
+    let held_again = hold_at(cx, Hold::PreviewStart);
+    let _second = plugin_op(cx, start(second.path()));
+    answer(cx, "approve");
+    cx.run_until_parked();
+
+    assert_eq!(
+        preview_folders(&path).len(),
+        2,
+        "the second start's sweep removed the first start's folder"
+    );
+    drop((held, held_again));
+}
+
+#[gpui_kit::test]
+fn a_sweep_removes_leftovers_and_keeps_running_ids_and_other_names(cx: &mut TestAppContext) {
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    open_kept(cx, &path, data, &[]);
+    let root = previews_dir(&path);
+    for name in ["p-aaaaaa", "p-bbbbbb", "p-cccccc", "other", "p-zz"] {
+        std::fs::create_dir_all(root.join(name)).unwrap();
+    }
+    let keep = [PreviewId("p-bbbbbb".into())];
+
+    preview::sweep(Path::new("/nonexistent/kagan-test-kg"), &path, &keep).unwrap();
+
+    let mut left: Vec<String> = preview_folders(&path)
+        .iter()
+        .map(|folder| folder.file_name().unwrap().to_string_lossy().into_owned())
+        .collect();
+    left.sort();
+    assert_eq!(left, ["other", "p-bbbbbb", "p-zz"]);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_sweep_keeps_a_folder_whose_app_still_answers_after_a_quit(cx: &mut TestAppContext) {
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    open_kept(cx, &path, data, &[]);
+    let folder = previews_dir(&path).join("p-dddddd");
+    std::fs::create_dir_all(&folder).unwrap();
+    let exe = fake_kg(&path, "exit 0");
+
+    preview::sweep(&exe, &path, &[]).unwrap();
+
+    assert!(
+        folder.exists(),
+        "a folder whose app still answers was removed"
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn stop_ends_the_preview_its_app_and_the_children_of_its_app(cx: &mut TestAppContext) {
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    open_kept(cx, &path, data, &[]);
+    let folder = previews_dir(&path).join("p-eeeeee");
+    std::fs::create_dir_all(&folder).unwrap();
+    let (app, pid, children) = app_with_child();
+    assert_eq!(
+        children.len(),
+        1,
+        "the app should have one child: {children:?}"
+    );
+    let watch =
+        Process::spawn(sleep_command(), Stdio::null(), Stdio::null(), Stdio::null()).unwrap();
+    let info = preview_at(&folder, "p-eeeeee", Some(thread()), ID);
+    let host = host_of(cx);
+    host.update(cx, |host, _| {
+        host.previews
+            .insert(Running::new(info, folder.clone(), app, watch));
+    });
+
+    let stopped = plugin_op(
+        cx,
+        PluginOp::Preview {
+            op: PluginPreviewOp::Stop {
+                id: PreviewId("p-eeeeee".into()),
+            },
+        },
+    );
+    cx.run_until_parked();
+    assert!(
+        within_five_seconds(cx, stopped)
+            .expect("stop did not finish")
+            .is_ok()
+    );
+
+    assert!(!folder.exists(), "stop left the folder");
+    assert!(
+        !alive(&pid.to_string()),
+        "the preview's app is still running"
+    );
+    assert!(
+        !alive(&children[0].to_string()),
+        "a child of the preview's app is still running"
+    );
+}
+
+#[gpui_kit::test]
+fn stop_of_an_unknown_id_says_what_is_running(cx: &mut TestAppContext) {
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    open_kept(cx, &path, data, &[]);
+
+    let stopped = plugin_op(
+        cx,
+        PluginOp::Preview {
+            op: PluginPreviewOp::Stop {
+                id: PreviewId("p-ffffff".into()),
+            },
+        },
+    );
+    let message = match within_five_seconds(cx, stopped).expect("stop did not finish") {
+        Err(OpError::NotFound(message)) => message,
+        other => panic!("an unknown preview was not reported: {other:?}"),
+    };
+    assert_eq!(message, "no preview p-ffffff; none is running");
+}
+
+#[test]
+fn taking_a_preview_takes_only_the_threads_preview_of_that_plugin() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut running = std::collections::BTreeMap::new();
+    let mine = sleeping(
+        dir.path(),
+        preview_at(dir.path(), "p-000001", Some(thread()), "dev.a"),
+    );
+    let other_thread = sleeping(
+        dir.path(),
+        preview_at(
+            dir.path(),
+            "p-000002",
+            Some(ThreadId("other".into())),
+            "dev.a",
+        ),
+    );
+    running.insert(mine.info.id.clone(), mine);
+    running.insert(other_thread.info.id.clone(), other_thread);
+
+    let taken = take_matching(&mut running, Some(&thread()), &PluginId("dev.a".into()));
+
+    assert_eq!(
+        taken.map(|preview| preview.info.id),
+        Some(PreviewId("p-000001".into()))
+    );
+    assert_eq!(running.len(), 1);
+    assert!(running.contains_key(&PreviewId("p-000002".into())));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn archiving_a_thread_ends_its_previews(cx: &mut TestAppContext) {
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    open_kept(cx, &path, data, &[]);
+    let folder = previews_dir(&path).join("p-111111");
+    std::fs::create_dir_all(&folder).unwrap();
+    let (app, pid, children) = app_with_child();
+    let watch =
+        Process::spawn(sleep_command(), Stdio::null(), Stdio::null(), Stdio::null()).unwrap();
+    let info = preview_at(&folder, "p-111111", Some(thread()), ID);
+    host_of(cx).update(cx, |host, _| {
+        host.previews
+            .insert(Running::new(info, folder.clone(), app, watch));
+    });
+
+    run(cx, Op::Thread(ThreadOp::Archive { id: thread() })).unwrap();
+    cx.run_until_parked();
+
+    let left = host_of(cx).read_with(cx, |host, _| host.previews.infos());
+    assert!(
+        left.is_empty(),
+        "an archived thread kept its preview: {left:?}"
+    );
+    assert!(!folder.exists(), "archiving left the folder");
+    assert!(
+        !alive(&pid.to_string()),
+        "the preview's app outlived its thread"
+    );
+    assert!(
+        !alive(&children[0].to_string()),
+        "a child of the preview's app outlived its thread"
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn list_shows_only_previews_that_still_run(cx: &mut TestAppContext) {
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    open_kept(cx, &path, data, &[]);
+    let folder = previews_dir(&path).join("p-222222");
+    std::fs::create_dir_all(&folder).unwrap();
+    let mut command = Command::new("sh");
+    command.args(["-c", "exit 0"]);
+    let mut app = Process::spawn(command, Stdio::null(), Stdio::null(), Stdio::null()).unwrap();
+    app.wait_within(Duration::from_secs(5), || false).unwrap();
+    let watch =
+        Process::spawn(sleep_command(), Stdio::null(), Stdio::null(), Stdio::null()).unwrap();
+    let info = preview_at(&folder, "p-222222", Some(thread()), ID);
+    host_of(cx).update(cx, |host, _| {
+        host.previews
+            .insert(Running::new(info, folder.clone(), app, watch));
+    });
+
+    let listed = run(
+        cx,
+        Op::Plugin(PluginOp::Preview {
+            op: PluginPreviewOp::List,
+        }),
+    )
+    .unwrap();
+    assert!(
+        matches!(listed, OpResult::PluginPreviews(ref list) if list.is_empty()),
+        "{listed:?}"
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_preview_quit_is_asked_over_its_socket_without_the_prompt(cx: &mut TestAppContext) {
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    open_kept(cx, &path, data, &[]);
+    let folder = previews_dir(&path).join("p-333333");
+    std::fs::create_dir_all(&folder).unwrap();
+    let log = path.join("asked.log");
+    let exe = fake_kg(
+        &path,
+        &format!(
+            "printf '%s|%s|%s\\n' \"$*\" \"$KG_NO_START\" \"$KG_SOCKET\" >> '{}'",
+            log.display()
+        ),
+    );
+    let info = preview_at(&folder, "p-333333", Some(thread()), ID);
+    let running = sleeping(&folder, info.clone());
+
+    preview::shut_down(running, &exe).unwrap();
+
+    let asked = std::fs::read_to_string(&log).expect("the preview was never asked to quit");
+    assert_eq!(
+        asked.trim(),
+        format!("window quit|1|{}", info.socket.display())
+    );
+    assert!(!folder.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_preview_app_that_exits_at_once_fails_the_wait_with_its_log() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("app.log"),
+        "boom: the window would not open\n",
+    )
+    .unwrap();
+    let mut command = Command::new("sh");
+    command.args(["-c", "exit 3"]);
+    let mut app_exiting =
+        Process::spawn(command, Stdio::null(), Stdio::null(), Stdio::null()).unwrap();
+    let started = Instant::now();
+
+    let error = preview::wait_ready(
+        Path::new("/nonexistent/kagan-test-kg"),
+        &dir.path().join("data"),
+        &dir.path().join("kg.sock"),
+        dir.path(),
+        &mut app_exiting,
+    )
+    .unwrap_err();
+
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "the wait ran on after the app exited"
+    );
+    let OpError::Failed(message) = error else {
+        panic!("{error:?}");
+    };
+    assert!(message.contains("stopped before it answered"), "{message}");
+    assert!(
+        message.contains("boom: the window would not open"),
+        "{message}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_socket_path_longer_than_the_platform_limit_is_refused() {
+    let folder = PathBuf::from(format!("/{}", "a".repeat(120)));
+    let id = PreviewId("p-444444".into());
+    assert!(matches!(
+        preview::socket_for(&folder, &id),
+        Err(OpError::Invalid(message)) if message.contains("socket path longer")
+    ));
+}
+
+#[gpui_kit::test]
+fn a_preview_refuses_a_question_at_once(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    let root = dunce::canonicalize(plugin.path()).unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    seed_preview(&path, &installed_record(&root)).unwrap();
+    open_kept(cx, &path, data, &[]);
+
+    let removed = plugin_op(
+        cx,
+        PluginOp::Remove {
+            id: PluginId(ID.into()),
+            thread_id: Some(thread()),
+        },
+    );
+    let outcome = within_five_seconds(cx, removed);
+
+    let Some(Err(OpError::Invalid(message))) = outcome else {
+        panic!("a question in a preview did not refuse at once: {outcome:?}");
+    };
+    assert!(message.contains("no one can answer here"), "{message}");
+}
+
+#[gpui_kit::test]
+fn preview_start_and_stop_refuse_inside_a_preview(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    let root = dunce::canonicalize(plugin.path()).unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    seed_preview(&path, &installed_record(&root)).unwrap();
+    open_kept(cx, &path, data, &[]);
+
+    for op in [
+        start(&root),
+        PluginOp::Preview {
+            op: PluginPreviewOp::Stop {
+                id: PreviewId("p-555555".into()),
+            },
+        },
+    ] {
+        let task = plugin_op(cx, op);
+        let outcome = within_five_seconds(cx, task);
+        let Some(Err(OpError::Invalid(message))) = outcome else {
+            panic!("a preview op inside a preview was not refused: {outcome:?}");
         };
-        let store = Store::open(folder.join("data").join("kagan.sqlite3")).unwrap();
-        let grant = Grant::of(&read_manifest(&root).unwrap(), &root);
-        let plugins = store.plugins().unwrap();
-        assert_eq!(plugins.len(), 1);
-        assert_eq!(plugins[0].id, PluginId(ID.into()));
-        assert_eq!(plugins[0].approved, serde_json::to_value(&grant).unwrap());
-        assert_eq!(store.setting(prefs::PREVIEW).unwrap(), Some(json!(true)));
-        drop(release);
+        assert_eq!(message, NO_ONE_HERE);
+    }
+}
+
+// The record a preview folder starts with: the plugin, approved as its manifest asks today.
+fn installed_record(root: &Path) -> Plugin {
+    Plugin {
+        id: PluginId(ID.into()),
+        source: root.display().to_string(),
+        approved: serde_json::to_value(Grant::of(&read_manifest(root).unwrap(), root)).unwrap(),
+        root: root.to_path_buf(),
+        commit: None,
+        enabled: true,
+        skills: Vec::new(),
+        error: None,
     }
 }
 
 #[gpui_kit::test]
-fn a_preview_refuses_a_reload_whose_powers_grew_and_keeps_the_approved_code(
-    cx: &mut TestAppContext,
-) {
-    {
-        let plugin = plugin_dir();
-        let root = dunce::canonicalize(plugin.path()).unwrap();
-        let data = tempfile::tempdir().unwrap();
-        let path = data.path().to_path_buf();
-        let record = Plugin {
-            id: PluginId(ID.into()),
-            source: root.display().to_string(),
-            root: root.clone(),
-            commit: None,
-            enabled: true,
-            approved: serde_json::to_value(Grant::default()).unwrap(),
-            skills: Vec::new(),
-            error: None,
-        };
-        seed_preview(&path, &record).unwrap();
-        open_kept(cx, &path, data, &[]);
+fn a_preview_refuses_a_reload_whose_powers_grew_and_keeps_the_loaded_code(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    let root = dunce::canonicalize(plugin.path()).unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    let record = installed_record(&root);
+    seed_preview(&path, &record).unwrap();
+    open_kept(cx, &path, data, &[]);
+    assert!(matches!(
+        echo(cx),
+        Ok(OpResult::ToolReply {
+            is_error: false,
+            ..
+        })
+    ));
+    assert!(plugin_loaded(cx, ID), "the approved plugin did not load");
 
-        let reloaded = plugin_op(
-            cx,
-            PluginOp::Reload {
-                id: PluginId(ID.into()),
-                thread_id: None,
-            },
-        );
-        cx.run_until_parked();
-        let timeout = cx.executor().timer(Duration::from_secs(5));
-        let outcome = cx.foreground_executor().block_test(async move {
-            match futures::future::select(reloaded, timeout).await {
-                futures::future::Either::Left((result, _)) => Some(result),
-                futures::future::Either::Right(_) => None,
-            }
-        });
-        let Some(Err(OpError::Invalid(message))) = outcome else {
-            panic!(
-                "a preview reload with grown powers was not refused within 5 seconds: {outcome:?}"
-            );
-        };
-        assert!(
-            message.contains("run kg plugin preview start again so the person can approve them"),
-            "{message}"
-        );
-        let kept = records(cx);
-        assert_eq!(kept.len(), 1);
-        assert_eq!(kept[0].approved, record.approved, "the old grant changed");
-    }
+    let mut grown = sample_manifest();
+    grown["powers"] = json!({ "clipboard": { "write": true }, "calls": ["dev.test.other"] });
+    write_plugin(&root, &grown);
+
+    let reloaded = plugin_op(
+        cx,
+        PluginOp::Reload {
+            id: PluginId(ID.into()),
+            thread_id: None,
+        },
+    );
+    let outcome = within_five_seconds(cx, reloaded);
+    let Some(Err(OpError::Invalid(message))) = outcome else {
+        panic!("a preview reload with grown powers was not refused: {outcome:?}");
+    };
+    assert!(
+        message.contains("run kg plugin preview start again so the person can approve them"),
+        "{message}"
+    );
+    let kept = records(cx);
+    assert_eq!(kept.len(), 1);
+    assert_eq!(kept[0].approved, record.approved, "the old grant changed");
+    assert!(plugin_loaded(cx, ID), "the approved code stopped running");
+    assert!(matches!(
+        echo(cx),
+        Ok(OpResult::ToolReply {
+            is_error: false,
+            ..
+        })
+    ));
 }
