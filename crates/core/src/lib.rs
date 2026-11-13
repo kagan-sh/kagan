@@ -33,7 +33,9 @@ pub use usage::{
 pub use workspace::approval::{Approval, Requester};
 pub use workspace::entity::{Environment, Project, Thread};
 
-pub use workspace::{Permit, PluginDispatch, PluginRequest, Workspace, WorkspaceEvent};
+pub use workspace::{
+    Permit, PluginDispatch, PluginRequest, Workspace, WorkspaceEvent, seed_preview,
+};
 
 // How long the person must stop typing before held questions show, and before a child's line
 // follows their Enter. A design value, not a number from the research.

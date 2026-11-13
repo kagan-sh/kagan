@@ -20,6 +20,7 @@ use crate::{Environment, Project, Requester, Thread};
 pub(crate) mod approval;
 mod clock;
 mod data;
+pub use data::seed_preview;
 pub(crate) mod entity;
 mod lifecycle;
 mod plugins;
