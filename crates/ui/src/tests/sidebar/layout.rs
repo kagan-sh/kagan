@@ -173,6 +173,36 @@ fn a_dragged_sidebar_width_is_saved(cx: &mut TestAppContext) {
     assert!((saved(cx, "main.right-width").as_f64().unwrap() - 400.).abs() < 1.);
 }
 
+// Decision 272: the right sidebar grows past the old 560 cap, until the center hits its minimum.
+#[gpui_kit::test]
+fn the_right_sidebar_drags_wide_until_the_center_minimum(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    cx.simulate_window_resize(window, size(px(1920.), px(1000.)));
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| kagan.resize_right(px(1000.), window, cx));
+    })
+    .unwrap();
+    cx.run_until_parked();
+    let wide = cx.update(|cx| kagan.read(cx).right_width_now(cx));
+    assert!((wide - 1000.).abs() < 1., "wide {wide}");
+    assert!((saved(cx, "main.right-width").as_f64().unwrap() - 1000.).abs() < 1.);
+    cx.update_window(window, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| kagan.resize_right(px(1800.), window, cx));
+    })
+    .unwrap();
+    cx.run_until_parked();
+    let center = cx
+        .update_window(window, |_, window, _| {
+            crate::ui_registry::find(window, &ElementId::Name("center".into()))
+                .map_or(0., |element| f32::from(element.bounds.size.width))
+        })
+        .unwrap();
+    assert!(center >= 479.5, "center {center}");
+}
+
 #[gpui_kit::test]
 fn a_saved_width_is_shown_at_once(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);

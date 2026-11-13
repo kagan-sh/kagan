@@ -35,9 +35,10 @@ pub const LEFT_WIDTH: &str = "left-width";
 pub const RIGHT_SIDEBAR: &str = "right-sidebar";
 pub const RIGHT_WIDTH: &str = "right-width";
 pub const REVIEW_WRAP: &str = "review-wrap";
-/// The widths, in pixels, a window's sidebars may be saved at.
+/// The widths, in pixels, a window's sidebars may be saved at. The right maximum is only a sanity
+/// bound: the center's minimum width is what stops a drag (decision 272).
 pub const LEFT_WIDTH_RANGE: (f32, f32) = (200., 420.);
-pub const RIGHT_WIDTH_RANGE: (f32, f32) = (240., 560.);
+pub const RIGHT_WIDTH_RANGE: (f32, f32) = (240., 3840.);
 
 /// The rule a branch prefix follows. Settings and the `kg` error both say it.
 pub const BRANCH_PREFIX_RULE: &str = "It must end in / or -, such as bb/ or feat-.";
