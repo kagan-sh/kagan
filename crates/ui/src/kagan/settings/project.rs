@@ -171,8 +171,9 @@ impl Page {
         if let Some(stored) = current.filter(|stored| {
             self.programs_loaded && !self.programs.iter().any(|p| &p.command == stored)
         }) {
-            let text =
-                format!("{stored} is not installed, so the first installed program is used.");
+            let text = format!(
+                "{stored} is not a listed program, so the first installed program is used."
+            );
             column = column.child(
                 div()
                     .id("project-program-missing")

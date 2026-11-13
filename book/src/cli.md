@@ -1455,7 +1455,7 @@ Programs a new thread can run, as the new-thread picker lists them
 Usage: kg program [OPTIONS] <COMMAND>
 
 Commands:
-  list    Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed known agent
+  list    Programs found on the PATH, the shell, and the saved programs. The default is the project's program when it is installed, else the first installed known agent
   save    Save a program line under a name. A name already saved takes the new line and keeps its pin
   rename  Give a saved program another name
   remove  Delete a saved program after the person approves it in kagan. The project and threads that used its line keep the line
@@ -1473,7 +1473,7 @@ Options:
 ## `kg program list`
 
 ```text
-Programs found on the PATH, the shell, the saved programs, and the recent threads. The default is the project's program when it is installed, else the first installed known agent
+Programs found on the PATH, the shell, and the saved programs. The default is the project's program when it is installed, else the first installed known agent
 
 Usage: kg program list [OPTIONS]
 

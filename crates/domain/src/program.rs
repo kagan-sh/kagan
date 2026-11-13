@@ -64,7 +64,6 @@ pub enum ProgramSource {
     Known,
     Shell,
     Saved,
-    Recent,
 }
 
 /// The longest name a saved program can have, in characters.
@@ -131,8 +130,8 @@ pub struct ProgramList {
 }
 
 impl ProgramList {
-    /// The first installed known agent, in the order the picker lists them. A shell or a recent
-    /// command is never an agent.
+    /// The first installed known agent, in the order the picker lists them. A shell or a saved
+    /// program is never an agent.
     #[must_use]
     pub fn agent(&self) -> Option<&Program> {
         self.programs

@@ -209,11 +209,7 @@ async fn a_project_can_default_to_a_saved_program(cx: &mut TestAppContext) {
         .iter()
         .filter(|program| program.command == "tool --fast")
         .collect();
-    assert_eq!(
-        rows.len(),
-        1,
-        "a saved line is one row, not one more recent row"
-    );
+    assert_eq!(rows.len(), 1, "the project's saved line is one row");
     assert_eq!(rows[0].label, "Fast tool");
     assert!(rows[0].installed());
 }
@@ -237,7 +233,7 @@ async fn renaming_a_missing_name_is_not_found_even_when_the_new_name_is_taken(
 }
 
 #[gpui_kit::test]
-async fn a_saved_line_is_stored_trimmed_so_it_matches_a_recent_one(cx: &mut TestAppContext) {
+async fn a_saved_line_is_stored_trimmed(cx: &mut TestAppContext) {
     let _fixture = Fixture::new(cx).await;
     op(save("Padded", "  claude  "), cx).await.unwrap();
     let saved = saved_list(cx).await;
