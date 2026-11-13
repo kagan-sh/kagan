@@ -195,6 +195,7 @@ impl Kagan {
                 columns.child(
                     resizable_panel()
                         .flex_none()
+                        .fixed()
                         .size(layout.left_width)
                         .size_range(px(layout::LEFT_RANGE.0)..px(layout::LEFT_RANGE.1))
                         .child(self.left_side(window, cx)),

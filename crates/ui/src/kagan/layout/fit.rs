@@ -42,12 +42,13 @@ impl Kagan {
         self.layout = next;
         self.supersede_surface();
         let held = self.panes;
+        let right_width = self.right_fit(held.left);
         self.columns.update(cx, |state, cx| {
             if held.left && next.left_width != was.left_width {
                 state.resize_panel(0, next.left_width, window, cx);
             }
             if held.right && next.right_width != was.right_width {
-                state.resize_panel(right_index(held.left), next.right_width, window, cx);
+                state.resize_panel(right_index(held.left), right_width, window, cx);
             }
         });
         self.sync_panels_keeping_widths(window, cx);
@@ -70,15 +71,27 @@ impl Kagan {
         self.restore_widths(kept, window, cx);
     }
 
+    // The right sidebar shrinks to the room it has, down to its minimum, before it hides.
+    pub(in crate::kagan) fn right_fit(&self, left_shown: bool) -> Pixels {
+        let left = if left_shown {
+            f32::from(self.layout.left_width)
+        } else {
+            0.
+        };
+        let room = f32::from(self.viewport) - CENTER_MIN - RAIL_WIDTH - left;
+        let width = f32::from(self.layout.right_width).min(room);
+        px(width.max(right::WIDTH_RANGE.0))
+    }
+
     pub(in crate::kagan) fn room_panes(&self, left_open: bool, right_open: bool) -> Panes {
         let room = f32::from(self.viewport) - CENTER_MIN - RAIL_WIDTH;
         let left = f32::from(self.layout.left_width);
-        let right = f32::from(self.layout.right_width);
         let mut panes = Panes {
             left: left_open,
             right: right_open,
         };
-        if panes.right && (right > room || (panes.left && left + right > room)) {
+        let left_used = if panes.left { left } else { 0. };
+        if panes.right && room - left_used < right::WIDTH_RANGE.0 {
             panes.right = false;
         }
         if panes.left && left > room {
@@ -206,7 +219,7 @@ impl Kagan {
 
     fn side_fits(&self, width: Pixels) -> bool {
         let right = if self.panes.right {
-            f32::from(self.layout.right_width)
+            right::WIDTH_RANGE.0
         } else {
             0.
         };

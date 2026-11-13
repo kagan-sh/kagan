@@ -23,7 +23,7 @@ impl Kagan {
         }
         self.panes = want;
         self.hide_browser(cx);
-        let layout = self.layout;
+        let (left_width, right_width) = (self.layout.left_width, self.right_fit(want.left));
         self.columns.update(cx, |state, cx| {
             if held.right && !want.right && state.sizes().len() > right_index(held.left) {
                 state.remove_panel(right_index(held.left), cx);
@@ -32,10 +32,10 @@ impl Kagan {
                 state.remove_panel(0, cx);
             }
             if want.left && !held.left {
-                state.insert_panel(Some(layout.left_width), Some(0), cx);
+                state.insert_panel(Some(left_width), Some(0), cx);
             }
             if want.right && !held.right {
-                state.insert_panel(Some(layout.right_width), None, cx);
+                state.insert_panel(Some(right_width), None, cx);
             }
         });
         cx.notify();
@@ -49,13 +49,14 @@ impl Kagan {
     ) {
         // Restoring makes resize events that are not the person's choice, so they are ignored.
         self.hold_resizes(cx);
-        let (index, layout) = (right_index(self.panes.left), self.layout);
+        let index = right_index(self.panes.left);
+        let (left_width, right_width) = (self.layout.left_width, self.right_fit(self.panes.left));
         self.columns.update(cx, |state, cx| {
             if kept.left {
-                state.resize_panel(0, layout.left_width, window, cx);
+                state.resize_panel(0, left_width, window, cx);
             }
             if kept.right {
-                state.resize_panel(index, layout.right_width, window, cx);
+                state.resize_panel(index, right_width, window, cx);
             }
         });
     }
