@@ -3,7 +3,7 @@ use kg_core::Workspace;
 use kg_domain::{
     AskField, DiffOp, DiffQuery, DiffScope, EnvironmentId, EnvironmentOp, EnvironmentSpec,
     InteractionOption, Metadata, Op, OpResult, Order, PluginId, Project, ProjectId, ProjectOp, Run,
-    Section, SectionId, ThreadId, ThreadOp, ThreadStatus, Timestamp, Visibility,
+    Section, SectionId, ThreadId, ThreadOp, ThreadStatus, Timestamp, Visibility, agent_mark,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -313,6 +313,8 @@ struct PluginThread<'a> {
     project_id: &'a ProjectId,
     environment_id: &'a Option<EnvironmentId>,
     title: &'a str,
+    agent: Option<&'static str>,
+    agent_mark: Option<&'static str>,
     status: ThreadStatus,
     visibility: Visibility,
     parent_thread_id: &'a Option<ThreadId>,
@@ -335,7 +337,7 @@ impl<'a> From<&'a kg_domain::Thread> for PluginThread<'a> {
             environment_id,
             title,
             title_locked: _,
-            provider: _,
+            provider,
             status,
             visibility,
             parent_thread_id,
@@ -351,11 +353,15 @@ impl<'a> From<&'a kg_domain::Thread> for PluginThread<'a> {
             created_at,
             updated_at,
         } = thread;
+        // Only an entry of kagan's own list, never the line: it can carry flags and keys.
+        let mark = agent_mark(provider);
         Self {
             id,
             project_id,
             environment_id,
             title,
+            agent: mark.map(|(name, _)| name),
+            agent_mark: mark.map(|(_, path)| path),
             status: *status,
             visibility: *visibility,
             parent_thread_id,
@@ -405,6 +411,46 @@ mod tests {
         let (_, build) = CALLS.iter().find(|(call, _)| *call == name).unwrap();
         let args = HostArguments::new(args.into_iter().map(super::to_host));
         build(&args, &PluginId("dev.test".into())).unwrap()
+    }
+
+    fn running(provider: &str) -> kg_domain::Thread {
+        serde_json::from_value(json!({
+            "id": "thr_1", "projectId": "prj_1", "environmentId": null, "title": "T",
+            "provider": provider, "status": "idle", "visibility": "visible",
+            "parentThreadId": null, "lifecycleOwnerThreadId": null, "sectionId": null,
+            "pinned": false, "lastReadAt": null, "latestAttentionAt": 0, "archivedAt": null,
+            "createdAt": 0, "updatedAt": 0
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_thread_shows_its_agent_and_mark_and_nothing_else_of_its_program_line() {
+        let line = "/opt/bin/claude --model mx-secret-model --api-key sk-secret-123";
+        let shown = super::shown(kg_domain::OpResult::Threads(vec![
+            running(line),
+            running("bash"),
+            running("/opt/bin/my-tool --token sk-secret-456"),
+        ]))
+        .unwrap();
+        assert_eq!(shown[0]["agent"], "claude");
+        assert_eq!(shown[0]["agentMark"], "agents/claude.svg");
+        assert_eq!(shown[1]["agent"], serde_json::Value::Null);
+        assert_eq!(shown[1]["agentMark"], serde_json::Value::Null);
+        assert_eq!(shown[2]["agent"], serde_json::Value::Null);
+        assert!(shown[0].get("provider").is_none());
+        let text = shown.to_string();
+        for part in [
+            "/opt/bin",
+            "my-tool",
+            "--model",
+            "mx-secret",
+            "--api-key",
+            "--token",
+            "sk-secret",
+        ] {
+            assert!(!text.contains(part), "{part} leaked: {text}");
+        }
     }
 
     #[test]

@@ -20,10 +20,12 @@ use crate::{Environment, Project, Requester, Thread};
 pub(crate) mod approval;
 mod clock;
 mod data;
+pub use data::seed_preview;
 pub(crate) mod entity;
 mod lifecycle;
 mod plugins;
 mod questions;
+pub use questions::NO_ONE_HERE;
 pub(crate) mod recovery;
 mod screens;
 mod state;
@@ -131,6 +133,8 @@ pub struct Workspace {
     pub(crate) cli: PathBuf,
     /// Where this app listens for `kg`; every process it starts gets it as `KG_SOCKET`.
     pub(crate) socket: Option<std::ffi::OsString>,
+    /// Whether this data folder is a preview's, which `seed_preview` made (decision 274).
+    pub(crate) preview: bool,
     pub(crate) projects: BTreeMap<ProjectId, Entity<Project>>,
     pub(crate) preparing_projects: BTreeMap<ProjectId, usize>,
     pub(crate) removing_projects: BTreeSet<ProjectId>,
@@ -239,6 +243,9 @@ impl Workspace {
             let (store, data_dir) = opened.await?;
             let (database, database_task) = Database::new(store, &executor);
             database.call(interrupted).await?;
+            let preview = database
+                .call(|store| Ok(store.setting(kg_domain::prefs::PREVIEW)?.is_some()))
+                .await?;
             let updates = database.clone();
             let workspace = cx.update(|cx| {
                 crate::update::Updater::install(updates, cx);
@@ -275,6 +282,7 @@ impl Workspace {
                         data_dir,
                         cli,
                         socket,
+                        preview,
                         sections: Vec::new(),
                         projects: BTreeMap::new(),
                         preparing_projects: BTreeMap::new(),

@@ -165,6 +165,9 @@ _Avoid_: Viewer, file opener, page, browser
 A titled block a plugin declares, or one of Questions, Changes, Details and Preview. Questions lists pending questions. A thread mark that says needs you is attention, not that panel. A plugin panel is a left tool, a center page, or a right sidebar tab. A panel placed on the bottom is refused. The right sidebar is a tab bar: built-in panels, closable plugin tabs, the Browser, extra terminals, Preview, and a + that opens one of them.
 _Avoid_: Pane, dock
 
+**Plugin preview**:
+A hidden kagan that runs one local plugin beside the person's own, started with `kg plugin preview start` and approved once by the person (decision 274). It is not the Preview tab above.
+
 **Page**:
 A plugin panel placed in the center. The host draws its title and Close. The thread's terminal stays, and Close shows it again.
 _Avoid_: Screen (that word is the terminal), pane, dock

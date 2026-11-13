@@ -57,6 +57,13 @@ pub(in crate::runtime::ops) fn options(verb: &str, destructive: bool) -> Vec<Int
     ]
 }
 
+pub(in crate::runtime::ops) fn refuse_in_preview(cx: &mut AsyncApp) -> Result<()> {
+    if cx.update(|cx| Workspace::global(cx).read(cx).is_preview()) {
+        return Err(OpError::Invalid(kg_core::NO_ONE_HERE.into()));
+    }
+    Ok(())
+}
+
 pub(in crate::runtime::ops) async fn choose(
     thread_id: Option<&ThreadId>,
     requester: Option<Requester>,

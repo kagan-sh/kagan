@@ -27,6 +27,8 @@ pub const SIDEBAR_ORDERS: [&str; 2] = [SIDEBAR_ORDER_CURRENT, SIDEBAR_ORDER_ATTE
 pub const SIDEBAR_HIDE_EMPTY_PROJECTS: &str = "sidebar-hide-empty-projects";
 pub const SIDEBAR_UNREAD_FIRST: &str = "sidebar-unread-first";
 pub const RAIL_HIDDEN: &str = "rail-hidden";
+/// Set in a preview app's own folder when a person approved its plugin there; it is never a window setting.
+pub const PREVIEW: &str = "preview";
 
 pub const TERMINAL_FONT_MIN: u8 = 9;
 pub const TERMINAL_FONT_MAX: u8 = 24;

@@ -8,6 +8,11 @@ pub fn plugins_dir(data: &Path) -> PathBuf {
 }
 
 #[must_use]
+pub fn previews_dir(data: &Path) -> PathBuf {
+    data.join("previews")
+}
+
+#[must_use]
 pub fn plugin_dir(data: &Path, id: &PluginId) -> PathBuf {
     plugins_dir(data).join(&id.0)
 }

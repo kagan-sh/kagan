@@ -4,23 +4,11 @@ use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, div,
     px, svg,
 };
-use kg_domain::{Program, ProgramSource, split_program};
-use std::path::Path;
+use kg_domain::{AGENT_MARKS, Program, ProgramSource, agent_mark};
 
 use crate::kagan::controls::program_key;
 use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
-
-// The command name of each agent with a bundled mark, and the mark's path in `brand.rs`.
-const AGENT_MARKS: &[(&str, &str)] = &[
-    ("claude", "agents/claude.svg"),
-    ("codex", "agents/codex.svg"),
-    ("gemini", "agents/gemini.svg"),
-    ("copilot", "agents/copilot.svg"),
-    ("opencode", "agents/opencode.svg"),
-    ("cursor-agent", "agents/cursor.svg"),
-    ("kimi", "agents/kimi.svg"),
-];
 
 const MARK: f32 = 20.;
 
@@ -71,8 +59,7 @@ pub(crate) fn program_mark(program: &Program, cx: &App) -> AnyElement {
 }
 
 fn agent_path(command: &str) -> Option<&'static str> {
-    let (name, _) = split_program(command).ok()?;
-    command_mark(Path::new(&name).file_stem()?.to_str()?)
+    agent_mark(command).map(|(_, path)| path)
 }
 
 /// The bundled mark of the agent whose command name is `name`, for any surface that shows an
@@ -90,26 +77,23 @@ mod tests {
 
     #[test]
     fn a_known_command_maps_to_its_mark_with_or_without_arguments_or_a_path() {
-        assert_eq!(agent_path("claude"), Some("agents/claude.svg"));
         assert_eq!(agent_path("claude --resume"), Some("agents/claude.svg"));
-        assert_eq!(agent_path("/usr/local/bin/codex"), Some("agents/codex.svg"));
+        assert_eq!(
+            agent_path("/usr/local/bin/cursor-agent"),
+            Some("agents/cursor.svg")
+        );
+        assert_eq!(agent_path("aider"), None);
     }
 
     #[test]
     fn every_mark_path_is_bundled() {
         use gpui_kit::AssetSource as _;
-        for (command, path) in super::AGENT_MARKS {
+        for (command, path) in kg_domain::AGENT_MARKS {
             let bundled = crate::brand::Assets.load(path).ok().flatten();
             assert!(
                 bundled.is_some(),
                 "the mark for {command} is not bundled: {path}"
             );
         }
-    }
-
-    #[test]
-    fn an_unknown_command_has_no_mark() {
-        assert_eq!(agent_path("aider"), None);
-        assert_eq!(agent_path("my-tool --flag"), None);
     }
 }

@@ -5,7 +5,7 @@ use kg_core::{Requester, Workspace};
 use kg_domain::{OpError, OpResult, Plugin, PluginId, ThreadId};
 
 use crate::manifest::Grant;
-use crate::source::{Source, fetch};
+use crate::source::{Fetched, Source, fetch};
 use crate::{PluginHost, Result};
 
 use super::approve::{approve, choose, options};
@@ -247,6 +247,26 @@ pub(in crate::runtime::ops) async fn dev(
     Ok(OpResult::Plugins(vec![record]))
 }
 
+// Reads a local plugin folder the way a reload does, and keeps nothing.
+pub(in crate::runtime::ops) async fn fetch_local(
+    host: &Entity<PluginHost>,
+    root: PathBuf,
+    cx: &mut AsyncApp,
+) -> Result<Fetched> {
+    let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
+    cx.background_spawn(async move {
+        let (_keep, never) = async_channel::bounded::<()>(1);
+        fetch(
+            &Source::Local(root),
+            None,
+            &PathBuf::new(),
+            &data_dir,
+            &never,
+        )
+    })
+    .await
+}
+
 pub(in crate::runtime::ops) async fn reload(
     host: &Entity<PluginHost>,
     record: Plugin,
@@ -254,21 +274,8 @@ pub(in crate::runtime::ops) async fn reload(
     requester: Option<Requester>,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
-    let plugins = kg_core::plugins_dir(&data_dir);
-    let root = record.root.clone();
-    let mut fetched = cx
-        .background_spawn(async move {
-            let (_keep, never) = async_channel::bounded::<()>(1);
-            fetch(
-                &Source::Local(root),
-                None,
-                &PathBuf::new(),
-                &data_dir,
-                &never,
-            )
-        })
-        .await?;
+    let plugins = kg_core::plugins_dir(&host.read_with(cx, |host, _| host.data_dir.clone()));
+    let mut fetched = fetch_local(host, record.root.clone(), cx).await?;
     fetched.commit.clone_from(&record.commit);
     if fetched.discovered.manifest.id != record.id {
         return Err(OpError::Invalid(
@@ -278,6 +285,13 @@ pub(in crate::runtime::ops) async fn reload(
     let grant = Grant::of(&fetched.discovered.manifest, &fetched.root);
     let approved = approved(&record)?;
     if !grant.within(&approved) {
+        let preview = cx.update(|cx| Workspace::global(cx).read(cx).is_preview());
+        if preview {
+            return Err(OpError::Invalid(format!(
+                "powers grew ({}); run kg plugin preview start again so the person can approve them",
+                grant.added(&approved).join(", ")
+            )));
+        }
         approve(
             thread_id.as_ref(),
             requester,

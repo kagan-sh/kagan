@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use kg_domain::OpError;
+use kg_domain::{OpError, Plugin, prefs};
 use kg_store::Store;
 
 use crate::host::database::Result;
@@ -31,6 +31,19 @@ fn ensure_personal(data_dir: &Path, store: &Store) -> Result<()> {
     Ok(())
 }
 
+/// Makes a preview's data folder with one plugin already in it, approved, and the `preview`
+/// preference that stops a reload from asking a question nobody can see.
+///
+/// # Errors
+/// When the folder or its database cannot be opened, or the plugin cannot be saved.
+pub fn seed_preview(data_dir: &Path, plugin: &Plugin) -> Result<()> {
+    let (store, _) = open_data(data_dir)?;
+    store.insert_plugin(plugin).map_err(closed)?;
+    store
+        .set_setting(prefs::PREVIEW, &serde_json::Value::Bool(true))
+        .map_err(closed)
+}
+
 pub(crate) fn open_data(data_dir: &Path) -> Result<(Store, PathBuf)> {
     std::fs::create_dir_all(data_dir)
         .map_err(|error| OpError::Failed(format!("{}: {error}", data_dir.display())))?;
@@ -42,3 +55,7 @@ pub(crate) fn open_data(data_dir: &Path) -> Result<(Store, PathBuf)> {
     ensure_personal(&data_dir, &store)?;
     Ok((store, data_dir))
 }
+
+#[cfg(test)]
+#[path = "data_test.rs"]
+mod tests;

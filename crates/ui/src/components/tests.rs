@@ -4,6 +4,7 @@ use gpui_shell::{ComponentRegistry, ShellRuntime};
 
 mod button;
 mod field;
+mod thread;
 
 fn registry() -> gpui_shell::FrozenComponentRegistry {
     build(false)
@@ -50,6 +51,7 @@ fn catalog_has_every_component_and_real_typings() {
     assert!(declarations.contains("thread_id: string"));
     assert!(declarations.contains("url(url: string): WebViewElement"));
     assert!(declarations.contains("store(keep: boolean): WebViewElement"));
+    assert!(declarations.contains("compact(): ThreadStatusElement;"));
 }
 
 #[test]
@@ -271,7 +273,7 @@ fn seed_thread(dir: &std::path::Path) {
             lifecycle_owner_thread_id: None,
             section_id: None,
             pinned: false,
-            last_read_at: Some(Timestamp(1)),
+            last_read_at: Some(Timestamp(2)),
             latest_attention_at: Timestamp(2),
             mark: kg_domain::ThreadMark::None,
             archived_at: None,
