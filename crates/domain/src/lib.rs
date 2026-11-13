@@ -48,8 +48,9 @@ pub use op::{
 };
 pub use preview::{PreviewCut, PreviewFile, PreviewImageFormat, PreviewKind, PreviewOp};
 pub use program::{
-    KNOWN_PROGRAMS, LISTED_WHEN_MISSING, PROGRAM_INSTALL_FOLDERS, Program, ProgramList,
-    ProgramSource, SAVED_NAME_MAX, SavedProgram, SplitProgramError, saved_name, split_program,
+    AGENT_MARKS, KNOWN_PROGRAMS, LISTED_WHEN_MISSING, PROGRAM_INSTALL_FOLDERS, Program,
+    ProgramList, ProgramSource, SAVED_NAME_MAX, SavedProgram, SplitProgramError, agent_name,
+    saved_name, split_program,
 };
 pub use record::{
     ASK_TEXT_MAX_CHARS, AgentTool, AskField, Environment, EnvironmentProvider, EnvironmentStatus,

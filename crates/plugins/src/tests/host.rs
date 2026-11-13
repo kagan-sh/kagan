@@ -394,6 +394,12 @@ fn approved_areas_dispatch_core_and_keep_database_transactions(cx: &mut TestAppC
     assert_eq!(value["metadata"], json!({ "own": true }));
     assert_eq!(value["sidebar"]["threads"][0]["pinned"], true);
     assert!(value["sidebar"]["threads"][0].get("provider").is_none());
+    // The fixture runs `claude-code`, which is not a marked agent: the field is there, and null.
+    assert_eq!(
+        value["sidebar"]["threads"][0].get("agent"),
+        Some(&Value::Null)
+    );
+    assert_eq!(value["thread"].get("agent"), Some(&Value::Null));
     assert_eq!(value["rows"], json!([{ "id": 1, "text": "kept" }]));
 
     run(
