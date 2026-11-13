@@ -8,9 +8,11 @@ use std::time::Instant;
 
 use gpui_kit::{Entity, Task, TestAppContext};
 use kg_core::{previews_dir, seed_preview};
+#[cfg(unix)]
+use kg_domain::{Op, ThreadOp};
 use kg_domain::{
-    Op, OpError, OpResult, Plugin, PluginId, PluginOp, PluginPreview, PluginPreviewOp, PreviewId,
-    ThreadId, ThreadOp, prefs,
+    OpError, OpResult, Plugin, PluginId, PluginOp, PluginPreview, PluginPreviewOp, PreviewId,
+    ThreadId, prefs,
 };
 use kg_process::Process;
 use kg_store::Store;
@@ -24,9 +26,11 @@ use kg_core::NO_ONE_HERE;
 
 #[cfg(unix)]
 use super::alive;
+#[cfg(unix)]
+use super::run;
 use super::{
     ID, PluginHostGlobal, answer, call, hold_at, open_kept, plugin_dir, plugin_loaded, plugin_op,
-    read_manifest, records, run, sample_manifest, sleep_command, thread, write_plugin,
+    read_manifest, records, sample_manifest, sleep_command, thread, write_plugin,
 };
 
 fn start(path: &Path) -> PluginOp {
@@ -514,7 +518,7 @@ fn a_preview_app_that_exits_at_once_fails_the_wait_with_its_log() {
 fn a_socket_path_longer_than_the_platform_limit_is_refused() {
     let folder = PathBuf::from(format!("/{}", "a".repeat(120)));
     assert!(matches!(
-        preview::socket_for(&folder),
+        preview::check_socket_length(&folder.join("kg.sock")),
         Err(OpError::Invalid(message)) if message.contains("socket path longer")
     ));
 }

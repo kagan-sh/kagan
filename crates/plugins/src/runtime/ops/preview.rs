@@ -48,7 +48,11 @@ async fn start(
     let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
     let id = preview::new_id();
     let folder = preview::folder(&data_dir, &id);
-    let socket = preview::socket_for(&folder)?;
+    let socket = preview::socket_for(&folder);
+    #[cfg(unix)]
+    {
+        preview::check_socket_length(&socket)?;
+    }
     approve(
         thread_id.as_ref(),
         requester,

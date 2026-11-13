@@ -166,23 +166,29 @@ fn is_preview_name(name: &str) -> bool {
         .is_some_and(|hex| hex.len() == 6 && hex.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
+// The socket a preview listens on: a file in its folder on unix, and a pipe name on Windows.
 #[cfg(unix)]
-pub(crate) fn socket_for(folder: &Path) -> Result<PathBuf> {
-    use kg_domain::SOCKET_PATH_MAX;
-    let socket = folder.join("kg.sock");
-    if socket.as_os_str().len() > SOCKET_PATH_MAX {
-        return Err(OpError::Invalid(format!(
-            "the preview folder {} makes a socket path longer than {SOCKET_PATH_MAX} bytes; move the kagan data folder somewhere shorter",
-            folder.display()
-        )));
-    }
-    Ok(socket)
+pub(crate) fn socket_for(folder: &Path) -> PathBuf {
+    folder.join("kg.sock")
 }
 
 #[cfg(windows)]
-pub(crate) fn socket_for(folder: &Path) -> Result<PathBuf> {
+pub(crate) fn socket_for(folder: &Path) -> PathBuf {
     let name = folder.file_name().unwrap_or_default().to_string_lossy();
-    Ok(PathBuf::from(format!("kagan-preview-{name}")))
+    PathBuf::from(format!("kagan-preview-{name}"))
+}
+
+// A unix socket path has a length limit, so a long folder is refused before anyone is asked.
+#[cfg(unix)]
+pub(crate) fn check_socket_length(socket: &Path) -> Result<()> {
+    use kg_domain::SOCKET_PATH_MAX;
+    if socket.as_os_str().len() > SOCKET_PATH_MAX {
+        return Err(OpError::Invalid(format!(
+            "the preview folder {} makes a socket path longer than {SOCKET_PATH_MAX} bytes; move the kagan data folder somewhere shorter",
+            socket.parent().unwrap_or(socket).display()
+        )));
+    }
+    Ok(())
 }
 
 // A `kg` aimed at one preview. It never starts an app: a preview that is gone stays gone.
@@ -351,8 +357,7 @@ pub(crate) fn sweep(exe: &Path, data_dir: &Path, keep: &[PreviewId]) -> io::Resu
         if !is_preview_name(&name) || keep.iter().any(|id| id.0 == name) {
             continue;
         }
-        let answering =
-            socket_for(&folder).is_ok_and(|socket| answers(exe, &folder.join("data"), &socket));
+        let answering = answers(exe, &folder.join("data"), &socket_for(&folder));
         if !answering {
             fs::remove_dir_all(&folder)?;
         }
