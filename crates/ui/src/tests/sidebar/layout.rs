@@ -256,6 +256,33 @@ fn the_right_sidebar_shrinks_to_the_room_before_it_hides(cx: &mut TestAppContext
     assert!((saved_right(cx) - 1300.).abs() < 1.);
 }
 
+// Decision 272: a width the room set is not the person's choice, so dragging the left sidebar
+// beside a narrowed right one saves the left width only.
+#[gpui_kit::test]
+fn dragging_the_left_beside_a_narrowed_right_keeps_the_right_width(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    cx.simulate_window_resize(window, size(px(1920.), px(1000.)));
+    cx.run_until_parked();
+    set_preference(cx, "main.left-sidebar", json!(false));
+    cx.run_until_parked();
+    drag_right(cx, &kagan, window, 1300.);
+    set_preference(cx, "main.left-sidebar", json!(true));
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| kagan.resize_left(px(220.), window, cx));
+    })
+    .unwrap();
+    cx.run_until_parked();
+    assert!((saved(cx, "main.left-width").as_f64().unwrap() - 220.).abs() < 1.);
+    assert!((saved_right(cx) - 1300.).abs() < 1., "{}", saved_right(cx));
+    set_preference(cx, "main.left-sidebar", json!(false));
+    cx.run_until_parked();
+    let back = cx.update(|cx| kagan.read(cx).right_width_now(cx));
+    assert!((back - 1300.).abs() < 1., "{back}");
+}
+
 #[gpui_kit::test]
 fn a_saved_width_is_shown_at_once(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);

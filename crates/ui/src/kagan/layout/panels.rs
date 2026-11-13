@@ -73,8 +73,11 @@ impl Kagan {
         {
             next.left_width = width;
         }
+        // A right width equal to its fit was set by the room, not chosen by the person.
+        let fit = f32::from(self.right_fit(self.panes.left));
         if self.panes.right
             && let Some(width) = sizes.last()
+            && (f32::from(*width) - fit).abs() > 0.5
         {
             next.right_width = *width;
         }
