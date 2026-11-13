@@ -1,4 +1,4 @@
-//! The lines `kg plugin preview` prints. Each one is ready to paste into a shell.
+//! The lines `kg plugin preview` prints. Each command is ready to paste into a shell.
 
 use std::path::Path;
 
@@ -7,16 +7,22 @@ use kg_domain::{OpError, PluginPreview};
 use crate::out;
 
 pub(crate) fn started(preview: &PluginPreview) -> Result<(), OpError> {
-    out::line(format!(
-        "preview {id}: {name} ({plugin}), watching {path}\nexport KG_DATA_DIR={data} KG_SOCKET={socket}\nstop it with: kg plugin preview stop {id}",
+    out::line(started_text(preview))?;
+    Ok(())
+}
+
+// The variables go in front of one command. Nothing is exported, so the stop line and install
+// run in the person's own shell, and a paste cannot send them to the preview.
+pub(crate) fn started_text(preview: &PluginPreview) -> String {
+    format!(
+        "preview {id}: {name} ({plugin}), watching {path}\ndrive it:  KG_DATA_DIR={data} KG_SOCKET={socket} kg ui snapshot\nstop it:   kg plugin preview stop {id}",
         id = preview.id,
         name = preview.name,
         plugin = preview.plugin,
         path = preview.path.display(),
         data = quoted(&preview.data_dir),
         socket = quoted(&preview.socket),
-    ))?;
-    Ok(())
+    )
 }
 
 pub(crate) fn listed(previews: &[PluginPreview]) -> Result<(), OpError> {
@@ -40,7 +46,7 @@ pub(crate) fn listed(previews: &[PluginPreview]) -> Result<(), OpError> {
 }
 
 // Plain words stay as they are. Anything else is single-quoted, so the line pastes as one value.
-fn quoted(path: &Path) -> String {
+pub(crate) fn quoted(path: &Path) -> String {
     let text = path.display().to_string();
     let plain = !text.is_empty()
         && text
@@ -52,3 +58,7 @@ fn quoted(path: &Path) -> String {
         format!("'{}'", text.replace('\'', r"'\''"))
     }
 }
+
+#[cfg(test)]
+#[path = "preview_test.rs"]
+mod tests;

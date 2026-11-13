@@ -26,7 +26,7 @@ async fn a_seeded_preview_folder_opens_with_its_plugin_enabled_and_approved(
 
     let workspace = open_at(&dir, cx, |_| {}).await.unwrap();
     let plugins = cx.read(|cx| workspace.read(cx).plugins()).await.unwrap();
-    let preview = cx.read(|cx| workspace.read(cx).is_preview()).await.unwrap();
+    let preview = cx.read(|cx| workspace.read(cx).is_preview());
 
     assert_eq!(plugins.len(), 1, "{plugins:?}");
     assert!(plugins[0].enabled, "the seeded plugin is not enabled");

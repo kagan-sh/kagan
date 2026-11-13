@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use kg_domain::{Plugin, PluginId, prefs};
+use kg_domain::{Plugin, PluginId};
 use kg_store::Store;
 use serde_json::Value;
 
@@ -119,11 +119,9 @@ impl Workspace {
         self.call(|store| store.plugins())
     }
     /// Whether this data folder is a preview's, which `seed_preview` made.
-    ///
-    /// # Errors
-    /// When the database is closed or the query fails.
-    pub fn is_preview(&self) -> impl Future<Output = Result<bool>> + use<> {
-        self.call(|store| Ok(store.setting(prefs::PREVIEW)?.is_some()))
+    #[must_use]
+    pub fn is_preview(&self) -> bool {
+        self.preview
     }
 
     /// # Errors

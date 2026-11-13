@@ -278,10 +278,7 @@ pub(in crate::runtime::ops) async fn reload(
     let grant = Grant::of(&fetched.discovered.manifest, &fetched.root);
     let approved = approved(&record)?;
     if !grant.within(&approved) {
-        let preview = cx
-            .update(|cx| Workspace::global(cx))
-            .read_with(cx, |workspace, _| workspace.is_preview())
-            .await?;
+        let preview = cx.update(|cx| Workspace::global(cx).read(cx).is_preview());
         if preview {
             return Err(OpError::Invalid(format!(
                 "powers grew ({}); run kg plugin preview start again so the person can approve them",

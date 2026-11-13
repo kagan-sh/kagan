@@ -104,6 +104,13 @@ pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
             }
             Ok(())
         }
+        op @ Op::Plugin(PluginOp::Preview {
+            op: PluginPreviewOp::Start { .. },
+        }) => {
+            eprintln!("waiting for approval in your kagan window…");
+            let result = client.call(&op)?;
+            print_result(&result, next, json)
+        }
         op => {
             if let Some(notice) = notice {
                 eprintln!("{notice}. kagan may ask for your OK in its window.");
