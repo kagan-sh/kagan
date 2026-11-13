@@ -13,7 +13,7 @@ use gpui_kit::{AnyElement, ParentElement as _, div};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, RegistryError, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
 };
 
 #[cfg(test)]
@@ -57,6 +57,31 @@ fn nonempty(id: &str) -> Result<(), String> {
     } else {
         Ok(())
     }
+}
+
+type Set<P> = Arc<dyn Fn(&mut P) + Send + Sync>;
+
+fn plain_method<P: 'static>(
+    name: &'static str,
+    set: impl Fn(&mut P) + Send + Sync + 'static,
+    documentation: &'static str,
+) -> MethodDescriptor {
+    let set: Set<P> = Arc::new(set);
+    MethodDescriptor::new(name, Vec::new(), move |_| {
+        Ok(ComponentPayload::new(set.clone()))
+    })
+    .with_documentation(documentation)
+}
+
+fn apply<P: Default + 'static>(request: &MaterializeRequest<'_>) -> P {
+    let mut state = P::default();
+    for set in request
+        .methods()
+        .filter_map(|method| method.payload().downcast_ref::<Set<P>>())
+    {
+        set(&mut state);
+    }
+    state
 }
 
 struct Markdown;
