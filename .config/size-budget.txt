@@ -9,8 +9,9 @@ target 35000
 # Cost: the kg ui window numbering fix adds 16 product lines on top of main (83238), in crates/ui/src/ui_driver.rs and about.rs: one list of kagan's own windows and the About window's handle. The merged count is 83254, and the ceiling is set to it.
 # Cost: the quit fix adds 6 product lines on top of main (83254): the shared kagan_windows move, and the check in quit_if_none_left that quit uses. The merged count is 83260, and the ceiling is set to it.
 # Cost: the plugin preview adds 828 product lines on top of main (83260, after #151), tests not counted: the Op shape and CLI text, the folder seed, the hidden app's start, shut down and sweep, the guard on questions, and the replace of a thread's preview. The ceiling is set to the count.
-# Cost: the compact ThreadStatus adds 24 product lines on top of main (84088), in crates/ui/src/components: the shared method helpers and the compact call. The ceiling is set to the branch count, and decision 276 records it.
-ceiling 84112
+# Cost: the plugin thread record's agent name and mark path add 87 product lines on top of main (84088, after #152): the shared agent list and its tests in kg-domain, and the two record fields with their leak test. The ceiling is set to the branch count.
+# Cost: the compact ThreadStatus adds 24 product lines on top of main (84175, after #154), in crates/ui/src/components: the shared method helpers and the compact call. The ceiling is set to the branch count, and decision 276 records it.
+ceiling 84199
 allow_expect 8
 crates/core/src/thread/agent/files.rs 754
 crates/ui/src/theme/catalog.rs 646
