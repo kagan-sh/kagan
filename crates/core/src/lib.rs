@@ -34,7 +34,7 @@ pub use workspace::approval::{Approval, Requester};
 pub use workspace::entity::{Environment, Project, Thread};
 
 pub use workspace::{
-    Permit, PluginDispatch, PluginRequest, Workspace, WorkspaceEvent, seed_preview,
+    NO_ONE_HERE, Permit, PluginDispatch, PluginRequest, Workspace, WorkspaceEvent, seed_preview,
 };
 
 // How long the person must stop typing before held questions show, and before a child's line

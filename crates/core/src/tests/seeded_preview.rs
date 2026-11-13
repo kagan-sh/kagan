@@ -1,9 +1,11 @@
+use std::time::Duration;
+
 use gpui_kit::TestAppContext;
-use kg_domain::{Op, Plugin, PluginId, prefs};
+use kg_domain::{InteractionOption, Op, OpError, Plugin, PluginId, ThreadId, ThreadOp, prefs};
 use serde_json::json;
 
-use super::open_at;
-use crate::{Workspace, seed_preview};
+use super::{Fixture, idle_thread, op, open_at};
+use crate::{NO_ONE_HERE, Workspace, seed_preview};
 
 // The same open the app does at start, on a folder made by `seed_preview`.
 #[gpui_kit::test]
@@ -65,4 +67,72 @@ async fn kg_preference_refuses_the_preview_marker(cx: &mut TestAppContext) {
             "kg preference reached the preview marker: {answer:?}"
         );
     }
+}
+
+// A preview with one thread in it, which a question would be about.
+async fn preview_with_a_thread(cx: &mut TestAppContext) -> Fixture {
+    let fixture = Fixture::new(cx).await;
+    let project = fixture.project.clone();
+    fixture
+        .restart(cx, move |store| {
+            store.set_setting(prefs::PREVIEW, &json!(true)).unwrap();
+            store
+                .put_thread(&idle_thread("thr_preview", project))
+                .unwrap();
+        })
+        .await
+}
+
+// Gives the answer within five seconds of test time, or None when the question is still open.
+async fn at_once<T: 'static>(cx: &mut TestAppContext, task: gpui_kit::Task<T>) -> Option<T> {
+    let timeout = cx.executor().timer(Duration::from_secs(5));
+    match futures::future::select(Box::pin(task), Box::pin(timeout)).await {
+        futures::future::Either::Left((value, _)) => Some(value),
+        futures::future::Either::Right(_) => None,
+    }
+}
+
+#[gpui_kit::test]
+async fn a_thread_delete_in_a_preview_is_refused_at_once(cx: &mut TestAppContext) {
+    let _fixture = preview_with_a_thread(cx).await;
+    let deleted = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::Delete {
+                id: ThreadId("thr_preview".into()),
+                approval_thread_id: None,
+            }),
+            cx,
+        )
+    });
+    let outcome = at_once(cx, deleted).await;
+    let Some(Err(OpError::Invalid(message))) = outcome else {
+        panic!("a delete in a preview did not refuse at once: {outcome:?}");
+    };
+    assert_eq!(message, NO_ONE_HERE);
+}
+
+#[gpui_kit::test]
+async fn a_thread_ask_in_a_preview_is_refused_at_once(cx: &mut TestAppContext) {
+    let _fixture = preview_with_a_thread(cx).await;
+    let option = |id: &str| InteractionOption {
+        id: id.into(),
+        label: id.into(),
+        role: None,
+    };
+    let asked = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::Ask {
+                id: ThreadId("thr_preview".into()),
+                title: "Which way?".into(),
+                options: vec![option("left"), option("right")],
+                fields: None,
+            }),
+            cx,
+        )
+    });
+    let outcome = at_once(cx, asked).await;
+    let Some(Err(OpError::Invalid(message))) = outcome else {
+        panic!("an ask in a preview did not refuse at once: {outcome:?}");
+    };
+    assert_eq!(message, NO_ONE_HERE);
 }

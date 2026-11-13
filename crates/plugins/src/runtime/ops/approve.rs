@@ -57,12 +57,9 @@ pub(in crate::runtime::ops) fn options(verb: &str, destructive: bool) -> Vec<Int
     ]
 }
 
-// A preview has no one to answer its questions, so a question there is refused, not left to wait.
-pub(crate) const NO_ONE_HERE: &str = "this is a preview kagan; no one can answer here. Run this without KG_DATA_DIR and KG_SOCKET set";
-
 pub(in crate::runtime::ops) fn refuse_in_preview(cx: &mut AsyncApp) -> Result<()> {
     if cx.update(|cx| Workspace::global(cx).read(cx).is_preview()) {
-        return Err(OpError::Invalid(NO_ONE_HERE.into()));
+        return Err(OpError::Invalid(kg_core::NO_ONE_HERE.into()));
     }
     Ok(())
 }
@@ -75,7 +72,6 @@ pub(in crate::runtime::ops) async fn choose(
     options: Vec<InteractionOption>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    refuse_in_preview(cx)?;
     let answer = cx
         .update(|cx| Workspace::ask_for_person(thread_id, requester, title, options, cx))
         .await?;

@@ -13,8 +13,6 @@ use crate::host::activate;
 use crate::manifest::Grant;
 use crate::{Discovered, PluginHost, Result};
 
-#[cfg(test)]
-pub(crate) use approve::NO_ONE_HERE;
 use approve::{choose, options};
 use config::config;
 use develop::{check, dev, disable, enable, logs, new, reload_enabled, remove, share, types};

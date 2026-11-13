@@ -15,8 +15,8 @@ use serde_json::json;
 use crate::PluginHost;
 use crate::host::Hold;
 use crate::manifest::Grant;
-use crate::runtime::ops::NO_ONE_HERE;
 use crate::runtime::preview::{self, Running, take_matching};
+use kg_core::NO_ONE_HERE;
 
 use super::{
     ID, PluginHostGlobal, alive, answer, call, hold_at, open_kept, plugin_dir, plugin_loaded,
