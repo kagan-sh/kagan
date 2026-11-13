@@ -1,6 +1,10 @@
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+#[cfg(unix)]
+use std::process::Command;
+use std::process::Stdio;
+use std::time::Duration;
+#[cfg(unix)]
+use std::time::Instant;
 
 use gpui_kit::{Entity, Task, TestAppContext};
 use kg_core::{previews_dir, seed_preview};
@@ -18,9 +22,11 @@ use crate::manifest::Grant;
 use crate::runtime::preview::{self, Running};
 use kg_core::NO_ONE_HERE;
 
+#[cfg(unix)]
+use super::alive;
 use super::{
-    ID, PluginHostGlobal, alive, answer, call, hold_at, open_kept, plugin_dir, plugin_loaded,
-    plugin_op, read_manifest, records, run, sample_manifest, sleep_command, thread, write_plugin,
+    ID, PluginHostGlobal, answer, call, hold_at, open_kept, plugin_dir, plugin_loaded, plugin_op,
+    read_manifest, records, run, sample_manifest, sleep_command, thread, write_plugin,
 };
 
 fn start(path: &Path) -> PluginOp {
