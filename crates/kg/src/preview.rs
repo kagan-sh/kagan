@@ -2,9 +2,21 @@
 
 use std::path::Path;
 
-use kg_domain::{OpError, PluginPreview};
+use kg_domain::{Op, OpError, PluginOp, PluginPreview, PluginPreviewOp};
 
 use crate::out;
+
+// A start blocks until the person answers its question, so the wait is said on stderr first.
+pub(crate) fn say_waiting(op: &Op) {
+    if matches!(
+        op,
+        Op::Plugin(PluginOp::Preview {
+            op: PluginPreviewOp::Start { .. }
+        })
+    ) {
+        eprintln!("waiting for approval in your kagan window…");
+    }
+}
 
 pub(crate) fn started(preview: &PluginPreview) -> Result<(), OpError> {
     out::line(started_text(preview))?;
