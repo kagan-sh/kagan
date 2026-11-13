@@ -4,7 +4,7 @@ use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, div,
     px, svg,
 };
-use kg_domain::{AGENT_MARKS, Program, ProgramSource, agent_name};
+use kg_domain::{AGENT_MARKS, Program, ProgramSource, agent_mark};
 
 use crate::kagan::controls::program_key;
 use crate::theme::TypeScale as _;
@@ -59,7 +59,7 @@ pub(crate) fn program_mark(program: &Program, cx: &App) -> AnyElement {
 }
 
 fn agent_path(command: &str) -> Option<&'static str> {
-    command_mark(agent_name(command)?)
+    agent_mark(command).map(|(_, path)| path)
 }
 
 /// The bundled mark of the agent whose command name is `name`, for any surface that shows an

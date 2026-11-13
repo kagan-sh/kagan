@@ -400,6 +400,11 @@ fn approved_areas_dispatch_core_and_keep_database_transactions(cx: &mut TestAppC
         Some(&Value::Null)
     );
     assert_eq!(value["thread"].get("agent"), Some(&Value::Null));
+    assert_eq!(
+        value["sidebar"]["threads"][0].get("agentMark"),
+        Some(&Value::Null)
+    );
+    assert_eq!(value["thread"].get("agentMark"), Some(&Value::Null));
     assert_eq!(value["rows"], json!([{ "id": 1, "text": "kept" }]));
 
     run(

@@ -3,7 +3,7 @@ use kg_core::Workspace;
 use kg_domain::{
     AskField, DiffOp, DiffQuery, DiffScope, EnvironmentId, EnvironmentOp, EnvironmentSpec,
     InteractionOption, Metadata, Op, OpResult, Order, PluginId, Project, ProjectId, ProjectOp, Run,
-    Section, SectionId, ThreadId, ThreadOp, ThreadStatus, Timestamp, Visibility, agent_name,
+    Section, SectionId, ThreadId, ThreadOp, ThreadStatus, Timestamp, Visibility, agent_mark,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -314,6 +314,7 @@ struct PluginThread<'a> {
     environment_id: &'a Option<EnvironmentId>,
     title: &'a str,
     agent: Option<&'static str>,
+    agent_mark: Option<&'static str>,
     status: ThreadStatus,
     visibility: Visibility,
     parent_thread_id: &'a Option<ThreadId>,
@@ -352,13 +353,15 @@ impl<'a> From<&'a kg_domain::Thread> for PluginThread<'a> {
             created_at,
             updated_at,
         } = thread;
+        // Only an entry of kagan's own list, never the line: it can carry flags and keys.
+        let mark = agent_mark(provider);
         Self {
             id,
             project_id,
             environment_id,
             title,
-            // Only a name from kagan's own list, never the line: it can carry flags and keys.
-            agent: agent_name(provider),
+            agent: mark.map(|(name, _)| name),
+            agent_mark: mark.map(|(_, path)| path),
             status: *status,
             visibility: *visibility,
             parent_thread_id,
@@ -422,18 +425,30 @@ mod tests {
     }
 
     #[test]
-    fn a_thread_shows_its_agent_name_and_nothing_else_of_its_program_line() {
+    fn a_thread_shows_its_agent_and_mark_and_nothing_else_of_its_program_line() {
         let line = "/opt/bin/claude --model mx-secret-model --api-key sk-secret-123";
         let shown = super::shown(kg_domain::OpResult::Threads(vec![
             running(line),
             running("bash"),
+            running("/opt/bin/my-tool --token sk-secret-456"),
         ]))
         .unwrap();
         assert_eq!(shown[0]["agent"], "claude");
+        assert_eq!(shown[0]["agentMark"], "agents/claude.svg");
         assert_eq!(shown[1]["agent"], serde_json::Value::Null);
+        assert_eq!(shown[1]["agentMark"], serde_json::Value::Null);
+        assert_eq!(shown[2]["agent"], serde_json::Value::Null);
         assert!(shown[0].get("provider").is_none());
         let text = shown.to_string();
-        for part in ["/opt/bin", "--model", "mx-secret", "--api-key", "sk-secret"] {
+        for part in [
+            "/opt/bin",
+            "my-tool",
+            "--model",
+            "mx-secret",
+            "--api-key",
+            "--token",
+            "sk-secret",
+        ] {
             assert!(!text.contains(part), "{part} leaked: {text}");
         }
     }

@@ -42,16 +42,16 @@ pub const AGENT_MARKS: &[(&str, &str)] = &[
     ("kimi", "agents/kimi.svg"),
 ];
 
-/// The command name of the agent `line` runs, when it is one of [`AGENT_MARKS`]. A path or a file
-/// extension on the command is dropped; the arguments are never read.
+/// The [`AGENT_MARKS`] entry, command name and mark path, of the agent `line` runs. A path or a
+/// file extension on the command is dropped; the arguments are never read.
 #[must_use]
-pub fn agent_name(line: &str) -> Option<&'static str> {
+pub fn agent_mark(line: &str) -> Option<(&'static str, &'static str)> {
     let (command, _) = split_program(line).ok()?;
     let stem = Path::new(&command).file_stem()?.to_str()?;
     AGENT_MARKS
         .iter()
+        .copied()
         .find(|(known, _)| *known == stem)
-        .map(|(known, _)| *known)
 }
 
 /// The known programs the picker lists even when they are not installed.
@@ -189,27 +189,31 @@ mod tests {
 
     use super::{
         AGENT_MARKS, KNOWN_PROGRAMS, PROGRAM_INSTALL_FOLDERS, SAVED_NAME_MAX, SplitProgramError,
-        agent_name, saved_name, split_program,
+        agent_mark, saved_name, split_program,
     };
 
     #[test]
-    fn an_agent_is_named_by_its_command_alone() {
-        assert_eq!(agent_name("claude"), Some("claude"));
-        assert_eq!(agent_name("claude --model x --api-key y"), Some("claude"));
-        assert_eq!(agent_name("/usr/local/bin/codex"), Some("codex"));
+    fn an_agent_is_found_by_its_command_alone() {
+        let claude = Some(("claude", "agents/claude.svg"));
+        assert_eq!(agent_mark("claude"), claude);
+        assert_eq!(agent_mark("claude --model x --api-key y"), claude);
         assert_eq!(
-            agent_name("'/opt/my tools/cursor-agent' -p"),
-            Some("cursor-agent")
+            agent_mark("/usr/local/bin/codex"),
+            Some(("codex", "agents/codex.svg"))
+        );
+        assert_eq!(
+            agent_mark("'/opt/my tools/cursor-agent' -p"),
+            Some(("cursor-agent", "agents/cursor.svg"))
         );
     }
 
     #[test]
     fn a_shell_an_unmarked_program_or_a_bad_line_has_no_agent() {
-        assert_eq!(agent_name("bash"), None);
-        assert_eq!(agent_name("aider"), None);
-        assert_eq!(agent_name("my-tool --flag claude"), None);
-        assert_eq!(agent_name("'claude"), None);
-        assert_eq!(agent_name(""), None);
+        assert_eq!(agent_mark("bash"), None);
+        assert_eq!(agent_mark("aider"), None);
+        assert_eq!(agent_mark("my-tool --flag claude"), None);
+        assert_eq!(agent_mark("'claude"), None);
+        assert_eq!(agent_mark(""), None);
     }
 
     #[test]
