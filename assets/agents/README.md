@@ -1,4 +1,4 @@
-Agent marks for the program picker. `picker/mark.rs` maps each command to its file here.
+Agent marks for the program picker, the usage popup and plugin views. `AGENT_MARKS` in `crates/domain/src/program.rs` maps each command to its file here.
 
 All marks are trademarks of their owners, used only to name the program they start.
 

@@ -1,6 +1,10 @@
 export type Status = "pending" | "idle" | "starting" | "active" | "stopping" | "error";
 export interface Thread {
   id: string; projectId: string; environmentId: string | null; title: string;
+  /** The command name of a known agent kagan bundles a mark for, such as "claude" or "cursor-agent", else null. Never the program line. */
+  agent: string | null;
+  /** Path of the bundled mark; draw it with svg(thread.agentMark). Null when kagan has no mark. */
+  agentMark: string | null;
   status: Status; visibility: "visible" | "hidden";
   parentThreadId: string | null; lifecycleOwnerThreadId: string | null;
   sectionId: string | null; pinned: boolean; lastReadAt: number | null;
