@@ -6,7 +6,8 @@ target 35000
 # Cost: this branch adds 28 product lines on top of main (81471), for the CLI and Windows fixes. The merged count is 81499, and the ceiling is set to it.
 # Cost: the Windows update waiter adds 89 product lines on top of main (82692, after #143): one waiter for both Windows install paths, and the tests that run replace and relaunch off Windows. The ceiling is set to the merged count.
 # Cost: provider usage adds 463 product lines on top of main (82781, after #145), tests not counted: the Claude CLI read, the shared usage cache and HTTPS helper, the process capture with input, and the popup's marks and labels. The ceiling is set to the branch count.
-ceiling 83244
+# Cost: the plugin preview command adds 139 product lines on top of main (83244) so far: the Op shape, the CLI text and the folder seed. The ceiling is set to the count, and it rises again with the runtime.
+ceiling 83383
 allow_expect 8
 crates/core/src/thread/agent/files.rs 754
 crates/ui/src/theme/catalog.rs 646
