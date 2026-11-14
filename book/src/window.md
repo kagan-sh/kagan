@@ -2,7 +2,7 @@
 
 From left to right: the **rail** (icons), the **left sidebar** (projects and threads), the **center** (the selected thread's terminal), and the **right sidebar**. The right sidebar has Questions, Changes, Details, plugin panels, the Browser, extra terminals, and Preview while a file is open. Open the Browser, a terminal, or a plugin panel with `+`.
 
-On a narrow window, the right sidebar hides first, then the left. The rail stays. Cmd+B shows the left sidebar. Cmd+Backslash shows the right. Escape closes the one that is open.
+On a narrow window, the right sidebar narrows, then hides, then the left one hides. The rail stays. Cmd+B shows the left sidebar. Cmd+Backslash shows the right. Escape closes the one that is open.
 
 ## Use the window
 

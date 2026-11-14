@@ -1,6 +1,6 @@
-use crate::kagan::screen_read;
+use crate::kagan::{Kagan, screen_read};
 use gpui_kit::{
-    AnyWindowHandle, AppContext as _, ElementId, Modifiers, TestAppContext, point, px, size,
+    AnyWindowHandle, AppContext as _, ElementId, Entity, Modifiers, TestAppContext, point, px, size,
 };
 use kg_core::Workspace;
 use kg_domain::{DropSide, InteractionOption, Op, OpError, OpResult, PreferenceOp, ThreadOp, UiOp};
@@ -171,6 +171,116 @@ fn a_dragged_sidebar_width_is_saved(cx: &mut TestAppContext) {
     .unwrap();
     cx.run_until_parked();
     assert!((saved(cx, "main.right-width").as_f64().unwrap() - 400.).abs() < 1.);
+}
+
+fn drag_right(cx: &mut TestAppContext, kagan: &Entity<Kagan>, window: AnyWindowHandle, width: f32) {
+    cx.update_window(window, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| kagan.resize_right(px(width), window, cx));
+    })
+    .unwrap();
+    cx.run_until_parked();
+}
+
+fn width_of(cx: &mut TestAppContext, window: AnyWindowHandle, id: &str) -> f32 {
+    span(cx, window, id).map_or(0., |(_, width)| width)
+}
+
+fn saved_right(cx: &mut TestAppContext) -> f64 {
+    saved(cx, "main.right-width").as_f64().unwrap()
+}
+
+// Decision 278: the right sidebar grows past the old 560 cap, until the center hits its minimum,
+// and a drag past that takes no room from the left sidebar.
+#[gpui_kit::test]
+fn the_right_sidebar_drags_wide_until_the_center_minimum(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    cx.simulate_window_resize(window, size(px(1920.), px(1000.)));
+    cx.run_until_parked();
+    drag_right(cx, &kagan, window, 1000.);
+    let wide = cx.update(|cx| kagan.read(cx).right_width_now(cx));
+    assert!((wide - 1000.).abs() < 1., "wide {wide}");
+    assert!((saved_right(cx) - 1000.).abs() < 1.);
+    drag_right(cx, &kagan, window, 1800.);
+    let center = width_of(cx, window, "center");
+    assert!((center - 480.).abs() < 1., "center {center}");
+    let left = width_of(cx, window, "sidebar-pane");
+    assert!((left - 256.).abs() < 1., "left {left}");
+    assert_eq!(saved(cx, "main.left-width"), Value::Null);
+    let right = cx.update(|cx| kagan.read(cx).right_width_now(cx));
+    assert!(
+        (saved_right(cx) - f64::from(right)).abs() < 1.,
+        "shown {right}"
+    );
+}
+
+// Decision 278: with less room than its saved width, the right sidebar is drawn narrower and
+// keeps the saved width for when the room comes back.
+#[gpui_kit::test]
+fn the_right_sidebar_shrinks_to_the_room_before_it_hides(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    cx.simulate_window_resize(window, size(px(1920.), px(1000.)));
+    cx.run_until_parked();
+    set_preference(cx, "main.left-sidebar", json!(false));
+    cx.run_until_parked();
+    drag_right(cx, &kagan, window, 1300.);
+    assert!((saved_right(cx) - 1300.).abs() < 1.);
+    let right_now = |cx: &mut TestAppContext| cx.update(|cx| kagan.read(cx).right_width_now(cx));
+
+    set_preference(cx, "main.left-sidebar", json!(true));
+    cx.run_until_parked();
+    assert!(left_shown(cx, window));
+    let beside_left = right_now(cx);
+    assert!(
+        (beside_left - (1920. - 48. - 480. - 256.)).abs() < 1.,
+        "{beside_left}"
+    );
+
+    cx.simulate_window_resize(window, size(px(1400.), px(1000.)));
+    cx.run_until_parked();
+    let narrow = right_now(cx);
+    assert!(
+        (narrow - (1400. - 48. - 480. - 256.)).abs() < 1.,
+        "{narrow}"
+    );
+    assert!((width_of(cx, window, "sidebar-pane") - 256.).abs() < 1.);
+
+    set_preference(cx, "main.left-sidebar", json!(false));
+    cx.simulate_window_resize(window, size(px(1920.), px(1000.)));
+    cx.run_until_parked();
+    let back = right_now(cx);
+    assert!((back - 1300.).abs() < 1., "{back}");
+    assert!((saved_right(cx) - 1300.).abs() < 1.);
+}
+
+// Decision 278: a width the room set is not the person's choice, so dragging the left sidebar
+// beside a narrowed right one saves the left width only.
+#[gpui_kit::test]
+fn dragging_the_left_beside_a_narrowed_right_keeps_the_right_width(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    cx.simulate_window_resize(window, size(px(1920.), px(1000.)));
+    cx.run_until_parked();
+    set_preference(cx, "main.left-sidebar", json!(false));
+    cx.run_until_parked();
+    drag_right(cx, &kagan, window, 1300.);
+    set_preference(cx, "main.left-sidebar", json!(true));
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| kagan.resize_left(px(220.), window, cx));
+    })
+    .unwrap();
+    cx.run_until_parked();
+    assert!((saved(cx, "main.left-width").as_f64().unwrap() - 220.).abs() < 1.);
+    assert!((saved_right(cx) - 1300.).abs() < 1., "{}", saved_right(cx));
+    set_preference(cx, "main.left-sidebar", json!(false));
+    cx.run_until_parked();
+    let back = cx.update(|cx| kagan.read(cx).right_width_now(cx));
+    assert!((back - 1300.).abs() < 1., "{back}");
 }
 
 #[gpui_kit::test]
