@@ -26,7 +26,7 @@ dunce = "=1.0.5"
 futures = "=0.3.34"
 # SQL is left out: tree-sitter-sequel requires cc 1.2, and this build already
 # uses cc 1.10. Cargo will not keep both (decision 173).
-gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "52a9c4db35a5cf42e65d6bbd73728539fdf2964f", features = [
+gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "0b642759985c44d253d0350ad4dd0b13089bd610", features = [
     "tree-sitter-astro",
     "tree-sitter-bash",
     "tree-sitter-c",
@@ -62,8 +62,8 @@ gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "52a9c4db35a5cf
     "tree-sitter-yaml",
     "tree-sitter-zig",
 ] }
-gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "52a9c4db35a5cf42e65d6bbd73728539fdf2964f", default-features = false, features = ["quickjs", "components"] }
-gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "52a9c4db35a5cf42e65d6bbd73728539fdf2964f", default-features = false, features = ["gpui-fast"] }
+gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "0b642759985c44d253d0350ad4dd0b13089bd610", default-features = false, features = ["quickjs", "components"] }
+gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "0b642759985c44d253d0350ad4dd0b13089bd610", default-features = false, features = ["gpui-fast"] }
 hex = "=0.4.3"
 interprocess = "=2.4.8"
 keyring-core = "=1.0.1"
