@@ -64,6 +64,8 @@ impl Kagan {
                 right: true,
             },
             left_overlay_focus: cx.focus_handle().tab_stop(true),
+            pick: None,
+            pick_focus: cx.focus_handle(),
             start_on_load: None,
             settings: settings::SettingsState::new(window, cx),
             settling: false,

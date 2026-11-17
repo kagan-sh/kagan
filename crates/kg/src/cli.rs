@@ -207,6 +207,7 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
                     .write_all(format_ui_snapshot(snapshot).as_bytes())?;
                 return Ok(());
             }
+            OpResult::Picked(pick) => return print_text(&format_picked(pick.as_ref())?),
             OpResult::BrowserSnapshot(snapshot) => {
                 use std::io::Write as _;
                 std::io::stdout()
@@ -455,6 +456,15 @@ pub(crate) fn format_browser_snapshot(snapshot: &BrowserSnapshot) -> String {
         out.push('\n');
     }
     out
+}
+
+fn format_picked(pick: Option<&kg_domain::UiPick>) -> Result<String, OpError> {
+    match pick {
+        Some(pick) => {
+            serde_json::to_string_pretty(pick).map_err(|error| OpError::Failed(error.to_string()))
+        }
+        None => Ok("cancelled".to_owned()),
+    }
 }
 
 fn format_ui_snapshot(snapshot: &UiSnapshot) -> String {

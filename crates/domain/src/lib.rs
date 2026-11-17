@@ -42,7 +42,7 @@ pub use op::{
     Shortcut, ShortcutGroup, ShortcutScope, ShortcutWhen, Skill, SkillOp, SkillSource,
     SkillTemplate, Slot, SlotChoice, SlotChoiceError, SurfaceItem, SurfaceOp, SurfacePlacement,
     TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThemeOp, ThemeSettings, ThreadOp, TurnOp,
-    UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,
+    UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp, UiPick,
     UiSnapshot, UpdateTarget, WaitOutcome, WindowOp, branch_slug, check, default_chord,
     expand_secondary, invalid_json, valid_branch, valid_theme_choice, valid_theme_id,
 };

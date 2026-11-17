@@ -23,6 +23,8 @@ pub(crate) struct ElementSnapshot {
     pub(crate) selected: Option<bool>,
     pub(crate) label: Option<SharedString>,
     pub(crate) hint: Option<SharedString>,
+    /// Paint order of the last paint: a later element is drawn over an earlier one.
+    pub(crate) order: u64,
 }
 impl fmt::Debug for ElementSnapshot {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -38,6 +40,7 @@ impl fmt::Debug for ElementSnapshot {
             .field("selected", &self.selected)
             .field("label", &self.label)
             .field("hint", &self.hint)
+            .field("order", &self.order)
             .finish()
     }
 }
@@ -199,9 +202,20 @@ pub(crate) fn snapshots(window: &Window) -> Vec<ElementSnapshot> {
                 selected: None,
                 label: None,
                 hint: None,
+                order: 0,
             }),
     );
     elements
+}
+
+thread_local! { static PAINT_ORDER: std::cell::Cell<u64> = const { std::cell::Cell::new(0) }; }
+
+fn next_paint_order() -> u64 {
+    PAINT_ORDER.with(|order| {
+        let next = order.get() + 1;
+        order.set(next);
+        next
+    })
 }
 
 // Transparent forwarding element. Its registration is owned by GPUI element
@@ -296,6 +310,7 @@ impl<E: Element<PrepaintState = Option<Hitbox>> + InteractiveElement> Element fo
                 None => node.label().map(|label| label.to_owned().into()),
             },
             hint: stated.and_then(|stated| stated.hint.clone()),
+            order: 0,
         };
         let registration =
             window.with_element_state(global_id, |state: Option<Rc<Registration>>, window| {
@@ -350,6 +365,7 @@ impl<E: Element<PrepaintState = Option<Hitbox>> + InteractiveElement> Element fo
                 .focus
                 .as_ref()
                 .map(|focus| focus.contains_focused(window, cx));
+            facts.order = next_paint_order();
         }
         self.inner
             .paint(id, inspector, bounds, layout, &mut paint.0, window, cx);

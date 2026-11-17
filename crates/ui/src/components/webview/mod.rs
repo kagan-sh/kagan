@@ -431,16 +431,30 @@ fn build(
     })
 }
 
-fn reveal(page: &Entity<crate::web_page::WebPage>, cx: &mut App) {
+pub(crate) fn reveal(page: &Entity<crate::web_page::WebPage>, cx: &mut App) {
     if !page.read(cx).visible(cx) {
         page.update(cx, |page, cx| page.show(cx));
     }
 }
 
-fn conceal(page: &Entity<crate::web_page::WebPage>, cx: &mut App) {
+pub(crate) fn conceal(page: &Entity<crate::web_page::WebPage>, cx: &mut App) {
     if page.read(cx).visible(cx) {
         page.update(cx, |page, cx| page.hide(cx));
     }
+}
+
+/// The panel pages on screen. A pick hides them, because a native page draws over GPUI.
+pub(crate) fn shown_pages(cx: &App) -> Vec<Entity<crate::web_page::WebPage>> {
+    cx.try_global::<Pages>()
+        .map(|pages| {
+            pages
+                .pages
+                .iter()
+                .filter_map(|held| held.page.clone())
+                .filter(|page| page.read(cx).visible(cx))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn conceal_at(cx: &mut App, index: usize) {

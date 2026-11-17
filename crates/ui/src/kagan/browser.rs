@@ -48,6 +48,10 @@ pub(super) struct Browser {
 }
 
 impl Browser {
+    pub(super) fn page(&self) -> Option<Entity<WebPage>> {
+        self.page.clone()
+    }
+
     pub(super) fn new(window: &mut Window, cx: &mut Context<Kagan>) -> Self {
         let address = cx
             .new(|cx| InputState::new(window, cx).placeholder("Web address, such as example.com"));

@@ -18,7 +18,7 @@ use gpui_shell::{
 
 #[cfg(test)]
 pub(crate) use webview::{REFUSED_HOST, native_shown};
-pub(crate) use webview::{drop_stores, fills_panel, sync_pages};
+pub(crate) use webview::{conceal, drop_stores, fills_panel, reveal, shown_pages, sync_pages};
 
 pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     button::register(registry)?;

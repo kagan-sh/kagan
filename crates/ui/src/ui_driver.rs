@@ -25,6 +25,9 @@ pub(crate) fn install(cx: &mut App) {
             UiJob::Op(UiOp::Screenshot { window, path }) => {
                 cx.spawn(async move |cx| capture_after_present(window, path, cx).await)
             }
+            UiJob::Op(UiOp::Pick { window }) => {
+                cx.spawn(async move |cx| drive_pick(window, cx).await)
+            }
             UiJob::Op(op) => cx.spawn(async move |cx| drive(op, cx)),
             UiJob::Surface(op) => cx.spawn(async move |cx| drive_surface(op, cx)),
         }));
@@ -227,6 +230,7 @@ fn window_index(op: &UiOp) -> u32 {
         | UiOp::Scroll { window, .. }
         | UiOp::Drag { window, .. }
         | UiOp::Drop { window }
+        | UiOp::Pick { window }
         | UiOp::Screenshot { window, .. } => *window,
     }
 }
@@ -319,7 +323,32 @@ fn run_op(op: UiOp, window: &mut gpui_kit::Window, cx: &mut App) -> Result<OpRes
             Ok(OpResult::Done)
         }
         UiOp::Screenshot { .. } => Err(OpError::Failed(UI_UNAVAILABLE.into())),
+        UiOp::Pick { .. } => Err(OpError::Invalid(
+            "kg ui pick waits for a person, so it does not run as a synthetic op".into(),
+        )),
     }
+}
+
+// Starts pick mode, then waits for the person outside any synthetic op: a person's click must
+// not count as synthetic while it waits.
+async fn drive_pick(index: u32, cx: &mut gpui_kit::AsyncApp) -> Result<OpResult, OpError> {
+    let (sender, receiver) = async_channel::bounded(1);
+    cx.update(|cx| {
+        let (handle, kagan) =
+            crate::kagan::front(cx).ok_or_else(|| OpError::Failed(UI_UNAVAILABLE.into()))?;
+        if window_at(cx, index) != Some(handle) {
+            return Err(OpError::Invalid(
+                "kg ui pick works in the main kagan window; use --window 0".into(),
+            ));
+        }
+        cx.update_window(handle, |_, window, cx| {
+            kagan.update(cx, |kagan, cx| kagan.begin_pick(None, sender, window, cx))
+        })
+        .map_err(|_| closed())?
+        .map_err(OpError::Invalid)
+    })?;
+    let answer = receiver.recv().await.unwrap_or(Ok(None));
+    answer.map(OpResult::Picked).map_err(OpError::Invalid)
 }
 
 fn flush(window: &mut gpui_kit::Window, cx: &mut App) {

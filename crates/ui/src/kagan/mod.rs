@@ -23,6 +23,7 @@ mod navigation;
 mod needs;
 mod notify;
 mod overlays;
+mod pick;
 pub(crate) mod picker;
 mod plugin_actions;
 mod preview;
@@ -198,6 +199,8 @@ pub(crate) struct Kagan {
     asks: ask_form::AskState,
     toast: Option<Toast>,
     toast_epoch: u64,
+    pick: Option<pick::Session>,
+    pick_focus: FocusHandle,
     activity: activity::Strip,
     _update_watch: Subscription,
     _release: Subscription,

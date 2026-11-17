@@ -9,7 +9,7 @@ use gpui_kit::{
 };
 use gpui_shell::{HostArguments, HostError, HostModule, HostValue};
 use kg_core::Workspace;
-use kg_domain::{DiffSide, Op, PluginId, ProjectId, ThreadId, ThreadOp};
+use kg_domain::{DiffSide, Op, PluginId, ProjectId, ThreadId, ThreadOp, UiPick};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -37,6 +37,13 @@ pub struct ToastAction {
 }
 
 pub enum HostUiEvent {
+    /// A plugin asked the person to pick a part of the front window. The reply is what they
+    /// picked, `None` when they cancelled, or an error when a pick is already on.
+    Pick {
+        plugin: PluginId,
+        name: String,
+        reply: Sender<Result<Option<UiPick>, String>>,
+    },
     OpenThread {
         id: ThreadId,
         reply: Sender<Result<(), String>>,
@@ -155,6 +162,12 @@ impl HostUi {
         }
         self.changed();
         cx.notify();
+    }
+
+    /// Whether a kagan window has told the host its context, so a pick has a window to run in.
+    #[must_use]
+    pub fn has_window(&self) -> bool {
+        self.front.is_some()
     }
 
     #[must_use]

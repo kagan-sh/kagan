@@ -207,6 +207,7 @@ pub(crate) enum Area {
     Database,
     Process,
     Browser,
+    Pick,
 }
 
 impl Area {
@@ -218,6 +219,9 @@ impl Area {
             Self::Database => "keeps its own database",
             Self::Process => "starts and stops the programs listed here",
             Self::Browser => "opens and drives the Browser tab for a thread it names",
+            Self::Pick => {
+                "lets you pick parts of kagan's window (it reads the name, text and place of what you click)"
+            }
         }
     }
 }

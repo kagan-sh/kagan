@@ -160,6 +160,7 @@ impl Render for Kagan {
             .child(self.title_bar(window, cx))
             .child(window_body(self, columns, window, cx))
             .child(self.activity_strip(window, cx))
+            .children(self.pick_layer(cx))
     }
 }
 

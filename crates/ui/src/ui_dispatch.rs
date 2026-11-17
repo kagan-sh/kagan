@@ -213,38 +213,37 @@ fn observed_elements(window: &Window) -> Vec<kg_domain::UiElement> {
 }
 
 fn observed(elements: &[ElementSnapshot]) -> Vec<kg_domain::UiElement> {
-    let mut elements: Vec<_> = elements
-        .iter()
-        .map(|element| {
-            let path = element.path.iter().map(|id| format!("{id:?}")).collect();
-            let id = element
-                .path
-                .last()
-                .map(|id| format!("{id:?}"))
-                .unwrap_or_default();
-            let bounds = element.bounds;
-            kg_domain::UiElement {
-                id,
-                path,
-                role: element.role.map(|role| format!("{role:?}")),
-                label: element.label.as_deref().map(str::to_owned),
-                value: element.value.as_deref().map(str::to_owned),
-                bounds: kg_domain::UiBounds {
-                    x: bounds.origin.x.as_f32(),
-                    y: bounds.origin.y.as_f32(),
-                    width: bounds.size.width.as_f32(),
-                    height: bounds.size.height.as_f32(),
-                },
-                focused: element.focused,
-                disabled: element.disabled,
-                selected: element.selected,
-                visible: element.visible,
-                hint: element.hint.as_deref().map(str::to_owned),
-            }
-        })
-        .collect();
+    let mut elements: Vec<_> = elements.iter().map(element).collect();
     elements.sort_by(reading_order);
     elements
+}
+
+pub(crate) fn element(element: &ElementSnapshot) -> kg_domain::UiElement {
+    let path = element.path.iter().map(|id| format!("{id:?}")).collect();
+    let id = element
+        .path
+        .last()
+        .map(|id| format!("{id:?}"))
+        .unwrap_or_default();
+    let bounds = element.bounds;
+    kg_domain::UiElement {
+        id,
+        path,
+        role: element.role.map(|role| format!("{role:?}")),
+        label: element.label.as_deref().map(str::to_owned),
+        value: element.value.as_deref().map(str::to_owned),
+        bounds: kg_domain::UiBounds {
+            x: bounds.origin.x.as_f32(),
+            y: bounds.origin.y.as_f32(),
+            width: bounds.size.width.as_f32(),
+            height: bounds.size.height.as_f32(),
+        },
+        focused: element.focused,
+        disabled: element.disabled,
+        selected: element.selected,
+        visible: element.visible,
+        hint: element.hint.as_deref().map(str::to_owned),
+    }
 }
 
 // The registry keeps its elements in a map, so each read would list them in a new order.

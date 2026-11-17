@@ -1,4 +1,4 @@
-use gpui_kit::{App, Context, Entity};
+use gpui_kit::{App, Context, Entity, EntityId};
 use gpui_shell::ScriptView;
 use kg_domain::{OpError, PluginId};
 
@@ -13,6 +13,26 @@ enum Mount {
     PaintOnly,
 }
 impl PluginHost {
+    #[must_use]
+    pub fn plugin_name(&self, id: &PluginId) -> Option<String> {
+        self.active
+            .get(id)
+            .map(|active| active.manifest.name.clone())
+    }
+
+    /// The plugin that drew the innermost of `path`'s views, if a plugin drew any part of it.
+    #[must_use]
+    pub fn owner_of(&self, path: &[EntityId]) -> Option<PluginId> {
+        path.iter().rev().find_map(|id| {
+            self.active.iter().find_map(|(plugin, active)| {
+                let loaded = active.loaded.as_ref()?;
+                let drawn = loaded.view.entity_id() == *id
+                    || loaded.views.iter().any(|view| view.entity_id() == *id);
+                drawn.then(|| plugin.clone())
+            })
+        })
+    }
+
     /// Mounts the view class of panel `panel` into `window`.
     ///
     /// The default export stays mounted in the plugin's hidden window for as long

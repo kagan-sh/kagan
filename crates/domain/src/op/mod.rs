@@ -82,7 +82,7 @@ pub use thread::{
 };
 pub use ui::{
     DropSide, UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,
-    UiSnapshot,
+    UiPick, UiSnapshot,
 };
 pub use window::WindowOp;
 
@@ -288,6 +288,7 @@ pub enum OpResult {
     Interactions(Vec<PendingInteraction>),
     Theme(ThemeSettings),
     Ui(UiSnapshot),
+    Picked(Option<UiPick>),
     Browser(BrowserView),
     BrowserSnapshot(BrowserSnapshot),
     Diff(crate::DiffList),

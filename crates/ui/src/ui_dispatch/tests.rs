@@ -17,6 +17,7 @@ fn element(id: &'static str, x: f32, y: f32) -> ElementSnapshot {
         selected: None,
         label: None,
         hint: None,
+        order: 0,
     }
 }
 

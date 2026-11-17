@@ -40,6 +40,7 @@ impl Kagan {
             this.sync_replaced(window, cx);
             this.reconcile_plugin_views(window, cx);
             this.sync_overlays(window, cx);
+            this.drop_orphan_pick(window, cx);
             cx.notify();
         }));
         self.activity
@@ -85,6 +86,11 @@ impl Kagan {
         cx: &mut Context<Self>,
     ) {
         match event {
+            HostUiEvent::Pick { name, reply, .. } => {
+                if let Err(error) = self.begin_pick(Some(name.clone()), reply.clone(), window, cx) {
+                    let _ = reply.try_send(Err(error)); // A caller that gave up reads no reply.
+                }
+            }
             HostUiEvent::OpenThread { id, reply } => {
                 self.select(id.clone(), window, cx);
                 let _ = reply.try_send(Ok(())); // A caller that gave up reads no reply.

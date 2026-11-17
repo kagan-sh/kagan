@@ -42,6 +42,18 @@ pub struct UiSnapshot {
     pub elements: Vec<UiElement>,
 }
 
+/// The part of the window a person picked, as `kg ui pick` and a plugin's `kagan/pick` report it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UiPick {
+    pub role: Option<String>,
+    pub label: Option<String>,
+    pub value: Option<String>,
+    pub path: Vec<String>,
+    pub bounds: UiBounds,
+    pub owner: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
 #[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum UiOp {
@@ -98,6 +110,11 @@ pub enum UiOp {
     },
     /// Release a drag that `kg ui drag --hold` left held, where the pointer is
     Drop {
+        #[arg(long, default_value_t = 0)]
+        window: u32,
+    },
+    /// Wait for a person to pick a part of the window with a click; Escape cancels. Prints what was picked
+    Pick {
         #[arg(long, default_value_t = 0)]
         window: u32,
     },
