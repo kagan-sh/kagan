@@ -199,7 +199,7 @@ pub(crate) struct Kagan {
     asks: ask_form::AskState,
     toast: Option<Toast>,
     toast_epoch: u64,
-    pick: Option<pick::Session>,
+    pick: Option<pick::Picking>,
     pick_focus: FocusHandle,
     activity: activity::Strip,
     _update_watch: Subscription,

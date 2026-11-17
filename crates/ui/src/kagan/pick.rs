@@ -14,7 +14,7 @@ use crate::web_page::WebPage;
 
 pub(crate) type Answer = Result<Option<UiPick>, String>;
 
-pub(crate) struct Session {
+pub(crate) struct Picking {
     name: Option<String>,
     reply: async_channel::Sender<Answer>,
     hover: Option<ElementSnapshot>,
@@ -42,7 +42,7 @@ impl Kagan {
         for page in &hidden {
             conceal(page, cx);
         }
-        self.pick = Some(Session {
+        self.pick = Some(Picking {
             name,
             reply,
             hover: None,
@@ -62,16 +62,16 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(session) = self.pick.take() else {
+        let Some(picking) = self.pick.take() else {
             return;
         };
-        for page in &session.hidden {
+        for page in &picking.hidden {
             reveal(page, cx);
         }
-        if let Some(focus) = &session.focus_before {
+        if let Some(focus) = &picking.focus_before {
             window.focus(focus, cx);
         }
-        let _ = session.reply.try_send(Ok(answer)); // A caller that gave up reads no reply.
+        let _ = picking.reply.try_send(Ok(answer)); // A caller that gave up reads no reply.
         cx.notify();
     }
 
@@ -88,10 +88,10 @@ impl Kagan {
 
     fn pick_move(&mut self, event: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
         let hover = topmost(window, event.position);
-        let Some(session) = self.pick.as_mut() else {
+        let Some(picking) = self.pick.as_mut() else {
             return;
         };
-        let changed = session
+        let changed = picking
             .hover
             .as_ref()
             .map(|element| (&element.path, element.bounds))
@@ -99,7 +99,7 @@ impl Kagan {
                 .as_ref()
                 .map(|element| (&element.path, element.bounds));
         if changed {
-            session.hover = hover;
+            picking.hover = hover;
             cx.notify();
         }
     }
@@ -117,8 +117,8 @@ impl Kagan {
             let pick = to_pick(&element, owner(&element, cx));
             self.end_pick(Some(pick), window, cx);
         } else {
-            if let Some(session) = self.pick.as_mut() {
-                session.missed = true;
+            if let Some(picking) = self.pick.as_mut() {
+                picking.missed = true;
             }
             cx.notify();
         }
@@ -133,8 +133,8 @@ impl Kagan {
     }
 
     pub(super) fn pick_layer(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let session = self.pick.as_ref()?;
-        let hint = match (&session.name, session.missed) {
+        let picking = self.pick.as_ref()?;
+        let hint = match (&picking.name, picking.missed) {
             (_, true) => "Nothing here can be picked. Click another spot, or press Esc.".to_owned(),
             (Some(name), false) => {
                 format!("{name} asks you to pick something. Click it, or press Esc.")
@@ -162,7 +162,7 @@ impl Kagan {
                     .text_color(cx.theme().foreground)
                     .child(hint),
             );
-        let outline = session
+        let outline = picking
             .hover
             .as_ref()
             .map(|element| outline(element, cx))
