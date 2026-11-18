@@ -1,5 +1,5 @@
 Third-party notices for the kg binary.
-cargo-lock 949fd9c3386e66cbec567d41e2b93cfd30dff79bba2acc37f4719069f83686e9
+cargo-lock d400e920a393e1c6b292587c18a9f7172338dd30a6a540eb2ad2bd8be73808e3
 
 kagan itself is Apache-2.0. See LICENSE.
 
@@ -2377,7 +2377,6 @@ windows-strings 0.3.1
 windows-strings 0.4.2
 windows-strings 0.5.1
 windows-sys 0.48.0
-windows-sys 0.52.0
 windows-sys 0.59.0
 windows-sys 0.60.2
 windows-sys 0.61.2
@@ -18679,8 +18678,8 @@ SOFTWARE.
 
 ================================================================================
 MIT
-jsonschema 0.60.2
-referencing 0.60.2
+jsonschema 0.61.1
+referencing 0.61.2
 
 MIT License
 
@@ -19008,8 +19007,8 @@ block2 0.6.2
 dpi 0.1.2
 harfrust 0.5.2
 hex-simd 0.8.0
-jsonschema-regex 0.60.2
-jsonschema-value 0.60.2
+jsonschema-regex 0.61.2
+jsonschema-value 0.61.2
 libm 0.2.16
 minisign-verify 0.3.0
 minisign 0.10.0
@@ -19346,7 +19345,7 @@ SOFTWARE.
 ================================================================================
 MIT
 fancy-regex 0.16.2
-fancy-regex 0.19.2
+fancy-regex 0.20.2
 
 The MIT License
 
