@@ -6,6 +6,10 @@ ignore = [
         id = "RUSTSEC-2023-0071",
         reason = "rsa (Marvin timing attack, no fixed release) comes only through gpui-shell's plugin JS crypto (LLRT's crypto module, vendored in quickjs-jit-stdlib); kagan does no RSA decryption itself. Drop when rsa ships a fix.",
     },
+    {
+        id = "RUSTSEC-2026-0543",
+        reason = "chrono is unmaintained, with no fixed release. kg-core and kg-ui use it for timestamps, and gpui-base pulls it in too. Drop when kagan moves to jiff and the gpui-kit fork drops chrono.",
+    },
 ]
 
 [licenses]
