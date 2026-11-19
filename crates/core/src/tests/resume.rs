@@ -386,21 +386,21 @@ fn codex_home(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
 }
 
 /// What Codex writes when a conversation begins: its first line names the folder and the UTC start.
-fn began(home: &Path, folder: &Path, at: chrono::DateTime<chrono::Utc>) -> String {
+fn began(home: &Path, folder: &Path, at: jiff::Timestamp) -> String {
     let conversation = Conversation::fresh().to_string();
     let day = home
         .join("sessions")
-        .join(at.format("%Y").to_string())
-        .join(at.format("%m").to_string())
-        .join(at.format("%d").to_string());
+        .join(at.strftime("%Y").to_string())
+        .join(at.strftime("%m").to_string())
+        .join(at.strftime("%d").to_string());
     std::fs::create_dir_all(&day).unwrap();
     let line = json!({
-        "timestamp": at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        "timestamp": format!("{at:.3}"),
         "type": "session_meta",
         "payload": {
             "id": conversation,
             "cwd": folder,
-            "timestamp": at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            "timestamp": format!("{at:.3}"),
         },
     });
     std::fs::write(
@@ -411,12 +411,8 @@ fn began(home: &Path, folder: &Path, at: chrono::DateTime<chrono::Utc>) -> Strin
     conversation
 }
 
-fn later() -> chrono::DateTime<chrono::Utc> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap();
-    chrono::DateTime::from_timestamp_millis(i64::try_from(now.as_millis()).unwrap()).unwrap()
-        + chrono::Duration::hours(1)
+fn later() -> jiff::Timestamp {
+    jiff::Timestamp::now() + jiff::SignedDuration::from_hours(1)
 }
 
 async fn codex_thread(
@@ -442,7 +438,7 @@ async fn start_again_resumes_the_one_codex_conversation_begun_in_its_folder(
     began(
         &home,
         fixture.dir.path(),
-        later() - chrono::Duration::days(1),
+        later() - jiff::SignedDuration::from_hours(24),
     );
     began(&home, &fixture.dir.path().join("elsewhere"), later());
     std::fs::create_dir_all(fixture.dir.path().join("elsewhere")).unwrap();

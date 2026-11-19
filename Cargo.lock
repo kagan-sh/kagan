@@ -318,7 +318,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -329,7 +329,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1115,7 +1115,7 @@ dependencies = [
  "maybe-owned",
  "rustix",
  "rustix-linux-procfs",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
  "winx",
 ]
 
@@ -2201,7 +2201,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.3",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2524,7 +2524,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3413,13 +3413,13 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.21",
- "windows 0.62.2",
+ "windows 0.58.0",
 ]
 
 [[package]]
 name = "gpui-base"
 version = "0.10.0"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=5d1d3ea73b15ca89f272726d3dd7441f490ccf85#5d1d3ea73b15ca89f272726d3dd7441f490ccf85"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -3463,7 +3463,7 @@ dependencies = [
 [[package]]
 name = "gpui-component"
 version = "0.10.0"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=5d1d3ea73b15ca89f272726d3dd7441f490ccf85#5d1d3ea73b15ca89f272726d3dd7441f490ccf85"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "anyhow",
  "core-text",
@@ -3546,7 +3546,7 @@ dependencies = [
 [[package]]
 name = "gpui-component-macros"
 version = "0.10.0"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=5d1d3ea73b15ca89f272726d3dd7441f490ccf85#5d1d3ea73b15ca89f272726d3dd7441f490ccf85"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "proc-macro-crate 3.5.0",
  "proc-macro2",
@@ -3864,7 +3864,7 @@ dependencies = [
 [[package]]
 name = "gpui-fps"
 version = "0.10.0"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=5d1d3ea73b15ca89f272726d3dd7441f490ccf85#5d1d3ea73b15ca89f272726d3dd7441f490ccf85"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "core-graphics 0.24.0",
  "gpui-fast",
@@ -3882,7 +3882,7 @@ dependencies = [
 [[package]]
 name = "gpui-kit"
 version = "0.10.0"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=5d1d3ea73b15ca89f272726d3dd7441f490ccf85#5d1d3ea73b15ca89f272726d3dd7441f490ccf85"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "gpui-base",
  "gpui-component",
@@ -3899,7 +3899,7 @@ dependencies = [
 [[package]]
 name = "gpui-kit-assets"
 version = "0.10.0"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=5d1d3ea73b15ca89f272726d3dd7441f490ccf85#5d1d3ea73b15ca89f272726d3dd7441f490ccf85"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "anyhow",
  "gpui-fast",
@@ -4432,7 +4432,7 @@ checksum = "85701631a9bbecf47e6d19f145e85e57767e7c50f7192d5b1bf65b5ef43cb373"
 [[package]]
 name = "gpui-shell"
 version = "0.10.0"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=5d1d3ea73b15ca89f272726d3dd7441f490ccf85#5d1d3ea73b15ca89f272726d3dd7441f490ccf85"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -4474,7 +4474,7 @@ dependencies = [
 [[package]]
 name = "gpui-webview"
 version = "0.10.0"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=5d1d3ea73b15ca89f272726d3dd7441f490ccf85#5d1d3ea73b15ca89f272726d3dd7441f490ccf85"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "anyhow",
  "gdkx11",
@@ -4916,7 +4916,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.58.0",
 ]
 
 [[package]]
@@ -5112,7 +5112,6 @@ dependencies = [
  "qoi",
  "ravif",
  "rayon",
- "rgb",
  "tiff",
  "zune-core 0.5.3",
  "zune-jpeg 0.5.15",
@@ -5582,7 +5581,6 @@ version = "0.1.0"
 dependencies = [
  "async-channel",
  "base64 0.23.1",
- "chrono",
  "clap",
  "dunce",
  "flate2",
@@ -5591,6 +5589,7 @@ dependencies = [
  "gpui-pre-reqwest",
  "hex",
  "image",
+ "jiff",
  "kg-domain",
  "kg-process",
  "kg-store",
@@ -5700,12 +5699,12 @@ name = "kg-ui"
 version = "0.1.0"
 dependencies = [
  "async-channel",
- "chrono",
  "dunce",
  "gpui-kit",
  "gpui-shell",
  "gpui-webview",
  "image",
+ "jiff",
  "kg-core",
  "kg-domain",
  "kg-plugins",
@@ -6281,7 +6280,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "536bfad37a309d62069485248eeaba1e8d9853aaf951caaeaed0585a95346f08"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6646,7 +6645,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
- "proc-macro-crate 3.5.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -8219,7 +8218,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8919,7 +8918,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -9691,7 +9690,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -10126,7 +10125,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -10961,7 +10960,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -11845,7 +11844,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -12575,7 +12574,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d6f32a0ff4a9f6f01231eb2059cc85479330739333e0e58cadf03b6af2cca10"
 dependencies = [
  "cfg-if",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

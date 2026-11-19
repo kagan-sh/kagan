@@ -1,7 +1,7 @@
 use gpui_kit::{
     App, Bounds, Element, ElementId, Entity, FocusHandle, Focusable as _, GlobalElementId, Hitbox,
-    InspectorElementId, InteractiveElement, IntoElement, LayoutId, Pixels, Point, SharedString,
-    Visibility, Window, component::input::InputState, px,
+    InspectorElementId, InteractiveElement, LayoutId, Pixels, Point, SharedString, Visibility,
+    Window, component::input::InputState, px,
 };
 use std::{
     cell::RefCell,
@@ -225,12 +225,6 @@ impl<E: Element> Observed<E> {
             focus: facts.focus.clone(),
             facts: Some(facts),
         }
-    }
-}
-impl<E: Element<PrepaintState = Option<Hitbox>> + InteractiveElement> IntoElement for Observed<E> {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
     }
 }
 impl<E: Element<PrepaintState = Option<Hitbox>> + InteractiveElement> Element for Observed<E> {

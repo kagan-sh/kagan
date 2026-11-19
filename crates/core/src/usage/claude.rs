@@ -8,7 +8,6 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
-use chrono::DateTime;
 use kg_domain::{UsageAccount, UsageProvider, UsageStatus, UsageWindow};
 use serde_json::{Value, json};
 
@@ -251,9 +250,11 @@ fn window(value: &Value, label: String) -> Option<UsageWindow> {
 }
 
 fn as_time(value: &Value) -> Option<i64> {
-    DateTime::parse_from_rfc3339(value.as_str()?)
+    value
+        .as_str()?
+        .parse::<jiff::Timestamp>()
         .ok()
-        .map(|time| time.timestamp())
+        .map(jiff::Timestamp::as_second)
 }
 
 /// `max` and `claude_max` both read as `Max`.
