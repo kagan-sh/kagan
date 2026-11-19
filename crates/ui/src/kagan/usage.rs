@@ -449,18 +449,15 @@ fn refresh_row(usage: &Entity<Usage>) -> AnyElement {
 }
 
 fn absolute_reset(at: i64) -> String {
-    reset_text(at, &chrono::Local)
+    reset_text(at, jiff::tz::TimeZone::system())
 }
 
-fn reset_text<Zone: chrono::TimeZone>(at: i64, zone: &Zone) -> String
-where
-    Zone::Offset: std::fmt::Display,
-{
-    chrono::DateTime::from_timestamp(at, 0).map_or_else(
-        || "at an unknown time".to_owned(),
+fn reset_text(at: i64, zone: jiff::tz::TimeZone) -> String {
+    jiff::Timestamp::from_second(at).map_or_else(
+        |_| "at an unknown time".to_owned(),
         |time| {
-            time.with_timezone(zone)
-                .format("%b %-d, %-I:%M %p")
+            time.to_zoned_datetime(zone)
+                .strftime("%b %-d, %-I:%M %p")
                 .to_string()
         },
     )

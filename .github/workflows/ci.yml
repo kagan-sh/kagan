@@ -336,8 +336,8 @@ jobs:
         if: matrix.shard == 1
         run: |
           log=$(mktemp)
-          cargo test -p gpui-fast-windows --locked --lib -- --exact platform::tests::window_procedure_returns_after_a_panic >"$log" 2>&1
-          status=$?
+          status=0
+          cargo test -p gpui-fast-windows --locked --lib -- --exact platform::tests::window_procedure_returns_after_a_panic >"$log" 2>&1 || status=$?
           cat "$log"
           grep -q "1 passed; 0 failed" "$log" || exit 1
           exit "$status"

@@ -155,13 +155,6 @@ struct Inert {
     child: AnyElement,
 }
 
-impl IntoElement for Inert {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 impl Element for Inert {
     type RequestLayoutState = ();
     type PrepaintState = bool;

@@ -1,5 +1,5 @@
 Third-party notices for the kg binary.
-cargo-lock 949fd9c3386e66cbec567d41e2b93cfd30dff79bba2acc37f4719069f83686e9
+cargo-lock 0cc1cf16a15f7bde761da8bd100f2477ba70e5873b001422d3f2f3d2041c3e95
 
 kagan itself is Apache-2.0. See LICENSE.
 
@@ -14339,18 +14339,18 @@ limitations under the License.
 
 ================================================================================
 Apache-2.0
-gpui-fast 0.1.14
-gpui-fast-apple 0.1.14
-gpui-fast-linux 0.1.14
-gpui-fast-macos 0.1.14
-gpui-fast-macros 0.1.14
-gpui-fast-platform 0.1.14
-gpui-fast-wgpu 0.1.14
-gpui-fast-windows 0.1.14
-gpui-kit 0.9.1
-gpui-fps 0.9.1
-gpui-kit-assets 0.9.1
-gpui-webview 0.9.1
+gpui-fast 0.1.17
+gpui-fast-apple 0.1.17
+gpui-fast-linux 0.1.17
+gpui-fast-macos 0.1.17
+gpui-fast-macros 0.1.17
+gpui-fast-platform 0.1.17
+gpui-fast-wgpu 0.1.17
+gpui-fast-windows 0.1.17
+gpui-kit 0.10.0
+gpui-fps 0.10.0
+gpui-kit-assets 0.10.0
+gpui-webview 0.10.0
 kg-core 0.1.0
 kg-domain 0.1.0
 kg 0.1.0
@@ -14447,7 +14447,7 @@ ref-cast-impl 1.0.27
 ref-cast 1.0.27
 resvg 0.45.1
 resvg 0.46.0
-rpassword 7.5.4
+rpassword 7.5.5
 rtoolbox 0.0.6
 rustc-hash 2.1.3
 rustversion 1.0.23
@@ -14822,10 +14822,10 @@ Apache License
 
 ================================================================================
 Apache-2.0
-gpui-base 0.9.1
-gpui-component-macros 0.9.1
-gpui-component 0.9.1
-gpui-shell 0.9.1
+gpui-base 0.10.0
+gpui-component-macros 0.10.0
+gpui-component 0.10.0
+gpui-shell 0.10.0
 
 Copyright 2024 - 2026 Longbridge <https://longbridge.com>
 
@@ -17272,8 +17272,8 @@ THE SOFTWARE.
 
 ================================================================================
 MIT
-libsqlite3-sys 0.39.1
-rusqlite 0.41.1
+libsqlite3-sys 0.40.0
+rusqlite 0.42.0
 
 Copyright (c) 2014 The rusqlite developers
 
@@ -18679,8 +18679,8 @@ SOFTWARE.
 
 ================================================================================
 MIT
-jsonschema 0.60.2
-referencing 0.60.2
+jsonschema 0.61.1
+referencing 0.61.2
 
 MIT License
 
@@ -19008,8 +19008,8 @@ block2 0.6.2
 dpi 0.1.2
 harfrust 0.5.2
 hex-simd 0.8.0
-jsonschema-regex 0.60.2
-jsonschema-value 0.60.2
+jsonschema-regex 0.61.2
+jsonschema-value 0.61.2
 libm 0.2.16
 minisign-verify 0.3.0
 minisign 0.10.0
@@ -19346,7 +19346,7 @@ SOFTWARE.
 ================================================================================
 MIT
 fancy-regex 0.16.2
-fancy-regex 0.19.2
+fancy-regex 0.20.2
 
 The MIT License
 
@@ -19638,6 +19638,10 @@ byteorder-lite 0.1.0
 byteorder 1.5.0
 globset 0.4.21
 ignore 0.4.34
+jiff-core 1.0.1
+jiff-tzdb-platform 1.0.0
+jiff-tzdb 1.0.0
+jiff 1.0.1
 memchr 2.8.3
 walkdir 2.5.0
 

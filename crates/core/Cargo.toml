@@ -13,7 +13,7 @@ kg-terminal.workspace = true
 gpui-kit.workspace = true
 async-channel.workspace = true
 base64 = "=0.23.1"
-chrono = { version = "=0.4.45", default-features = false, features = ["alloc"] }
+jiff = "=1.0.1"
 dunce.workspace = true
 futures.workspace = true
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg"] }

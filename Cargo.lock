@@ -2607,9 +2607,9 @@ dependencies = [
 
 [[package]]
 name = "fancy-regex"
-version = "0.19.2"
+version = "0.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d301f5bf187b3c295fce6468d3875037a0bccc5f6b151c63cac2f85babf21912"
+checksum = "0a2e16b9a584b602f1e0e5e22c30ca0906786088c27500653e432d086def8b53"
 dependencies = [
  "bit-set 0.8.0",
  "regex-automata",
@@ -3418,14 +3418,13 @@ dependencies = [
 
 [[package]]
 name = "gpui-base"
-version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=0b642759985c44d253d0350ad4dd0b13089bd610#0b642759985c44d253d0350ad4dd0b13089bd610"
+version = "0.10.0"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "aho-corasick",
  "anyhow",
  "ashpd",
  "async-channel",
- "chrono",
  "data-url",
  "futures",
  "gpui-fast",
@@ -3433,8 +3432,10 @@ dependencies = [
  "gpui-pre-macros",
  "gpui-pre-sum-tree",
  "html5ever 0.27.0",
+ "image",
  "instant",
  "itertools 0.13.0",
+ "jiff",
  "lsp-types",
  "markdown",
  "markup5ever_rcdom",
@@ -3450,7 +3451,9 @@ dependencies = [
  "serde_json",
  "smallvec",
  "smol",
+ "sys-locale",
  "tracing",
+ "unicode-bidi",
  "unicode-linebreak",
  "unicode-segmentation",
  "web-time",
@@ -3459,11 +3462,10 @@ dependencies = [
 
 [[package]]
 name = "gpui-component"
-version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=0b642759985c44d253d0350ad4dd0b13089bd610#0b642759985c44d253d0350ad4dd0b13089bd610"
+version = "0.10.0"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "anyhow",
- "chrono",
  "core-text",
  "enum-iterator",
  "gpui-base",
@@ -3475,6 +3477,7 @@ dependencies = [
  "gpui-pre-sum-tree",
  "instant",
  "itertools 0.13.0",
+ "jiff",
  "log",
  "lsp-types",
  "markdown",
@@ -3542,8 +3545,8 @@ dependencies = [
 
 [[package]]
 name = "gpui-component-macros"
-version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=0b642759985c44d253d0350ad4dd0b13089bd610#0b642759985c44d253d0350ad4dd0b13089bd610"
+version = "0.10.0"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "proc-macro-crate 3.5.0",
  "proc-macro2",
@@ -3553,8 +3556,8 @@ dependencies = [
 
 [[package]]
 name = "gpui-fast"
-version = "0.1.14"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=0f27075e33dee5a09bc7ae7a6634d2995aa867fa#0f27075e33dee5a09bc7ae7a6634d2995aa867fa"
+version = "0.1.17"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -3624,8 +3627,8 @@ dependencies = [
 
 [[package]]
 name = "gpui-fast-apple"
-version = "0.1.14"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=0f27075e33dee5a09bc7ae7a6634d2995aa867fa#0f27075e33dee5a09bc7ae7a6634d2995aa867fa"
+version = "0.1.17"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "anyhow",
  "async-task",
@@ -3663,8 +3666,8 @@ dependencies = [
 
 [[package]]
 name = "gpui-fast-linux"
-version = "0.1.14"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=0f27075e33dee5a09bc7ae7a6634d2995aa867fa#0f27075e33dee5a09bc7ae7a6634d2995aa867fa"
+version = "0.1.17"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -3707,8 +3710,8 @@ dependencies = [
 
 [[package]]
 name = "gpui-fast-macos"
-version = "0.1.14"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=0f27075e33dee5a09bc7ae7a6634d2995aa867fa#0f27075e33dee5a09bc7ae7a6634d2995aa867fa"
+version = "0.1.17"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -3740,6 +3743,7 @@ dependencies = [
  "parking_lot",
  "raw-window-handle",
  "semver",
+ "serde_json",
  "smallvec",
  "strum",
  "uuid",
@@ -3747,8 +3751,8 @@ dependencies = [
 
 [[package]]
 name = "gpui-fast-macros"
-version = "0.1.14"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=0f27075e33dee5a09bc7ae7a6634d2995aa867fa#0f27075e33dee5a09bc7ae7a6634d2995aa867fa"
+version = "0.1.17"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3758,8 +3762,8 @@ dependencies = [
 
 [[package]]
 name = "gpui-fast-platform"
-version = "0.1.14"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=0f27075e33dee5a09bc7ae7a6634d2995aa867fa#0f27075e33dee5a09bc7ae7a6634d2995aa867fa"
+version = "0.1.17"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -3774,8 +3778,8 @@ dependencies = [
 
 [[package]]
 name = "gpui-fast-web"
-version = "0.1.14"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=0f27075e33dee5a09bc7ae7a6634d2995aa867fa#0f27075e33dee5a09bc7ae7a6634d2995aa867fa"
+version = "0.1.17"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -3803,8 +3807,8 @@ dependencies = [
 
 [[package]]
 name = "gpui-fast-wgpu"
-version = "0.1.14"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=0f27075e33dee5a09bc7ae7a6634d2995aa867fa#0f27075e33dee5a09bc7ae7a6634d2995aa867fa"
+version = "0.1.17"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -3830,13 +3834,14 @@ dependencies = [
 
 [[package]]
 name = "gpui-fast-windows"
-version = "0.1.14"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=0f27075e33dee5a09bc7ae7a6634d2995aa867fa#0f27075e33dee5a09bc7ae7a6634d2995aa867fa"
+version = "0.1.17"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "accesskit",
  "accesskit_windows",
  "anyhow",
  "dunce",
+ "embed-resource",
  "etagere",
  "futures",
  "gpui-fast",
@@ -3859,8 +3864,8 @@ dependencies = [
 
 [[package]]
 name = "gpui-fps"
-version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=0b642759985c44d253d0350ad4dd0b13089bd610#0b642759985c44d253d0350ad4dd0b13089bd610"
+version = "0.10.0"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "core-graphics 0.24.0",
  "gpui-fast",
@@ -3877,8 +3882,8 @@ dependencies = [
 
 [[package]]
 name = "gpui-kit"
-version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=0b642759985c44d253d0350ad4dd0b13089bd610#0b642759985c44d253d0350ad4dd0b13089bd610"
+version = "0.10.0"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "gpui-base",
  "gpui-component",
@@ -3894,8 +3899,8 @@ dependencies = [
 
 [[package]]
 name = "gpui-kit-assets"
-version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=0b642759985c44d253d0350ad4dd0b13089bd610#0b642759985c44d253d0350ad4dd0b13089bd610"
+version = "0.10.0"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "anyhow",
  "gpui-fast",
@@ -4427,13 +4432,12 @@ checksum = "85701631a9bbecf47e6d19f145e85e57767e7c50f7192d5b1bf65b5ef43cb373"
 
 [[package]]
 name = "gpui-shell"
-version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=0b642759985c44d253d0350ad4dd0b13089bd610#0b642759985c44d253d0350ad4dd0b13089bd610"
+version = "0.10.0"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "anyhow",
  "async-channel",
  "cap-std",
- "chrono",
  "flate2",
  "fs2",
  "gpui-base",
@@ -4448,6 +4452,7 @@ dependencies = [
  "gpui-webview",
  "image",
  "instant",
+ "jiff",
  "libc",
  "quickjs-jit",
  "quickjs-jit-runtime",
@@ -4469,8 +4474,8 @@ dependencies = [
 
 [[package]]
 name = "gpui-webview"
-version = "0.9.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=0b642759985c44d253d0350ad4dd0b13089bd610#0b642759985c44d253d0350ad4dd0b13089bd610"
+version = "0.10.0"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=24732b63e0d69c45c595e071527de63ff8ab9b35#24732b63e0d69c45c595e071527de63ff8ab9b35"
 dependencies = [
  "anyhow",
  "gdkx11",
@@ -5348,6 +5353,60 @@ dependencies = [
 ]
 
 [[package]]
+name = "jiff"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed5d126d72eb017f10b302e73bdeca446bea405ee449af4d9e7866d6b082d83e"
+dependencies = [
+ "jiff-core",
+ "jiff-static",
+ "jiff-tzdb-platform",
+ "js-sys",
+ "log",
+ "portable-atomic",
+ "portable-atomic-util",
+ "serde_core",
+ "wasm-bindgen",
+ "windows-link 0.2.1",
+]
+
+[[package]]
+name = "jiff-core"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6b46a105a9874634dd96231021526bf24ca04955a5998c59a9c7666e634b7b8"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "jiff-static"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0127e9bde3c6130d6169e7d8d68676e4be69c4bf7573c308b6f960a5089c428"
+dependencies = [
+ "jiff-core",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.10",
+]
+
+[[package]]
+name = "jiff-tzdb"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12e71a1b68a875a44a33bb7a1dd84392cb77145a3367a552a3cfe6a4f5cf3afc"
+
+[[package]]
+name = "jiff-tzdb-platform"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc65b284afcfa8f6cf189c7274c805505314a7ab975c60e1f548bff56525420e"
+dependencies = [
+ "jiff-tzdb",
+]
+
+[[package]]
 name = "jni"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5414,15 +5473,15 @@ dependencies = [
 
 [[package]]
 name = "jsonschema"
-version = "0.60.2"
+version = "0.61.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a42a11b47492e6a2cc76e9c7bcc8077776cb31dac444e0795d7f61bcc6441c08"
+checksum = "e404978f72e1a21b53c96114b8a56e4cee7f17bd0a09b9c130875ed02a696f43"
 dependencies = [
  "ahash",
  "bytecount",
  "data-encoding",
  "email_address",
- "fancy-regex 0.19.2",
+ "fancy-regex 0.20.2",
  "fraction",
  "getrandom 0.3.4",
  "itoa",
@@ -5442,18 +5501,18 @@ dependencies = [
 
 [[package]]
 name = "jsonschema-regex"
-version = "0.60.2"
+version = "0.61.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "107aeb6ff14b8deb5610096a8ce5c554ec89806b521147eaeb3cae05b07edb7a"
+checksum = "7e41151614b6c927e21982be8bef5a26741ae5a0ae6a781eedee2aa930a980e6"
 dependencies = [
  "regex-syntax",
 ]
 
 [[package]]
 name = "jsonschema-value"
-version = "0.60.2"
+version = "0.61.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e281d6b177bb4834f2ffd6f92aa0443cffe29c996b251c8d94eb6f456186feba"
+checksum = "1515b9a91134ef67d7bac95c2d76fbc7e383c4c55ee544204ceec8088f881fef"
 dependencies = [
  "ahash",
  "bytecount",
@@ -5523,7 +5582,6 @@ version = "0.1.0"
 dependencies = [
  "async-channel",
  "base64 0.23.1",
- "chrono",
  "clap",
  "dunce",
  "flate2",
@@ -5532,6 +5590,7 @@ dependencies = [
  "gpui-pre-reqwest",
  "hex",
  "image",
+ "jiff",
  "kg-domain",
  "kg-process",
  "kg-store",
@@ -5641,12 +5700,12 @@ name = "kg-ui"
 version = "0.1.0"
 dependencies = [
  "async-channel",
- "chrono",
  "dunce",
  "gpui-kit",
  "gpui-shell",
  "gpui-webview",
  "image",
+ "jiff",
  "kg-core",
  "kg-domain",
  "kg-plugins",
@@ -5839,9 +5898,9 @@ dependencies = [
 
 [[package]]
 name = "libsqlite3-sys"
-version = "0.39.1"
+version = "0.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14a5f01b87b92705d07b433c06f96cbc764637d81a0bffb5734ce17cf0f9a2b3"
+checksum = "b06e69070b7e12262b0cd90832f0a7396f142a2b330181255562decf9f0c6215"
 dependencies = [
  "cc",
  "pkg-config",
@@ -8509,9 +8568,9 @@ dependencies = [
 
 [[package]]
 name = "referencing"
-version = "0.60.2"
+version = "0.61.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f42818036d3b37cda6bd4c494543158a36e431cb717015ef7c93acc6ba214d3b"
+checksum = "a028057ef852c58a42d75e09da87b5e733f4030f4c7411728955e4f87203a577"
 dependencies = [
  "ahash",
  "fluent-uri 0.4.1",
@@ -8676,9 +8735,9 @@ dependencies = [
 
 [[package]]
 name = "rpassword"
-version = "7.5.4"
+version = "7.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2da316a15f47e3d053de9cb2c439650bd8fa4aaeb9365f2e5f27f492ff73c196"
+checksum = "1fa2c5d9304b618df61ff17f3d3485c6e1854a3d94902a49abbb8d43dfbe0464"
 dependencies = [
  "libc",
  "rtoolbox",
@@ -8725,9 +8784,9 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.41.1"
+version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da9bba6f3506135e120a6586df05be18b48d18896600646a4bec8f993d91a594"
+checksum = "a4edff0039f148731aee2fd80f76dbfeb12d204ab3d1c544838d34e02151049b"
 dependencies = [
  "bitflags 2.13.2",
  "fallible-iterator",
@@ -9706,9 +9765,9 @@ checksum = "3a0219bd7d979d58245a4f41f695e1ac9f8befdffadd7f61f1bae9e39abc6620"
 
 [[package]]
 name = "sqlite-wasm-rs"
-version = "0.6.2"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36bd8e29bf08189a005b2df1df99823aa0861cabe9044e5f31ed54ca292ee618"
+checksum = "a6cd504cecbfe7eef649988840f9a6cb768d11085efec138f8e99f160632d867"
 dependencies = [
  "cc",
  "rsqlite-vfs",
@@ -11786,7 +11845,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

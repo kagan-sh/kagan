@@ -2,8 +2,9 @@ use std::ffi::{OsStr, OsString};
 use std::io::BufRead as _;
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, NaiveDate, Utc};
 use gpui_kit::{AppContext as _, AsyncApp, WeakEntity};
+use jiff::civil::Date;
+use jiff::tz::TimeZone;
 use kg_domain::{Conversation, Timestamp};
 use serde::Deserialize;
 
@@ -414,7 +415,7 @@ fn claude_kept(config: &Path, conversation: Conversation) -> bool {
 // Codex writes `sessions/<year>/<month>/<day>/rollout-<local time>-<id>.jsonl`.
 fn codex_kept(sessions: &Path, conversation: Conversation) -> bool {
     let end = format!("-{conversation}.jsonl");
-    days(sessions, NaiveDate::MIN)
+    days(sessions, Date::MIN)
         .flat_map(|day| entries(&day))
         .any(|file| {
             file.file_name()
@@ -435,10 +436,10 @@ pub(super) fn codex_matches(sessions: &Path, folder: &Path, since: Timestamp) ->
     let Some(folder) = dunce::canonicalize(folder).ok() else {
         return Vec::new();
     };
-    let Some(since) = DateTime::<Utc>::from_timestamp_millis(since.0) else {
+    let Ok(since) = jiff::Timestamp::from_millisecond(since.0) else {
         return Vec::new();
     };
-    let Some(first) = since.date_naive().pred_opt() else {
+    let Ok(first) = since.to_zoned_datetime(TimeZone::UTC).date().yesterday() else {
         return Vec::new();
     };
     days(sessions, first)
@@ -452,30 +453,30 @@ pub(super) fn codex_matches(sessions: &Path, folder: &Path, since: Timestamp) ->
         .collect()
 }
 
-fn codex_meta(file: &Path) -> Option<(CodexMeta, DateTime<Utc>)> {
+fn codex_meta(file: &Path) -> Option<(CodexMeta, jiff::Timestamp)> {
     let mut line = String::new();
     std::io::BufReader::new(std::fs::File::open(file).ok()?)
         .read_line(&mut line)
         .ok()?;
     let line: CodexLine = serde_json::from_str(&line).ok()?;
-    let started = DateTime::parse_from_rfc3339(&line.payload.timestamp).ok()?;
-    (line.kind == "session_meta").then(|| (line.payload, started.to_utc()))
+    let started = line.payload.timestamp.parse().ok()?;
+    (line.kind == "session_meta").then_some((line.payload, started))
 }
 
-fn days(sessions: &Path, first: NaiveDate) -> impl Iterator<Item = PathBuf> + use<> {
+fn days(sessions: &Path, first: Date) -> impl Iterator<Item = PathBuf> + use<> {
     entries(sessions)
         .flat_map(|year| entries(&year))
         .flat_map(|month| entries(&month))
         .filter(move |day| date(day).is_some_and(|date| date >= first))
 }
 
-fn date(day: &Path) -> Option<NaiveDate> {
+fn date(day: &Path) -> Option<Date> {
     let mut parts = day
         .iter()
         .rev()
-        .map(|part| part.to_str()?.parse::<u32>().ok());
+        .map(|part| part.to_str()?.parse::<i16>().ok());
     let (day, month, year) = (parts.next()??, parts.next()??, parts.next()??);
-    NaiveDate::from_ymd_opt(i32::try_from(year).ok()?, month, day)
+    Date::new(year, i8::try_from(month).ok()?, i8::try_from(day).ok()?).ok()
 }
 
 // Cursor Agent 2026.10.22 writes `chats/<hash>/<id>/` under `CURSOR_CONFIG_DIR`,
