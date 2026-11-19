@@ -339,6 +339,8 @@ jobs:
           status=0
           cargo test -p gpui-fast-windows --locked --lib -- --exact platform::tests::window_procedure_returns_after_a_panic >"$log" 2>&1 || status=$?
           cat "$log"
+          readobj=$(command -v llvm-readobj || echo "/c/Program Files/LLVM/bin/llvm-readobj.exe")
+          for exe in target/debug/deps/gpui_windows-*.exe; do "$readobj" --coff-imports --coff-resources "$exe" | grep -E "Name: |Symbol: |Type: MANIFEST" || true; done
           grep -q "1 passed; 0 failed" "$log" || exit 1
           exit "$status"
       - name: Browser page
