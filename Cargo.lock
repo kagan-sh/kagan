@@ -3557,7 +3557,7 @@ dependencies = [
 [[package]]
 name = "gpui-fast"
 version = "0.1.17"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=73941f88183ff7cbf2ddb3e40ed5483af495a3f0#73941f88183ff7cbf2ddb3e40ed5483af495a3f0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -3628,7 +3628,7 @@ dependencies = [
 [[package]]
 name = "gpui-fast-apple"
 version = "0.1.17"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=73941f88183ff7cbf2ddb3e40ed5483af495a3f0#73941f88183ff7cbf2ddb3e40ed5483af495a3f0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "anyhow",
  "async-task",
@@ -3667,7 +3667,7 @@ dependencies = [
 [[package]]
 name = "gpui-fast-linux"
 version = "0.1.17"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=73941f88183ff7cbf2ddb3e40ed5483af495a3f0#73941f88183ff7cbf2ddb3e40ed5483af495a3f0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -3711,7 +3711,7 @@ dependencies = [
 [[package]]
 name = "gpui-fast-macos"
 version = "0.1.17"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=73941f88183ff7cbf2ddb3e40ed5483af495a3f0#73941f88183ff7cbf2ddb3e40ed5483af495a3f0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -3752,7 +3752,7 @@ dependencies = [
 [[package]]
 name = "gpui-fast-macros"
 version = "0.1.17"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=73941f88183ff7cbf2ddb3e40ed5483af495a3f0#73941f88183ff7cbf2ddb3e40ed5483af495a3f0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3763,7 +3763,7 @@ dependencies = [
 [[package]]
 name = "gpui-fast-platform"
 version = "0.1.17"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=73941f88183ff7cbf2ddb3e40ed5483af495a3f0#73941f88183ff7cbf2ddb3e40ed5483af495a3f0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -3779,7 +3779,7 @@ dependencies = [
 [[package]]
 name = "gpui-fast-web"
 version = "0.1.17"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=73941f88183ff7cbf2ddb3e40ed5483af495a3f0#73941f88183ff7cbf2ddb3e40ed5483af495a3f0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -3808,7 +3808,7 @@ dependencies = [
 [[package]]
 name = "gpui-fast-wgpu"
 version = "0.1.17"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=73941f88183ff7cbf2ddb3e40ed5483af495a3f0#73941f88183ff7cbf2ddb3e40ed5483af495a3f0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -3835,12 +3835,13 @@ dependencies = [
 [[package]]
 name = "gpui-fast-windows"
 version = "0.1.17"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=73941f88183ff7cbf2ddb3e40ed5483af495a3f0#73941f88183ff7cbf2ddb3e40ed5483af495a3f0"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e9b0557d6173aed3e1b480b870cfce3164e3572a#e9b0557d6173aed3e1b480b870cfce3164e3572a"
 dependencies = [
  "accesskit",
  "accesskit_windows",
  "anyhow",
  "dunce",
+ "embed-resource",
  "etagere",
  "futures",
  "gpui-fast",
