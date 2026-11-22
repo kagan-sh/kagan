@@ -21,7 +21,7 @@ kg-ui = { path = "crates/ui" }
 anyhow = "=1.0.104"
 proptest = "=1.12.0"
 async-channel = "=2.5.0"
-clap = { version = "=4.6.7", features = ["derive", "env"] }
+clap = { version = "=4.6.8", features = ["derive", "env"] }
 dunce = "=1.0.5"
 futures = "=0.3.34"
 # SQL is left out: tree-sitter-sequel requires cc 1.2, and this build already
@@ -65,7 +65,7 @@ gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "24732b63e0d69c
 gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "24732b63e0d69c45c595e071527de63ff8ab9b35", default-features = false, features = ["quickjs", "components"] }
 gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "24732b63e0d69c45c595e071527de63ff8ab9b35", default-features = false, features = ["gpui-fast"] }
 hex = "=0.4.3"
-interprocess = "=2.4.8"
+interprocess = "=2.4.9"
 keyring-core = "=1.0.1"
 libc = "=0.2.191"
 objc2 = "=0.6.5"
@@ -76,7 +76,7 @@ semver = "=1.0.28"
 sha2 = "=0.11.1"
 tempfile = "=3.27.0"
 url = "=2.5.8"
-uuid = { version = "=1.29.2", features = ["v4"] }
+uuid = { version = "=1.29.3", features = ["v4"] }
 rusqlite = { version = "=0.42.0", features = ["bundled", "fallible_uint"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
