@@ -106,6 +106,7 @@ fn a_thread_switch_closes_the_preview(cx: &mut TestAppContext) {
     let started = cx.update(|cx| {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Run(kg_domain::Run {
+                link: kg_domain::Link::Terminal,
                 project_id: kg_domain::ProjectId("prj_kagan".into()),
                 program: "/bin/sh".into(),
                 title: None,

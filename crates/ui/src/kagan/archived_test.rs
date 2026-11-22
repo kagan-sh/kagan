@@ -4,6 +4,7 @@ use super::in_archived_list;
 
 fn thread(visibility: Visibility, archived: bool) -> Thread {
     Thread {
+        link: kg_domain::Link::Terminal,
         id: ThreadId("thr_1".into()),
         project_id: ProjectId("prj_1".into()),
         environment_id: None,

@@ -42,6 +42,21 @@ pub const AGENT_MARKS: &[(&str, &str)] = &[
     ("kimi", "agents/kimi.svg"),
 ];
 
+/// The subcommand each agent answers the agent protocol on. Slice 1 knows one agent.
+pub const ACP_COMMANDS: &[(&str, &str)] = &[("opencode", "acp")];
+
+/// The ACP subcommand of the agent `line` runs. A path or a file extension on the command is
+/// dropped; the arguments are never read.
+#[must_use]
+pub fn acp_command(line: &str) -> Option<&'static str> {
+    let (command, _) = split_program(line).ok()?;
+    let stem = Path::new(&command).file_stem()?.to_str()?;
+    ACP_COMMANDS
+        .iter()
+        .find(|(known, _)| *known == stem)
+        .map(|(_, acp)| *acp)
+}
+
 /// The [`AGENT_MARKS`] entry, command name and mark path, of the agent `line` runs. A path or a
 /// file extension on the command is dropped; the arguments are never read.
 #[must_use]

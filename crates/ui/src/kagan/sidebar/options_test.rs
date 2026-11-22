@@ -6,6 +6,7 @@ use super::options::{ListOptions, ThreadOrder, sort_threads};
 
 fn thread(id: &str, created: i64, attention: i64, pinned: bool, read: bool) -> kg_domain::Thread {
     kg_domain::Thread {
+        link: kg_domain::Link::Terminal,
         id: ThreadId(id.into()),
         project_id: ProjectId("proj".into()),
         environment_id: None,

@@ -374,6 +374,7 @@ async fn a_thread_without_a_title_is_named_by_its_program_not_its_path(cx: &mut 
     let line = format!("{} --fast", path.display());
     let OpResult::Thread(started) = op(
         Op::Thread(kg_domain::ThreadOp::Run(kg_domain::Run {
+            link: kg_domain::Link::Terminal,
             project_id: fixture.project.clone(),
             program: line,
             title: None,
@@ -466,6 +467,7 @@ async fn a_thread_from_a_saved_program_takes_its_saved_name_and_stays_renamable(
     .unwrap();
     let OpResult::Thread(started) = op(
         Op::Thread(kg_domain::ThreadOp::Run(kg_domain::Run {
+            link: kg_domain::Link::Terminal,
             project_id: fixture.project.clone(),
             program: line,
             title: None,
@@ -497,6 +499,7 @@ async fn a_thread_started_with_flags_adds_no_card(cx: &mut TestAppContext) {
     let line = format!("{} --model x", fixture.dir.path().join("claude").display());
     op(
         Op::Thread(kg_domain::ThreadOp::Run(kg_domain::Run {
+            link: kg_domain::Link::Terminal,
             project_id: fixture.project.clone(),
             program: line.clone(),
             title: None,

@@ -222,6 +222,7 @@ struct PluginSpawn {
 fn spawn_thread(args: &HostArguments, plugin: &PluginId) -> Result<Op, HostError> {
     let spawn: PluginSpawn = argument(args, 0)?;
     Ok(Op::Thread(ThreadOp::Run(Run {
+        link: kg_domain::Link::Terminal,
         project_id: spawn.project_id,
         program: spawn.program,
         title: spawn.title,
@@ -338,6 +339,7 @@ impl<'a> From<&'a kg_domain::Thread> for PluginThread<'a> {
             title,
             title_locked: _,
             provider,
+            link: _,
             status,
             visibility,
             parent_thread_id,

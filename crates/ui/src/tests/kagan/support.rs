@@ -160,6 +160,7 @@ pub(crate) fn run_shell(cx: &mut TestAppContext) -> ThreadId {
 
 pub(in crate::tests) fn run_program(cx: &mut TestAppContext, program: &str) -> ThreadId {
     let run = Run {
+        link: kg_domain::Link::Terminal,
         project_id: ProjectId("prj_kagan".into()),
         program: program.into(),
         title: None,
@@ -181,6 +182,7 @@ pub(in crate::tests) fn run_program(cx: &mut TestAppContext, program: &str) -> T
 /// A thread run under `parent`, shown in the sidebar under it.
 pub(in crate::tests) fn run_child(cx: &mut TestAppContext, parent: &ThreadId) -> ThreadId {
     let run = Run {
+        link: kg_domain::Link::Terminal,
         project_id: ProjectId("prj_kagan".into()),
         program: shell().into(),
         title: None,

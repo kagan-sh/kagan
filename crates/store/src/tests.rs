@@ -35,6 +35,7 @@ fn store() -> Store {
 
 fn thread(id: &str, created_at: i64) -> Thread {
     Thread {
+        link: kg_domain::Link::Terminal,
         id: ThreadId(id.into()),
         project_id: ProjectId("prj_1".into()),
         environment_id: None,

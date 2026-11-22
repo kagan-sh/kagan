@@ -48,6 +48,7 @@ const TYPES: [&str; 26] = [
 #[test]
 fn run_op() {
     let op = Op::Thread(ThreadOp::Run(crate::Run {
+        link: crate::Link::Terminal,
         project_id: crate::ProjectId("proj".into()),
         program: "claude".into(),
         title: None,
@@ -169,7 +170,7 @@ fn a_branch_slug_comes_from_the_title() {
 fn thread_unread_when_attention_is_newer_than_read() {
     let wire = json!({
         "id": "thr_1", "projectId": "prj_1", "environmentId": null, "title": "t", "titleLocked": false, "quiet": false, "notify": "default",
-        "provider": "claude-code", "status": "idle", "visibility": "visible",
+        "provider": "claude-code", "link": "terminal", "status": "idle", "visibility": "visible",
         "parentThreadId": null, "lifecycleOwnerThreadId": null, "sectionId": null,
         "pinned": false, "lastReadAt": 5, "latestAttentionAt": 5, "mark": "none", "archivedAt": null,
         "createdAt": 1, "updatedAt": 5,
@@ -1091,6 +1092,7 @@ fn sample(
     archived_at: Option<Timestamp>,
 ) -> Thread {
     Thread {
+        link: crate::Link::Terminal,
         id: ThreadId(id.into()),
         project_id: crate::ProjectId("proj".into()),
         environment_id: None,
@@ -1124,6 +1126,7 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
         Err("thread id must be a plain identifier".into())
     );
     let run = Op::Thread(ThreadOp::Run(crate::Run {
+        link: crate::Link::Terminal,
         project_id: crate::ProjectId("project".into()),
         program: "sh".into(),
         title: None,
@@ -1138,6 +1141,81 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
         metadata: None,
     }));
     assert_eq!(crate::check(&run), Ok(()));
+}
+
+#[test]
+fn an_acp_run_needs_an_agent_kagan_knows() {
+    let acp = |program: &str| {
+        Op::Thread(ThreadOp::Run(crate::Run {
+            link: crate::Link::Acp,
+            project_id: crate::ProjectId("project".into()),
+            program: program.into(),
+            title: None,
+            environment: EnvironmentSpec::Worktree {
+                base_branch: None,
+                branch: None,
+            },
+            visibility: None,
+            parent_thread_id: None,
+            quiet: false,
+            lifecycle_owner_thread_id: None,
+            metadata: None,
+        }))
+    };
+    assert_eq!(crate::check(&acp("opencode")), Ok(()));
+    assert_eq!(crate::check(&acp("/opt/bin/opencode --model fast")), Ok(()));
+    assert_eq!(
+        crate::check(&acp("bash")),
+        Err("bash cannot be an ACP thread; kagan knows opencode".into())
+    );
+    assert_eq!(crate::acp_command("opencode"), Some("acp"));
+    assert_eq!(
+        crate::acp_command("/usr/local/bin/opencode --model x"),
+        Some("acp")
+    );
+    assert_eq!(crate::acp_command("claude"), None);
+    assert_eq!(crate::acp_command("'opencode"), None);
+}
+
+#[test]
+fn a_thread_and_a_run_carry_their_link_on_the_wire() {
+    let thread = crate::Thread {
+        link: crate::Link::Acp,
+        ..sample("thr_1", None, Visibility::Visible, None)
+    };
+    let wire = serde_json::to_value(&thread).unwrap();
+    assert_eq!(wire["link"], "acp");
+    assert_eq!(
+        serde_json::from_value::<crate::Thread>(wire).unwrap(),
+        thread
+    );
+    let run = crate::Run {
+        link: crate::Link::Acp,
+        project_id: crate::ProjectId("proj".into()),
+        program: "opencode".into(),
+        title: None,
+        environment: EnvironmentSpec::Personal,
+        visibility: None,
+        parent_thread_id: None,
+        quiet: false,
+        lifecycle_owner_thread_id: None,
+        metadata: None,
+    };
+    round_trip(
+        &run,
+        &json!({
+            "projectId": "proj",
+            "program": "opencode",
+            "link": "acp",
+            "title": null,
+            "environment": {"kind": "personal"},
+            "visibility": null,
+            "parentThreadId": null,
+            "quiet": false,
+            "lifecycleOwnerThreadId": null,
+            "metadata": null,
+        }),
+    );
 }
 
 #[test]

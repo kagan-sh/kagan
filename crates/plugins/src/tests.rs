@@ -179,6 +179,7 @@ fn open_kept(cx: &mut TestAppContext, data: &Path, keep: TempDir, plugins: &[Plu
     store.put_project(&project).unwrap();
     store
         .put_thread(&Thread {
+            link: kg_domain::Link::Terminal,
             id: ThreadId(THREAD.into()),
             project_id: project.id,
             environment_id: None,

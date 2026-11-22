@@ -207,6 +207,7 @@ async fn a_project_in_a_personal_folder_keeps_it_when_its_thread_is_deleted(
         .await;
     op(
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: ProjectId("linked".into()),
             program: program().into(),
             title: Some("linked".into()),

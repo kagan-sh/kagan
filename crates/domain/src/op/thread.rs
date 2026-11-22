@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    AskField, InteractionOption, PluginId, ProjectId, ThreadId, ThreadNotify, Timestamp, Visibility,
+    AskField, InteractionOption, Link, PluginId, ProjectId, ThreadId, ThreadNotify, Timestamp,
+    Visibility,
 };
 
 use super::EnvironmentSpec;
@@ -337,6 +338,9 @@ pub struct Run {
     /// The program to run, such as `claude`, `codex`, or a command the person types. Words split on spaces; single or double quotes keep spaces together
     #[arg(long)]
     pub program: String,
+    /// What runs the program: a terminal, or the agent's own ACP connection on its stdin and stdout
+    #[arg(long, value_enum, default_value = "terminal")]
+    pub link: Link,
     #[arg(long)]
     pub title: Option<String>,
     /// project-default, `project-on:checkout:<branch>`, `project-on:new:<base>`, personal, `worktree[:<base>[:<branch>]]`, or `reuse:<environment-id>`

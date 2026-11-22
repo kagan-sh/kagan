@@ -76,6 +76,16 @@ impl ThreadStatus {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
+pub enum Link {
+    /// A pty: the program draws its own screen.
+    #[default]
+    Terminal,
+    /// The agent protocol on the program's stdin and stdout; the center shows the transcript.
+    Acp,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
 pub enum Visibility {
     #[default]
     Visible,
@@ -174,6 +184,8 @@ pub struct Thread {
     #[serde(default)]
     pub title_locked: bool,
     pub provider: String,
+    /// What runs the provider: a terminal, or its own ACP connection. Fixed when the thread starts.
+    pub link: Link,
     pub status: ThreadStatus,
     pub visibility: Visibility,
     pub parent_thread_id: Option<ThreadId>,

@@ -451,6 +451,7 @@ fn an_archived_program_is_not_the_default(cx: &mut TestAppContext) {
     let data = data.path().to_path_buf();
     let bin = fixture_programs(cx, &data, &["codex", "gemini"]);
     let run = Run {
+        link: kg_domain::Link::Terminal,
         project_id: ProjectId("personal".into()),
         program: bin.join("gemini").display().to_string(),
         title: None,
@@ -925,6 +926,7 @@ fn a_selected_program_below_the_cap_is_in_view_on_every_open(cx: &mut TestAppCon
     let bin = fixture_programs(cx, data.path(), &ROW_NAMES);
     let shell = bin.join("fixture-shell").display().to_string();
     let run = Run {
+        link: kg_domain::Link::Terminal,
         project_id: ProjectId("personal".into()),
         program: shell.clone(),
         title: None,

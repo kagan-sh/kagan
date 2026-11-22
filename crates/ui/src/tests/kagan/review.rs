@@ -248,6 +248,7 @@ fn switching_scope_selects_a_file_in_the_new_list(cx: &mut TestAppContext) {
     );
     std::fs::write(repo.join("other.txt"), "only uncommitted\n").unwrap();
     let run = Run {
+        link: kg_domain::Link::Terminal,
         project_id: project.id,
         program: shell().into(),
         title: None,
@@ -361,6 +362,7 @@ fn a_delayed_list_for_the_old_scope_does_not_replace_the_branch_list(cx: &mut Te
         ],
     );
     let run = Run {
+        link: kg_domain::Link::Terminal,
         project_id: project.id,
         program: shell().into(),
         title: None,
@@ -445,6 +447,7 @@ fn open_review_after_a_scope_switch_opens_a_listed_file(cx: &mut TestAppContext)
     );
     std::fs::write(repo.join("other.txt"), "only uncommitted\n").unwrap();
     let run = Run {
+        link: kg_domain::Link::Terminal,
         project_id: project.id,
         program: shell().into(),
         title: None,

@@ -450,6 +450,15 @@ Options:
       --program <PROGRAM>
           The program to run, such as `claude`, `codex`, or a command the person types. Words split on spaces; single or double quotes keep spaces together
 
+      --link <LINK>
+          What runs the program: a terminal, or the agent's own ACP connection on its stdin and stdout
+
+          Possible values:
+          - terminal: A pty: the program draws its own screen
+          - acp:      The agent protocol on the program's stdin and stdout; the center shows the transcript
+          
+          [default: terminal]
+
       --title <TITLE>
           
 
@@ -477,7 +486,7 @@ Options:
           The metadata as JSON
 
   -h, --help
-          Print help
+          Print help (see a summary with '-h')
 ```
 
 ## `kg thread stop`

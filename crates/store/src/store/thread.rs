@@ -11,7 +11,7 @@ use super::{found, not_found};
 use crate::column::{Json, Text};
 use crate::{Error, Result};
 
-const THREAD_COLUMNS: &str = "id, project_id, environment_id, title, provider, status, \
+const THREAD_COLUMNS: &str = "id, project_id, environment_id, title, provider, link, status, \
     visibility, parent_thread_id, lifecycle_owner_thread_id, section_id, pinned, last_read_at, \
     latest_attention_at, archived_at, created_at, updated_at, title_locked, done, quiet, notify";
 
@@ -430,6 +430,7 @@ fn thread_row(row: &Row) -> rusqlite::Result<Thread> {
         environment_id: row.get::<_, Text<_>>("environment_id")?.0,
         title: row.get("title")?,
         provider: row.get("provider")?,
+        link: row.get::<_, Text<_>>("link")?.0,
         status: row.get::<_, Text<_>>("status")?.0,
         visibility: row.get::<_, Text<_>>("visibility")?.0,
         parent_thread_id: row.get::<_, Text<_>>("parent_thread_id")?.0,
@@ -461,6 +462,7 @@ fn put_thread(conn: &Connection, thread: &Thread) -> Result<()> {
             ":environment_id": Text(&thread.environment_id),
             ":title": thread.title,
             ":provider": thread.provider,
+            ":link": Text(thread.link),
             ":status": Text(thread.status),
             ":visibility": Text(thread.visibility),
             ":parent_thread_id": Text(&thread.parent_thread_id),

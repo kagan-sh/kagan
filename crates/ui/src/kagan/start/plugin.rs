@@ -49,6 +49,7 @@ impl Kagan {
             let task = cx.update(|cx| {
                 Workspace::dispatch(
                     Op::Thread(ThreadOp::Run(Run {
+                        link: kg_domain::Link::Terminal,
                         project_id: ProjectId::personal(),
                         program,
                         title: Some("New plugin".into()),

@@ -203,6 +203,7 @@ async fn fire(
     cx: &mut AsyncApp,
 ) -> Option<()> {
     let run = Run {
+        link: kg_domain::Link::Terminal,
         project_id: automation.project_id.clone(),
         program: automation.program.clone(),
         title: Some(automation.name.clone()),

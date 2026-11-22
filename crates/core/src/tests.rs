@@ -128,6 +128,7 @@ impl Fixture {
 
     fn run(&self, program: &str) -> Op {
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: self.project.clone(),
             program: program.into(),
             title: None,
@@ -374,6 +375,7 @@ async fn diff_paths(id: &ThreadId, scope: DiffScope, cx: &mut TestAppContext) ->
 
 fn personal_run(fixture: &Fixture, title: &str, environment: EnvironmentSpec) -> Op {
     Op::Thread(ThreadOp::Run(Run {
+        link: kg_domain::Link::Terminal,
         project_id: fixture.project.clone(),
         program: program().into(),
         title: Some(title.into()),
@@ -1525,6 +1527,7 @@ fn fake_program(dir: &std::path::Path, name: &str, body: &str) {
 
 fn idle_thread(id: &str, project: ProjectId) -> Thread {
     Thread {
+        link: kg_domain::Link::Terminal,
         id: ThreadId(id.into()),
         project_id: project,
         environment_id: None,
@@ -1680,6 +1683,7 @@ fn assert_diagnostics_keeps_secrets_out(text: &str) {
 #[cfg(unix)]
 fn worktree_run(fixture: &Fixture, title: Option<&str>, base: Option<&str>) -> Op {
     Op::Thread(ThreadOp::Run(Run {
+        link: kg_domain::Link::Terminal,
         project_id: fixture.project.clone(),
         program: program().into(),
         title: title.map(str::to_owned),

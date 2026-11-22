@@ -259,6 +259,7 @@ fn seed_thread(dir: &std::path::Path) {
     store.put_project(&project).unwrap();
     store
         .put_thread(&Thread {
+            link: kg_domain::Link::Terminal,
             id: ThreadId("thr_swap".into()),
             project_id: project.id,
             environment_id: None,

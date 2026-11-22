@@ -111,6 +111,7 @@ fn archive_skips_an_owned_thread_and_undo_restores_it(cx: &mut TestAppContext) {
 
 pub(in crate::tests) fn run_owned(cx: &mut TestAppContext, owner: &ThreadId) -> ThreadId {
     let run = Run {
+        link: kg_domain::Link::Terminal,
         project_id: ProjectId("prj_kagan".into()),
         program: shell().into(),
         title: None,

@@ -340,6 +340,7 @@ fn created_and_deleted_events_carry_the_project(cx: &mut TestAppContext) {
     let OpResult::Thread(forked) = run(
         cx,
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: ProjectId("prj_test".into()),
             program: if cfg!(windows) { "cmd.exe" } else { "/bin/sh" }.into(),
             title: None,

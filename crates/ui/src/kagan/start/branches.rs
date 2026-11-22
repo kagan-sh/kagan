@@ -326,6 +326,7 @@ impl Kagan {
             return;
         };
         let run = ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id,
             program,
             title: None,

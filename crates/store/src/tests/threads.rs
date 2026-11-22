@@ -600,3 +600,21 @@ fn a_thread_keeps_its_own_notification_level() {
             .is_err()
     );
 }
+
+#[test]
+fn a_thread_keeps_the_link_it_was_put_with() {
+    let store = store();
+    let mut record = thread("thr_1", 1);
+    record.link = kg_domain::Link::Acp;
+    store.put_thread(&record).unwrap();
+    assert_eq!(
+        store.thread(&id("thr_1")).unwrap().unwrap().link,
+        kg_domain::Link::Acp
+    );
+    record.link = kg_domain::Link::Terminal;
+    store.put_thread(&record).unwrap();
+    assert_eq!(
+        store.thread(&id("thr_1")).unwrap().unwrap().link,
+        kg_domain::Link::Terminal
+    );
+}

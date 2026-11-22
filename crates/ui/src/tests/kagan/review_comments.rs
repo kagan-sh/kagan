@@ -552,6 +552,7 @@ fn sidebar_nests_and_collapses_child_threads(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     let parent = run_shell(cx);
     let run = Run {
+        link: kg_domain::Link::Terminal,
         project_id: ProjectId("prj_kagan".into()),
         program: shell().into(),
         title: None,

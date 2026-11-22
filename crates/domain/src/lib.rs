@@ -49,13 +49,13 @@ pub use op::{
 };
 pub use preview::{PreviewCut, PreviewFile, PreviewImageFormat, PreviewKind, PreviewOp};
 pub use program::{
-    AGENT_MARKS, KNOWN_PROGRAMS, LISTED_WHEN_MISSING, PROGRAM_INSTALL_FOLDERS, Program,
-    ProgramList, ProgramSource, SAVED_NAME_MAX, SavedProgram, SplitProgramError, agent_mark,
-    saved_name, split_program,
+    ACP_COMMANDS, AGENT_MARKS, KNOWN_PROGRAMS, LISTED_WHEN_MISSING, PROGRAM_INSTALL_FOLDERS,
+    Program, ProgramList, ProgramSource, SAVED_NAME_MAX, SavedProgram, SplitProgramError,
+    acp_command, agent_mark, saved_name, split_program,
 };
 pub use record::{
     ASK_TEXT_MAX_CHARS, AgentTool, AskField, Environment, EnvironmentProvider, EnvironmentStatus,
-    Found, GIT_SOURCE, IndexEntry, InteractionOption, Listing, LogCounts, OptionRole,
+    Found, GIT_SOURCE, IndexEntry, InteractionOption, Link, Listing, LogCounts, OptionRole,
     PendingInteraction, Plugin, PluginCommand, PluginLog, Project, ProjectKind, SavedPrompt,
     Section, Sidebar, Snippet, Thread, ThreadMark, ThreadStatus, Visibility, archive_span,
     is_git_source, newest_first, order_sidebar_projects, owned_thread_ids,

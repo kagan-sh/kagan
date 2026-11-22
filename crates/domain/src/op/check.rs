@@ -10,7 +10,7 @@ use super::{
     SEARCH_LIMIT, SEARCH_TEXT_MAX, SavedPromptOp, SectionOp, SurfaceOp, TERMINAL_COLS,
     TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThreadOp, TurnOp, WindowOp,
 };
-use crate::{saved_name, split_program, unsafe_char};
+use crate::{Link, acp_command, saved_name, split_program, unsafe_char};
 
 /// Rejects an op a client must not send.
 ///
@@ -33,6 +33,7 @@ pub fn check(op: &Op) -> Result<(), String> {
             .and_then(|()| terminal_size(op))
             .and_then(|()| search(op))
             .and_then(|()| match op {
+                ThreadOp::Run(run) if run.link == Link::Acp => acp_link(&run.program),
                 ThreadOp::Paste { text, file, .. } => carried_text(text.as_ref(), file.as_ref()),
                 ThreadOp::Input { text, .. } if text.len() > TEXT_MAX => Err(over_cap()),
                 ThreadOp::Report { bytes, .. } if bytes.len() > TEXT_MAX => Err(over_cap()),
@@ -178,6 +179,17 @@ fn search(op: &ThreadOp) -> Result<(), String> {
             Err(format!("--limit must be from 1 to {SEARCH_LIMIT}"))
         }
         _ => Ok(()),
+    }
+}
+
+// An ACP thread spawns the agent's ACP subcommand, so the link needs one kagan knows.
+fn acp_link(program: &str) -> Result<(), String> {
+    match acp_command(program) {
+        Some(_) => Ok(()),
+        None => Err(format!(
+            "{} cannot be an ACP thread; kagan knows opencode",
+            split_program(program).map_or_else(|_| program.to_owned(), |(name, _)| name)
+        )),
     }
 }
 

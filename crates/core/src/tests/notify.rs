@@ -39,6 +39,7 @@ async fn titled_child(
     cx: &mut TestAppContext,
 ) -> (ThreadId, Reap) {
     let request = Op::Thread(ThreadOp::Run(Run {
+        link: kg_domain::Link::Terminal,
         project_id: fixture.project.clone(),
         program: program.into(),
         title: title.map(str::to_owned),
