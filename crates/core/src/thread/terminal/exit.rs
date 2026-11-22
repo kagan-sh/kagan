@@ -104,14 +104,17 @@ pub(crate) async fn exited(
 }
 
 fn exit_end(exit: Exit) -> End {
-    let (outcome, error, exited, status) = match exit {
+    let (outcome, error, events, status) = match exit {
         Exit::Code(0) => (
             TurnOutcome::Completed,
             None,
-            EventKind::Exited {
-                code: Some(0),
-                signal: None,
-            },
+            vec![
+                EventKind::Exited {
+                    code: Some(0),
+                    signal: None,
+                },
+                EventKind::Idle,
+            ],
             ThreadStatus::Idle,
         ),
         Exit::Code(code) => {
@@ -119,10 +122,13 @@ fn exit_end(exit: Exit) -> End {
             (
                 TurnOutcome::Failed,
                 Some(error.clone()),
-                EventKind::Exited {
-                    code: Some(code),
-                    signal: None,
-                },
+                vec![
+                    EventKind::Exited {
+                        code: Some(code),
+                        signal: None,
+                    },
+                    EventKind::Failed { error: Some(error) },
+                ],
                 ThreadStatus::Error,
             )
         }
@@ -131,18 +137,17 @@ fn exit_end(exit: Exit) -> End {
             (
                 TurnOutcome::Failed,
                 Some(error.clone()),
-                EventKind::Exited {
-                    code: None,
-                    signal: Some(signal),
-                },
+                vec![
+                    EventKind::Exited {
+                        code: None,
+                        signal: Some(signal),
+                    },
+                    EventKind::Failed { error: Some(error) },
+                ],
                 ThreadStatus::Error,
             )
         }
     };
-    let mut events = vec![exited, EventKind::Idle];
-    if let Some(error) = error.clone() {
-        events.push(EventKind::Failed { error: Some(error) });
-    }
     End {
         turn: Some((outcome, error)),
         events,

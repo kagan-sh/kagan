@@ -92,7 +92,12 @@ pub(crate) async fn hook(
         Some(Change::Opened) => {
             Workspace::events(this, id, vec![EventKind::TurnStarted], cx).await?;
         }
-        Some(Change::Closed) => waiting(this, id, cx).await?,
+        Some(Change::Closed) => {
+            let turn = this
+                .update(cx, |workspace, _| ended_turn(workspace, &id))
+                .map_err(closed)?;
+            waiting(this, id, turn, cx).await?;
+        }
         None => {}
     }
     Ok(OpResult::Done)
@@ -153,28 +158,30 @@ pub(crate) fn busy(title: &str) -> bool {
         .is_some_and(|first| matches!(first, '\u{2800}'..='\u{28FF}' | '\u{25D0}'..='\u{25D3}'))
 }
 
+/// The turn an ended program leaves behind. Quitting leaves the turn to the quit path, which
+/// records the stop itself.
+pub(super) fn ended_turn(workspace: &Workspace, id: &ThreadId) -> Option<TurnOutcome> {
+    Some(match workspace.runs.get(id).and_then(|run| run.stopping) {
+        Some(StopReason::Quit) => return None,
+        Some(StopReason::Stop) => TurnOutcome::Interrupted,
+        None => TurnOutcome::Completed,
+    })
+}
+
 pub(super) async fn waiting(
     this: &WeakEntity<Workspace>,
     id: ThreadId,
+    turn: Option<TurnOutcome>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    let reason = this
-        .update(cx, |workspace, _| {
-            workspace.runs.get(&id).and_then(|run| run.stopping)
-        })
-        .map_err(closed)?;
     let thread = crate::thread::thread(this, &id, cx)?;
     done(this, &thread, cx).await?;
     let mut kinds = vec![EventKind::Waiting];
-    if reason != Some(StopReason::Quit) {
+    if let Some(outcome) = turn {
         kinds.insert(
             0,
             EventKind::TurnEnded {
-                outcome: if reason.is_some() {
-                    TurnOutcome::Interrupted
-                } else {
-                    TurnOutcome::Completed
-                },
+                outcome,
                 error: None,
             },
         );
