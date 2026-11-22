@@ -145,7 +145,7 @@ async fn claude(
         None => Last::None,
         Some(conversation) => {
             cx.background_spawn(async move {
-                if config.is_some_and(|config| claude_kept(&config, conversation)) {
+                if config.is_some_and(|config| claude_kept(&config, &conversation)) {
                     Last::Kept(conversation)
                 } else {
                     Last::Gone
@@ -177,11 +177,11 @@ async fn codex(
         .await?;
     let folder = folder.to_owned();
     let scan = folder.clone();
+    let kept = stored.clone();
     let found = cx
         .background_spawn(async move {
             let sessions = codex_home?.join("sessions");
-            stored
-                .filter(|conversation| codex_kept(&sessions, *conversation))
+            kept.filter(|conversation| codex_kept(&sessions, conversation))
                 .or_else(|| codex_started(&sessions, &scan, since?))
         })
         .await;
@@ -189,13 +189,14 @@ async fn codex(
         written::note_when_written(this, record, &folder, false, cx);
         return Ok((Vec::new(), Some(CODEX_FRESH)));
     };
-    if stored != Some(conversation) {
+    if stored.as_ref() != Some(&conversation) {
         let id = record.id.clone();
+        let save = conversation.clone();
         database
-            .call(move |store| store.set_conversation(&id, conversation))
+            .call(move |store| store.set_conversation(&id, &save))
             .await?;
     }
-    Ok((resume("resume", conversation), None))
+    Ok((resume("resume", &conversation), None))
 }
 
 async fn cursor(
@@ -217,7 +218,7 @@ async fn cursor(
         None => Last::None,
         Some(conversation) => {
             cx.background_spawn(async move {
-                if config.is_some_and(|root| cursor_kept(&root, conversation, &folder)) {
+                if config.is_some_and(|root| cursor_kept(&root, &conversation, &folder)) {
                     Last::Kept(conversation)
                 } else {
                     Last::Gone
@@ -237,17 +238,18 @@ async fn remember(
     start: Start,
 ) -> Result<(Vec<OsString>, Option<&'static str>)> {
     let notice = match last {
-        Last::Kept(conversation) => return Ok((resume("--resume", conversation), None)),
+        Last::Kept(conversation) => return Ok((resume("--resume", &conversation), None)),
         Last::None => NO_CONVERSATION,
         Last::Gone => LOST_CONVERSATION,
     };
     let conversation = Conversation::fresh();
     let id = thread.clone();
+    let stored = conversation.clone();
     database
-        .call(move |store| store.set_conversation(&id, conversation))
+        .call(move |store| store.set_conversation(&id, &stored))
         .await?;
     Ok((
-        resume(flag, conversation),
+        resume(flag, &conversation),
         (start == Start::Again).then_some(notice),
     ))
 }
@@ -262,15 +264,16 @@ async fn named(
     let database = crate::workspace::database(this, cx)?;
     let id = record.id.clone();
     let stored = database.call(move |store| store.conversation(&id)).await?;
-    let conversation = stored.unwrap_or_else(Conversation::fresh);
+    let conversation = stored.clone().unwrap_or_else(Conversation::fresh);
     if stored.is_none() {
         let id = record.id.clone();
+        let save = conversation.clone();
         database
-            .call(move |store| store.set_conversation(&id, conversation))
+            .call(move |store| store.set_conversation(&id, &save))
             .await?;
     }
     Ok((
-        resume(flag, conversation),
+        resume(flag, &conversation),
         (stored.is_none() && start == Start::Again).then_some(NO_CONVERSATION),
     ))
 }
@@ -295,11 +298,11 @@ async fn kimi(
         .await?;
     let folder = folder.to_owned();
     let scan = folder.clone();
+    let kept = stored.clone();
     let found = cx
         .background_spawn(async move {
             let root = root?;
-            stored
-                .filter(|conversation| kimi_kept(&root, *conversation))
+            kept.filter(|conversation| kimi_kept(&root, conversation))
                 .or_else(|| kimi_started(&root, &scan, since?))
         })
         .await;
@@ -312,20 +315,21 @@ async fn kimi(
         written::note_when_written(this, record, &folder, true, cx);
         return Ok((Vec::new(), Some(notice)));
     };
-    if stored != Some(conversation) {
+    if stored.as_ref() != Some(&conversation) {
         let id = record.id.clone();
+        let save = conversation.clone();
         database
-            .call(move |store| store.set_conversation(&id, conversation))
+            .call(move |store| store.set_conversation(&id, &save))
             .await?;
     }
-    Ok((kimi_resume(conversation), None))
+    Ok((kimi_resume(&conversation), None))
 }
 
-fn resume(word: &str, conversation: Conversation) -> Vec<OsString> {
+fn resume(word: &str, conversation: &Conversation) -> Vec<OsString> {
     vec![OsString::from(word), conversation.to_string().into()]
 }
 
-fn kimi_resume(conversation: Conversation) -> Vec<OsString> {
+fn kimi_resume(conversation: &Conversation) -> Vec<OsString> {
     vec![
         OsString::from("--session"),
         format!("session_{conversation}").into(),
@@ -362,15 +366,17 @@ impl Workspace {
 // Kimi Code writes `sessions/<workspace>/session_<uuid>/state.json`. `--session` resumes that id
 // and does not create one, so the id has to be read from the file. The layout is what Kimi Code
 // 2.4 writes, and what herdr resumes with `kimi --session <id>`.
-fn kimi_kept(root: &Path, conversation: Conversation) -> bool {
+fn kimi_kept(root: &Path, conversation: &Conversation) -> bool {
     let name = format!("session_{conversation}");
     entries(&root.join("sessions"))
         .any(|workspace| workspace.join(&name).join("state.json").is_file())
 }
 
 fn kimi_started(root: &Path, folder: &Path, since: kg_domain::Timestamp) -> Option<Conversation> {
-    let found = kimi_matches(root, folder, since);
-    (found.len() == 1).then(|| found[0])
+    match kimi_matches(root, folder, since).as_slice() {
+        [only] => Some(only.clone()),
+        _ => None,
+    }
 }
 
 pub(super) fn kimi_matches(
@@ -407,13 +413,13 @@ fn kimi_state(file: &Path) -> Option<(Conversation, PathBuf, i64)> {
 // Claude Code writes a conversation to `projects/<folder>/<id>.jsonl` once something is said, and
 // `--resume` with an id it has not written fails. The folder name is Claude's own encoding of the
 // working folder, so every folder is searched for the id.
-fn claude_kept(config: &Path, conversation: Conversation) -> bool {
+fn claude_kept(config: &Path, conversation: &Conversation) -> bool {
     let name = format!("{conversation}.jsonl");
     entries(&config.join("projects")).any(|folder| folder.join(&name).is_file())
 }
 
 // Codex writes `sessions/<year>/<month>/<day>/rollout-<local time>-<id>.jsonl`.
-fn codex_kept(sessions: &Path, conversation: Conversation) -> bool {
+fn codex_kept(sessions: &Path, conversation: &Conversation) -> bool {
     let end = format!("-{conversation}.jsonl");
     days(sessions, Date::MIN)
         .flat_map(|day| entries(&day))
@@ -428,8 +434,10 @@ fn codex_kept(sessions: &Path, conversation: Conversation) -> bool {
 // each file names its folder and its start in UTC; the folder names are local dates, so the day
 // before the start is read too. Two candidates, or none, find nothing.
 fn codex_started(sessions: &Path, folder: &Path, since: Timestamp) -> Option<Conversation> {
-    let found = codex_matches(sessions, folder, since);
-    (found.len() == 1).then(|| found[0])
+    match codex_matches(sessions, folder, since).as_slice() {
+        [only] => Some(only.clone()),
+        _ => None,
+    }
 }
 
 pub(super) fn codex_matches(sessions: &Path, folder: &Path, since: Timestamp) -> Vec<Conversation> {
@@ -484,7 +492,7 @@ fn date(day: &Path) -> Option<Date> {
 // start passes `--new-session-id`, which reserves that directory. Start again
 // passes `--resume` only while it is still there and the recorded folder is this
 // thread's. A different folder belongs to another thread.
-fn cursor_kept(config: &Path, conversation: Conversation, folder: &Path) -> bool {
+fn cursor_kept(config: &Path, conversation: &Conversation, folder: &Path) -> bool {
     let name = conversation.to_string();
     let folder = dunce::canonicalize(folder).ok();
     entries(&config.join("chats")).any(|bucket| {

@@ -1692,3 +1692,33 @@ fn a_reset_reads_in_days_hours_or_minutes() {
     assert_eq!(crate::resets_in(now + 5 * 60, now), "5m");
     assert_eq!(crate::resets_in(now - 60, now), "0m");
 }
+
+#[test]
+fn a_conversation_is_a_bounded_plain_string() {
+    let fresh = crate::Conversation::fresh();
+    assert_eq!(
+        fresh.to_string().parse::<crate::Conversation>(),
+        Ok(fresh.clone())
+    );
+    assert_eq!(fresh.as_str().len(), 36);
+    let agent = "ses_01J8Z8YQ4XN6R5T7VW3B2C1D";
+    assert_eq!(
+        agent.parse::<crate::Conversation>().unwrap().as_str(),
+        agent
+    );
+    for (text, error) in [
+        ("", crate::ConversationError::Empty),
+        ("a\tb", crate::ConversationError::Control),
+    ] {
+        assert_eq!(text.parse::<crate::Conversation>(), Err(error), "{text:?}");
+    }
+    let long = "x".repeat(crate::CONVERSATION_MAX + 1);
+    assert_eq!(
+        long.parse::<crate::Conversation>(),
+        Err(crate::ConversationError::TooLong)
+    );
+    assert!(
+        serde_json::from_value::<crate::Conversation>(json!("")).is_err(),
+        "a stored empty id is refused"
+    );
+}

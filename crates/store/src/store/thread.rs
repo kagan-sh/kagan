@@ -172,7 +172,7 @@ impl super::Store {
             .ok_or_else(|| not_found("thread", id))
     }
 
-    pub fn set_conversation(&self, id: &ThreadId, conversation: Conversation) -> Result<()> {
+    pub fn set_conversation(&self, id: &ThreadId, conversation: &Conversation) -> Result<()> {
         let changed = self.conn.execute(
             "UPDATE threads SET conversation = ?2 WHERE id = ?1",
             params![Text(id), Text(conversation)],
@@ -195,7 +195,7 @@ impl super::Store {
     pub fn claim_conversation(
         &self,
         id: &ThreadId,
-        conversation: Conversation,
+        conversation: &Conversation,
         expect: Option<Conversation>,
         since: Timestamp,
     ) -> Result<bool> {

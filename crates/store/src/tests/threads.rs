@@ -253,7 +253,7 @@ fn claim_conversation_waits_for_this_start_and_refuses_another_threads_id() {
     let second = Conversation::fresh();
     assert!(
         !store
-            .claim_conversation(&running.id, first, None, Timestamp(9))
+            .claim_conversation(&running.id, &first, None, Timestamp(9))
             .unwrap()
     );
     store
@@ -261,7 +261,7 @@ fn claim_conversation_waits_for_this_start_and_refuses_another_threads_id() {
         .unwrap();
     assert!(
         !store
-            .claim_conversation(&running.id, first, None, Timestamp(10))
+            .claim_conversation(&running.id, &first, None, Timestamp(10))
             .unwrap()
     );
     store
@@ -269,31 +269,37 @@ fn claim_conversation_waits_for_this_start_and_refuses_another_threads_id() {
         .unwrap();
     assert!(
         store
-            .claim_conversation(&running.id, first, None, Timestamp(10))
+            .claim_conversation(&running.id, &first, None, Timestamp(10))
             .unwrap()
     );
-    assert_eq!(store.conversation(&running.id).unwrap(), Some(first));
+    assert_eq!(
+        store.conversation(&running.id).unwrap(),
+        Some(first.clone())
+    );
     assert!(
         !store
-            .claim_conversation(&running.id, second, None, Timestamp(10))
+            .claim_conversation(&running.id, &second, None, Timestamp(10))
             .unwrap()
     );
     assert!(
         store
-            .claim_conversation(&running.id, second, Some(first), Timestamp(10))
+            .claim_conversation(&running.id, &second, Some(first), Timestamp(10))
             .unwrap()
     );
-    assert_eq!(store.conversation(&running.id).unwrap(), Some(second));
+    assert_eq!(
+        store.conversation(&running.id).unwrap(),
+        Some(second.clone())
+    );
     assert!(
         !store
-            .claim_conversation(&other.id, second, None, Timestamp(11))
+            .claim_conversation(&other.id, &second, None, Timestamp(11))
             .unwrap()
     );
     assert_eq!(store.conversation(&other.id).unwrap(), None);
     let third = Conversation::fresh();
     assert!(
         store
-            .claim_conversation(&other.id, third, None, Timestamp(11))
+            .claim_conversation(&other.id, &third, None, Timestamp(11))
             .unwrap()
     );
     assert_eq!(store.conversation_ids().unwrap().len(), 2);
@@ -305,17 +311,17 @@ fn a_thread_keeps_its_conversation() {
     store.put_thread(&thread("thr_1", 1)).unwrap();
     assert_eq!(store.conversation(&id("thr_1")).unwrap(), None);
     let conversation = Conversation::fresh();
-    store.set_conversation(&id("thr_1"), conversation).unwrap();
+    store.set_conversation(&id("thr_1"), &conversation).unwrap();
     assert_eq!(
         store.conversation(&id("thr_1")).unwrap(),
-        Some(conversation)
+        Some(conversation.clone())
     );
     assert!(matches!(
         store.conversation(&id("thr_missing")),
         Err(Error::NotFound { what: "thread", .. })
     ));
     assert!(matches!(
-        store.set_conversation(&id("thr_missing"), conversation),
+        store.set_conversation(&id("thr_missing"), &conversation),
         Err(Error::NotFound { what: "thread", .. })
     ));
 }

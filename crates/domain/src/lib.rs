@@ -24,8 +24,9 @@ pub use event::{
     Attachment, Event, EventKind, NoticeSeverity, Role, ToolOutcome, ToolStatus, TurnOutcome,
 };
 pub use id::{
-    AutomationId, Conversation, EnvironmentId, PendingInteractionId, PluginId, PreviewId,
-    ProjectId, SavedPromptId, SectionId, ThreadId, Timestamp,
+    AutomationId, CONVERSATION_MAX, Conversation, ConversationError, EnvironmentId,
+    PendingInteractionId, PluginId, PreviewId, ProjectId, SavedPromptId, SectionId, ThreadId,
+    Timestamp,
 };
 pub use notify::{NotifyLevel, NotifyReason, ThreadNotify};
 #[cfg(unix)]
