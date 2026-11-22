@@ -55,7 +55,7 @@ The GPUI Kit coding and design skills are in the `skills/` folder of [gpui-kit](
 - Before you write a helper, a check, or a start path, search for the one that exists and call it. Review sends back a second copy, even a short one.
 - Delete what you replace. No shims, no dead code, no `#[allow(dead_code)]`.
 - No comments except where the code would surprise a reader. No doc comments on private items.
-- Names come from `docs/CONTEXT.md`. One word per concept. `scripts/glossary-check.sh` rejects the banned synonyms: Session/Chat → Thread, Backend → Provider, Sandbox → Environment, Scratch → Personal project, Add-on → Plugin.
+- Names come from `docs/CONTEXT.md`. One word per concept. `scripts/glossary-check.sh` rejects the banned synonyms: Backend → Provider, Sandbox → Environment, Scratch → Personal project, Add-on → Plugin.
 - Before adding to the host or UI core, ask: Does kagan itself act on it, beyond how it looks? Can only the host see it? Can a plugin not do it correctly even with care? If all three answers are no, it belongs in a plugin, even if that means some repetition.
 
 ## Idiomatic Rust

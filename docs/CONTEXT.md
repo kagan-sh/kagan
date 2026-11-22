@@ -228,8 +228,6 @@ _Avoid_: Channel, distribution
 Add-on	Plugin
 Sandbox	Environment
 Scratch	Personal project
-Session	Thread
-Chat	Thread
 Backend	Provider
 ```
 
@@ -241,19 +239,4 @@ Sandbox	picker.rs	sandbox	Provider permission sandbox wording
 Sandbox	tests/app/commands.rs	sandbox	Provider permission test copy
 Sandbox	plugins/src/runtime/files.rs	sandbox	tempdir variable in path tests
 Sandbox	thread/agent.rs	--sandbox	Cursor Agent's own flag name
-Session	thread/conversation	"--	Claude Code's own flag names
-Session	*	--session-id	Claude Code's own flag name
-Session	*	--session	OpenCode, Pi, and Kimi Code's own flag name
-Session	*	--new-session-id	Cursor Agent's own flag name
-Session	usage/claude	--no-session-persistence	Claude Code's own flag name
-Session	usage/claude	"session":	Claude Code's own usage reply field name
-Session	tests/usage	--no-session-persistence	Claude Code's own flag name
-Session	docs/behaviour.md	browser session	browser session is the CONTEXT term for the page a thread drives
-Session	book/src/window.md	browser session	browser session is the CONTEXT term for the page a thread drives
-Session	crates/ui/src/kagan/browser/agent	browser session	browser session is the CONTEXT term for the page a thread drives
-Session	thread/agent.rs	--session	another program's own flag name
-Session	thread/agent.rs	"session"	another program's own subcommand name
-Session	book/src/skills.md	session opened	another program's own session
-Session	docs/self-extend.md	session of the same program	another program's own session
-Chat	thread/agent.rs	create-chat	Cursor Agent's own subcommand
 ```
