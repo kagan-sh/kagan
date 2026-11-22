@@ -24,6 +24,7 @@ pub(crate) use exit::{exited, request_stop, start_again};
 pub(crate) use screen::follow_terminals;
 #[cfg(test)]
 pub(crate) use screen::remember;
+pub(crate) use turn::done;
 pub(crate) use turn::hook as turn_hook;
 
 #[cfg(test)]

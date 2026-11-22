@@ -3,6 +3,7 @@ pub(crate) mod archive;
 mod conversation;
 mod details;
 mod extra;
+pub(crate) mod finish;
 mod halt;
 mod interaction;
 pub(crate) mod notify;

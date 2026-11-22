@@ -190,7 +190,7 @@ pub(super) async fn waiting(
     .map_err(closed)
 }
 
-pub(super) async fn done(
+pub(crate) async fn done(
     this: &WeakEntity<Workspace>,
     thread: &Entity<Thread>,
     cx: &mut AsyncApp,
