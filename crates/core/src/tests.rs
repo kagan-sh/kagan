@@ -328,7 +328,14 @@ fn plant_old_turn(db: &Path, id: &ThreadId) {
                 EventKind::Tool {
                     id: "tool-1".into(),
                     name: Some("read".into()),
-                    status: ToolStatus::Completed,
+                    kind: None,
+                    title: None,
+                    status: Some(ToolStatus::Completed),
+                    input: None,
+                    output: None,
+                    diff: Vec::new(),
+                    locations: Vec::new(),
+                    approval: None,
                 },
             ],
         )

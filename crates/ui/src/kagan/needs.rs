@@ -16,7 +16,12 @@ use super::{Kagan, question};
 fn opening_option(options: &[InteractionOption]) -> Option<&InteractionOption> {
     options
         .iter()
-        .find(|option| option.role == Some(OptionRole::Safe))
+        .find(|option| option.role == Some(OptionRole::Primary))
+        .or_else(|| {
+            options
+                .iter()
+                .find(|option| option.role == Some(OptionRole::Safe))
+        })
         .or_else(|| options.first())
 }
 

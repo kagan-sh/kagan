@@ -145,10 +145,10 @@ fn body(
                         .small()
                         .tab_stop(false)
                         .label(option.label.clone());
-                    button = if option.role == Some(OptionRole::Destructive) {
-                        button.danger()
-                    } else {
-                        button.outline()
+                    button = match option.role {
+                        Some(OptionRole::Destructive) => button.danger(),
+                        Some(OptionRole::Primary) => button.primary(),
+                        _ => button.outline(),
                     };
                     button.on_click(move |_, _, cx| on_click(cx))
                 })

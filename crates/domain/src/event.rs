@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{ThreadId, Timestamp};
+use crate::{PendingInteractionId, ThreadId, Timestamp};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,13 +54,40 @@ pub enum EventKind {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<Attachment>,
     },
-    /// One tool call; later events with the same `id` update it. `name` is absent when an
-    /// update does not retitle the call.
+    /// One thought chunk; chunks with the same `messageId` belong to one thought.
+    Thought {
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none", alias = "message_id")]
+        message_id: Option<String>,
+    },
+    /// The agent's whole plan; a later plan replaces it.
+    Plan {
+        entries: Vec<PlanEntry>,
+    },
+    /// Tokens in context, for the header line. Not a row.
+    Usage {
+        used: u64,
+        size: u64,
+    },
+    /// One tool call; later events with the same `id` update it. Each event carries only what the
+    /// agent said this time, so a reader folds the events for one id into one row.
     Tool {
         #[serde(default)]
         id: String,
         name: Option<String>,
-        status: ToolStatus,
+        kind: Option<ToolKind>,
+        title: Option<String>,
+        status: Option<ToolStatus>,
+        /// ACP raw input.
+        input: Option<serde_json::Value>,
+        /// ACP content text and raw output, flattened.
+        output: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        diff: Vec<ToolDiff>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        locations: Vec<ToolLocation>,
+        /// Set only by a permission request, which links the row to its question.
+        approval: Option<PendingInteractionId>,
     },
     /// kagan handed this tool call to a plugin, or served `skill_load` itself.
     #[serde(rename = "tool.started")]
@@ -137,7 +164,7 @@ pub enum NoticeSeverity {
 impl EventKind {
     /// The kinds kagan writes now, and the only names a wait or a subscription accepts. Other
     /// kinds still load from an old log.
-    pub const LIVE_TYPES: [&'static str; 17] = [
+    pub const LIVE_TYPES: [&'static str; 21] = [
         "created",
         "started",
         "exited",
@@ -151,8 +178,12 @@ impl EventKind {
         "turn.started",
         "turn.ended",
         "message",
+        "thought",
+        "plan",
+        "usage",
         "notice",
         "answered",
+        "tool",
         "tool.started",
         "tool.ended",
     ];
@@ -173,6 +204,9 @@ impl EventKind {
             Self::TurnStarted => "turn.started",
             Self::TurnEnded { .. } => "turn.ended",
             Self::Message { .. } => "message",
+            Self::Thought { .. } => "thought",
+            Self::Plan { .. } => "plan",
+            Self::Usage { .. } => "usage",
             Self::Tool { .. } => "tool",
             Self::ToolStarted { .. } => "tool.started",
             Self::ToolEnded { .. } => "tool.ended",
@@ -235,6 +269,54 @@ pub enum ToolStatus {
     InProgress,
     Completed,
     Failed,
+}
+
+/// What a tool call does, as the agent's ACP kind names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolKind {
+    Read,
+    Edit,
+    Delete,
+    Move,
+    Search,
+    Execute,
+    Think,
+    Fetch,
+    SwitchMode,
+    Other,
+}
+
+/// One file a tool call changed. `old` is absent for a file it created.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolDiff {
+    pub path: String,
+    pub old: Option<String>,
+    pub new: String,
+}
+
+/// One file a tool call looked at.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolLocation {
+    pub path: String,
+    pub line: Option<u32>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanEntry {
+    pub text: String,
+    pub status: PlanStatus,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanStatus {
+    Pending,
+    InProgress,
+    Completed,
 }
 
 /// How a tool call kagan served ended.

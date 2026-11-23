@@ -16,7 +16,7 @@ where
 }
 
 // Every `type` tag an old log may hold.
-const TYPES: [&str; 26] = [
+const TYPES: [&str; 29] = [
     "created",
     "started",
     "exited",
@@ -30,6 +30,9 @@ const TYPES: [&str; 26] = [
     "turn.started",
     "turn.ended",
     "message",
+    "thought",
+    "plan",
+    "usage",
     "tool",
     "tool.started",
     "tool.ended",
@@ -820,7 +823,7 @@ fn a_plugin_theme_is_named_by_its_plugin() {
 
 #[test]
 fn event_type_names_match_the_wire_tag() {
-    use crate::{Role, ToolStatus};
+    use crate::Role;
     let kinds = [
         EventKind::Created,
         EventKind::Started,
@@ -846,10 +849,25 @@ fn event_type_names_match_the_wire_tag() {
             message_id: None,
             attachments: Vec::new(),
         },
+        EventKind::Thought {
+            text: String::new(),
+            message_id: None,
+        },
+        EventKind::Plan {
+            entries: Vec::new(),
+        },
+        EventKind::Usage { used: 1, size: 2 },
         EventKind::Tool {
             id: String::new(),
             name: None,
-            status: ToolStatus::Completed,
+            kind: None,
+            title: None,
+            status: None,
+            input: None,
+            output: None,
+            diff: Vec::new(),
+            locations: Vec::new(),
+            approval: None,
         },
         EventKind::ToolStarted {
             id: String::new(),
@@ -906,11 +924,84 @@ fn live_event_types_are_all_known_types() {
 }
 
 #[test]
+fn a_tool_delta_plan_and_usage_read_from_the_wire() {
+    round_trip(
+        &EventKind::Tool {
+            id: "call-1".into(),
+            name: Some("read_file".into()),
+            kind: Some(crate::ToolKind::Read),
+            title: Some("Read file auth.spec.ts".into()),
+            status: Some(crate::ToolStatus::Completed),
+            input: Some(json!({ "file_path": "auth.spec.ts" })),
+            output: Some("line one\nline two".into()),
+            diff: vec![crate::ToolDiff {
+                path: "auth.spec.ts".into(),
+                old: None,
+                new: "+ one".into(),
+            }],
+            locations: vec![crate::ToolLocation {
+                path: "auth.spec.ts".into(),
+                line: Some(41),
+            }],
+            approval: None,
+        },
+        &json!({"type": "tool", "data": {
+            "id": "call-1",
+            "name": "read_file",
+            "kind": "read",
+            "title": "Read file auth.spec.ts",
+            "status": "completed",
+            "input": { "file_path": "auth.spec.ts" },
+            "output": "line one\nline two",
+            "diff": [{ "path": "auth.spec.ts", "old": null, "new": "+ one" }],
+            "locations": [{ "path": "auth.spec.ts", "line": 41 }],
+            "approval": null
+        }}),
+    );
+    round_trip(
+        &EventKind::Thought {
+            text: "look first".into(),
+            message_id: Some("m1".into()),
+        },
+        &json!({"type": "thought", "data": { "text": "look first", "messageId": "m1" }}),
+    );
+    round_trip(
+        &EventKind::Plan {
+            entries: vec![
+                crate::PlanEntry {
+                    text: "Read the test".into(),
+                    status: crate::PlanStatus::Completed,
+                },
+                crate::PlanEntry {
+                    text: "Find the race".into(),
+                    status: crate::PlanStatus::InProgress,
+                },
+                crate::PlanEntry {
+                    text: "Fix it".into(),
+                    status: crate::PlanStatus::Pending,
+                },
+            ],
+        },
+        &json!({"type": "plan", "data": { "entries": [
+            { "text": "Read the test", "status": "completed" },
+            { "text": "Find the race", "status": "in_progress" },
+            { "text": "Fix it", "status": "pending" }
+        ]}}),
+    );
+    round_trip(
+        &EventKind::Usage {
+            used: 12_000,
+            size: 200_000,
+        },
+        &json!({"type": "usage", "data": { "used": 12000, "size": 200000 }}),
+    );
+}
+
+#[test]
 fn tool_events_are_live_and_an_old_tool_row_still_reads() {
-    for live in ["tool.started", "tool.ended"] {
+    for live in ["tool", "tool.started", "tool.ended"] {
         assert!(EventKind::LIVE_TYPES.contains(&live), "{live}");
     }
-    assert!(!EventKind::LIVE_TYPES.contains(&"tool"));
     let old: EventKind = serde_json::from_value(json!({
         "type": "tool",
         "data": { "id": "tool_1", "status": "completed" }
@@ -921,7 +1012,14 @@ fn tool_events_are_live_and_an_old_tool_row_still_reads() {
         EventKind::Tool {
             id: "tool_1".into(),
             name: None,
-            status: crate::ToolStatus::Completed,
+            kind: None,
+            title: None,
+            status: Some(crate::ToolStatus::Completed),
+            input: None,
+            output: None,
+            diff: Vec::new(),
+            locations: Vec::new(),
+            approval: None,
         }
     );
     let started: EventKind = serde_json::from_value(json!({

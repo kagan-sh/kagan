@@ -299,11 +299,12 @@ pub struct InteractionOption {
     pub role: Option<OptionRole>,
 }
 
-/// What an option does, for the host to draw: the safe choice takes focus, the destructive one
-/// is drawn as a danger.
+/// What an option does, for the host to draw: the primary choice is filled, the safe choice takes
+/// focus when there is no primary, and the destructive one is drawn as a danger.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum OptionRole {
+    Primary,
     Safe,
     Destructive,
 }
