@@ -136,15 +136,12 @@ impl ChatView {
             self.pending.push(event.clone());
             return;
         }
-        match self.transcript.absorb(event) {
-            part::Fold::Ignored => {}
-            part::Fold::Appended(index) => {
-                _ = self.scroller.update(cx, |state, cx| state.append(1, cx));
-                let _ = self.row_changed(index, cx);
-            }
-            part::Fold::Changed(index) => {
-                let _ = self.row_changed(index, cx);
-            }
+        if let part::Fold::Dirty(from) = self.transcript.absorb(event) {
+            self.sync(cx);
+            let count = self.scroller.read(cx).item_count();
+            let _ = self.scroller.update(cx, |state, cx| {
+                state.remeasure_items(from.min(count)..count, cx)
+            });
         }
         cx.notify();
     }

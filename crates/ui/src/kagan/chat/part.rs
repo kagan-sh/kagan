@@ -124,8 +124,8 @@ impl ToolRow {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Fold {
     Ignored,
-    Appended(usize),
-    Changed(usize),
+    /// Every row from here on is new or changed, so the list measures from it to the end.
+    Dirty(usize),
 }
 
 /// The transcript as rows: the fold of the thread's events. One function applies one event, so the
@@ -194,7 +194,7 @@ impl Transcript {
             EventKind::Plan { entries } => {
                 if let Some(index) = self.plan.filter(|index| *index < self.rows.len()) {
                     self.rows[index].kind = RowKind::Plan(entries.clone());
-                    Fold::Changed(index)
+                    Fold::Dirty(index)
                 } else {
                     self.plan = Some(self.rows.len());
                     self.push(Row {
@@ -237,7 +237,24 @@ impl Transcript {
 
     fn push(&mut self, row: Row) -> Fold {
         self.rows.push(row);
-        Fold::Appended(self.rows.len() - 1)
+        Fold::Dirty(self.rows.len() - 1)
+    }
+
+    /// The row a tool id's events fold into: its place in the transcript, and its place among a
+    /// bundle's members when it has one.
+    fn find_tool(&self, id: &str) -> Option<(usize, Option<usize>)> {
+        self.rows
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(top, row)| match &row.kind {
+                RowKind::Work(tool) if tool.id == id => Some((top, None)),
+                RowKind::Bundle(members) => members
+                    .iter()
+                    .position(|member| matches!(&member.kind, RowKind::Work(tool) if tool.id == id))
+                    .map(|member| (top, Some(member))),
+                _ => None,
+            })
     }
 
     /// Appends a message or a thought chunk to the row it belongs to, or starts a row.
@@ -273,7 +290,7 @@ impl Transcript {
                     }
                     _ => {}
                 }
-                return Fold::Changed(index);
+                return Fold::Dirty(index);
             }
         }
         let kind = if thought {
@@ -297,44 +314,63 @@ impl Transcript {
         })
     }
 
-    /// Folds one tool delta into the last row with its id, or starts a row. A finished look folds
-    /// into the bundle at the tail when there is one.
+    /// Folds one tool delta into the row with its id, wherever that row is, or starts a row.
     fn tool(&mut self, seq: u64, delta: ToolRow) -> Fold {
-        let id = delta.id.clone();
-        if let Some(index) = self.rows.len().checked_sub(1)
-            && let RowKind::Work(seen) = &mut self.rows[index].kind
-            && seen.id == id
-        {
-            merge(seen, delta);
-            return Fold::Changed(index);
+        if let Some((top, member)) = self.find_tool(&delta.id) {
+            let seen = match (&mut self.rows[top].kind, member) {
+                (RowKind::Work(tool), None) => Some(tool.as_mut()),
+                (RowKind::Bundle(members), Some(member)) => match &mut members[member].kind {
+                    RowKind::Work(tool) => Some(tool.as_mut()),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(seen) = seen {
+                merge(seen, delta);
+                return Fold::Dirty(top);
+            }
         }
-        let row = Row {
+        self.rows.push(Row {
             id: seq,
             kind: RowKind::Work(Box::new(delta)),
-        };
-        let folds = self.rows.last().is_some_and(|last| {
-            matches!(&last.kind, RowKind::Work(tool) if tool.folds())
-                || matches!(&last.kind, RowKind::Bundle(_))
         });
-        let completed = matches!(&row.kind, RowKind::Work(tool) if tool.folds());
-        if completed && folds {
-            let index = self.rows.len() - 1;
-            let last = self.rows.remove(index);
-            let members = match last.kind {
-                RowKind::Bundle(mut members) => {
-                    members.push(row);
-                    members
-                }
-                _ => vec![last, row],
-            };
-            let id = members[0].id;
-            self.rows.push(Row {
+        let index = self.rows.len() - 1;
+        Fold::Dirty(self.bundle(index))
+    }
+
+    /// Folds the row at `index` with the row before it when both are finished looking work, and
+    /// names the row the list has to measure: the bundle's place, or the row's own.
+    fn bundle(&mut self, index: usize) -> usize {
+        let folds = matches!(&self.rows[index].kind, RowKind::Work(tool) if tool.folds());
+        let Some(previous) = index.checked_sub(1).filter(|_| folds) else {
+            return index;
+        };
+        let joins = match &self.rows[previous].kind {
+            RowKind::Work(tool) => tool.folds(),
+            RowKind::Bundle(_) => true,
+            _ => false,
+        };
+        if !joins {
+            return index;
+        }
+        let row = self.rows.remove(index);
+        let last = self.rows.remove(previous);
+        let members = match last.kind {
+            RowKind::Bundle(mut members) => {
+                members.push(row);
+                members
+            }
+            _ => vec![last, row],
+        };
+        let id = members[0].id;
+        self.rows.insert(
+            previous,
+            Row {
                 id,
                 kind: RowKind::Bundle(members),
-            });
-            return Fold::Changed(index);
-        }
-        self.push(row)
+            },
+        );
+        previous
     }
 
     /// The last row has something streaming into it, so it is the live frontier and no "Working…"
@@ -395,10 +431,20 @@ mod tests {
     }
 
     fn tool(seq: u64, kind: ToolKind, status: ToolStatus) -> Event {
+        call(seq, &format!("call-{seq}"), kind, status, None)
+    }
+
+    fn call(
+        seq: u64,
+        id: &str,
+        kind: ToolKind,
+        status: ToolStatus,
+        approval: Option<PendingInteractionId>,
+    ) -> Event {
         event(
             seq,
             EventKind::Tool {
-                id: format!("call-{seq}"),
+                id: id.into(),
                 name: None,
                 kind: Some(kind),
                 title: Some("Read file".into()),
@@ -407,7 +453,7 @@ mod tests {
                 output: None,
                 diff: Vec::new(),
                 locations: Vec::new(),
-                approval: None,
+                approval,
             },
         )
     }
@@ -433,6 +479,46 @@ mod tests {
         let mut transcript = Transcript::default();
         transcript.absorb(&tool(1, ToolKind::Read, ToolStatus::Completed));
         assert!(matches!(transcript.rows[0].kind, RowKind::Work(_)));
+    }
+
+    /// The approval card sits between a call and its update, so the update must find the row by id.
+    #[test]
+    fn a_delta_after_the_approval_card_folds_into_its_row() {
+        let mut transcript = Transcript::default();
+        let approval = PendingInteractionId("pn_1".into());
+        transcript.absorb(&call(1, "t1", ToolKind::Read, ToolStatus::InProgress, None));
+        transcript.absorb(&call(
+            2,
+            "t1",
+            ToolKind::Read,
+            ToolStatus::Pending,
+            Some(approval),
+        ));
+        transcript.absorb(&call(3, "t1", ToolKind::Read, ToolStatus::Completed, None));
+        assert_eq!(transcript.rows.len(), 2);
+        let RowKind::Work(tool) = &transcript.rows[0].kind else {
+            panic!("the call stays one work row");
+        };
+        assert_eq!(tool.title.as_deref(), Some("Read file"));
+        assert_eq!(tool.status, Some(ToolStatus::Completed));
+        assert!(matches!(transcript.rows[1].kind, RowKind::Approval(_)));
+    }
+
+    #[test]
+    fn parallel_calls_keep_a_row_each_until_both_finish() {
+        let mut transcript = Transcript::default();
+        transcript.absorb(&call(1, "t1", ToolKind::Read, ToolStatus::InProgress, None));
+        transcript.absorb(&call(2, "t2", ToolKind::Read, ToolStatus::InProgress, None));
+        transcript.absorb(&call(3, "t1", ToolKind::Read, ToolStatus::Completed, None));
+        assert_eq!(transcript.rows.len(), 2);
+        let RowKind::Work(first) = &transcript.rows[0].kind else {
+            panic!("the first call");
+        };
+        assert_eq!(first.status, Some(ToolStatus::Completed));
+        let RowKind::Work(second) = &transcript.rows[1].kind else {
+            panic!("the second call");
+        };
+        assert_eq!(second.status, Some(ToolStatus::InProgress));
     }
 
     #[test]
@@ -503,7 +589,7 @@ mod tests {
                     text: "hi".into(),
                 }
             )),
-            Fold::Appended(0)
+            Fold::Dirty(0)
         );
         assert_eq!(
             transcript.absorb(&event(2, EventKind::Started)),
