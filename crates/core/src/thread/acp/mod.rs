@@ -141,12 +141,9 @@ async fn launch(
     if let Some(locale) = cx.background_spawn(async { utf8_locale() }).await {
         env.push(("LANG".into(), locale.into()));
     }
-    let args = std::iter::once(OsString::from(subcommand))
-        .chain(program.args)
-        .collect();
     Ok(client::Launch {
         program: program.path,
-        args,
+        args: acp.args,
         cwd: folder.to_owned(),
         env,
     })
