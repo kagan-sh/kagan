@@ -42,7 +42,7 @@ pub(super) async fn settle(
 }
 
 /// Drops every question the thread has open, in memory and in the store: the card goes with them.
-pub(crate) async fn drop_questions(
+async fn drop_questions(
     this: &WeakEntity<Workspace>,
     thread: &Entity<Thread>,
     cx: &mut AsyncApp,

@@ -178,6 +178,41 @@ fn a_tool_delta_carries_its_kind_title_status_and_fields() {
     assert_eq!(failed["status"], "error");
 }
 
+/// The classification the host's rows use, on the events a delta sends: the name that arrives in
+/// one event names the call, and a kind that arrives in another is read the same way.
+#[test]
+fn a_work_item_is_classified_as_the_host_draws_it() {
+    let named = |name: &str, input: Option<Value>| {
+        work_of(EventKind::Tool {
+            id: "t1".into(),
+            name: Some(name.into()),
+            kind: None,
+            title: None,
+            status: None,
+            input,
+            output: None,
+            diff: Vec::new(),
+            locations: Vec::new(),
+            approval: None,
+        })
+    };
+    let called = named("mcp__github__create_issue", None);
+    assert_eq!(called["tool"], "mcp");
+    assert_eq!(called["title"], "github.create_issue");
+    let own = named("kagan_open_pull_request", None);
+    assert_eq!(own["tool"], "mcp");
+    assert_eq!(own["title"], "kagan.open_pull_request");
+    let loaded = named("skill_load", Some(json!({ "name": "rust-review" })));
+    assert_eq!(loaded["tool"], "skill");
+    assert_eq!(loaded["title"], "rust-review");
+
+    // A delta that names neither the call nor its kind reads as "other" and keeps its own title:
+    // a page holds the tool and title of the event that named the call.
+    let ended = work_of(delta(None, None, None, None));
+    assert_eq!(ended["tool"], "other");
+    assert_eq!(ended["title"], "src/main.rs");
+}
+
 #[test]
 fn a_long_args_or_output_is_cut_at_a_letter_and_flagged() {
     let text = "é".repeat(6 * 1024);

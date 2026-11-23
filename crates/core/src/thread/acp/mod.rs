@@ -13,6 +13,7 @@ use crate::host::database::Result;
 use crate::workspace::closed;
 use crate::{
     Workspace,
+    thread::Raised,
     thread::agent::{self, Start},
     thread::halt::status,
     thread::turn_state::{Signal, Source},
@@ -21,6 +22,8 @@ use crate::{
 
 mod client;
 mod map;
+mod permission;
+
 #[cfg(test)]
 #[path = "acp_test.rs"]
 mod tests;
@@ -34,6 +37,9 @@ const NOT_A_TERMINAL: &str =
 /// A live ACP connection. Dropping it cancels the connection, and the process tree with it.
 pub(crate) struct Acp {
     commands: async_channel::Sender<AcpCommand>,
+    /// The questions this connection asked the person, so Cancel and the end of a turn can take
+    /// back the ones it raised and leave the thread's others alone.
+    pub(super) raised: Vec<Raised>,
     _connection: Task<()>,
 }
 
@@ -91,6 +97,7 @@ pub(super) async fn start(
         let run = workspace.run_mut(&record.id);
         run.acp = Some(Acp {
             commands,
+            raised: Vec::new(),
             _connection: connection,
         });
         run.acp_task = Some(consumer);
@@ -334,7 +341,18 @@ async fn permission(
     };
     let raised = crate::thread::raise(this, &thread, title, options, None, waiting, cx).await;
     let approval = match raised {
-        Ok(raised) => Some(raised.id),
+        Ok(raised) => {
+            let asked = raised.id.clone();
+            // The connection keeps what it asked, so Cancel and the end of the turn take back
+            // only its own questions. A connection that is already gone leaves the question to
+            // the end that settles the thread.
+            this.update(cx, |workspace, _| {
+                let acp = workspace.runs.get_mut(id)?.acp.as_mut()?;
+                acp.raised.push(raised);
+                Some(asked)
+            })
+            .map_err(closed)?
+        }
         Err(error) => {
             eprintln!("kg: could not ask about the agent's tool call: {error}");
             None
@@ -412,6 +430,8 @@ async fn turn_done(
         thread.busy = thread.turn.open();
         cx.notify();
     });
+    // A question the agent asked and left behind is about a turn that is over: the card goes.
+    withdraw_questions(this, id, cx).await?;
     waiting(this, id.clone(), Some((outcome, error)), cx).await
 }
 
@@ -482,10 +502,38 @@ pub(super) async fn cancel(
         return Err(OpError::Invalid("the agent is not answering".into()));
     }
     send(this, id, AcpCommand::Cancel, cx)?;
-    // The question goes the moment the person cancels; the agent's own prompt response would
-    // otherwise leave the card up.
-    crate::thread::drop_questions(this, &thread, cx).await?;
+    // The agent's approval goes the moment the person cancels; the agent's own prompt response
+    // would otherwise leave the card up. A question the agent raised through `kg thread ask` is
+    // not this connection's, so it stays.
+    withdraw_questions(this, id, cx).await?;
     Ok(OpResult::Done)
+}
+
+/// Withdraws the questions this connection raised that the person has not answered: the card goes,
+/// the attention it raised goes, and an answered question is left alone.
+async fn withdraw_questions(
+    this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    let raised = this
+        .update(cx, |workspace, _| {
+            let open: std::collections::BTreeSet<_> = workspace.pending.keys().cloned().collect();
+            workspace
+                .runs
+                .get_mut(id)
+                .and_then(|run| run.acp.as_mut())
+                .map(|acp| std::mem::take(&mut acp.raised))
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|raised| open.contains(&raised.id))
+                .collect::<Vec<_>>()
+        })
+        .map_err(closed)?;
+    for raised in raised {
+        crate::thread::withdraw(this, raised, cx).await?;
+    }
+    Ok(())
 }
 
 fn running(this: &WeakEntity<Workspace>, id: &ThreadId, cx: &mut AsyncApp) -> Result<bool> {

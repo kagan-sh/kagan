@@ -11,6 +11,9 @@ use kg_domain::{
 /// The most of one side of a diff or one tool output kagan keeps, so one event stays small enough
 /// to read and to keep in the log.
 const TOOL_TEXT_MAX: usize = 64 * 1024;
+/// The most of one tool call's input kagan keeps, written out as JSON: a write tool's input is the
+/// whole file, and the log, `kg thread events` and every chat open would carry it.
+const TOOL_INPUT_MAX: usize = 8 * 1024;
 const CUT: &str = "\n… (truncated)";
 
 /// One chunk of the agent's reply, and the message the agent says it belongs to.
@@ -94,7 +97,7 @@ fn tool_call(call: &ToolCall) -> ToolUpdate {
         kind: Some(kind(call.kind)),
         title: Some(call.title.clone()),
         status: Some(status(call.status)),
-        input: call.raw_input.clone(),
+        input: call.raw_input.as_ref().map(input),
         output: output(&call.content, call.raw_output.as_ref()),
         diff: diffs(&call.content),
         locations: call.locations.iter().map(location).collect(),
@@ -109,7 +112,7 @@ pub(super) fn tool_delta(id: String, fields: &ToolCallUpdateFields) -> ToolUpdat
         kind: fields.kind.map(kind),
         title: fields.title.clone(),
         status: fields.status.map(status),
-        input: fields.raw_input.clone(),
+        input: fields.raw_input.as_ref().map(input),
         output: fields
             .content
             .as_deref()
@@ -124,26 +127,43 @@ pub(super) fn tool_delta(id: String, fields: &ToolCallUpdateFields) -> ToolUpdat
     }
 }
 
-/// The text of every text content block, then the raw output, joined by a blank line.
+/// The text of every text content block, joined by a blank line, or the raw output when the
+/// content carries no text: an agent that sends both repeats itself, and the body would say it
+/// twice.
 fn output(content: &[ToolCallContent], raw: Option<&serde_json::Value>) -> Option<String> {
-    let mut parts: Vec<String> = content
+    let parts: Vec<String> = content
         .iter()
         .filter_map(|content| match content {
             ToolCallContent::Content(Content {
                 content: ContentBlock::Text(TextContent { text, .. }),
                 ..
-            }) => Some(cap(text.clone())),
+            }) => Some(text.clone()),
             _ => None,
         })
         .collect();
-    if let Some(raw) = raw {
-        let text = match raw {
+    let text = match (parts.is_empty(), raw) {
+        (true, Some(raw)) => match raw {
             serde_json::Value::String(text) => text.clone(),
             other => other.to_string(),
-        };
-        parts.push(cap(text));
+        },
+        (true, None) => return None,
+        (false, _) => parts.join("\n\n"),
+    };
+    (!text.trim().is_empty()).then(|| cap(text))
+}
+
+/// The input as the log keeps it: the value itself, or a small marker where a value too large to
+/// carry every time it is read would sit.
+fn input(value: &serde_json::Value) -> serde_json::Value {
+    let text = value.to_string();
+    if text.len() <= TOOL_INPUT_MAX {
+        return value.clone();
     }
-    (!parts.is_empty()).then(|| parts.join("\n\n"))
+    let mut cut = TOOL_INPUT_MAX;
+    while !text.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    serde_json::Value::String(format!("{}{CUT}", &text[..cut]))
 }
 
 fn diffs(content: &[ToolCallContent]) -> Vec<ToolDiff> {
@@ -195,10 +215,12 @@ fn kind(kind: AcpToolKind) -> ToolKind {
 
 fn status(status: ToolCallStatus) -> ToolStatus {
     match status {
-        ToolCallStatus::Pending => ToolStatus::Pending,
         ToolCallStatus::InProgress => ToolStatus::InProgress,
         ToolCallStatus::Completed => ToolStatus::Completed,
-        _ => ToolStatus::Failed,
+        ToolCallStatus::Failed => ToolStatus::Failed,
+        // Pending, and any status kagan has not met, is read as still to come: nothing is called
+        // failed on the strength of a word kagan does not know.
+        _ => ToolStatus::Pending,
     }
 }
 
@@ -209,11 +231,12 @@ pub(super) fn options(options: &[PermissionOption]) -> Vec<InteractionOption> {
         .map(|option| InteractionOption {
             id: option.option_id.to_string(),
             label: option.name.clone(),
-            role: Some(match option.kind {
-                PermissionOptionKind::AllowOnce => OptionRole::Primary,
-                PermissionOptionKind::AllowAlways => OptionRole::Safe,
-                _ => OptionRole::Destructive,
-            }),
+            role: match option.kind {
+                PermissionOptionKind::AllowOnce => Some(OptionRole::Primary),
+                // Always allow is a grant the agent remembers, and the card must not open on it.
+                PermissionOptionKind::AllowAlways => None,
+                _ => Some(OptionRole::Destructive),
+            },
         })
         .collect()
 }
@@ -271,6 +294,8 @@ pub(super) fn outcome(reason: StopReason) -> (TurnOutcome, Option<String>) {
 
 #[cfg(test)]
 mod tests {
+    use agent_client_protocol::v1::schema::Diff;
+
     use super::*;
 
     #[test]
@@ -299,11 +324,80 @@ mod tests {
     }
 
     #[test]
+    fn an_output_that_names_its_text_once_keeps_one_copy() {
+        let content = vec![ToolCallContent::Content(Content::new(ContentBlock::Text(
+            TextContent::new("line one\nline two"),
+        )))];
+        let raw = serde_json::json!("line one\nline two");
+        assert_eq!(
+            output(&content, Some(&raw)),
+            Some("line one\nline two".to_owned())
+        );
+        assert_eq!(
+            output(&[], Some(&raw)),
+            Some("line one\nline two".to_owned())
+        );
+    }
+
+    #[test]
+    fn many_text_blocks_are_capped_together() {
+        let content: Vec<ToolCallContent> = (0..4)
+            .map(|_| {
+                ToolCallContent::Content(Content::new(ContentBlock::Text(TextContent::new(
+                    "é".repeat(TOOL_TEXT_MAX / 2),
+                ))))
+            })
+            .collect();
+        let joined = output(&content, None).expect("an output");
+        assert!(
+            joined.len() < TOOL_TEXT_MAX + CUT.len() + 4,
+            "{}",
+            joined.len()
+        );
+        assert!(joined.ends_with(CUT));
+    }
+
+    #[test]
+    fn an_input_too_large_to_carry_reads_as_a_marker() {
+        let big = serde_json::json!({"file_path": "a.ts", "content": "x".repeat(TOOL_INPUT_MAX)});
+        let kept = input(&big);
+        let serde_json::Value::String(text) = &kept else {
+            panic!("a marker: {kept:?}");
+        };
+        assert!(text.ends_with(CUT), "{}", &text[text.len() - 40..]);
+        assert!(text.len() <= TOOL_INPUT_MAX + CUT.len());
+        assert_eq!(
+            input(&serde_json::json!({"path": "a.ts"})),
+            serde_json::json!({"path": "a.ts"})
+        );
+    }
+
+    #[test]
     fn a_long_output_is_cut_at_a_character() {
         let long = "é".repeat(TOOL_TEXT_MAX);
         let cut = cap(long);
         assert!(cut.len() < TOOL_TEXT_MAX + CUT.len() + 4, "{}", cut.len());
         assert!(cut.ends_with(CUT), "{}", &cut[cut.len() - 40..]);
         assert_eq!(cap("short".into()), "short");
+    }
+
+    /// Both sides of a diff are capped, at a character boundary: a whole file's rewrite must not
+    /// travel in the log either.
+    #[test]
+    fn a_diff_too_long_is_cut_at_a_character_on_both_sides() {
+        let long = "é".repeat(TOOL_TEXT_MAX);
+        let content = vec![ToolCallContent::Diff(
+            Diff::new("a.ts", long.clone()).old_text(long),
+        )];
+        let diff = diffs(&content).remove(0);
+        let old = diff.old.expect("an old side");
+        assert!(old.len() < TOOL_TEXT_MAX + CUT.len() + 4, "{}", old.len());
+        assert!(old.ends_with(CUT), "{}", &old[old.len() - 40..]);
+        assert!(diff.new.len() < TOOL_TEXT_MAX + CUT.len() + 4);
+        assert!(
+            diff.new.ends_with(CUT),
+            "{}",
+            &diff.new[diff.new.len() - 40..]
+        );
     }
 }

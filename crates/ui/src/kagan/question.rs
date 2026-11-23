@@ -25,6 +25,8 @@ pub(super) struct Question {
     title: String,
     options: Vec<InteractionOption>,
     asked: Option<PendingInteraction>,
+    /// What the card's element and focus ids start with: one question can be drawn in two places.
+    region: &'static str,
 }
 
 impl Question {
@@ -35,6 +37,7 @@ impl Question {
             title: asked.title.clone(),
             options: asked.options.clone(),
             asked: Some(asked.clone()),
+            region: "",
         }
     }
 
@@ -45,6 +48,15 @@ impl Question {
             title: approval.title.clone(),
             options: approval.options.clone(),
             asked: None,
+            region: "",
+        }
+    }
+
+    /// The same card in the transcript, which keeps its own ids apart from the Questions tab.
+    fn in_the_transcript(asked: &PendingInteraction) -> Self {
+        Self {
+            region: "chat-",
+            ..Self::thread(asked)
         }
     }
 }
@@ -85,7 +97,7 @@ pub(super) fn permission_card(
     cx: &mut App,
 ) -> impl IntoElement {
     body(
-        Question::thread(asked),
+        Question::in_the_transcript(asked),
         None,
         detail,
         None,
@@ -136,6 +148,16 @@ pub(super) fn answer_focus(question: &str, option: &str) -> String {
     format!("answer-focus-{question}-{option}")
 }
 
+impl Question {
+    fn focus_key(&self, option: &str) -> String {
+        answer_focus(&format!("{}{}", self.region, self.id.0), option)
+    }
+
+    fn element(&self, kind: &str, option: &str) -> String {
+        format!("{kind}-{}{}-{option}", self.region, self.id.0)
+    }
+}
+
 fn body(
     question: Question,
     form: Option<AnyElement>,
@@ -147,11 +169,11 @@ fn body(
 ) -> impl IntoElement + use<> {
     let failed = Rc::clone(failed);
     let mut buttons: Vec<AnyElement> = Vec::new();
-    for option in &question.options {
+    for option in &ordered(&question.options) {
         let focus = super::tab_stop(
             window,
             cx,
-            ElementId::Name(answer_focus(&question.id.0, &option.id).into()),
+            ElementId::Name(question.focus_key(&option.id).into()),
         );
         let answer_now: Rc<dyn Fn(&mut App)> = match (
             question.asked.clone(),
@@ -178,7 +200,7 @@ fn body(
         buttons.push(
             div()
                 .id(ElementId::Name(
-                    format!("answer-{}-{}", question.id.0, option.id).into(),
+                    question.element("answer", &option.id).into(),
                 ))
                 .ui_observe_as(Facts {
                     focus: Some(focus.clone()),
@@ -212,7 +234,7 @@ fn body(
     }
     v_flex()
         .id(ElementId::Name(
-            format!("question-{}", question.id.0).into(),
+            format!("question-{}{}", question.region, question.id.0).into(),
         ))
         .ui_container()
         .p(px(space(SpaceStep::Md, cx)))
@@ -225,6 +247,19 @@ fn body(
         .children(detail)
         .children(form)
         .child(h_flex().gap(px(space(SpaceStep::Sm, cx))).children(buttons))
+}
+
+/// The options in the order a card reads: the reject that grants nothing, then the rest, then the
+/// filled one, which is the step the card offers. The agent's order stays within a rank.
+fn ordered(options: &[InteractionOption]) -> Vec<InteractionOption> {
+    let rank = |role: Option<OptionRole>| match role {
+        Some(OptionRole::Destructive) => 0,
+        Some(OptionRole::Primary) => 2,
+        _ => 1,
+    };
+    let mut ordered = options.to_vec();
+    ordered.sort_by_key(|option| rank(option.role));
+    ordered
 }
 
 fn answer(
@@ -248,4 +283,31 @@ fn answer(
         }
     })
     .detach();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn option(id: &str, role: Option<OptionRole>) -> InteractionOption {
+        InteractionOption {
+            id: id.into(),
+            label: id.into(),
+            role,
+        }
+    }
+
+    #[test]
+    fn a_permission_card_reads_deny_then_always_allow_then_allow_once() {
+        let agent = vec![
+            option("allow-once", Some(OptionRole::Primary)),
+            option("allow-always", None),
+            option("reject-once", Some(OptionRole::Destructive)),
+        ];
+        let ids: Vec<_> = ordered(&agent)
+            .into_iter()
+            .map(|option| option.id)
+            .collect();
+        assert_eq!(ids, ["reject-once", "allow-always", "allow-once"]);
+    }
 }

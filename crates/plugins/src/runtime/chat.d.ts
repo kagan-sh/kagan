@@ -7,8 +7,10 @@ export type ChatItem = { seq: number; threadId: string; at: number } & (
   | { kind: "thought"; text: string; messageId: string | null }
   | { kind: "work"; work: {
         id: string;
-        tool: "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "other";
-        /** The event's title, else its name, else "": keep the last non-empty one for this `id`. */
+        /** The call's kind: an MCP call by its name, a skill load, then the agent's own kind. */
+        tool: "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "mcp" | "skill" | "other";
+        /** The named title: `<server>.<tool>` for an MCP call, the skill's name, else the event's
+         * title, else its name, else "". Keep the last non-empty one for this `id`. */
         title: string;
         /** The state this event leaves the call in. */
         status: "running" | "ok" | "error";

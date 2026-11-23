@@ -859,7 +859,7 @@ async fn acp_approval_allow_once_answers_the_agent(cx: &mut TestAppContext) {
             InteractionOption {
                 id: "allow-always".into(),
                 label: "Always allow".into(),
-                role: Some(OptionRole::Safe),
+                role: None,
             },
         ],
         "the agent's labels and order stay as they are"
@@ -936,6 +936,148 @@ async fn acp_cancel_withdraws_the_approval(cx: &mut TestAppContext) {
         "a withdrawn question never reaches the agent"
     );
     assert!(alive(pid), "the agent keeps running");
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn acp_cancel_withdraws_the_agent_approval_and_leaves_the_threads_question(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_cancel_ask"],
+        &[asking(&calling(), &allow_options(), "end_turn")],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let approval = asked(&id, cx).await;
+    let option = |id: &str| InteractionOption {
+        id: id.into(),
+        label: id.into(),
+        role: None,
+    };
+    let OpResult::Text(asked_by_agent) = op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Which way?".into(),
+            options: vec![option("left"), option("right")],
+            fields: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("ask")
+    };
+    assert_eq!(
+        super::pending(&id, cx).await.len(),
+        2,
+        "both questions wait"
+    );
+    op(Op::Thread(ThreadOp::Cancel { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for(&id, |kinds| ended(kinds, TurnOutcome::Interrupted), cx).await;
+    let pending = super::pending(&id, cx).await;
+    assert_eq!(
+        pending.len(),
+        1,
+        "cancel took the agent's card only: {pending:?}"
+    );
+    assert_eq!(pending[0].id.to_string(), asked_by_agent);
+    assert_ne!(pending[0].id, approval.id);
+    // The question the agent asked through kagan still has its waiter.
+    let question = PendingInteractionId(asked_by_agent);
+    cx.update(|cx| Workspace::answer(&id, question, "left".into(), cx))
+        .await
+        .unwrap();
+    assert!(super::pending(&id, cx).await.is_empty());
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+/// An agent that exits while its request is open leaves no card and no waiter behind.
+#[gpui_kit::test]
+async fn acp_an_agent_that_hangs_up_with_a_question_open_leaves_nothing_waiting(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_hangup"],
+        &[json!({
+            "updates": [calling()],
+            "permission": {
+                "toolCall": {"toolCallId": "call_1", "title": "Run the tests", "kind": "execute"},
+                "options": allow_options(),
+                "hangup": true,
+            },
+            "stopReason": "end_turn",
+        })],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let interaction = asked(&id, cx).await;
+    assert!(
+        interaction.title.contains("wants to run a command"),
+        "{}",
+        interaction.title
+    );
+    std::fs::write(agent.path("hangup"), "").unwrap();
+    wait_for_status(&id, ThreadStatus::Idle, cx).await;
+    assert!(
+        super::pending(&id, cx).await.is_empty(),
+        "the agent's exit takes its question with it"
+    );
+    assert!(
+        !super::busy_of(&fixture, &id, cx),
+        "and the thread is not left waiting on an answer"
+    );
+}
+
+/// Stop while the agent waits for an answer ends the wait with the agent.
+#[gpui_kit::test]
+async fn acp_stop_with_a_question_open_leaves_nothing_waiting(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_stop_ask"],
+        &[asking(&calling(), &allow_options(), "end_turn")],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let interaction = asked(&id, cx).await;
+    assert!(!interaction.options.is_empty());
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    assert!(
+        super::pending(&id, cx).await.is_empty(),
+        "the stopped thread has no question"
+    );
+    assert!(!agent.path("answer").exists(), "nobody answered it");
+}
+
+/// A question the agent left open when its turn ended is about a turn that is over.
+#[gpui_kit::test]
+async fn acp_a_question_left_open_when_the_turn_ends_goes_with_it(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_abandon"],
+        &[json!({
+            "updates": [calling()],
+            "permission": {
+                "toolCall": {"toolCallId": "call_1", "title": "Run the tests", "kind": "execute"},
+                "options": allow_options(),
+                "abandon": true,
+            },
+            "stopReason": "end_turn",
+        })],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    assert!(
+        super::pending(&id, cx).await.is_empty(),
+        "a question the agent left behind does not outlive its turn"
+    );
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 
@@ -1344,6 +1486,23 @@ fn permission_step(
     prompt: &Value,
 ) -> bool {
     write(out, &permission_request(session, permission));
+    // An agent that hangs up with its request open never answers it: it waits for the test to say
+    // the card is up, then goes, and the card must not outlive it.
+    if permission["hangup"].as_bool() == Some(true) {
+        let signal = dir.join("hangup");
+        for _ in 0..600 {
+            if signal.exists() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        std::process::exit(0);
+    }
+    // An agent that ends its turn without waiting for the answer leaves the request open.
+    if permission["abandon"].as_bool() == Some(true) {
+        write(out, &reply(prompt, &json!({ "stopReason": "end_turn" })));
+        return true;
+    }
     let mut answered = false;
     for line in lines.by_ref() {
         let Ok(message) = serde_json::from_str::<Value>(&line) else {

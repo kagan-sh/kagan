@@ -102,6 +102,10 @@ an approval, and it never answers one.
    `notice` `{ severity, text }`; and `turn` `{ outcome, error? }`. An item is one event, not one
    row: one tool call is a `work` item that starts it and another that ends it, with `title: ""` on
    the end, so fold them by `work.id`, where the last non-empty title and the last status win. A
+   `work` item names the call itself: `tool` is one of the agent's kinds (`read`, `edit`, `delete`,
+   `move`, `search`, `execute`, `think`, `fetch`), `mcp` for a call named `mcp__<server>__<tool>` or
+   `kagan_<tool>` with `title` as `<server>.<tool>`, `skill` for a skill load with `title` as the
+   skill's name, and `other` when the event names neither. A
    `work` item's `args` is the agent's raw input, or its JSON text cut at 4 KiB when `argsTruncated`
    is true; `output` is the result text cut at 8 KiB when `outputTruncated` is true. `usage` is not
    an item. The open approvals and questions are `approvals(id)` — `{ interactionId, title,

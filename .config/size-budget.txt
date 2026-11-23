@@ -21,13 +21,17 @@ target 35000
 # and approvals in kg-plugins, and the prompt box the window answers. Decision 281 records it.
 # Cost: the last slice 1 fixes add 75 product lines on top of the merged count (89684): the chunked
 # line read with its cap, the poll after the agent's output ends, Escape propagating, and the test
-# module hook. The rest of the fixes are tests. Decision 279 records it. Product Rust went from
-# main's 84147 to 89759 (+5612), slices 1, 2 and 2b, and the last slice 1 fixes, together.
-ceiling 89759
+# module hook. The rest of the fixes are tests. Decision 279 records it.
+# Cost: the fixes the two slice reviews asked for add 581 product lines on top of the merged count
+# (89759): the fold by tool id with the bundle step after a merge, the auto-expand and override rules
+# with their tests, the permission queue in its own file, the caps on what a tool call writes, a
+# row's mark and word, the bodies' links and counts, and the files the budget asked to split.
+# Product Rust went from main's 84147 to 90340 (+6193), slices 1, 2 and 2b, and both reviews'
+# fixes, together. Decisions 279, 280 and 281 record it.
+ceiling 90340
 allow_expect 9
-crates/core/src/thread/acp/client.rs 835
+crates/core/src/thread/acp/client.rs 798
 crates/core/src/thread/agent/files.rs 754
 crates/plugins/src/runtime/ui_host.rs 630
-crates/ui/src/kagan/chat.rs 783
-crates/ui/src/kagan/chat/work.rs 893
+crates/ui/src/kagan/chat.rs 780
 crates/ui/src/theme/catalog.rs 646

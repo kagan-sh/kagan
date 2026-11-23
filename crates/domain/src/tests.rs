@@ -954,8 +954,7 @@ fn a_tool_delta_plan_and_usage_read_from_the_wire() {
             "input": { "file_path": "auth.spec.ts" },
             "output": "line one\nline two",
             "diff": [{ "path": "auth.spec.ts", "old": null, "new": "+ one" }],
-            "locations": [{ "path": "auth.spec.ts", "line": 41 }],
-            "approval": null
+            "locations": [{ "path": "auth.spec.ts", "line": 41 }]
         }}),
     );
     round_trip(
@@ -994,6 +993,29 @@ fn a_tool_delta_plan_and_usage_read_from_the_wire() {
             size: 200_000,
         },
         &json!({"type": "usage", "data": { "used": 12000, "size": 200_000 }}),
+    );
+}
+
+/// A delta carries only what the agent said this time: a field it left out is not written as a
+/// null, so the log and `kg thread events` stay small.
+#[test]
+fn a_tool_delta_writes_only_the_field_it_names() {
+    let wire = serde_json::to_value(EventKind::Tool {
+        id: "call-1".into(),
+        name: None,
+        kind: None,
+        title: None,
+        status: Some(crate::ToolStatus::InProgress),
+        input: None,
+        output: None,
+        diff: Vec::new(),
+        locations: Vec::new(),
+        approval: None,
+    })
+    .unwrap();
+    assert_eq!(
+        wire,
+        json!({"type": "tool", "data": { "id": "call-1", "status": "in_progress" }})
     );
 }
 

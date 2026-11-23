@@ -13,16 +13,17 @@ use super::changes::line;
 use super::screen::{Activation, Side};
 use super::{Kagan, question};
 
+/// The option a card opens on: the one that grants nothing. The safe way out comes first, then the
+/// option that refuses; the filled grant never opens a card, so Enter never approves by itself.
 fn opening_option(options: &[InteractionOption]) -> Option<&InteractionOption> {
     options
         .iter()
-        .find(|option| option.role == Some(OptionRole::Primary))
+        .find(|option| option.role == Some(OptionRole::Safe))
         .or_else(|| {
             options
                 .iter()
-                .find(|option| option.role == Some(OptionRole::Safe))
+                .find(|option| option.role == Some(OptionRole::Destructive))
         })
-        .or_else(|| options.first())
 }
 
 impl Kagan {
@@ -196,5 +197,38 @@ impl Kagan {
             });
         });
         cx.notify();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn option(id: &str, role: Option<OptionRole>) -> InteractionOption {
+        InteractionOption {
+            id: id.into(),
+            label: id.into(),
+            role,
+        }
+    }
+
+    #[test]
+    fn a_card_opens_on_the_option_that_grants_nothing() {
+        let options = vec![
+            option("reject-once", Some(OptionRole::Destructive)),
+            option("allow-always", None),
+            option("allow-once", Some(OptionRole::Primary)),
+        ];
+        assert_eq!(
+            opening_option(&options).map(|option| option.id.as_str()),
+            Some("reject-once"),
+            "a permission card never opens on an allow"
+        );
+    }
+
+    #[test]
+    fn a_card_with_no_reject_option_opens_on_nothing() {
+        assert!(opening_option(&[option("allow-once", Some(OptionRole::Primary))]).is_none());
+        assert!(opening_option(&[option("left", None), option("right", None)]).is_none());
     }
 }

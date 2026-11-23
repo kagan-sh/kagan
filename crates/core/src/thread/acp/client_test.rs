@@ -1,7 +1,8 @@
 //! The parts of the agent connection a test can reach without a process: a line read in chunks,
-//! an exit code, and the frames the pump reads after the agent stops writing.
+//! an exit code, the output a tool call repeats, and the frames the pump reads after the agent
+//! stops writing.
 
-use super::{LINE_MAX, Lines, Output, exit_code};
+use super::{LINE_MAX, Lines, Output, Repeats, exit_code};
 use kg_terminal::Exit;
 
 struct Bytes(std::io::Cursor<Vec<u8>>);
@@ -61,5 +62,31 @@ async fn a_stop_after_the_agent_spoke_still_reads_what_it_said(cx: &mut gpui_kit
         seen.load(Ordering::Relaxed),
         2,
         "the frames the agent wrote before its output ended are read"
+    );
+}
+
+fn update(output: Option<&str>, status: Option<kg_domain::ToolStatus>) -> super::map::ToolUpdate {
+    super::map::ToolUpdate {
+        id: "t1".into(),
+        name: None,
+        kind: None,
+        title: None,
+        status,
+        input: None,
+        output: output.map(str::to_owned),
+        diff: Vec::new(),
+        locations: Vec::new(),
+    }
+}
+
+#[test]
+fn an_output_the_last_update_already_said_is_not_written_again() {
+    let mut repeats = Repeats::default();
+    assert!(!repeats.repeats(&update(Some("one"), None)));
+    assert!(repeats.repeats(&update(Some("one"), None)));
+    assert!(!repeats.repeats(&update(Some("two"), None)));
+    assert!(
+        !repeats.repeats(&update(Some("two"), Some(kg_domain::ToolStatus::Completed))),
+        "an update that names a status is kept, whatever its output"
     );
 }

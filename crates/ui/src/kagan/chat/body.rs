@@ -1,21 +1,15 @@
-use std::rc::Rc;
-
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, Sizable as _, h_flex};
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled as _, WeakEntity, Window, div, px,
 };
 use kg_domain::{PlanEntry, PlanStatus, ToolDiff};
 
-use crate::kagan::attention;
 use crate::kagan::chat::ChatView;
+use crate::kagan::chat::kind::WorkKind;
 use crate::kagan::chat::part::ToolRow;
-use crate::kagan::chat::work::WorkKind;
-use crate::kagan::question;
 use crate::theme::{Tone, TypeScale as _, added, terminal_color};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -35,20 +29,24 @@ pub(super) fn work_body(
     tool: &ToolRow,
     kind: &WorkKind,
     weak: &WeakEntity<ChatView>,
-    window: &mut Window,
     cx: &mut App,
 ) -> impl IntoElement {
-    let _ = window;
     let more = weak
         .read_with(cx, |this, _| this.more_open(row))
         .unwrap_or(false);
     let output = match kind {
-        WorkKind::Execute => terminal_out(tool.output.as_deref(), cx),
+        WorkKind::Execute => terminal_out(row, tool.output.as_deref(), tool.running(), cx),
         WorkKind::Edit | WorkKind::Delete | WorkKind::Move => {
-            diff_out(&tool.diff, tool.output.as_deref(), cx)
+            diff_out(row, &tool.diff, tool.output.as_deref(), cx)
         }
         WorkKind::Think => thought_text(row, tool.output.as_deref().unwrap_or_default(), cx),
-        _ => plain_out(tool.output.as_deref(), cx),
+        WorkKind::Mcp { .. } => mcp_out(row, tool, cx),
+        _ => plain_out(row, tool.output.as_deref(), cx),
+    };
+    let link = match kind {
+        WorkKind::Edit | WorkKind::Delete | WorkKind::Move => review_link(row, tool, weak, cx),
+        WorkKind::Skill { .. } => Some(skill_link(row)),
+        _ => None,
     };
     let args = matches!(
         kind,
@@ -73,7 +71,101 @@ pub(super) fn work_body(
         .min_w_0()
         .children(args)
         .children(output)
+        .children(link)
         .ui_container()
+}
+
+/// A tool's own way on: the file in the review, or the skill in its window. It is idle while the
+/// row still runs.
+fn review_link(
+    row: u64,
+    tool: &ToolRow,
+    weak: &WeakEntity<ChatView>,
+    cx: &mut App,
+) -> Option<AnyElement> {
+    if !tool.diff.is_empty() && tool.running() {
+        return None;
+    }
+    let path = tool.diff.first()?.path.clone();
+    let kagan = weak.read_with(cx, |this, _| this.kagan()).ok()?;
+    Some(link(row, "review", "Open in review", move |window, cx| {
+        _ = kagan.update(cx, |kagan, cx| {
+            kagan.open_review(path.clone(), window, cx);
+        });
+    }))
+}
+
+fn skill_link(row: u64) -> AnyElement {
+    link(row, "skill", "Open skill", |_, cx| {
+        _ = crate::kagan::show_skills(cx);
+    })
+}
+
+/// One idle button under a body, so a row leads to the place the body talks about.
+fn link(
+    row: u64,
+    name: &'static str,
+    label: &'static str,
+    action: impl Fn(&mut Window, &mut App) + 'static,
+) -> AnyElement {
+    let id = format!("chat-link-{name}-{row}");
+    div()
+        .id(gpui_kit::ElementId::Name(id.clone().into()))
+        .ui_observe_as(Facts::button(label))
+        .child(
+            Button::new(SharedString::from(format!("{id}-button")))
+                .small()
+                .ghost()
+                .label(label)
+                .on_click(move |_, window, cx| action(window, cx)),
+        )
+        .into_any_element()
+}
+
+/// An MCP call's answer: how many things it carries, then the text the server sent.
+fn mcp_out(row: u64, tool: &ToolRow, cx: &mut App) -> Option<AnyElement> {
+    let output = tool.output.as_deref()?;
+    let items = serde_json::from_str::<serde_json::Value>(output)
+        .ok()
+        .and_then(|value| {
+            let list = match &value {
+                serde_json::Value::Array(items) => Some(items),
+                serde_json::Value::Object(map) => {
+                    map.get("items").and_then(serde_json::Value::as_array)
+                }
+                _ => None,
+            };
+            list.map(Vec::len)
+        });
+    let count = items.map(|items| {
+        let id = format!("chat-items-{row}");
+        div()
+            .id(gpui_kit::ElementId::Name(id.into()))
+            .ui_observe_as(Facts::button(format!(
+                "{items} {}",
+                if items == 1 { "item" } else { "items" }
+            )))
+            .type_caption(cx)
+            .text_color(cx.theme().muted_foreground)
+            .child(format!(
+                "{items} {}",
+                if items == 1 { "item" } else { "items" }
+            ))
+            .into_any_element()
+    });
+    let text = plain_out(row, Some(output), cx);
+    match (count, text) {
+        (None, None) => None,
+        (count, text) => Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(4.))
+                .children(count)
+                .children(text)
+                .into_any_element(),
+        ),
+    }
 }
 
 /// The reasoning, muted, markdown, capped and scrollable.
@@ -149,78 +241,6 @@ pub(super) fn plan_body(row: u64, entries: &[PlanEntry], cx: &mut App) -> impl I
         .py(px(2.))
         .children(steps)
         .ui_container()
-}
-
-/// The approval card: what the agent wants to do, in one plain sentence, the command or file in
-/// mono, and the agent's own options.
-pub(super) fn approval_card(
-    id: &kg_domain::PendingInteractionId,
-    tool_title: Option<&str>,
-    weak: &WeakEntity<ChatView>,
-    window: &mut Window,
-    cx: &mut App,
-) -> AnyElement {
-    let asked = attention::global(cx)
-        .read(cx)
-        .questions
-        .iter()
-        .find(|asked| &asked.id == id)
-        .cloned();
-    let Some(asked) = asked else {
-        return div().into_any_element();
-    };
-    let detail = detail(tool_title, cx);
-    let failed: question::Failed = {
-        let weak = weak.clone();
-        Rc::new(move |cx, text| {
-            _ = weak.update(cx, |this, cx| this.say(text, cx));
-        })
-    };
-    div()
-        .id(crate::kagan::chat::work::named(
-            crate::kagan::chat::part::Part::Approval,
-            &id.0,
-        ))
-        .child(question::permission_card(
-            &asked,
-            Some(detail),
-            &failed,
-            window,
-            cx,
-        ))
-        .ui_container()
-        .into_any_element()
-}
-
-fn detail(tool_title: Option<&str>, cx: &mut App) -> AnyElement {
-    let mono = cx.theme().mono_font_family.clone();
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(6.))
-        .when_some(tool_title.map(str::to_owned), |detail, title| {
-            let tip = title.clone();
-            detail.child(
-                div()
-                    .id(gpui_kit::ElementId::Name("chat-approval-value".into()))
-                    .px(px(8.))
-                    .py(px(4.))
-                    .rounded(cx.theme().radius)
-                    .bg(cx.theme().input)
-                    .font_family(mono)
-                    .type_small(cx)
-                    .text_color(cx.theme().foreground)
-                    .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
-                    .child(title),
-            )
-        })
-        .child(
-            div()
-                .type_caption(cx)
-                .text_color(cx.theme().muted_foreground)
-                .child("It runs in this thread's worktree."),
-        )
-        .into_any_element()
 }
 
 /// `key: value` lines for the raw input, three of them until the person asks for more.
@@ -316,82 +336,117 @@ fn value_text(value: &serde_json::Value) -> String {
     }
 }
 
-/// Plain output in a surface block, the first lines only.
-fn plain_out(output: Option<&str>, cx: &mut App) -> Option<AnyElement> {
-    let output = output?;
-    let lines = output.lines().take(OUTPUT_LINES);
-    Some(
-        div()
-            .id(gpui_kit::ElementId::Name("chat-output".into()))
-            .max_h(px(BODY_MAX))
-            .overflow_y_scroll()
-            .px(px(8.))
-            .py(px(6.))
-            .mb(px(4.))
-            .rounded(cx.theme().radius)
+/// What `kg ui` reads of a body's output: the lines the block shows.
+fn output_fact(lines: &[&str]) -> Facts {
+    Facts {
+        role: gpui_kit::Role::Label,
+        value: Some(lines.join("\n").into()),
+        ..Facts::button("Output")
+    }
+}
+
+/// The block every body's output sits in: capped, scrollable, mono, and the lines `kg ui` reads.
+/// A command and a diff sit on the terminal colours; other output on the surface, inside a border.
+fn output_block(
+    name: String,
+    lines: Vec<AnyElement>,
+    fact: Option<Facts>,
+    terminal: bool,
+    cx: &mut App,
+) -> AnyElement {
+    let block = div()
+        .id(gpui_kit::ElementId::Name(name.into()))
+        .max_h(px(BODY_MAX))
+        .overflow_y_scroll()
+        .px(px(8.))
+        .py(px(6.))
+        .mb(px(4.))
+        .rounded(cx.theme().radius)
+        .font_family(cx.theme().mono_font_family.clone())
+        .type_small(cx);
+    let block = if terminal {
+        block
+            .bg(terminal_color(kg_core::Color::Background, cx))
+            .text_color(terminal_color(kg_core::Color::Foreground, cx))
+    } else {
+        block
             .border_1()
             .border_color(cx.theme().border)
             .bg(cx.theme().secondary)
-            .font_family(cx.theme().mono_font_family.clone())
-            .type_small(cx)
-            .children(lines.map(|line| {
-                div()
-                    .whitespace_nowrap()
-                    .child(SharedString::from(line.to_owned()))
-            }))
-            .into_any_element(),
-    )
+    }
+    .children(lines);
+    match fact {
+        Some(fact) => block.ui_observe_as(fact).into_any_element(),
+        None => block.into_any_element(),
+    }
+}
+
+/// One line of an output block, never wrapped.
+fn output_line(line: &str) -> gpui_kit::Div {
+    div()
+        .whitespace_nowrap()
+        .child(SharedString::from(line.to_owned()))
+}
+
+/// Plain output in a surface block, the first lines only.
+fn plain_out(row: u64, output: Option<&str>, cx: &mut App) -> Option<AnyElement> {
+    let output = output?;
+    let lines: Vec<&str> = output.lines().take(OUTPUT_LINES).collect();
+    let fact = output_fact(&lines);
+    let block = output_block(
+        format!("chat-output-{row}"),
+        lines
+            .into_iter()
+            .map(|line| output_line(line).into_any_element())
+            .collect(),
+        Some(fact),
+        false,
+        cx,
+    );
+    Some(block)
 }
 
 /// A command's output in the terminal colours, capped and scrollable.
-fn terminal_out(output: Option<&str>, cx: &mut App) -> Option<AnyElement> {
+fn terminal_out(row: u64, output: Option<&str>, live: bool, cx: &mut App) -> Option<AnyElement> {
     let output = output?;
-    let background = terminal_color(kg_core::Color::Background, cx);
-    let foreground = terminal_color(kg_core::Color::Foreground, cx);
-    Some(
-        div()
-            .id(gpui_kit::ElementId::Name("chat-terminal".into()))
-            .max_h(px(BODY_MAX))
-            .overflow_y_scroll()
-            .px(px(8.))
-            .py(px(6.))
-            .mb(px(4.))
-            .rounded(cx.theme().radius)
-            .bg(background)
-            .text_color(foreground)
-            .font_family(cx.theme().mono_font_family.clone())
-            .type_small(cx)
-            .children(output.lines().map(|line| {
-                div()
-                    .whitespace_nowrap()
-                    .child(SharedString::from(line.to_owned()))
-            }))
-            .into_any_element(),
-    )
+    // A running command shows its newest lines, so the body stays at the bottom as it streams.
+    let mut lines: Vec<&str> = if live {
+        output.lines().rev().take(OUTPUT_LINES).collect()
+    } else {
+        output.lines().take(OUTPUT_LINES).collect()
+    };
+    if live {
+        lines.reverse();
+    }
+    let fact = output_fact(&lines);
+    let block = output_block(
+        format!("chat-terminal-{row}"),
+        lines
+            .into_iter()
+            .map(|line| output_line(line).into_any_element())
+            .collect(),
+        Some(fact),
+        true,
+        cx,
+    );
+    Some(block)
 }
 
-/// The reasoning a tool named, muted.
+/// The reasoning a tool named, muted, in the same markdown block a thought streams into.
 fn thought_text(row: u64, text: &str, cx: &mut App) -> Option<AnyElement> {
-    (!text.trim().is_empty()).then(|| {
-        div()
-            .id(gpui_kit::ElementId::Name(
-                format!("chat-reason-{row}").into(),
-            ))
-            .max_h(px(BODY_MAX))
-            .overflow_y_scroll()
-            .type_small(cx)
-            .text_color(cx.theme().muted_foreground)
-            .child(SharedString::from(text.to_owned()))
-            .into_any_element()
-    })
+    (!text.trim().is_empty()).then(|| thought_body(row, text, cx).into_any_element())
 }
 
 /// The diff, hunked, with `+` in the added colour and `−` in the failed one.
-fn diff_out(diffs: &[ToolDiff], output: Option<&str>, cx: &mut App) -> Option<AnyElement> {
+fn diff_out(
+    row: u64,
+    diffs: &[ToolDiff],
+    output: Option<&str>,
+    cx: &mut App,
+) -> Option<AnyElement> {
     if diffs.is_empty() {
-        return plain_out(output, cx);
+        return plain_out(row, output, cx);
     }
-    let background = terminal_color(kg_core::Color::Background, cx);
     let foreground = terminal_color(kg_core::Color::Foreground, cx);
     let mut lines: Vec<AnyElement> = Vec::new();
     for diff in diffs {
@@ -402,23 +457,17 @@ fn diff_out(diffs: &[ToolDiff], output: Option<&str>, cx: &mut App) -> Option<An
                 .header(&diff.path, &diff.path)
                 .to_string();
         for line in text.lines().take(DIFF_LINES.saturating_sub(lines.len())) {
-            let (color, mark) =
+            let color =
                 if line.starts_with("+++") || line.starts_with("---") || line.starts_with("@@") {
-                    (cx.theme().muted_foreground, "")
+                    cx.theme().muted_foreground
                 } else if line.starts_with('+') {
-                    (added(cx), "")
+                    added(cx)
                 } else if line.starts_with('-') {
-                    (Tone::Failed.color(cx), "")
+                    Tone::Failed.color(cx)
                 } else {
-                    (foreground, "")
+                    foreground
                 };
-            lines.push(
-                div()
-                    .whitespace_nowrap()
-                    .text_color(color)
-                    .child(SharedString::from(format!("{mark}{line}")))
-                    .into_any_element(),
-            );
+            lines.push(output_line(line).text_color(color).into_any_element());
         }
         if lines.len() >= DIFF_LINES {
             lines.push(
@@ -431,19 +480,11 @@ fn diff_out(diffs: &[ToolDiff], output: Option<&str>, cx: &mut App) -> Option<An
             break;
         }
     }
-    Some(
-        div()
-            .id(gpui_kit::ElementId::Name("chat-diff".into()))
-            .max_h(px(BODY_MAX))
-            .overflow_y_scroll()
-            .px(px(8.))
-            .py(px(6.))
-            .mb(px(4.))
-            .rounded(cx.theme().radius)
-            .bg(background)
-            .font_family(cx.theme().mono_font_family.clone())
-            .type_small(cx)
-            .children(lines)
-            .into_any_element(),
-    )
+    Some(output_block(
+        format!("chat-diff-{row}"),
+        lines,
+        None,
+        true,
+        cx,
+    ))
 }

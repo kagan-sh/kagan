@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use crate::theme::TypeScale as _;
 use gpui_kit::component::ActiveTheme as _;
@@ -16,11 +16,14 @@ use gpui_kit::{
 use kg_core::{Workspace, WorkspaceEvent};
 use kg_domain::{Event, Op, Role as Speaker, ThreadId, ThreadOp, Timestamp, program_label};
 
+use crate::kagan::Kagan;
 use crate::kagan::controls::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 mod body;
+mod card;
+mod kind;
 mod part;
 mod work;
 
@@ -31,14 +34,14 @@ pub(crate) const CONTEXT: &str = "Chat";
 /// answers it. The thread's events are the transcript, so nothing is kept here that the log lacks.
 pub(crate) struct ChatView {
     thread: ThreadId,
+    /// The window's own view, so a row's link can open the review or the skills it names.
+    kagan: gpui_kit::WeakEntity<Kagan>,
     transcript: part::Transcript,
     /// Whether the load has finished. Live events wait in `pending` until it has.
     loaded: bool,
     pending: Vec<Event>,
     prompt: gpui_kit::Entity<TextareaState>,
     scroller: gpui_kit::Entity<MessageScrollerState>,
-    /// The person's own expand and collapse choices: they always win over the rules.
-    open: BTreeMap<u64, bool>,
     /// The rows whose arguments show every line.
     more: BTreeSet<u64>,
     /// Whether the trailing "Working…" row is drawn.
@@ -51,7 +54,12 @@ pub(crate) struct ChatView {
 }
 
 impl ChatView {
-    pub(crate) fn new(thread: ThreadId, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub(crate) fn new(
+        thread: ThreadId,
+        kagan: gpui_kit::WeakEntity<Kagan>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let prompt = cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 8));
         let prompt_watch = cx.subscribe_in(&prompt, window, |this, _, event, window, cx| {
             if let InputEvent::PressEnter {
@@ -67,21 +75,29 @@ impl ChatView {
         // scroller draws (the jump button, the bottom fade) has to bring the view back.
         let scroller_watch = cx.observe(&scroller, |_, _, cx| cx.notify());
         let events = cx.subscribe(&Workspace::global(cx), |this, _, event, cx| {
-            if let WorkspaceEvent::Event { event, .. } = event
-                && event.thread_id == this.thread
-            {
-                this.absorb(event, cx);
+            // Another thread's events are not this transcript's work: the fold meets the log
+            // once per event that is this thread's, and the state's own changes.
+            let sync = match event {
+                WorkspaceEvent::Event { event, .. } if event.thread_id == this.thread => {
+                    this.absorb(event, cx);
+                    false
+                }
+                WorkspaceEvent::Changed => true,
+                WorkspaceEvent::Waiting(id) | WorkspaceEvent::Finished(id) => *id == this.thread,
+                _ => false,
+            };
+            if sync {
+                this.sync(cx);
             }
-            this.sync(cx);
         });
         let mut this = Self {
             thread,
+            kagan,
             transcript: part::Transcript::default(),
             loaded: false,
             pending: Vec::new(),
             prompt,
             scroller,
-            open: BTreeMap::new(),
             more: BTreeSet::new(),
             working: false,
             notice: None,
@@ -147,15 +163,12 @@ impl ChatView {
             self.pending.push(event.clone());
             return;
         }
-        match self.transcript.absorb(event) {
-            part::Fold::Ignored => {}
-            part::Fold::Appended(index) => {
-                _ = self.scroller.update(cx, |state, cx| state.append(1, cx));
-                let _ = self.row_changed(index, cx);
-            }
-            part::Fold::Changed(index) => {
-                let _ = self.row_changed(index, cx);
-            }
+        if let part::Fold::Dirty(from) = self.transcript.absorb(event) {
+            self.sync(cx);
+            let count = self.scroller.read(cx).item_count();
+            let _ = self.scroller.update(cx, |state, cx| {
+                state.remeasure_items(from.min(count)..count, cx)
+            });
         }
         cx.notify();
     }
@@ -183,42 +196,24 @@ impl ChatView {
             .update(cx, |state, cx| state.remeasure_items(index..index + 1, cx))
     }
 
-    fn toggle(&mut self, row: u64, cx: &mut Context<Self>) {
-        let Some(index) = self.transcript.rows.iter().position(|line| line.id == row) else {
-            return;
-        };
-        let open = self.is_open(index, cx);
-        self.open.insert(row, !open);
-        self.row_changed(index, cx);
+    fn toggle(&mut self, key: part::RowKey, cx: &mut Context<Self>) {
+        let answering = self.answering(cx);
+        if let Some(index) = self.transcript.toggle(key, answering) {
+            self.row_changed(index, cx);
+        }
         cx.notify();
     }
 
     fn is_open(&self, index: usize, cx: &App) -> bool {
-        let Some(row) = self.transcript.rows.get(index) else {
-            return false;
-        };
-        self.open
-            .get(&row.id)
-            .copied()
-            .unwrap_or_else(|| self.auto_open(index, cx))
+        self.transcript.is_open(index, self.answering(cx))
     }
 
-    /// Recomputed on every event, never stored, so it cannot fight the log.
-    fn auto_open(&self, index: usize, cx: &App) -> bool {
-        let Some(row) = self.transcript.rows.get(index) else {
-            return false;
-        };
-        let last = index + 1 == self.transcript.rows.len();
-        let failed_turn = self.transcript.last_outcome == Some(kg_domain::TurnOutcome::Failed);
-        match &row.kind {
-            part::RowKind::Plan(_) => true,
-            part::RowKind::Thought(thought) => last && !thought.text.is_empty(),
-            part::RowKind::Bundle(_) => last && self.answering(cx),
-            part::RowKind::Work(tool) => {
-                (last && tool.live_body()) || (last && failed_turn && tool.failed())
-            }
-            _ => false,
-        }
+    fn member_open(&self, key: part::RowKey) -> bool {
+        self.transcript.member_open(key)
+    }
+
+    pub(super) fn kagan(&self) -> gpui_kit::WeakEntity<Kagan> {
+        self.kagan.clone()
     }
 
     fn more_open(&self, row: u64) -> bool {
@@ -362,15 +357,14 @@ impl ChatView {
     pub(crate) fn render_with(
         &mut self,
         transcript: Option<AnyElement>,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let answering = self.answering(cx);
         let running = self.running(cx);
-        let who = self.who(cx);
         let body = match transcript {
             Some(transcript) => transcript,
-            None => self.transcript(&who, window, cx).into_any_element(),
+            None => self.transcript(cx).into_any_element(),
         };
         v_flex()
             .size_full()
@@ -384,12 +378,7 @@ impl ChatView {
 
 impl ChatView {
     /// Everything the thread has said, read top to bottom in one column.
-    fn transcript(
-        &mut self,
-        _who: &SharedString,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn transcript(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let weak = cx.weak_entity();
         let scroller = self.scroller.clone();
         let usage = self
@@ -550,7 +539,7 @@ fn row_at(
         .ok()
         .flatten()
     else {
-        return working_row(weak, window, cx);
+        return working_row(cx);
     };
     let open = weak
         .read_with(cx, |this, cx| this.is_open(index, cx))
@@ -560,55 +549,65 @@ fn row_at(
             this.answering(cx) && index + 1 == this.transcript.rows.len()
         })
         .unwrap_or(false);
-    match row.kind.clone() {
+    match &row.kind {
         part::RowKind::Message { role, text, at, .. } => {
             let who = weak
                 .read_with(cx, ChatView::who)
                 .unwrap_or_else(|_| "Agent".into());
             message_view(
                 row.id,
-                role,
-                &text,
-                at,
-                if role == Speaker::User { "You" } else { &who },
+                *role,
+                text,
+                *at,
+                if *role == Speaker::User { "You" } else { &who },
                 cx,
             )
         }
         part::RowKind::Thought(thought) => {
-            work::thought_row(&row, &thought, live, open, weak, window, cx)
+            work::thought_row(&row, thought, live, open, weak, window, cx)
         }
-        part::RowKind::Work(tool) => work::work_row(&row, &tool, false, open, weak, window, cx),
-        part::RowKind::Bundle(members) => work::bundle_row(&row, &members, open, weak, window, cx),
-        part::RowKind::Plan(entries) => work::plan_row(&row, &entries, open, weak, window, cx),
+        part::RowKind::Work(tool) => work::work_row(&row, tool, false, open, weak, window, cx),
+        part::RowKind::Bundle(members) => work::bundle_row(&row, members, open, weak, window, cx),
+        part::RowKind::Plan(entries) => work::plan_row(&row, entries, open, weak, window, cx),
         part::RowKind::Approval(id) => {
-            let title = weak
-                .read_with(cx, |this, _| this.approval_title(index))
-                .ok()
-                .flatten();
-            body::approval_card(&id, title.as_deref(), weak, window, cx)
+            let (title, worktree) = weak
+                .read_with(cx, |this, cx| this.approval_detail(index, cx))
+                .unwrap_or_default();
+            card::approval_card(id, title.as_deref(), worktree, weak, window, cx)
         }
-        part::RowKind::Notice(text) => notice_view(row.id, &text, cx),
-        part::RowKind::Divider { from, to, outcome } => divider_view(row.id, from, to, outcome, cx),
+        part::RowKind::Notice(text) => notice_view(row.id, text, cx),
+        part::RowKind::Divider { from, to, outcome } => {
+            divider_view(row.id, *from, *to, *outcome, cx)
+        }
     }
 }
 
 impl ChatView {
-    /// The title of the tool row an approval card follows.
-    fn approval_title(&self, index: usize) -> Option<String> {
-        let previous = index.checked_sub(1)?;
-        match &self.transcript.rows.get(previous)?.kind {
-            part::RowKind::Work(tool) => work::title_of(tool),
-            _ => None,
-        }
+    /// What an approval card says about the tool row it follows: its title, and whether the tool
+    /// works in the thread's own folder.
+    fn approval_detail(&self, index: usize, cx: &App) -> (Option<String>, bool) {
+        let tool = index.checked_sub(1).and_then(|previous| {
+            match &self.transcript.rows.get(previous)?.kind {
+                part::RowKind::Work(tool) => Some(tool.as_ref()),
+                _ => None,
+            }
+        });
+        let Some(tool) = tool else {
+            return (None, false);
+        };
+        let environment = Workspace::global(cx)
+            .read(cx)
+            .thread(&self.thread)
+            .is_some_and(|thread| thread.read(cx).record().environment_id.is_some());
+        (
+            kind::title_of(tool),
+            card::runs_in_worktree(tool.kind, environment),
+        )
     }
 }
 
 /// The trailing row that says the agent is working and nothing else is live.
-fn working_row(
-    _weak: &gpui_kit::WeakEntity<ChatView>,
-    _window: &mut Window,
-    cx: &mut App,
-) -> AnyElement {
+fn working_row(cx: &mut App) -> AnyElement {
     let muted = cx.theme().muted_foreground;
     div()
         .id("chat-working")
@@ -643,7 +642,7 @@ fn message_view(
     cx: &mut App,
 ) -> AnyElement {
     let user = role == Speaker::User;
-    let element = work::row_id(part::Part::Message, id);
+    let element = work::named(part::Part::Message, id);
     let label = who.to_owned();
     let copy = text.to_owned();
     let row = h_flex()
@@ -718,7 +717,7 @@ fn message_view(
 
 fn notice_view(id: u64, text: &str, cx: &mut App) -> AnyElement {
     div()
-        .id(work::row_id(part::Part::Notice, id))
+        .id(work::named(part::Part::Notice, id))
         .ui_observe_as(Facts {
             role: Role::Label,
             name: text.to_owned().into(),
@@ -742,9 +741,7 @@ fn divider_view(
     outcome: kg_domain::TurnOutcome,
     cx: &mut App,
 ) -> AnyElement {
-    let span = work::span_text(std::time::Duration::from_millis(
-        u64::try_from(to.0.saturating_sub(from.0).max(0)).unwrap_or(0),
-    ));
+    let span = kind::span_text(kind::span_of(from, to));
     let text = if outcome == kg_domain::TurnOutcome::Failed {
         format!("Worked for {span} · failed")
     } else {
