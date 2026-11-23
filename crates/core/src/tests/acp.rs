@@ -837,7 +837,7 @@ async fn acp_approval_allow_once_answers_the_agent(cx: &mut TestAppContext) {
             InteractionOption {
                 id: "allow-always".into(),
                 label: "Always allow".into(),
-                role: Some(OptionRole::Safe),
+                role: None,
             },
         ],
         "the agent's labels and order stay as they are"

@@ -209,11 +209,12 @@ pub(super) fn options(options: &[PermissionOption]) -> Vec<InteractionOption> {
         .map(|option| InteractionOption {
             id: option.option_id.to_string(),
             label: option.name.clone(),
-            role: Some(match option.kind {
-                PermissionOptionKind::AllowOnce => OptionRole::Primary,
-                PermissionOptionKind::AllowAlways => OptionRole::Safe,
-                _ => OptionRole::Destructive,
-            }),
+            role: match option.kind {
+                PermissionOptionKind::AllowOnce => Some(OptionRole::Primary),
+                // Always allow is a grant the agent remembers, and the card must not open on it.
+                PermissionOptionKind::AllowAlways => None,
+                _ => Some(OptionRole::Destructive),
+            },
         })
         .collect()
 }
