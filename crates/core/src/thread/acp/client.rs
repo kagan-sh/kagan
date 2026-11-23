@@ -1,4 +1,4 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::ffi::OsString;
 use std::fs::File;
 use std::path::PathBuf;
@@ -511,6 +511,28 @@ impl Unread {
     }
 }
 
+/// The output each tool call last reported. ACP re-sends the whole output on every update, so an
+/// update that says nothing but one the log already holds is not written again.
+#[derive(Default)]
+struct Repeats(HashMap<String, String>);
+
+impl Repeats {
+    fn repeats(&mut self, tool: &map::ToolUpdate) -> bool {
+        let Some(output) = &tool.output else {
+            return false;
+        };
+        let only_output = tool.name.is_none()
+            && tool.kind.is_none()
+            && tool.title.is_none()
+            && tool.status.is_none()
+            && tool.input.is_none()
+            && tool.diff.is_empty()
+            && tool.locations.is_empty();
+        let last = self.0.insert(tool.id.clone(), output.clone());
+        only_output && last.is_some_and(|last| last == *output)
+    }
+}
+
 /// A permission request the connection holds open: the agent waits, and so does the person's
 /// answer. The connection keeps reading meanwhile.
 struct Asking {
@@ -526,6 +548,7 @@ async fn serve(
     events: &async_channel::Sender<AcpEvent>,
 ) -> Result<(), String> {
     let mut unread = Unread::default();
+    let mut repeats = Repeats::default();
     let mut asking: std::collections::VecDeque<Asking> = std::collections::VecDeque::new();
     loop {
         let step = {
@@ -554,7 +577,7 @@ async fn serve(
         };
         match step {
             Step::Update(Ok(message)) => {
-                heard(*message, events, &mut unread, &mut asking).await;
+                heard(*message, events, &mut unread, &mut repeats, &mut asking).await;
             }
             Step::Update(Err(error)) => return Err(error.to_string()),
             Step::Answer(Ok(option)) => {
@@ -603,6 +626,7 @@ async fn heard(
     message: SessionMessage,
     events: &async_channel::Sender<AcpEvent>,
     unread: &mut Unread,
+    repeats: &mut Repeats,
     asking: &mut std::collections::VecDeque<Asking>,
 ) {
     match message {
@@ -614,7 +638,7 @@ async fn heard(
             send(events, AcpEvent::TurnDone { outcome, error }).await;
         }
         SessionMessage::Message(dispatch) => {
-            answer(dispatch.into_raw(), events, unread, asking).await;
+            answer(dispatch.into_raw(), events, unread, repeats, asking).await;
         }
         _ => eprintln!("kg: the agent sent something kagan does not read yet"),
     }
@@ -632,6 +656,7 @@ async fn answer(
     dispatch: Dispatch,
     events: &async_channel::Sender<AcpEvent>,
     unread: &mut Unread,
+    repeats: &mut Repeats,
     asking: &mut std::collections::VecDeque<Asking>,
 ) {
     let dispatch = match dispatch.into_notification::<SessionNotification>() {
@@ -659,7 +684,11 @@ async fn answer(
                     )
                     .await;
                 }
-                Some(map::Update::Tool(tool)) => send(events, AcpEvent::Tool(tool)).await,
+                Some(map::Update::Tool(tool)) => {
+                    if !repeats.repeats(&tool) {
+                        send(events, AcpEvent::Tool(tool)).await;
+                    }
+                }
                 Some(map::Update::Plan(entries)) => send(events, AcpEvent::Plan(entries)).await,
                 Some(map::Update::Usage { used, size }) => {
                     send(events, AcpEvent::Usage { used, size }).await;
@@ -719,6 +748,37 @@ async fn permission(
         answer: answered,
         responder,
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn update(output: Option<&str>, status: Option<kg_domain::ToolStatus>) -> map::ToolUpdate {
+        map::ToolUpdate {
+            id: "t1".into(),
+            name: None,
+            kind: None,
+            title: None,
+            status,
+            input: None,
+            output: output.map(str::to_owned),
+            diff: Vec::new(),
+            locations: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn an_output_the_last_update_already_said_is_not_written_again() {
+        let mut repeats = Repeats::default();
+        assert!(!repeats.repeats(&update(Some("one"), None)));
+        assert!(repeats.repeats(&update(Some("one"), None)));
+        assert!(!repeats.repeats(&update(Some("two"), None)));
+        assert!(
+            !repeats.repeats(&update(Some("two"), Some(kg_domain::ToolStatus::Completed))),
+            "an update that names a status is kept, whatever its output"
+        );
+    }
 }
 
 /// Waits a moment for the agent to exit on its own, then ends its tree and reports how it ended.
