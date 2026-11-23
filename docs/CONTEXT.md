@@ -34,12 +34,20 @@ _Avoid_: Environment type, backend
 ## Threads
 
 **Thread**:
-One program running in one environment, with a status (`pending`, `idle`, `starting`, `active`, `stopping`, `error`) and an append-only event log.
+One program running in one environment, with a status (`pending`, `idle`, `starting`, `active`, `stopping`, `error`) and an append-only event log. Its link is how the program is reached: a terminal, or the agent's own ACP connection, fixed when the thread starts.
 _Avoid_: Session, chat, task
 
 **Turn**:
-The stretch a program's title shows a spinner, until that title stays plain, or the program stops or exits while the spinner is up. `turn.started` and `turn.ended` record it.
+The stretch a program's title shows a spinner, until that title stays plain, or the program stops or exits while the spinner is up. `turn.started` and `turn.ended` record it. An ACP thread's turn is one prompt, from sending it to the agent's stop reason.
 _Avoid_: Run, step
+
+**Session**:
+A chat agent's own record of the thread, which the agent names with an id. Kagan stores that id as the thread's conversation.
+_Avoid_: Chat, thread
+
+**Chat**:
+The center of an ACP thread: the thread's events as a transcript, and one prompt box. The agent answers here instead of in a terminal.
+_Avoid_: Terminal, session view
 
 **Event**:
 One immutable record in a thread's log, such as a message, tool call, file change or status change, numbered by sequence.
@@ -142,8 +150,8 @@ What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_
 _Avoid_: Injection, agent setup, wrapper
 
 **Conversation**:
-What an agent remembers of a thread's program: what was said and done. Kagan gives `claude`, `cursor-agent`, and `agent` an id for it at the first start, and finds the id `codex` picked, so Start again resumes it.
-_Avoid_: Session, chat
+What an agent remembers of a thread's program: what was said and done. Kagan gives `claude`, `cursor-agent`, and `agent` an id for it at the first start, and finds the id `codex` picked, so Start again resumes it. An ACP thread's conversation is the agent's session id.
+_Avoid_: Chat
 
 **Browser**:
 A tab of the right sidebar that shows one web page. On Linux the page is WebKitGTK and needs an X11 window. A thread's agent can drive it with `kg browser`. A plugin can drive that same page when the Browser area is on its install card. The row has Back, Forward, Reload, and Open in external browser.
