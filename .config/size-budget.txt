@@ -15,11 +15,11 @@ target 35000
 # Cost: ACP threads, slice 2, add the full transcript on top of main (84147): the domain events a
 # tool call, a plan and usage arrive as, the ACP mapping and the permission request in kg-core, and
 # the row fold, work row, bodies, bundling, scroller and approval card in kg-ui. Decision 280 records
-# it. Product Rust went from main's 84147 to 88905 (+4758), slices 1 and 2 together.
-ceiling 88905
+# it. Product Rust went from main's 84147 to 88922 (+4775), slices 1 and 2 together.
+ceiling 88922
 allow_expect 9
 crates/core/src/thread/acp/client.rs 762
 crates/core/src/thread/agent/files.rs 754
 crates/ui/src/kagan/chat.rs 754
-crates/ui/src/kagan/chat/work.rs 885
+crates/ui/src/kagan/chat/work.rs 893
 crates/ui/src/theme/catalog.rs 646
