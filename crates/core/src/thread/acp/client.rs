@@ -614,7 +614,7 @@ async fn heard(
             send(events, AcpEvent::TurnDone { outcome, error }).await;
         }
         SessionMessage::Message(dispatch) => {
-            answer(dispatch.into_raw(), events, unread, asking).await
+            answer(dispatch.into_raw(), events, unread, asking).await;
         }
         _ => eprintln!("kg: the agent sent something kagan does not read yet"),
     }

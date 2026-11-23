@@ -258,7 +258,7 @@ pub(crate) async fn commit(
     this.update(cx, |_, cx| {
         for event in events {
             cx.emit(crate::WorkspaceEvent::Event {
-                event,
+                event: Box::new(event),
                 project_id: record.project_id.clone(),
             });
         }

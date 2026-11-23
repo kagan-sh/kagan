@@ -993,7 +993,7 @@ fn a_tool_delta_plan_and_usage_read_from_the_wire() {
             used: 12_000,
             size: 200_000,
         },
-        &json!({"type": "usage", "data": { "used": 12000, "size": 200000 }}),
+        &json!({"type": "usage", "data": { "used": 12000, "size": 200_000 }}),
     );
 }
 

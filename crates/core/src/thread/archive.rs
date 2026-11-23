@@ -47,7 +47,10 @@ fn emit(
         for event in events {
             if let Some(thread) = workspace.threads.get(&event.thread_id) {
                 let project_id = thread.read(cx).record.project_id.clone();
-                cx.emit(crate::WorkspaceEvent::Event { event, project_id });
+                cx.emit(crate::WorkspaceEvent::Event {
+                    event: Box::new(event),
+                    project_id,
+                });
             }
         }
         cx.notify();
@@ -159,7 +162,10 @@ pub(crate) fn forget_deleted(
         super::terminal::kill(workspace, &event.thread_id);
         workspace.threads.remove(&event.thread_id);
         workspace.tasks.remove(&event.thread_id);
-        cx.emit(crate::WorkspaceEvent::Event { event, project_id });
+        cx.emit(crate::WorkspaceEvent::Event {
+            event: Box::new(event),
+            project_id,
+        });
     }
     cx.notify();
 }

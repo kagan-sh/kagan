@@ -192,7 +192,7 @@ impl Workspace {
             crate::thread::notify::after(workspace, &thread_id, &events, cx);
             for event in events {
                 cx.emit(WorkspaceEvent::Event {
-                    event,
+                    event: Box::new(event),
                     project_id: project_id.clone(),
                 });
             }

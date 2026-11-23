@@ -97,6 +97,10 @@ async fn set_metadata(
     Ok(OpResult::Done)
 }
 
+#[expect(
+    clippy::cognitive_complexity,
+    reason = "one arm per ThreadOp variant; the router is a flat table"
+)]
 pub(crate) async fn dispatch_thread(
     this: &WeakEntity<Workspace>,
     database: Database,

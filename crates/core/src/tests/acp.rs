@@ -18,12 +18,12 @@ fn turn(chunks: &[&str], stop: &str) -> Value {
 }
 
 /// A turn recorded as raw ACP updates, then the stop reason.
-fn transcript(updates: Value, stop: &str) -> Value {
+fn transcript(updates: &Value, stop: &str) -> Value {
     json!({ "updates": updates, "stopReason": stop })
 }
 
 /// A turn that asks for permission before it finishes. `options` are the agent's own.
-fn asking(tool: Value, options: Value, stop: &str) -> Value {
+fn asking(tool: &Value, options: &Value, stop: &str) -> Value {
     json!({
         "updates": [tool],
         "permission": {
@@ -574,41 +574,8 @@ fn heard_in(path: &Path, cx: &mut TestAppContext) -> String {
     }
 }
 
-#[gpui_kit::test]
-async fn acp_thought_and_tool_updates_fill_the_log(cx: &mut TestAppContext) {
-    let fixture = Fixture::new(cx).await;
-    let agent = Agent::new(
-        &["ses_tool"],
-        &[transcript(
-            json!([
-                {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": "look first"}},
-                {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": " before"}},
-                {
-                    "sessionUpdate": "tool_call",
-                    "toolCallId": "t1",
-                    "name": "read_file",
-                    "title": "Read file auth.spec.ts",
-                    "kind": "read",
-                    "status": "in_progress",
-                    "rawInput": {"file_path": "auth.spec.ts"},
-                    "locations": [{"path": "/work/auth.spec.ts", "line": 41}]
-                },
-                {
-                    "sessionUpdate": "tool_call_update",
-                    "toolCallId": "t1",
-                    "status": "completed",
-                    "content": [
-                        {"type": "content", "content": {"type": "text", "text": "line one\nline two"}},
-                        {"type": "diff", "path": "/work/auth.spec.ts", "oldText": "old", "newText": "new"}
-                    ]
-                }
-            ]),
-            "end_turn",
-        )],
-    );
-    let id = started(&fixture, &agent, cx).await;
-    send(&id, "go", cx).await;
-    let kinds = wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+/// The two thought chunks of the recording arrive as one stream, in order.
+fn one_thought(kinds: &[EventKind]) {
     let thoughts: Vec<_> = kinds
         .iter()
         .filter_map(|kind| match kind {
@@ -617,6 +584,10 @@ async fn acp_thought_and_tool_updates_fill_the_log(cx: &mut TestAppContext) {
         })
         .collect();
     assert_eq!(thoughts.concat(), "look first before", "{kinds:?}");
+}
+
+/// A read call opens the row; its update completes it and repeats neither title nor input.
+fn a_read_call_and_its_update(kinds: &[EventKind]) {
     let tools: Vec<_> = kinds
         .iter()
         .filter(|kind| matches!(kind, EventKind::Tool { .. }))
@@ -677,6 +648,45 @@ async fn acp_thought_and_tool_updates_fill_the_log(cx: &mut TestAppContext) {
     );
     assert!(title.is_none(), "an update need not repeat the title");
     assert!(input.is_none(), "an update need not repeat the input");
+}
+
+#[gpui_kit::test]
+async fn acp_thought_and_tool_updates_fill_the_log(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_tool"],
+        &[transcript(
+            &json!([
+                {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": "look first"}},
+                {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": " before"}},
+                {
+                    "sessionUpdate": "tool_call",
+                    "toolCallId": "t1",
+                    "name": "read_file",
+                    "title": "Read file auth.spec.ts",
+                    "kind": "read",
+                    "status": "in_progress",
+                    "rawInput": {"file_path": "auth.spec.ts"},
+                    "locations": [{"path": "/work/auth.spec.ts", "line": 41}]
+                },
+                {
+                    "sessionUpdate": "tool_call_update",
+                    "toolCallId": "t1",
+                    "status": "completed",
+                    "content": [
+                        {"type": "content", "content": {"type": "text", "text": "line one\nline two"}},
+                        {"type": "diff", "path": "/work/auth.spec.ts", "oldText": "old", "newText": "new"}
+                    ]
+                }
+            ]),
+            "end_turn",
+        )],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let kinds = wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    one_thought(&kinds);
+    a_read_call_and_its_update(&kinds);
     let ats: Vec<_> = events(&id, cx).await.iter().map(|event| event.at).collect();
     assert!(
         ats.windows(2).all(|pair| pair[0] <= pair[1]),
@@ -691,7 +701,7 @@ async fn acp_mcp_and_skill_calls_are_plain_tool_events(cx: &mut TestAppContext) 
     let agent = Agent::new(
         &["ses_mcp"],
         &[transcript(
-            json!([
+            &json!([
                 {
                     "sessionUpdate": "tool_call",
                     "toolCallId": "m1",
@@ -747,7 +757,7 @@ async fn acp_plan_and_usage_are_events(cx: &mut TestAppContext) {
     let agent = Agent::new(
         &["ses_plan"],
         &[transcript(
-            json!([
+            &json!([
                 {
                     "sessionUpdate": "plan",
                     "entries": [
@@ -756,7 +766,7 @@ async fn acp_plan_and_usage_are_events(cx: &mut TestAppContext) {
                         {"content": "Fix it", "priority": "low", "status": "pending"}
                     ]
                 },
-                {"sessionUpdate": "usage_update", "used": 12000, "size": 200000}
+                {"sessionUpdate": "usage_update", "used": 12000, "size": 200_000}
             ]),
             "end_turn",
         )],
@@ -789,7 +799,7 @@ async fn acp_plan_and_usage_are_events(cx: &mut TestAppContext) {
     assert!(
         kinds.contains(&EventKind::Usage {
             used: 12000,
-            size: 200000,
+            size: 200_000,
         }),
         "{kinds:?}"
     );
@@ -801,7 +811,7 @@ async fn acp_approval_allow_once_answers_the_agent(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let agent = Agent::new(
         &["ses_allow"],
-        &[asking(calling(), allow_options(), "end_turn")],
+        &[asking(&calling(), &allow_options(), "end_turn")],
     );
     let id = started(&fixture, &agent, cx).await;
     send(&id, "go", cx).await;
@@ -862,7 +872,7 @@ async fn acp_approval_deny_answers_the_agent(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let agent = Agent::new(
         &["ses_deny"],
-        &[asking(calling(), allow_options(), "end_turn")],
+        &[asking(&calling(), &allow_options(), "end_turn")],
     );
     let id = started(&fixture, &agent, cx).await;
     send(&id, "go", cx).await;
@@ -881,7 +891,7 @@ async fn acp_cancel_withdraws_the_approval(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let agent = Agent::new(
         &["ses_withdraw"],
-        &[asking(calling(), allow_options(), "end_turn")],
+        &[asking(&calling(), &allow_options(), "end_turn")],
     );
     let id = started(&fixture, &agent, cx).await;
     let pid = agent.pid("pid", cx);
@@ -910,7 +920,10 @@ async fn acp_cancel_withdraws_the_approval(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 async fn acp_a_permission_request_with_no_options_is_cancelled(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
-    let agent = Agent::new(&["ses_noopt"], &[asking(calling(), json!([]), "end_turn")]);
+    let agent = Agent::new(
+        &["ses_noopt"],
+        &[asking(&calling(), &json!([]), "end_turn")],
+    );
     let id = started(&fixture, &agent, cx).await;
     send(&id, "go", cx).await;
     wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
@@ -1231,19 +1244,8 @@ fn fake_agent() {
                     let stop = record["stopReason"].as_str().unwrap_or("end_turn");
                     write(&mut out, &reply(&id, &json!({ "stopReason": stop })));
                 }
-                if record["quit"].as_bool() == Some(true) {
+                if record["quit"].as_bool() == Some(true) || ends(&record) {
                     return;
-                }
-                for line in record["stderr"].as_array().cloned().unwrap_or_default() {
-                    eprintln!("{}", line.as_str().unwrap_or_default());
-                }
-                if let Some(code) = record["exit"].as_i64() {
-                    std::process::exit(i32::try_from(code).unwrap_or(1));
-                }
-                if record["signal"].as_bool() == Some(true) {
-                    let _ = std::process::Command::new("kill")
-                        .args(["-9", &std::process::id().to_string()])
-                        .status();
                 }
             }
             "session/cancel" => {
@@ -1265,6 +1267,23 @@ fn fake_agent() {
             _ => {}
         }
     }
+}
+
+/// The ways a recording ends the agent after a prompt: its stderr, its exit code, or a signal.
+/// Returns whether the agent stops listening.
+fn ends(record: &Value) -> bool {
+    for line in record["stderr"].as_array().cloned().unwrap_or_default() {
+        eprintln!("{}", line.as_str().unwrap_or_default());
+    }
+    if let Some(code) = record["exit"].as_i64() {
+        std::process::exit(i32::try_from(code).unwrap_or(1));
+    }
+    if record["signal"].as_bool() == Some(true) {
+        let _ = std::process::Command::new("kill")
+            .args(["-9", &std::process::id().to_string()])
+            .status();
+    }
+    false
 }
 
 /// Writes one recorded turn's chunks, with the prompt echo and the message id the modes ask for.
@@ -1304,7 +1323,7 @@ fn permission_step(
 ) -> bool {
     write(out, &permission_request(session, permission));
     let mut answered = false;
-    while let Some(line) = lines.next() {
+    for line in lines.by_ref() {
         let Ok(message) = serde_json::from_str::<Value>(&line) else {
             continue;
         };

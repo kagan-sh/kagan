@@ -322,7 +322,7 @@ async fn permission(
 ) -> Result<()> {
     let thread = crate::thread::thread(this, id, cx)?;
     let provider = thread.read_with(cx, |thread, _| {
-        kg_domain::program_label(&thread.record.provider).to_owned()
+        kg_domain::program_label(&thread.record.provider).clone()
     });
     let title = format!("{provider} wants to {}", map::phrase(tool.kind));
     let waiting = crate::workspace::Waiting {

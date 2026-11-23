@@ -91,7 +91,7 @@ fn wait_event_in(
             && event.thread_id == watched
         {
             // The waiter is gone or stopped listening.
-            let _ = sent.try_send(event.clone());
+            let _ = sent.try_send(event.as_ref().clone());
         }
     });
     cx.spawn(async move |cx| {
@@ -225,7 +225,7 @@ fn wait_in(
                     if let Some(reason) = settle(&kind) {
                         return Ok(OpResult::Wait(reason));
                     }
-                    if kind == EventKind::Deleted {
+                    if *kind == EventKind::Deleted {
                         return Err(missing("thread", &id));
                     }
                 }
@@ -241,7 +241,7 @@ enum Wake {
 }
 
 enum Hit {
-    Event(EventKind),
+    Event(Box<EventKind>),
     Busy,
     Ended(WaitOutcome),
     Timeout,
@@ -292,7 +292,7 @@ async fn quiet(
 
 fn from_event(result: std::result::Result<EventKind, async_channel::RecvError>) -> Hit {
     match result {
-        Ok(kind) => Hit::Event(kind),
+        Ok(kind) => Hit::Event(Box::new(kind)),
         Err(_) => Hit::Closed,
     }
 }
