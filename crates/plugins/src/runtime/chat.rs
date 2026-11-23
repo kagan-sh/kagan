@@ -255,8 +255,7 @@ fn classify(
     if loads_skill {
         let named = named_skill(input)
             .or_else(|| title.and_then(|title| title.strip_prefix("load skill ")))
-            .map(str::to_owned)
-            .unwrap_or_else(|| "a skill".into());
+            .map_or_else(|| "a skill".into(), str::to_owned);
         return ("skill", Some(named));
     }
     (tool(kind), None)
