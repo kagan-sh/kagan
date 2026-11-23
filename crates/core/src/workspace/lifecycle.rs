@@ -19,6 +19,7 @@ impl Workspace {
         for run in self.runs.values_mut() {
             run.extras = crate::thread::Extras::default();
             run.shown = None;
+            run.acp = None;
         }
     }
     pub fn stop_for_quit(cx: &mut App) -> Task<Result<()>> {

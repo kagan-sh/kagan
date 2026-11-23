@@ -5,7 +5,7 @@ use kg_terminal::Finished;
 use crate::workspace::Request;
 use crate::{Workspace, WorkspaceEvent};
 
-use super::turn::{Spin, follow, screen_hash, waiting};
+use super::turn::{Spin, ended_turn, follow, screen_hash, waiting};
 use super::{Shown, TICK};
 
 pub(super) async fn persist(
@@ -126,7 +126,7 @@ fn watch(cx: &mut Context<Workspace>) {
                             }
                             Some(Spin::Resumed) => cx.emit(WorkspaceEvent::Changed),
                             Some(Spin::Closed) => {
-                                waited.push((id.clone(), super::turn::ended_turn(workspace, id)));
+                                waited.push((id.clone(), ended_turn(workspace, id)));
                             }
                             None => {}
                         }

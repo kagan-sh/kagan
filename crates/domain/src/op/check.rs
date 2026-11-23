@@ -223,6 +223,7 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
             .collect(),
         ThreadOp::Get { id, .. }
         | ThreadOp::Stop { id, .. }
+        | ThreadOp::Cancel { id }
         | ThreadOp::Input { id, .. }
         | ThreadOp::Resize { id, .. }
         | ThreadOp::Screen { id, .. }

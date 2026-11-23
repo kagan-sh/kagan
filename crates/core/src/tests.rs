@@ -4,6 +4,8 @@
     reason = "a test stops at the first broken step"
 )]
 
+#[cfg(unix)]
+mod acp;
 mod agent;
 mod automation;
 #[cfg(unix)]
@@ -124,6 +126,14 @@ impl Fixture {
             project,
             workspace,
         }
+    }
+
+    fn run_acp(&self, program: &str) -> Op {
+        let Op::Thread(ThreadOp::Run(mut run)) = self.run(program) else {
+            panic!("a run")
+        };
+        run.link = Link::Acp;
+        Op::Thread(ThreadOp::Run(run))
     }
 
     fn run(&self, program: &str) -> Op {

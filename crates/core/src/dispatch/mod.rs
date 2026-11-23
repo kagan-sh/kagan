@@ -292,6 +292,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
         Op::Surface(op) => !matches!(op, kg_domain::SurfaceOp::List),
         Op::Thread(op) => match op {
             ThreadOp::Stop { .. }
+            | ThreadOp::Cancel { .. }
             | ThreadOp::Archive { .. }
             | ThreadOp::Unarchive { .. }
             | ThreadOp::SetPinned { .. }

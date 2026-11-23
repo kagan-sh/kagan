@@ -24,8 +24,7 @@ pub(crate) use exit::{exited, request_stop, start_again};
 pub(crate) use screen::follow_terminals;
 #[cfg(test)]
 pub(crate) use screen::remember;
-pub(crate) use turn::done;
-pub(crate) use turn::hook as turn_hook;
+pub(crate) use turn::{begin_run, done, hook as turn_hook, waiting};
 
 #[cfg(test)]
 pub(super) use turn::{Spin, busy, follow};
@@ -101,7 +100,12 @@ async fn spawn(
         .map_err(|error| OpError::Invalid(error.to_string()))?;
     let integration = agent::integrate(this, record, &program, &folder, start, cx).await?;
     this.update(cx, |workspace, cx| {
-        turn::begin_run(workspace, &record.id, integration.hooks, cx);
+        let source = if integration.hooks {
+            crate::thread::turn_state::Source::Hook
+        } else {
+            crate::thread::turn_state::Source::Undecided
+        };
+        turn::begin_run(workspace, &record.id, source, cx);
     })
     .map_err(closed)?;
     let args = integration.args.into_iter().chain(program.args).collect();
@@ -232,6 +236,9 @@ pub(crate) async fn send(
     text: &str,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
+    if acp_runs(this, &id, cx)? {
+        return crate::thread::acp::prompt(this, &id, text, cx).await;
+    }
     let typed = submit(this, &id, text, cx).await?;
     this.update(cx, |workspace, cx| {
         let now = cx.background_executor().now();
@@ -253,7 +260,7 @@ pub(crate) async fn send(
     Ok(OpResult::Done)
 }
 
-pub(crate) fn run(
+pub(crate) async fn run(
     this: &WeakEntity<Workspace>,
     op: ThreadOp,
     cx: &mut AsyncApp,
@@ -270,6 +277,12 @@ pub(crate) fn run(
         return Err(OpError::Invalid("not a terminal operation".into()));
     };
     let (id, number) = (id.clone(), *terminal);
+    if number.is_none() && self::acp_runs(this, &id, cx)? {
+        if let ThreadOp::Input { text, .. } = &op {
+            return crate::thread::acp::prompt(this, &id, text, cx).await;
+        }
+        return Err(crate::thread::acp::not_a_terminal());
+    }
     // Scrolling and selecting move the view, so the window redraws even when nothing else changed.
     let moves_view = matches!(op, ThreadOp::Scroll { .. } | ThreadOp::Select { .. });
     this.update(cx, |workspace, cx| {
@@ -310,10 +323,23 @@ pub(crate) fn run(
     .map_err(closed)?
 }
 
+// An ACP thread has no program terminal: everything but a prompt names an extra one.
+fn acp_runs(this: &WeakEntity<Workspace>, id: &ThreadId, cx: &mut AsyncApp) -> Result<bool> {
+    this.update(cx, |workspace, cx| {
+        workspace
+            .threads
+            .get(id)
+            .is_some_and(|thread| thread.read(cx).record.link == kg_domain::Link::Acp)
+    })
+    .map_err(closed)
+}
+
 /// Everything the workspace keeps for one thread's program. Forgetting the thread is one `remove`.
 #[derive(Default)]
 pub(crate) struct Run {
     pub(crate) shown: Option<Shown>,
+    /// The agent's own connection, for a thread whose link is ACP.
+    pub(crate) acp: Option<crate::thread::acp::Acp>,
     pub(crate) extras: Extras,
     pub(crate) size: Option<(u16, u16)>,
     pub(crate) started_seq: Option<u64>,

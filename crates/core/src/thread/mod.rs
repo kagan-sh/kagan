@@ -1,3 +1,4 @@
+mod acp;
 pub(crate) mod agent;
 pub(crate) mod archive;
 mod conversation;
@@ -27,7 +28,7 @@ pub(crate) use terminal::exited;
 #[cfg(test)]
 pub(crate) use terminal::remember;
 pub(crate) use terminal::send;
-pub(crate) use terminal::start as start_terminal;
+
 pub(crate) use terminal::start_again;
 pub(crate) use terminal::{Run, Shown};
 
@@ -122,8 +123,9 @@ pub(crate) async fn dispatch_thread(
         | ThreadOp::Select { .. }
         | ThreadOp::Copy { .. }
         | ThreadOp::Paste { .. }
-        | ThreadOp::Report { .. }) => terminal::run(this, op, cx),
+        | ThreadOp::Report { .. }) => terminal::run(this, op, cx).await,
         ThreadOp::Send { id, text } => terminal::send(this, id, &text, cx).await,
+        ThreadOp::Cancel { id } => acp::cancel(this, &id, cx),
         ThreadOp::Turn(op) => terminal::turn_hook(this, op, cx).await,
         ThreadOp::Terminal(op) => extra::run(this, op, cx).await,
         ThreadOp::Details { id } => details::read(database, id, cx).await,
@@ -226,6 +228,20 @@ async fn rename(
     Ok(OpResult::Thread(
         thread(this, &id, cx)?.read_with(cx, |thread, _| thread.record.clone()),
     ))
+}
+
+/// Starts a thread's program the way its link says: in a pty, or as the agent's own ACP
+/// connection.
+pub(crate) async fn start_program(
+    this: &WeakEntity<Workspace>,
+    thread: &Entity<Thread>,
+    start: agent::Start,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    if thread.read_with(cx, |thread, _| thread.record.link) == kg_domain::Link::Acp {
+        return acp::start(this, thread, start, cx).await;
+    }
+    terminal::start(this, thread, start, cx).await
 }
 
 pub(crate) fn thread(

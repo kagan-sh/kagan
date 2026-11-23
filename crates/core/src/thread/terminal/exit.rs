@@ -9,9 +9,9 @@ use crate::host::database::Result;
 use crate::thread::finish::{End, ended};
 use crate::workspace::closed;
 
+use super::Shown;
 use super::agent::Start;
 use super::screen::keep_screen;
-use super::{Shown, start};
 use crate::thread::halt::status;
 
 /// Why a program was asked to stop. Quit still records `stopped` and `idle`, and skips `turn.ended`.
@@ -27,6 +27,11 @@ pub(crate) fn request_stop(workspace: &mut Workspace, id: &ThreadId) -> bool {
     let Some(run) = workspace.runs.get_mut(id) else {
         return false;
     };
+    if let Some(acp) = run.acp.take() {
+        acp.halt();
+        run.stopping.get_or_insert(StopReason::Stop);
+        return true;
+    }
     let Some(Shown::Running(terminal)) = &run.shown else {
         return false;
     };
@@ -69,7 +74,7 @@ pub(crate) async fn start_again(
         ));
     }
     status(this, &thread, ThreadStatus::Starting, cx).await?;
-    start(this, &thread, Start::Again, cx).await?;
+    crate::thread::start_program(this, &thread, Start::Again, cx).await?;
     Ok(OpResult::Thread(
         thread.read_with(cx, |thread, _| thread.record.clone()),
     ))
@@ -158,6 +163,9 @@ fn exit_end(exit: Exit) -> End {
 fn program_is_live(workspace: &Workspace, id: &ThreadId, cx: &gpui_kit::App) -> bool {
     let shown = workspace.shown(id);
     if matches!(shown, Some(Shown::Running(_))) {
+        return true;
+    }
+    if workspace.runs.get(id).is_some_and(|run| run.acp.is_some()) {
         return true;
     }
     let status = workspace

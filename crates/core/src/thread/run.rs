@@ -269,7 +269,7 @@ pub(crate) async fn commit(
     .map_err(crate::workspace::closed)?;
     Workspace::refresh(this, cx).await?;
     let entity = super::thread(this, &record.id, cx)?;
-    super::start_terminal(this, &entity, super::agent::Start::First, cx).await?;
+    super::start_program(this, &entity, super::agent::Start::First, cx).await?;
     Ok(OpResult::Thread(
         entity.read_with(cx, |thread, _| thread.record.clone()),
     ))

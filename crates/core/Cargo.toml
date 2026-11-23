@@ -12,6 +12,7 @@ kg-store.workspace = true
 kg-terminal.workspace = true
 gpui-kit.workspace = true
 async-channel.workspace = true
+agent-client-protocol = { version = "=5.5.1", default-features = false }
 base64 = "=0.23.1"
 jiff = "=1.0.1"
 dunce.workspace = true
@@ -27,6 +28,9 @@ sha2.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 flate2 = "=1.1.11"

@@ -15,12 +15,18 @@ pub(crate) enum Source {
     Hook,
     Title,
     Quiet,
+    /// An agent that answers over its own pipes: a prompt opens the turn, its response ends it.
+    Acp,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Signal {
     HookStart,
     HookEnd,
+    /// A prompt went to an agent that answers over its own pipes.
+    Prompt,
+    /// That prompt's response came back.
+    PromptDone,
     /// The window title shows a spinner (`busy`) or it does not.
     Title {
         busy: bool,
@@ -104,7 +110,14 @@ impl TurnState {
                     Some(self.begin(now))
                 }
             }
-            Signal::HookEnd | Signal::Ended => self.close(),
+            Signal::HookEnd | Signal::Ended | Signal::PromptDone => self.close(),
+            Signal::Prompt => {
+                if self.open {
+                    None
+                } else {
+                    Some(self.begin(now))
+                }
+            }
             Signal::Title { busy: true } => self.spinner(now),
             Signal::Title { busy: false } => self.plain(now),
             Signal::Submit { screen } => {
@@ -187,7 +200,7 @@ impl TurnState {
         let limit = match self.source {
             Source::Quiet => QUIET_OUTPUT,
             Source::Hook => HOOK_SILENCE,
-            Source::Undecided | Source::Title => return None,
+            Source::Undecided | Source::Title | Source::Acp => return None,
         };
         let silent = self
             .output_at

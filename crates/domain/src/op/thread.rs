@@ -58,6 +58,11 @@ pub enum ThreadOp {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
     },
+    /// Cancel the agent's reply; an ACP thread's agent keeps running
+    Cancel {
+        #[arg(env = "KG_THREAD_ID")]
+        id: ThreadId,
+    },
     /// Type into the program's terminal
     Input {
         #[arg(env = "KG_THREAD_ID")]

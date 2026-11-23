@@ -81,6 +81,9 @@ pub(crate) async fn hook(
     let thread = crate::thread::thread(this, &id, cx)?;
     let now = cx.background_executor().now();
     let change = thread.update(cx, |thread, cx| {
+        if thread.record.link != kg_domain::Link::Terminal {
+            return None;
+        }
         if signal == Signal::HookStart && !thread.running() {
             return None;
         }
@@ -109,14 +112,9 @@ fn step(thread: &mut Thread, signal: Signal, now: Instant) -> Option<Change> {
     change
 }
 
-pub(crate) fn begin_run(workspace: &Workspace, id: &ThreadId, hooks: bool, cx: &mut App) {
+pub(crate) fn begin_run(workspace: &Workspace, id: &ThreadId, source: Source, cx: &mut App) {
     let Some(thread) = workspace.threads.get(id) else {
         return;
-    };
-    let source = if hooks {
-        Source::Hook
-    } else {
-        Source::Undecided
     };
     thread.update(cx, |thread, _| {
         thread.turn = TurnState::new(source);
@@ -160,31 +158,29 @@ pub(crate) fn busy(title: &str) -> bool {
 
 /// The turn an ended program leaves behind. Quitting leaves the turn to the quit path, which
 /// records the stop itself.
-pub(super) fn ended_turn(workspace: &Workspace, id: &ThreadId) -> Option<TurnOutcome> {
-    Some(match workspace.runs.get(id).and_then(|run| run.stopping) {
+pub(super) fn ended_turn(
+    workspace: &Workspace,
+    id: &ThreadId,
+) -> Option<(TurnOutcome, Option<String>)> {
+    let outcome = match workspace.runs.get(id).and_then(|run| run.stopping) {
         Some(StopReason::Quit) => return None,
         Some(StopReason::Stop) => TurnOutcome::Interrupted,
         None => TurnOutcome::Completed,
-    })
+    };
+    Some((outcome, None))
 }
 
-pub(super) async fn waiting(
+pub(crate) async fn waiting(
     this: &WeakEntity<Workspace>,
     id: ThreadId,
-    turn: Option<TurnOutcome>,
+    turn: Option<(TurnOutcome, Option<String>)>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
     let thread = crate::thread::thread(this, &id, cx)?;
     done(this, &thread, cx).await?;
     let mut kinds = vec![EventKind::Waiting];
-    if let Some(outcome) = turn {
-        kinds.insert(
-            0,
-            EventKind::TurnEnded {
-                outcome,
-                error: None,
-            },
-        );
+    if let Some((outcome, error)) = turn {
+        kinds.insert(0, EventKind::TurnEnded { outcome, error });
     }
     Workspace::events(this, id.clone(), kinds, cx).await?;
     this.update(cx, |_, cx| {

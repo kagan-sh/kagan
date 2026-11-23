@@ -356,6 +356,7 @@ Commands:
   list          List threads
   run           Start a thread that runs a program in its folder
   stop          Stop the program
+  cancel        Cancel the agent's reply; an ACP thread's agent keeps running
   input         Type into the program's terminal
   resize        Resize the program's terminal
   screen        The program's screen as ANSI escape sequences; use `--scrollback` for plain text
@@ -495,6 +496,22 @@ Options:
 Stop the program
 
 Usage: kg thread stop <ID>
+
+Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg thread cancel`
+
+```text
+Cancel the agent's reply; an ACP thread's agent keeps running
+
+Usage: kg thread cancel <ID>
 
 Arguments:
   <ID>
