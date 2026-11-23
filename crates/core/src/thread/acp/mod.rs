@@ -135,7 +135,7 @@ async fn launch(
         .map_err(|error| OpError::Invalid(error.to_string()))?;
     let subcommand = acp_command(&record.provider)
         .ok_or_else(|| OpError::Invalid(format!("{} has no ACP command", record.provider)))?;
-    let acp = resolve_program_path(&program.path, subcommand, &program.args);
+    let acp = acp_line(&program.path, subcommand, &program.args);
     let integration = agent::integrate(this, record, &acp, folder, start, cx).await?;
     let mut env = integration.env;
     if let Some(locale) = cx.background_spawn(async { utf8_locale() }).await {
@@ -153,8 +153,9 @@ async fn launch(
 }
 
 // The same program, with the ACP subcommand among its arguments, so the agent integration sees
-// the subcommand line and adds nothing of its own.
-fn resolve_program_path(
+// the subcommand line and adds nothing of its own. The integration's flags are dropped: the ACP
+// command is the agent's own line, and slice 5 settles the rest.
+fn acp_line(
     path: &Path,
     subcommand: &str,
     args: &[OsString],

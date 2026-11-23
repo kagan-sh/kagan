@@ -43,10 +43,11 @@ impl Agent {
         std::fs::write(dir.path().join("turns.ndjson"), turns.concat()).unwrap();
         let program = dir.path().join("opencode");
         let exe = std::env::current_exe().unwrap();
+        // Quiet libtest still prints a progress dot: a line that is not JSON is skipped below.
         std::fs::write(
             &program,
             format!(
-                "#!/bin/sh\nexec '{}' --exact tests::acp::fake_agent --nocapture\n",
+                "#!/bin/sh\nexec '{}' -q --exact tests::acp::fake_agent --nocapture\n",
                 exe.display()
             ),
         )
@@ -428,6 +429,77 @@ async fn acp_events_are_the_transcript(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+async fn acp_message_ids_are_kept_with_their_chunks(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_ids"], &[turn(&["a", "b"], "end_turn")]);
+    std::fs::write(agent.path("modes"), "ids\n").unwrap();
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "one", cx).await;
+    wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    let ids: Vec<_> = events(&id, cx)
+        .await
+        .into_iter()
+        .filter_map(|event| match event.kind {
+            EventKind::Message {
+                role: Role::Agent,
+                message_id,
+                ..
+            } => Some(message_id),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        ids,
+        vec![Some("msg_1".into())],
+        "the chunk's own id, joined once"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn acp_an_echo_of_the_prompt_is_not_drawn(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_echo"], &[turn(&["done"], "end_turn")]);
+    std::fs::write(agent.path("modes"), "echo\n").unwrap();
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "one", cx).await;
+    let kinds = wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    assert_eq!(agent_said(&kinds), "done", "{kinds:?}");
+    assert!(
+        !kinds.iter().any(
+            |kind| matches!(kind, EventKind::Message { text, .. } if text.contains("echo me"))
+        ),
+        "the agent's echo of the prompt is not a second message: {kinds:?}"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn acp_a_permission_request_is_answered_cancelled(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_ask"], &[turn(&["done"], "end_turn")]);
+    std::fs::write(agent.path("modes"), "permission\n").unwrap();
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    let answered = agent.path("permission");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let answer = loop {
+        cx.run_until_parked();
+        if let Ok(answer) = std::fs::read_to_string(&answered) {
+            break answer;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the agent never heard kagan's answer"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
+    assert!(answer.contains("cancelled"), "{answer}");
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
 async fn acp_agent_that_fails_before_its_session_leaves_an_error(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let agent = Agent::new(&["ses_none"], &[]);
@@ -616,16 +688,30 @@ fn reply(id: &Value, result: &Value) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "result": result })
 }
 
-fn say(session: &str, text: &str) -> Value {
+fn update(session: &str, kind: &str, text: &str, message_id: Option<&str>) -> Value {
+    let mut chunk = json!({
+        "sessionUpdate": kind,
+        "content": {"type": "text", "text": text},
+    });
+    if let Some(message_id) = message_id {
+        chunk["messageId"] = json!(message_id);
+    }
     json!({
         "jsonrpc": "2.0",
         "method": "session/update",
+        "params": {"sessionId": session, "update": chunk},
+    })
+}
+
+fn permission_request(session: &str) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "session/request_permission",
         "params": {
             "sessionId": session,
-            "update": {
-                "sessionUpdate": "agent_message_chunk",
-                "content": {"type": "text", "text": text},
-            },
+            "toolCall": {"toolCallId": "call_1", "title": "read a file", "kind": "read"},
+            "options": [{"optionId": "allow", "name": "Allow once", "kind": "allow_once"}],
         },
     })
 }
@@ -656,8 +742,9 @@ fn fake_agent() {
         .into_iter();
     std::fs::write(dir.join("pid"), std::process::id().to_string()).unwrap();
     let modes = std::fs::read_to_string(dir.join("modes")).unwrap_or_default();
-    let fail_init = modes.lines().any(|mode| mode == "fail_init");
-    let hang_init = modes.lines().any(|mode| mode == "hang_init");
+    let mode = |name: &str| modes.lines().any(|line| line == name);
+    let fail_init = mode("fail_init");
+    let hang_init = mode("hang_init");
     let mut open: Option<(Value, Value)> = None;
     let mut session = String::new();
     let mut out = std::io::stdout();
@@ -668,7 +755,13 @@ fn fake_agent() {
             continue;
         };
         let id = message["id"].clone();
-        match message["method"].as_str().unwrap_or_default() {
+        let method = message["method"].as_str().unwrap_or_default();
+        if method.is_empty() {
+            // A response to a request this agent made: what kagan answered the permission with.
+            std::fs::write(dir.join("permission"), &line).unwrap();
+            continue;
+        }
+        match method {
             "initialize" => {
                 if fail_init {
                     eprintln!("the agent cannot start");
@@ -691,9 +784,23 @@ fn fake_agent() {
                 if record["sleep"].as_bool() == Some(true) {
                     sleep_child(&dir);
                 }
+                if mode("echo") {
+                    write(
+                        &mut out,
+                        &update(&session, "user_message_chunk", "echo me", None),
+                    );
+                }
+                if mode("permission") {
+                    write(&mut out, &permission_request(&session));
+                }
+                let ids = mode("ids");
                 for chunk in record["chunks"].as_array().cloned().unwrap_or_default() {
                     let text = chunk.as_str().unwrap_or_default();
-                    write(&mut out, &say(&session, text));
+                    let message_id = ids.then_some("msg_1");
+                    write(
+                        &mut out,
+                        &update(&session, "agent_message_chunk", text, message_id),
+                    );
                 }
                 if record["hold"].as_bool() == Some(true) {
                     open = Some((id, record.clone()));

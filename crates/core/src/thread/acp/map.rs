@@ -51,6 +51,39 @@ pub(super) fn outcome(reason: StopReason) -> (TurnOutcome, Option<String>) {
             TurnOutcome::Failed,
             Some("the agent refused to continue".into()),
         ),
-        _ => (TurnOutcome::Failed, None),
+        _ => (
+            TurnOutcome::Failed,
+            Some("the agent stopped for a reason kagan does not know".into()),
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_stop_reason_has_its_outcome() {
+        for (reason, want, error) in [
+            (StopReason::EndTurn, TurnOutcome::Completed, None),
+            (StopReason::Cancelled, TurnOutcome::Interrupted, None),
+            (
+                StopReason::MaxTokens,
+                TurnOutcome::Failed,
+                Some("the agent reached its token limit"),
+            ),
+            (
+                StopReason::MaxTurnRequests,
+                TurnOutcome::Failed,
+                Some("the agent reached its turn limit"),
+            ),
+            (
+                StopReason::Refusal,
+                TurnOutcome::Failed,
+                Some("the agent refused to continue"),
+            ),
+        ] {
+            assert_eq!(outcome(reason), (want, error.map(str::to_owned)));
+        }
     }
 }
