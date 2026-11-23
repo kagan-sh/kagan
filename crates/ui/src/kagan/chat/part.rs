@@ -327,7 +327,7 @@ impl Transcript {
             };
             if let Some(seen) = seen {
                 merge(seen, delta);
-                return Fold::Dirty(top);
+                return Fold::Dirty(self.bundle(top));
             }
         }
         self.rows.push(Row {
@@ -519,6 +519,27 @@ mod tests {
             panic!("the second call");
         };
         assert_eq!(second.status, Some(ToolStatus::InProgress));
+    }
+
+    /// ACP sends a call in progress, then the update that completes it: the row is created
+    /// unfinshed, so it only becomes foldable at the update.
+    #[test]
+    fn reads_that_finish_after_they_start_fold_into_one_bundle() {
+        let mut transcript = Transcript::default();
+        for seq in 1..=6u64 {
+            let id = format!("t{}", seq.div_ceil(2));
+            let status = if seq % 2 == 0 {
+                ToolStatus::Completed
+            } else {
+                ToolStatus::InProgress
+            };
+            transcript.absorb(&call(seq, &id, ToolKind::Read, status, None));
+        }
+        assert_eq!(transcript.rows.len(), 1);
+        let RowKind::Bundle(members) = &transcript.rows[0].kind else {
+            panic!("one bundle");
+        };
+        assert_eq!(members.len(), 3);
     }
 
     #[test]
