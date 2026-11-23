@@ -80,7 +80,7 @@ pub(super) async fn start(
     let consumer = {
         let this = this.clone();
         cx.spawn(async move |cx| {
-            consume(&this, id, at, start, received, cx).await;
+            consume(&this, id, at, received, cx).await;
         })
     };
     this.update(cx, |workspace, cx| {
@@ -172,13 +172,27 @@ async fn consume(
     this: &WeakEntity<Workspace>,
     id: ThreadId,
     at: kg_domain::Timestamp,
-    start: Start,
     events: async_channel::Receiver<AcpEvent>,
     cx: &mut AsyncApp,
 ) {
-    while let Ok(event) = events.recv().await {
+    let mut pending = None;
+    loop {
+        let event = match pending.take() {
+            Some(event) => event,
+            None => match events.recv().await {
+                Ok(event) => event,
+                Err(_) => break,
+            },
+        };
+        let event = match event {
+            AcpEvent::Message { text, message_id } => AcpEvent::Message {
+                text: joined(text, &message_id, &events, &mut pending),
+                message_id,
+            },
+            other => other,
+        };
         let outcome = match event {
-            AcpEvent::Session(session) => named(this, &id, &session, at, start, cx).await,
+            AcpEvent::Session(session) => named(this, &id, &session, at, cx).await,
             AcpEvent::Message { text, message_id } => {
                 let kinds = vec![EventKind::Message {
                     role: Role::Agent,
@@ -205,36 +219,74 @@ async fn consume(
     }
 }
 
+/// Joins the chunks the agent already said for the same message behind this one, so a burst is one
+/// write and one event row. Anything else stays queued for the next step.
+fn joined(
+    mut text: String,
+    message_id: &Option<String>,
+    events: &async_channel::Receiver<AcpEvent>,
+    pending: &mut Option<AcpEvent>,
+) -> String {
+    loop {
+        match events.try_recv() {
+            Ok(AcpEvent::Message {
+                text: more,
+                message_id: same,
+            }) => {
+                if same.as_deref() != message_id.as_deref() {
+                    *pending = Some(AcpEvent::Message {
+                        text: more,
+                        message_id: same,
+                    });
+                    break;
+                }
+                text.push_str(&more);
+            }
+            Ok(other) => {
+                *pending = Some(other);
+                break;
+            }
+            Err(_) => break,
+        }
+    }
+    text
+}
+
 /// The agent named its session: that id is the thread's conversation, and the thread is running.
 async fn named(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
     session: &str,
     at: kg_domain::Timestamp,
-    start: Start,
     cx: &mut AsyncApp,
 ) -> Result<()> {
     let thread = crate::thread::thread(this, id, cx)?;
     Workspace::events_at(this, id.clone(), at, vec![EventKind::Started], cx).await?;
     status(this, &thread, ThreadStatus::Active, cx).await?;
-    let Ok(conversation) = session.parse::<Conversation>() else {
-        return Ok(());
-    };
     let database = crate::workspace::database(this, cx)?;
-    let (thread_id, claimed) = (id.clone(), conversation.clone());
-    let saved = match start {
-        Start::First => {
-            database
-                .call(move |store| store.claim_conversation(&thread_id, &claimed, None, at))
-                .await?
-        }
-        Start::Again => {
-            database
-                .call(move |store| store.set_conversation(&thread_id, &conversation))
-                .await?;
-            true
+    let conversation = match session.parse::<Conversation>() {
+        Ok(conversation) => conversation,
+        Err(error) => {
+            let kinds = vec![EventKind::Notice {
+                severity: NoticeSeverity::Warning,
+                text: format!("the agent named a session kagan cannot store: {error}"),
+            }];
+            return Workspace::events(this, id.clone(), kinds, cx).await;
         }
     };
+    let thread_id = id.clone();
+    let previous = database
+        .call({
+            let thread_id = thread_id.clone();
+            move |store| store.conversation(&thread_id)
+        })
+        .await?;
+    let claimed = conversation.clone();
+    // One claim for both starts: an id another thread holds is never stored, and a late answer
+    // from a start the thread has left is not stored either.
+    let saved = database
+        .call(move |store| store.claim_conversation(&thread_id, &claimed, previous, at))
+        .await?;
     if saved {
         return Ok(());
     }

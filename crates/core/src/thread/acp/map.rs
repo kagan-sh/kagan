@@ -21,6 +21,19 @@ pub(super) fn chunk(update: &SessionUpdate) -> Option<Chunk> {
     })
 }
 
+/// What an update calls itself on the wire, for the one log line an unread kind gets.
+pub(super) fn name(update: &SessionUpdate) -> String {
+    serde_json::to_value(update)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("sessionUpdate")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+        })
+        .unwrap_or_else(|| "an update with no name".into())
+}
+
 /// What the turn's stop reason means, and the words shown when the agent stopped short.
 pub(super) fn outcome(reason: StopReason) -> (TurnOutcome, Option<String>) {
     match reason {

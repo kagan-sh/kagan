@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::ffi::OsString;
 use std::fs::File;
 use std::path::PathBuf;
@@ -476,6 +476,26 @@ async fn connect(
     }
 }
 
+/// What the agent sent that slice 1 does not read, so each kind is logged once per connection
+/// rather than once per chunk.
+#[derive(Default)]
+struct Unread(HashSet<String>);
+
+impl Unread {
+    fn update(&mut self, update: &agent_client_protocol::v1::schema::SessionUpdate) {
+        let name = map::name(update);
+        if self.0.insert(name.clone()) {
+            eprintln!("kg: the agent sent {name}, which kagan does not draw yet");
+        }
+    }
+
+    fn request(&mut self, method: &str) {
+        if self.0.insert(method.to_owned()) {
+            eprintln!("kg: the agent asked for {method}, which kagan does not serve yet");
+        }
+    }
+}
+
 /// Serves the thread's commands and the agent's messages until one side is gone: a reply chunk
 /// becomes an event, and the prompt's response ends its turn.
 async fn serve(
@@ -483,6 +503,7 @@ async fn serve(
     commands: &async_channel::Receiver<AcpCommand>,
     events: &async_channel::Sender<AcpEvent>,
 ) -> Result<(), String> {
+    let mut unread = Unread::default();
     loop {
         let step = {
             let update = Box::pin(session.read_update());
@@ -493,7 +514,7 @@ async fn serve(
             }
         };
         match step {
-            Step::Update(Ok(message)) => heard(*message, events).await,
+            Step::Update(Ok(message)) => heard(*message, events, &mut unread).await,
             Step::Update(Err(error)) => return Err(error.to_string()),
             Step::Command(AcpCommand::Prompt(text)) => session
                 .send_prompt(text)
@@ -509,7 +530,11 @@ async fn serve(
 
 /// One thing the agent said, as far as slice 1 reads it: an answer chunk, its turn's end, or a
 /// permission request.
-async fn heard(message: SessionMessage, events: &async_channel::Sender<AcpEvent>) {
+async fn heard(
+    message: SessionMessage,
+    events: &async_channel::Sender<AcpEvent>,
+    unread: &mut Unread,
+) {
     match message {
         SessionMessage::PromptResponse(response) => {
             let (outcome, error) = match response {
@@ -518,9 +543,9 @@ async fn heard(message: SessionMessage, events: &async_channel::Sender<AcpEvent>
             };
             send(events, AcpEvent::TurnDone { outcome, error }).await;
         }
-        SessionMessage::Message(dispatch) => answer(dispatch.into_raw(), events).await,
+        SessionMessage::Message(dispatch) => answer(dispatch.into_raw(), events, unread).await,
         // Slice 2 reads the rest; until then a kind kagan does not draw is not an answer.
-        _ => {}
+        _ => eprintln!("kg: the agent sent something kagan does not read yet"),
     }
 }
 
@@ -533,7 +558,7 @@ enum Step {
 /// One message from the agent for this session: a reply chunk, or a request that slice 1 does
 /// not serve. A request kagan drops is answered by the protocol with an error, so the agent's
 /// call cannot wait forever.
-async fn answer(dispatch: Dispatch, events: &async_channel::Sender<AcpEvent>) {
+async fn answer(dispatch: Dispatch, events: &async_channel::Sender<AcpEvent>, unread: &mut Unread) {
     let dispatch = match dispatch.into_notification::<SessionNotification>() {
         Ok(Ok(notification)) => {
             if let Some(chunk) = map::chunk(&notification.update) {
@@ -545,16 +570,27 @@ async fn answer(dispatch: Dispatch, events: &async_channel::Sender<AcpEvent>) {
                     },
                 )
                 .await;
+            } else {
+                unread.update(&notification.update);
             }
             return;
         }
         Ok(Err(dispatch)) => dispatch,
-        Err(_) => return,
+        Err(_) => {
+            eprintln!("kg: the agent sent a message kagan could not read");
+            return;
+        }
     };
-    if let Ok(Ok((_request, responder))) = dispatch.into_request::<RequestPermissionRequest>() {
-        let _ = responder.respond(RequestPermissionResponse::new(
-            RequestPermissionOutcome::Cancelled,
-        ));
+    match dispatch.into_request::<RequestPermissionRequest>() {
+        Ok(Ok((_request, responder))) => {
+            let _ = responder.respond(RequestPermissionResponse::new(
+                RequestPermissionOutcome::Cancelled,
+            ));
+        }
+        // The protocol answers a request kagan drops with an error, so its caller never waits; the
+        // log says which one, once, so a dialect kagan does not know is visible.
+        Ok(Err(dropped)) => unread.request(dropped.method()),
+        Err(_) => eprintln!("kg: the agent sent a request kagan could not read"),
     }
 }
 

@@ -10,7 +10,7 @@ use super::{
     SEARCH_LIMIT, SEARCH_TEXT_MAX, SavedPromptOp, SectionOp, SurfaceOp, TERMINAL_COLS,
     TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThreadOp, TurnOp, WindowOp,
 };
-use crate::{Link, acp_command, saved_name, split_program, unsafe_char};
+use crate::{ACP_COMMANDS, Link, acp_command, saved_name, split_program, unsafe_char};
 
 /// Rejects an op a client must not send.
 ///
@@ -182,14 +182,19 @@ fn search(op: &ThreadOp) -> Result<(), String> {
     }
 }
 
-// An ACP thread spawns the agent's ACP subcommand, so the link needs one kagan knows.
+// An ACP thread spawns the agent's ACP subcommand, so the link needs one kagan knows. The names
+// come from the one per-agent table, so a new agent is listed the day it is added.
 fn acp_link(program: &str) -> Result<(), String> {
     match acp_command(program) {
         Some(_) => Ok(()),
-        None => Err(format!(
-            "{} cannot be an ACP thread; kagan knows opencode",
-            split_program(program).map_or_else(|_| program.to_owned(), |(name, _)| name)
-        )),
+        None => {
+            let known: Vec<_> = ACP_COMMANDS.iter().map(|(name, _)| *name).collect();
+            Err(format!(
+                "{} cannot be an ACP thread; kagan knows {}",
+                split_program(program).map_or_else(|_| program.to_owned(), |(name, _)| name),
+                known.join(", ")
+            ))
+        }
     }
 }
 
