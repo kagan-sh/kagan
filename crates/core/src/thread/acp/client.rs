@@ -455,10 +455,18 @@ async fn pump(
                 }
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
-                    // The agent stopped writing: the connection sees its input end, and the run
-                    // reports the exit now instead of waiting out a grace it no longer needs.
+                    // The agent stopped writing. The connection still reads the frames queued
+                    // ahead of that end, so it is polled until it has answered them.
                     frames.close_channel();
-                    return Ok(());
+                    return match futures::future::select(
+                        connection.as_mut(),
+                        executor.timer(EXIT_GRACE),
+                    )
+                    .await
+                    {
+                        futures::future::Either::Left((result, _)) => result,
+                        futures::future::Either::Right(_) => Ok(()),
+                    };
                 }
             }
         }
@@ -563,7 +571,9 @@ async fn serve(
         };
         match step {
             Step::Update(Ok(message)) => heard(*message, events, &mut unread).await,
-            Step::Update(Err(error)) => return Err(error.to_string()),
+            // The update stream closes when the agent's output ends. That is the end of the
+            // connection, not a failure of it: the exit and the tail say how it ended.
+            Step::Update(Err(_)) => return Ok(()),
             Step::Command(AcpCommand::Prompt(text)) => session
                 .send_prompt(text)
                 .map_err(|error| error.to_string())?,
@@ -719,5 +729,36 @@ mod tests {
         assert_eq!(read.len(), 2, "{read:?}");
         assert_eq!(read[0].len(), LINE_MAX);
         assert_eq!(read[1], "last", "the rest of the long line is not a line");
+    }
+
+    #[gpui_kit::test]
+    async fn a_stop_after_the_agent_spoke_still_reads_what_it_said(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::{Arc, mpsc};
+
+        let (lines, read) = mpsc::sync_channel(2);
+        let (frames, mut inbound) = futures::channel::mpsc::unbounded();
+        lines.send("one".to_owned()).unwrap();
+        lines.send("two".to_owned()).unwrap();
+        drop(lines);
+        let seen = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&seen);
+        let connection = async move {
+            use futures::StreamExt as _;
+            while inbound.next().await.is_some() {
+                counted.fetch_add(1, Ordering::Relaxed);
+            }
+            Ok(())
+        };
+        super::pump(read, frames, connection, &cx.background_executor)
+            .await
+            .unwrap();
+        assert_eq!(
+            seen.load(Ordering::Relaxed),
+            2,
+            "the frames the agent wrote before its output ended are read"
+        );
     }
 }

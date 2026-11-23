@@ -396,6 +396,28 @@ async fn acp_agent_that_quits_is_gone_and_a_prompt_is_refused(cx: &mut TestAppCo
 }
 
 #[gpui_kit::test]
+async fn acp_an_answer_that_ends_with_the_agent_is_kept(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_last_word"],
+        &[json!({
+            "chunks": ["the last word"],
+            "stopReason": "end_turn",
+            "quit": true,
+        })],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let kinds = wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    assert_eq!(
+        agent_said(&kinds),
+        "the last word",
+        "the agent's last frames are read before its output ends: {kinds:?}"
+    );
+    wait_for_status(&id, ThreadStatus::Idle, cx).await;
+}
+
+#[gpui_kit::test]
 async fn acp_events_are_the_transcript(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let agent = Agent::new(&["ses_zeta"], &[turn(&["one ", "two"], "end_turn")]);
