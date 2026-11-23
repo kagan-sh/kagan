@@ -263,11 +263,42 @@ fn a_failed_command_row_reads_failed(cx: &mut TestAppContext) {
         value_of(cx, window, "chat-work-1").as_deref(),
         Some("collapsed · failed")
     );
+    let name = super::label(cx, window, "chat-work-1");
+    assert!(name.contains("Ran command"), "{name}");
     assert!(
-        super::label(cx, window, "chat-work-1").contains("Ran command"),
-        "{}",
-        super::label(cx, window, "chat-work-1")
+        name.ends_with("failed"),
+        "the row says the word too: {name}"
     );
+}
+
+/// A running command shows its newest lines under the row, without opening it, and its body keeps
+/// the newest lines too.
+#[gpui_kit::test]
+fn a_running_command_previews_its_output(cx: &mut TestAppContext) {
+    let lines: Vec<String> = (1..=60).map(|n| format!("line {n}")).collect();
+    let output = lines.join("\n");
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![tool(
+            "t1",
+            ToolKind::Execute,
+            ToolStatus::InProgress,
+            "Run the tests",
+            Some(serde_json::json!({"command": "cargo t"})),
+            Some(&output),
+        )],
+    );
+    wait_until(cx, |cx| {
+        shows(cx, window, "chat-preview-1")
+            && value_of(cx, window, "chat-preview-1").is_some_and(|text| text.contains("line 60"))
+    });
+    let preview = value_of(cx, window, "chat-preview-1").expect("a preview");
+    assert_eq!(preview.lines().count(), 3, "{preview}");
+    click(cx, window, "chat-work-1");
+    wait_until(cx, |cx| shows(cx, window, "chat-terminal-1"));
+    let body = value_of(cx, window, "chat-terminal-1").expect("a body");
+    assert!(body.contains("line 60"), "the newest line is in the body");
+    assert!(!body.contains("line 1\n"), "the first lines scrolled away");
 }
 
 /// A failure that ends the turn stays open, past the divider the turn ends with.
@@ -383,6 +414,32 @@ fn a_bundle_closes_when_the_turn_ends(cx: &mut TestAppContext) {
     assert_eq!(
         value_of(cx, window, "chat-divider-4").as_deref(),
         Some("Worked for 1 s")
+    );
+}
+
+/// Work is collapsed by default: a plan row opens only while it is a live turn's frontier.
+#[gpui_kit::test]
+fn a_plan_row_is_collapsed_once_the_turn_ends(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![
+            EventKind::TurnStarted,
+            EventKind::Plan {
+                entries: vec![kg_domain::PlanEntry {
+                    text: "read the tests".into(),
+                    status: kg_domain::PlanStatus::Pending,
+                }],
+            },
+            EventKind::TurnEnded {
+                outcome: kg_domain::TurnOutcome::Completed,
+                error: None,
+            },
+        ],
+    );
+    wait_until(cx, |cx| shows(cx, window, "chat-plan-2"));
+    assert_eq!(
+        value_of(cx, window, "chat-plan-2").as_deref(),
+        Some("collapsed · done")
     );
 }
 

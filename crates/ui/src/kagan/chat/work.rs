@@ -50,7 +50,7 @@ pub(super) fn work_row(
     let body = open
         .then(|| body::work_body(row.id, tool, &kind, weak, window, cx))
         .map(IntoElement::into_any_element);
-    face(
+    let face = face(
         Face {
             id: row_id(Part::Work, row.id),
             key: row.key(),
@@ -77,6 +77,45 @@ pub(super) fn work_row(
         weak,
         window,
         cx,
+    );
+    match live_preview(row.id, tool, cx) {
+        Some(preview) => div().child(face).child(preview).into_any_element(),
+        None => face,
+    }
+}
+
+/// A running command's last lines, under the row, so its noise never needs the row opened.
+fn live_preview(row: u64, tool: &ToolRow, cx: &mut App) -> Option<AnyElement> {
+    if !tool.running() || WorkKind::of(tool) != WorkKind::Execute {
+        return None;
+    }
+    let lines: Vec<&str> = tool.output.as_deref()?.lines().rev().take(3).collect();
+    if lines.is_empty() {
+        return None;
+    }
+    let mut lines = lines;
+    lines.reverse();
+    let text = lines.join("\n");
+    Some(
+        div()
+            .id(gpui_kit::ElementId::Name(
+                format!("chat-preview-{row}").into(),
+            ))
+            .ui_observe_as(Facts {
+                role: gpui_kit::Role::Label,
+                value: Some(text.clone().into()),
+                ..Facts::button("Preview")
+            })
+            .pl(px(28.))
+            .font_family(cx.theme().mono_font_family.clone())
+            .type_caption(cx)
+            .text_color(cx.theme().muted_foreground)
+            .children(lines.into_iter().map(|line| {
+                div()
+                    .whitespace_nowrap()
+                    .child(SharedString::from(line.to_owned()))
+            }))
+            .into_any_element(),
     )
 }
 
@@ -339,10 +378,16 @@ fn line(
     on_click: Rc<dyn Fn(&mut App)>,
     cx: &mut App,
 ) -> impl IntoElement {
+    // Nothing depends on colour: a running or failed row carries its status as a word too.
+    let word = matches!(face.tone, Tone::Busy | Tone::Failed).then(|| face.tone.word());
     let name = face.title.as_ref().map_or_else(
         || face.label.clone(),
         |title| format!("{} {}", face.label, title),
     );
+    let name = match word {
+        Some(word) => format!("{name} {word}"),
+        None => name,
+    };
     let value = format!(
         "{} · {}",
         pick(face.open, "expanded", "collapsed"),
@@ -413,22 +458,32 @@ fn content(face: Face, cx: &mut App) -> gpui_kit::Div {
     } else {
         div().w(px(12.)).flex_none().into_any_element()
     };
-    let mut line = div()
-        .child(chevron)
-        .child(
+    let mut line = div().child(chevron).child(
+        div()
+            .w(px(16.))
+            .flex()
+            .justify_center()
+            .child(Icon::new(face.icon).xsmall().text_color(muted)),
+    );
+    if matches!(face.tone, Tone::Busy | Tone::Failed) {
+        line = line.child(div().flex_none().child(face.tone.mark(cx)));
+    }
+    line = line.child(
+        div()
+            .type_small(cx)
+            .whitespace_nowrap()
+            .text_color(label_color)
+            .child(face.label),
+    );
+    if matches!(face.tone, Tone::Busy | Tone::Failed) {
+        line = line.child(
             div()
-                .w(px(16.))
-                .flex()
-                .justify_center()
-                .child(Icon::new(face.icon).xsmall().text_color(muted)),
-        )
-        .child(
-            div()
-                .type_small(cx)
-                .whitespace_nowrap()
-                .text_color(label_color)
-                .child(face.label),
+                .flex_none()
+                .type_caption(cx)
+                .text_color(face.tone.color(cx))
+                .child(face.tone.word()),
         );
+    }
     if let Some(text) = face.title {
         let title = div()
             .min_w_0()

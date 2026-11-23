@@ -409,7 +409,7 @@ impl Transcript {
         let last = self.frontier() == Some(index);
         let failed = self.last_outcome == Some(TurnOutcome::Failed);
         match &row.kind {
-            RowKind::Plan(_) => true,
+            RowKind::Plan(_) => last && answering,
             RowKind::Thought(thought) => last && answering && !thought.text.is_empty(),
             RowKind::Bundle(_) => last && answering,
             RowKind::Work(tool) => {

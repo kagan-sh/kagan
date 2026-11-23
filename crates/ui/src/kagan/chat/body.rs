@@ -43,7 +43,7 @@ pub(super) fn work_body(
         .read_with(cx, |this, _| this.more_open(row))
         .unwrap_or(false);
     let output = match kind {
-        WorkKind::Execute => terminal_out(row, tool.output.as_deref(), cx),
+        WorkKind::Execute => terminal_out(row, tool.output.as_deref(), tool.running(), cx),
         WorkKind::Edit | WorkKind::Delete | WorkKind::Move => {
             diff_out(row, &tool.diff, tool.output.as_deref(), cx)
         }
@@ -388,11 +388,19 @@ fn plain_out(row: u64, output: Option<&str>, cx: &mut App) -> Option<AnyElement>
 }
 
 /// A command's output in the terminal colours, capped and scrollable.
-fn terminal_out(row: u64, output: Option<&str>, cx: &mut App) -> Option<AnyElement> {
+fn terminal_out(row: u64, output: Option<&str>, live: bool, cx: &mut App) -> Option<AnyElement> {
     let output = output?;
     let background = terminal_color(kg_core::Color::Background, cx);
     let foreground = terminal_color(kg_core::Color::Foreground, cx);
-    let lines: Vec<&str> = output.lines().take(OUTPUT_LINES).collect();
+    // A running command shows its newest lines, so the body stays at the bottom as it streams.
+    let mut lines: Vec<&str> = if live {
+        output.lines().rev().take(OUTPUT_LINES).collect()
+    } else {
+        output.lines().take(OUTPUT_LINES).collect()
+    };
+    if live {
+        lines.reverse();
+    }
     let fact = output_fact(&lines);
     Some(
         div()
