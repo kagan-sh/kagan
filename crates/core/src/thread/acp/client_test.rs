@@ -95,7 +95,7 @@ fn an_output_the_last_update_already_said_is_not_written_again() {
 fn a_call_that_ended_keeps_no_output_in_the_connection() {
     let mut repeats = Repeats::default();
     assert!(!repeats.repeats(&update(Some("one"), None)));
-    assert!(!repeats.repeats(&update(None, Some(kg_domain::ToolStatus::Completed))));
+    assert!(!repeats.repeats(&update(Some("one"), Some(kg_domain::ToolStatus::Completed))));
     assert!(repeats.0.is_empty(), "a finished call holds nothing");
     assert!(
         !repeats.repeats(&update(Some("one"), None)),

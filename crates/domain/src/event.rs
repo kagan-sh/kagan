@@ -347,9 +347,11 @@ impl WorkKind {
             || (title.is_some_and(|title| title.starts_with(LOAD_SKILL)) && named.is_some())
         {
             let name = named
-                .or_else(|| title.and_then(|title| title.strip_prefix(LOAD_SKILL_NAMED)))
-                .map_or_else(|| A_SKILL.to_owned(), str::to_owned);
-            return Self::Skill { name };
+                .or_else(|| title.and_then(|title| title.strip_prefix(LOAD_SKILL)))
+                .map_or_else(|| A_SKILL, str::trim_start);
+            return Self::Skill {
+                name: name.to_owned(),
+            };
         }
         match kind {
             Some(ToolKind::Read) => Self::Read,
@@ -394,10 +396,8 @@ impl WorkKind {
     }
 }
 
-/// The tool name kagan serves itself, and the titles an agent reports it under.
 const SKILL_LOAD: &str = "skill_load";
 const LOAD_SKILL: &str = "load skill";
-const LOAD_SKILL_NAMED: &str = "load skill ";
 const A_SKILL: &str = "a skill";
 
 /// One file a tool call changed. `old` is absent for a file it created.
