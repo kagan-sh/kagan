@@ -157,13 +157,14 @@ impl ChatView {
             cx,
         );
         cx.spawn(async move |this, cx| {
-            let Ok(kg_domain::OpResult::Events(events)) = read.await else {
-                return;
-            };
+            let read = read.await;
             _ = this.update(cx, |this, cx| {
+                // A load that fails still ends the wait: the live events behind it are drawn.
                 this.loaded = true;
-                for event in events {
-                    this.absorb(&event, cx);
+                if let Ok(kg_domain::OpResult::Events(events)) = read {
+                    for event in events {
+                        this.absorb(&event, cx);
+                    }
                 }
                 let pending = std::mem::take(&mut this.pending);
                 for event in &pending {
