@@ -45,7 +45,7 @@ pub(super) fn work_body(
     };
     let link = match kind {
         WorkKind::Edit | WorkKind::Delete | WorkKind::Move => review_link(row, tool, weak, cx),
-        WorkKind::Skill { .. } => skill_link(row),
+        WorkKind::Skill { .. } => Some(skill_link(row)),
         _ => None,
     };
     let args = matches!(
@@ -88,14 +88,14 @@ fn review_link(
     }
     let path = tool.diff.first()?.path.clone();
     let kagan = weak.read_with(cx, |this, _| this.kagan()).ok()?;
-    link(row, "review", "Open in review", move |window, cx| {
+    Some(link(row, "review", "Open in review", move |window, cx| {
         _ = kagan.update(cx, |kagan, cx| {
             kagan.open_review(path.clone(), window, cx);
         });
-    })
+    }))
 }
 
-fn skill_link(row: u64) -> Option<AnyElement> {
+fn skill_link(row: u64) -> AnyElement {
     link(row, "skill", "Open skill", |_, cx| {
         _ = crate::kagan::show_skills(cx);
     })
@@ -107,21 +107,19 @@ fn link(
     name: &'static str,
     label: &'static str,
     action: impl Fn(&mut Window, &mut App) + 'static,
-) -> Option<AnyElement> {
+) -> AnyElement {
     let id = format!("chat-link-{name}-{row}");
-    Some(
-        div()
-            .id(gpui_kit::ElementId::Name(id.clone().into()))
-            .ui_observe_as(Facts::button(label))
-            .child(
-                Button::new(SharedString::from(format!("{id}-button")))
-                    .small()
-                    .ghost()
-                    .label(label)
-                    .on_click(move |_, window, cx| action(window, cx)),
-            )
-            .into_any_element(),
-    )
+    div()
+        .id(gpui_kit::ElementId::Name(id.clone().into()))
+        .ui_observe_as(Facts::button(label))
+        .child(
+            Button::new(SharedString::from(format!("{id}-button")))
+                .small()
+                .ghost()
+                .label(label)
+                .on_click(move |_, window, cx| action(window, cx)),
+        )
+        .into_any_element()
 }
 
 /// An MCP call's answer: how many things it carries, then the text the server sent.

@@ -129,9 +129,10 @@ impl WorkKind {
             Self::Fetch => pick(done, "Fetched page", "Fetching page"),
             Self::Think => pick(done, "Thought", "Thinking"),
             Self::Mcp { server, tool } => {
-                return match done {
-                    true => format!("Called {server}.{tool}"),
-                    false => format!("Calling {server}.{tool}"),
+                return if done {
+                    format!("Called {server}.{tool}")
+                } else {
+                    format!("Calling {server}.{tool}")
                 };
             }
             Self::Skill { .. } => pick(done, "Loaded skill", "Loading skill"),

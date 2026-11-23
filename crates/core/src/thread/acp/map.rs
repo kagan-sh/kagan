@@ -215,12 +215,11 @@ fn kind(kind: AcpToolKind) -> ToolKind {
 
 fn status(status: ToolCallStatus) -> ToolStatus {
     match status {
-        ToolCallStatus::Pending => ToolStatus::Pending,
         ToolCallStatus::InProgress => ToolStatus::InProgress,
         ToolCallStatus::Completed => ToolStatus::Completed,
         ToolCallStatus::Failed => ToolStatus::Failed,
-        // A status kagan has not met is read as still to come: nothing is called failed on the
-        // strength of a word kagan does not know.
+        // Pending, and any status kagan has not met, is read as still to come: nothing is called
+        // failed on the strength of a word kagan does not know.
         _ => ToolStatus::Pending,
     }
 }

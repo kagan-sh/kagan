@@ -345,14 +345,12 @@ async fn permission(
             // The connection keeps what it asked, so Cancel and the end of the turn take back
             // only its own questions. A connection that is already gone leaves the question to
             // the end that settles the thread.
-            let kept = this
-                .update(cx, |workspace, _| {
-                    let acp = workspace.runs.get_mut(id)?.acp.as_mut()?;
-                    acp.raised.push(raised);
-                    Some(asked)
-                })
-                .map_err(closed)?;
-            kept
+            this.update(cx, |workspace, _| {
+                let acp = workspace.runs.get_mut(id)?.acp.as_mut()?;
+                acp.raised.push(raised);
+                Some(asked)
+            })
+            .map_err(closed)?
         }
         Err(error) => {
             eprintln!("kg: could not ask about the agent's tool call: {error}");

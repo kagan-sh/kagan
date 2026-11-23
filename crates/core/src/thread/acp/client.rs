@@ -684,37 +684,6 @@ async fn answer(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn update(output: Option<&str>, status: Option<kg_domain::ToolStatus>) -> map::ToolUpdate {
-        map::ToolUpdate {
-            id: "t1".into(),
-            name: None,
-            kind: None,
-            title: None,
-            status,
-            input: None,
-            output: output.map(str::to_owned),
-            diff: Vec::new(),
-            locations: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn an_output_the_last_update_already_said_is_not_written_again() {
-        let mut repeats = Repeats::default();
-        assert!(!repeats.repeats(&update(Some("one"), None)));
-        assert!(repeats.repeats(&update(Some("one"), None)));
-        assert!(!repeats.repeats(&update(Some("two"), None)));
-        assert!(
-            !repeats.repeats(&update(Some("two"), Some(kg_domain::ToolStatus::Completed))),
-            "an update that names a status is kept, whatever its output"
-        );
-    }
-}
-
 /// Waits a moment for the agent to exit on its own, then ends its tree and reports how it ended.
 async fn exit_status(process: &mut Process, executor: &BackgroundExecutor) -> Option<Exit> {
     let started = Instant::now();
@@ -753,4 +722,35 @@ fn exit_of(status: ExitStatus) -> Option<Exit> {
         .code()
         .and_then(|code| u32::try_from(code).ok())
         .map(Exit::Code)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn update(output: Option<&str>, status: Option<kg_domain::ToolStatus>) -> map::ToolUpdate {
+        map::ToolUpdate {
+            id: "t1".into(),
+            name: None,
+            kind: None,
+            title: None,
+            status,
+            input: None,
+            output: output.map(str::to_owned),
+            diff: Vec::new(),
+            locations: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn an_output_the_last_update_already_said_is_not_written_again() {
+        let mut repeats = Repeats::default();
+        assert!(!repeats.repeats(&update(Some("one"), None)));
+        assert!(repeats.repeats(&update(Some("one"), None)));
+        assert!(!repeats.repeats(&update(Some("two"), None)));
+        assert!(
+            !repeats.repeats(&update(Some("two"), Some(kg_domain::ToolStatus::Completed))),
+            "an update that names a status is kept, whatever its output"
+        );
+    }
 }
