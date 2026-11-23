@@ -451,6 +451,27 @@ impl Kagan {
             .into_any_element()
     }
 
+    pub(super) fn render_chat(
+        &self,
+        view: &Entity<super::chat::ChatView>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let id = view.read(cx).thread().clone();
+        let Some(thread) = self.record(&id, cx).cloned() else {
+            return Self::render_empty("This thread is gone.", cx);
+        };
+        let archived = thread.archived_at.is_some();
+        let live = thread.status.running();
+        let strip = self.render_strip(cx);
+        let ended = (!live).then(|| Self::ended_notice(&id, archived, cx));
+        v_flex()
+            .size_full()
+            .children(strip)
+            .child(div().flex_1().min_h_0().child(view.clone()))
+            .children(ended)
+            .into_any_element()
+    }
+
     pub(super) fn render_welcome(&self, cx: &mut Context<Self>) -> AnyElement {
         v_flex()
             .flex_1()

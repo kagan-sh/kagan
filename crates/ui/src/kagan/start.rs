@@ -122,6 +122,8 @@ impl FolderUse {
 #[derive(Default)]
 pub(super) struct StartState {
     reuse: Option<Reuse>,
+    /// The link the person chose. None follows the program: Chat for an agent that answers ACP.
+    pub(super) link: Option<kg_domain::Link>,
     // The data folder's worktrees, as the line under "Runs in" shows it. Set once when the screen opens.
     pub(super) worktree_root: String,
     folder: Option<StartFolder>,
@@ -153,8 +155,17 @@ pub(super) struct StartState {
 }
 
 impl StartState {
+    /// The link this start uses: the person's choice, or Chat when the agent answers ACP.
+    pub(super) fn link(&self, program: &str) -> kg_domain::Link {
+        if kg_domain::acp_command(program).is_none() {
+            return kg_domain::Link::Terminal;
+        }
+        self.link.unwrap_or(kg_domain::Link::Acp)
+    }
+
     pub(super) fn reset(&mut self) {
         self.reuse = None;
+        self.link = None;
         self.folder = None;
         self.pick = BranchPick::Current;
         self.intent = ProjectIntent::Current;

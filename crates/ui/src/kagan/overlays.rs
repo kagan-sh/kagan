@@ -74,7 +74,7 @@ impl Kagan {
 
 fn drawn_over(kagan: &Kagan, cx: &App) -> bool {
     let work = match kagan.screen.current() {
-        Center::Work(Shown::Thread(_)) | Center::Page(_) => true,
+        Center::Work(Shown::Thread(_) | Shown::Chat(_)) | Center::Page(_) => true,
         Center::Work(Shown::Nothing | Shown::Start(_))
         | Center::Review(_)
         | Center::Settings

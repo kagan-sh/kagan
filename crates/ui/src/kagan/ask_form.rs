@@ -104,6 +104,7 @@ impl Kagan {
     pub(super) fn terminal_thread(&self, cx: &App) -> Option<kg_domain::ThreadId> {
         match self.screen.current() {
             Center::Work(Shown::Thread(view)) => Some(view.read(cx).thread().clone()),
+            Center::Work(Shown::Chat(view)) => Some(view.read(cx).thread().clone()),
             _ => None,
         }
     }

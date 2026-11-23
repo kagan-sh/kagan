@@ -68,6 +68,7 @@ fn chord_bindings(keymap: &Keymap, cx: &App) -> Vec<KeyBinding> {
             let chord = chord_for(shortcut.name, keymap, KeyPlatform::host());
             let contexts: &[&str] = match shortcut.scope {
                 ShortcutScope::Window => &[CONTEXT],
+                ShortcutScope::Chat => &[super::chat::CONTEXT],
                 ShortcutScope::Review => &[super::review::CONTEXT],
                 ShortcutScope::ReviewSend => &[NAV_CONTEXT, "Review > Input"],
             };

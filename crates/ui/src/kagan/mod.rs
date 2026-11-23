@@ -9,6 +9,7 @@ mod ask_form;
 pub(crate) mod attention;
 pub(crate) mod browser;
 pub(crate) mod changes;
+pub(crate) mod chat;
 pub(crate) mod commands;
 mod controls;
 mod details;
@@ -76,6 +77,8 @@ pub(crate) use window::{
 use std::collections::BTreeSet;
 
 use crate::terminal::TerminalView;
+
+use chat::ChatView;
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::resizable::ResizableState;
 use gpui_kit::{
@@ -100,6 +103,7 @@ actions!(
     [
         NewThread,
         StopThread,
+        CancelTurn,
         ArchiveThread,
         TogglePinned,
         StartAgain,
@@ -118,6 +122,8 @@ actions!(
         OpenUsage,
         UseProjectFolder,
         UseWorktreeFolder,
+        UseTerminalLink,
+        UseChatLink,
         RetryBranches,
         RetryPrograms,
         ToggleCustomCommand,
@@ -142,6 +148,8 @@ enum Shown {
     Nothing,
     Start(ProjectId),
     Thread(Entity<TerminalView>),
+    /// An ACP thread, whose agent answers in the transcript.
+    Chat(Entity<ChatView>),
 }
 
 pub(crate) struct Kagan {

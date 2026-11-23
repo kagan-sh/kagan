@@ -100,6 +100,7 @@ impl Screen {
     pub(super) fn covered_thread(&self, cx: &App) -> Option<ThreadId> {
         match self.shown() {
             Shown::Thread(view) => Some(view.read(cx).thread().clone()),
+            Shown::Chat(view) => Some(view.read(cx).thread().clone()),
             Shown::Nothing | Shown::Start(_) => None,
         }
     }

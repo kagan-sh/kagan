@@ -151,6 +151,7 @@ impl Kagan {
         let listed = |id: &ProjectId| self.sidebar.read(cx).project(id).is_some();
         let gone = match self.screen.shown() {
             Shown::Thread(view) => self.record(view.read(cx).thread(), cx).is_none(),
+            Shown::Chat(view) => self.record(view.read(cx).thread(), cx).is_none(),
             Shown::Start(id) => !listed(id),
             Shown::Nothing => false,
         };
