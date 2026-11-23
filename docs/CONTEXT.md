@@ -49,6 +49,14 @@ _Avoid_: Chat, thread
 The center of an ACP thread: the thread's events as a transcript, and one prompt box. The agent answers here instead of in a terminal.
 _Avoid_: Terminal, session view
 
+**Work**:
+A chat row for something the agent did rather than said: a tool call, an MCP call, a skill load, or its thinking. One compact row, collapsed until the person opens it or it is the live last row.
+_Avoid_: Tool (as a synonym for the row), step
+
+**Bundle**:
+One chat row holding a run of consecutive finished looking work, such as reads, searches and fetches, labelled by what they did. Editing, commands, MCP calls, skill loads and failures never fold.
+_Avoid_: Group, cluster
+
 **Event**:
 One immutable record in a thread's log, such as a message, tool call, file change or status change, numbered by sequence.
 _Avoid_: Log entry, message (as a synonym)
