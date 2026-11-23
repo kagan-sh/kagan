@@ -186,15 +186,24 @@ async fn consume(
             },
         };
         let event = match event {
-            AcpEvent::Message { text, message_id } => AcpEvent::Message {
-                text: joined(text, message_id.as_deref(), &events, &mut pending),
+            AcpEvent::Chunk {
+                thought,
+                text,
+                message_id,
+            } => AcpEvent::Chunk {
+                thought,
+                text: joined(thought, text, message_id.as_deref(), &events, &mut pending),
                 message_id,
             },
             other => other,
         };
         let outcome = match event {
             AcpEvent::Session(session) => named(this, &id, &session, at, cx).await,
-            AcpEvent::Message { text, message_id } => {
+            AcpEvent::Chunk {
+                thought: false,
+                text,
+                message_id,
+            } => {
                 let kinds = vec![EventKind::Message {
                     role: Role::Agent,
                     text,
@@ -203,6 +212,26 @@ async fn consume(
                 }];
                 Workspace::events(this, id.clone(), kinds, cx).await
             }
+            AcpEvent::Chunk {
+                thought: true,
+                text,
+                message_id,
+            } => {
+                let kinds = vec![EventKind::Thought { text, message_id }];
+                Workspace::events(this, id.clone(), kinds, cx).await
+            }
+            AcpEvent::Tool(tool) => tool_event(this, &id, tool, None, cx).await,
+            AcpEvent::Plan(entries) => {
+                Workspace::events(this, id.clone(), vec![EventKind::Plan { entries }], cx).await
+            }
+            AcpEvent::Usage { used, size } => {
+                Workspace::events(this, id.clone(), vec![EventKind::Usage { used, size }], cx).await
+            }
+            AcpEvent::Permission {
+                tool,
+                options,
+                answer,
+            } => permission(this, &id, tool, options, answer, cx).await,
             AcpEvent::TurnDone { outcome, error } => turn_done(this, &id, outcome, error, cx).await,
             AcpEvent::Ended { exit, error } => {
                 // The agent is gone: the next prompt starts it again rather than writing to a
@@ -223,6 +252,7 @@ async fn consume(
 /// Joins the chunks the agent already said for the same message behind this one, so a burst is one
 /// write and one event row. Anything else stays queued for the next step.
 fn joined(
+    thought: bool,
     mut text: String,
     message_id: Option<&str>,
     events: &async_channel::Receiver<AcpEvent>,
@@ -230,12 +260,14 @@ fn joined(
 ) -> String {
     loop {
         match events.try_recv() {
-            Ok(AcpEvent::Message {
+            Ok(AcpEvent::Chunk {
+                thought: same_kind,
                 text: more,
                 message_id: same,
             }) => {
-                if same.as_deref() != message_id {
-                    *pending = Some(AcpEvent::Message {
+                if same_kind != thought || same.as_deref() != message_id {
+                    *pending = Some(AcpEvent::Chunk {
+                        thought: same_kind,
                         text: more,
                         message_id: same,
                     });
@@ -251,6 +283,68 @@ fn joined(
         }
     }
     text
+}
+
+/// One tool delta as the log keeps it, with the approval that links it to a question when there is
+/// one.
+async fn tool_event(
+    this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    tool: map::ToolUpdate,
+    approval: Option<kg_domain::PendingInteractionId>,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    let kinds = vec![EventKind::Tool {
+        id: tool.id,
+        name: tool.name,
+        kind: tool.kind,
+        title: tool.title,
+        status: tool.status,
+        input: tool.input,
+        output: tool.output,
+        diff: tool.diff,
+        locations: tool.locations,
+        approval,
+    }];
+    Workspace::events(this, id.clone(), kinds, cx).await
+}
+
+/// The agent wants permission: raise the one question the card and the Questions tab share, then
+/// record the tool row it links to. A question that cannot be raised is not the agent's problem:
+/// the row still draws, and the dropped answer channel answers the agent `cancelled`.
+async fn permission(
+    this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    tool: map::ToolUpdate,
+    options: Vec<kg_domain::InteractionOption>,
+    answer: async_channel::Sender<String>,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    let thread = crate::thread::thread(this, id, cx)?;
+    let provider = thread.read_with(cx, |thread, _| {
+        kg_domain::program_label(&thread.record.provider).to_owned()
+    });
+    let title = format!("{provider} wants to {}", map::phrase(tool.kind));
+    let waiting = crate::workspace::Waiting {
+        thread: None,
+        answer,
+        for_a_person: true,
+        approval: None,
+        ask: None,
+    };
+    let raised = crate::thread::raise(this, &thread, title, options, None, waiting, cx).await;
+    let approval = match raised {
+        Ok(raised) => Some(raised.id),
+        Err(error) => {
+            eprintln!("kg: could not ask about the agent's tool call: {error}");
+            None
+        }
+    };
+    let pending = map::ToolUpdate {
+        status: Some(kg_domain::ToolStatus::Pending),
+        ..tool
+    };
+    tool_event(this, id, pending, approval, cx).await
 }
 
 /// The agent named its session: that id is the thread's conversation, and the thread is running.
@@ -373,7 +467,7 @@ pub(super) async fn prompt(
 }
 
 /// Asks the agent to end its reply; the agent itself keeps running.
-pub(super) fn cancel(
+pub(super) async fn cancel(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
     cx: &mut AsyncApp,
@@ -388,6 +482,9 @@ pub(super) fn cancel(
         return Err(OpError::Invalid("the agent is not answering".into()));
     }
     send(this, id, AcpCommand::Cancel, cx)?;
+    // The question goes the moment the person cancels; the agent's own prompt response would
+    // otherwise leave the card up.
+    crate::thread::drop_questions(this, &thread, cx).await?;
     Ok(OpResult::Done)
 }
 

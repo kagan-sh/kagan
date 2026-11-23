@@ -36,14 +36,23 @@ pub(super) async fn settle(
     thread: &Entity<Thread>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    let thread_id = thread.read_with(cx, |thread, _| thread.record.id.clone());
     thread.update(cx, |thread, _| thread.busy = false);
+    drop_questions(this, thread, cx).await?;
+    crate::workspace::changed(this, cx)
+}
+
+/// Drops every question the thread has open, in memory and in the store: the card goes with them.
+pub(crate) async fn drop_questions(
+    this: &WeakEntity<Workspace>,
+    thread: &Entity<Thread>,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    let thread_id = thread.read_with(cx, |thread, _| thread.record.id.clone());
     this.update(cx, |workspace, _| {
         take_thread_replies(workspace, &thread_id)
     })
     .map_err(closed)?;
-    clear_interactions(this, thread, cx).await?;
-    crate::workspace::changed(this, cx)
+    clear_interactions(this, thread, cx).await
 }
 
 pub(crate) async fn stop(

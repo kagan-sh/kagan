@@ -8,11 +8,12 @@ use std::time::{Duration, Instant};
 
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::v1::schema::{
-    CancelNotification, InitializeRequest, RequestPermissionOutcome, RequestPermissionRequest,
-    RequestPermissionResponse, SessionNotification,
+    CancelNotification, InitializeRequest, PermissionOptionId, RequestPermissionOutcome,
+    RequestPermissionRequest, RequestPermissionResponse, SelectedPermissionOutcome,
+    SessionNotification,
 };
 use agent_client_protocol::v1::{SessionMessage, SessionSetup};
-use agent_client_protocol::{Agent, Channel, Client, Dispatch, TransportFrame};
+use agent_client_protocol::{Agent, Channel, Client, Dispatch, Responder, TransportFrame};
 use gpui_kit::BackgroundExecutor;
 use kg_domain::{TEXT_MAX, TurnOutcome};
 use kg_process::Process;
@@ -45,9 +46,23 @@ const READ_BACKLOG: usize = 64;
 pub(super) enum AcpEvent {
     /// The agent named its session. It is the thread's conversation.
     Session(String),
-    Message {
+    /// One chunk of the agent's reply or its reasoning.
+    Chunk {
+        thought: bool,
         text: String,
         message_id: Option<String>,
+    },
+    /// One tool call, or an update to one with the same id.
+    Tool(map::ToolUpdate),
+    /// The agent's whole plan.
+    Plan(Vec<kg_domain::PlanEntry>),
+    /// Tokens in context.
+    Usage { used: u64, size: u64 },
+    /// The agent wants permission; `answer` carries the person's chosen option id.
+    Permission {
+        tool: map::ToolUpdate,
+        options: Vec<kg_domain::InteractionOption>,
+        answer: async_channel::Sender<String>,
     },
     /// The agent answered the prompt: its turn is over.
     TurnDone {
@@ -496,44 +511,99 @@ impl Unread {
     }
 }
 
-/// Serves the thread's commands and the agent's messages until one side is gone: a reply chunk
-/// becomes an event, and the prompt's response ends its turn.
+/// A permission request the connection holds open: the agent waits, and so does the person's
+/// answer. The connection keeps reading meanwhile.
+struct Asking {
+    answer: async_channel::Receiver<String>,
+    responder: Responder<RequestPermissionResponse>,
+}
+
+/// Serves the thread's commands, the agent's messages, and any permission answer until one side is
+/// gone: an update becomes an event, and the prompt's response ends its turn.
 async fn serve(
     session: &mut agent_client_protocol::v1::ActiveSession<'_, Agent>,
     commands: &async_channel::Receiver<AcpCommand>,
     events: &async_channel::Sender<AcpEvent>,
 ) -> Result<(), String> {
     let mut unread = Unread::default();
+    let mut asking: std::collections::VecDeque<Asking> = std::collections::VecDeque::new();
     loop {
         let step = {
             let update = Box::pin(session.read_update());
-            match futures::future::select(update, Box::pin(commands.recv())).await {
-                futures::future::Either::Left((update, _)) => Step::Update(update.map(Box::new)),
-                futures::future::Either::Right((Ok(command), _)) => Step::Command(command),
-                futures::future::Either::Right((Err(_), _)) => Step::Closed,
+            let command = Box::pin(commands.recv());
+            let heard = async {
+                match futures::future::select(update, command).await {
+                    futures::future::Either::Left((update, _)) => {
+                        Step::Update(update.map(Box::new))
+                    }
+                    futures::future::Either::Right((Ok(command), _)) => Step::Command(command),
+                    futures::future::Either::Right((Err(_), _)) => Step::Closed,
+                }
+            };
+            match asking.front_mut() {
+                Some(first) => {
+                    let heard = Box::pin(heard);
+                    let answer = Box::pin(first.answer.recv());
+                    match futures::future::select(heard, answer).await {
+                        futures::future::Either::Left((step, _)) => step,
+                        futures::future::Either::Right((answer, _)) => Step::Answer(answer),
+                    }
+                }
+                None => heard.await,
             }
         };
         match step {
-            Step::Update(Ok(message)) => heard(*message, events, &mut unread).await,
+            Step::Update(Ok(message)) => {
+                heard(*message, events, &mut unread, &mut asking).await;
+            }
             Step::Update(Err(error)) => return Err(error.to_string()),
+            Step::Answer(Ok(option)) => {
+                if let Some(asking) = asking.pop_front() {
+                    let _ = asking.responder.respond(selected(option));
+                }
+            }
+            Step::Answer(Err(_)) => {
+                if let Some(asking) = asking.pop_front() {
+                    let _ = asking.responder.respond(cancelled());
+                }
+            }
             Step::Command(AcpCommand::Prompt(text)) => session
                 .send_prompt(text)
                 .map_err(|error| error.to_string())?,
-            Step::Command(AcpCommand::Cancel) => session
-                .connection()
-                .send_notification_to(Agent, CancelNotification::new(session.session_id().clone()))
-                .map_err(|error| error.to_string())?,
+            Step::Command(AcpCommand::Cancel) => {
+                session
+                    .connection()
+                    .send_notification_to(
+                        Agent,
+                        CancelNotification::new(session.session_id().clone()),
+                    )
+                    .map_err(|error| error.to_string())?;
+                // The protocol asks for `cancelled` on every request still open.
+                for asking in asking.drain(..) {
+                    let _ = asking.responder.respond(cancelled());
+                }
+            }
             Step::Closed => return Ok(()),
         }
     }
 }
 
-/// One thing the agent said, as far as slice 1 reads it: an answer chunk, its turn's end, or a
-/// permission request.
+fn selected(option: String) -> RequestPermissionResponse {
+    RequestPermissionResponse::new(RequestPermissionOutcome::Selected(
+        SelectedPermissionOutcome::new(PermissionOptionId::new(option)),
+    ))
+}
+
+fn cancelled() -> RequestPermissionResponse {
+    RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled)
+}
+
+/// One thing the agent said: an update, its turn's end, or a permission request.
 async fn heard(
     message: SessionMessage,
     events: &async_channel::Sender<AcpEvent>,
     unread: &mut Unread,
+    asking: &mut std::collections::VecDeque<Asking>,
 ) {
     match message {
         SessionMessage::PromptResponse(response) => {
@@ -543,8 +613,9 @@ async fn heard(
             };
             send(events, AcpEvent::TurnDone { outcome, error }).await;
         }
-        SessionMessage::Message(dispatch) => answer(dispatch.into_raw(), events, unread).await,
-        // Slice 2 reads the rest; until then a kind kagan does not draw is not an answer.
+        SessionMessage::Message(dispatch) => {
+            answer(dispatch.into_raw(), events, unread, asking).await
+        }
         _ => eprintln!("kg: the agent sent something kagan does not read yet"),
     }
 }
@@ -552,26 +623,48 @@ async fn heard(
 enum Step {
     Update(Result<Box<SessionMessage>, agent_client_protocol::Error>),
     Command(AcpCommand),
+    Answer(Result<String, async_channel::RecvError>),
     Closed,
 }
 
-/// One message from the agent for this session: a reply chunk, or a request that slice 1 does
-/// not serve. A request kagan drops is answered by the protocol with an error, so the agent's
-/// call cannot wait forever.
-async fn answer(dispatch: Dispatch, events: &async_channel::Sender<AcpEvent>, unread: &mut Unread) {
+/// One message from the agent for this session: an update to draw, or a permission request.
+async fn answer(
+    dispatch: Dispatch,
+    events: &async_channel::Sender<AcpEvent>,
+    unread: &mut Unread,
+    asking: &mut std::collections::VecDeque<Asking>,
+) {
     let dispatch = match dispatch.into_notification::<SessionNotification>() {
         Ok(Ok(notification)) => {
-            if let Some(chunk) = map::chunk(&notification.update) {
-                send(
-                    events,
-                    AcpEvent::Message {
-                        text: chunk.text,
-                        message_id: chunk.message_id,
-                    },
-                )
-                .await;
-            } else {
-                unread.update(&notification.update);
+            match map::read(&notification.update) {
+                Some(map::Update::Message(chunk)) => {
+                    send(
+                        events,
+                        AcpEvent::Chunk {
+                            thought: false,
+                            text: chunk.text,
+                            message_id: chunk.message_id,
+                        },
+                    )
+                    .await;
+                }
+                Some(map::Update::Thought(chunk)) => {
+                    send(
+                        events,
+                        AcpEvent::Chunk {
+                            thought: true,
+                            text: chunk.text,
+                            message_id: chunk.message_id,
+                        },
+                    )
+                    .await;
+                }
+                Some(map::Update::Tool(tool)) => send(events, AcpEvent::Tool(tool)).await,
+                Some(map::Update::Plan(entries)) => send(events, AcpEvent::Plan(entries)).await,
+                Some(map::Update::Usage { used, size }) => {
+                    send(events, AcpEvent::Usage { used, size }).await;
+                }
+                None => unread.update(&notification.update),
             }
             return;
         }
@@ -582,16 +675,50 @@ async fn answer(dispatch: Dispatch, events: &async_channel::Sender<AcpEvent>, un
         }
     };
     match dispatch.into_request::<RequestPermissionRequest>() {
-        Ok(Ok((_request, responder))) => {
-            let _ = responder.respond(RequestPermissionResponse::new(
-                RequestPermissionOutcome::Cancelled,
-            ));
+        Ok(Ok((request, responder))) => {
+            permission(request, responder, events, asking).await;
         }
         // The protocol answers a request kagan drops with an error, so its caller never waits; the
         // log says which one, once, so a dialect kagan does not know is visible.
         Ok(Err(dropped)) => unread.request(dropped.method()),
         Err(_) => eprintln!("kg: the agent sent a request kagan could not read"),
     }
+}
+
+/// Reports a permission request to the thread and holds its responder until the person answers.
+/// A request with no options is cancelled at once: there is nothing to choose.
+async fn permission(
+    request: RequestPermissionRequest,
+    responder: Responder<RequestPermissionResponse>,
+    events: &async_channel::Sender<AcpEvent>,
+    asking: &mut std::collections::VecDeque<Asking>,
+) {
+    let options = map::options(&request.options);
+    if options.is_empty() {
+        let _ = responder.respond(cancelled());
+        return;
+    }
+    let tool = map::tool_delta(
+        request.tool_call.tool_call_id.to_string(),
+        &request.tool_call.fields,
+    );
+    let (answer, answered) = async_channel::bounded(1);
+    if events
+        .send(AcpEvent::Permission {
+            tool,
+            options,
+            answer,
+        })
+        .await
+        .is_err()
+    {
+        let _ = responder.respond(cancelled());
+        return;
+    }
+    asking.push_back(Asking {
+        answer: answered,
+        responder,
+    });
 }
 
 /// Waits a moment for the agent to exit on its own, then ends its tree and reports how it ended.

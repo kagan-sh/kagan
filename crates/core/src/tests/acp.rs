@@ -9,11 +9,29 @@ use kg_domain::*;
 use serde_json::{Value, json};
 
 use super::{Fixture, alive, events, gone, kinds_of, op, thread, wait_for_status};
+use crate::Workspace;
 
 /// One recorded turn: the chunks the agent says, and why it stopped. `hold` keeps the prompt
 /// open until a cancel; `sleep` spawns a child that must die with the agent.
 fn turn(chunks: &[&str], stop: &str) -> Value {
     json!({ "chunks": chunks, "stopReason": stop })
+}
+
+/// A turn recorded as raw ACP updates, then the stop reason.
+fn transcript(updates: Value, stop: &str) -> Value {
+    json!({ "updates": updates, "stopReason": stop })
+}
+
+/// A turn that asks for permission before it finishes. `options` are the agent's own.
+fn asking(tool: Value, options: Value, stop: &str) -> Value {
+    json!({
+        "updates": [tool],
+        "permission": {
+            "toolCall": {"toolCallId": "call_1", "title": "Run the tests", "kind": "execute"},
+            "options": options,
+        },
+        "stopReason": stop,
+    })
 }
 
 fn holding() -> Value {
@@ -500,28 +518,408 @@ async fn acp_an_echo_of_the_prompt_is_not_drawn(cx: &mut TestAppContext) {
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 
-#[gpui_kit::test]
-async fn acp_a_permission_request_is_answered_cancelled(cx: &mut TestAppContext) {
-    let fixture = Fixture::new(cx).await;
-    let agent = Agent::new(&["ses_ask"], &[turn(&["done"], "end_turn")]);
-    std::fs::write(agent.path("modes"), "permission\n").unwrap();
-    let id = started(&fixture, &agent, cx).await;
-    send(&id, "go", cx).await;
-    wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
-    let answered = agent.path("permission");
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    let answer = loop {
+fn allow_options() -> Value {
+    json!([
+        {"optionId": "reject-once", "name": "Deny", "kind": "reject_once"},
+        {"optionId": "allow-once", "name": "Allow once", "kind": "allow_once"},
+        {"optionId": "allow-always", "name": "Always allow", "kind": "allow_always"}
+    ])
+}
+
+fn calling() -> Value {
+    json!({
+        "sessionUpdate": "tool_call",
+        "toolCallId": "call_1",
+        "title": "Run the tests",
+        "kind": "execute",
+        "status": "in_progress",
+        "rawInput": {"command": "cargo t"}
+    })
+}
+
+/// Waits for the thread's first pending question.
+async fn asked(id: &ThreadId, cx: &mut TestAppContext) -> PendingInteraction {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
         cx.run_until_parked();
-        if let Ok(answer) = std::fs::read_to_string(&answered) {
-            break answer;
+        if let Some(interaction) = super::pending(id, cx).await.into_iter().next() {
+            return interaction;
         }
         assert!(
             std::time::Instant::now() < deadline,
-            "the agent never heard kagan's answer"
+            "the agent's question was never raised"
         );
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(20));
         std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+/// Waits for the file the fake agent writes with what it heard.
+fn heard_in(path: &Path, cx: &mut TestAppContext) -> String {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        cx.run_until_parked();
+        if let Ok(text) = std::fs::read_to_string(path) {
+            return text;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the agent never wrote {}",
+            path.display()
+        );
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(20));
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+#[gpui_kit::test]
+async fn acp_thought_and_tool_updates_fill_the_log(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_tool"],
+        &[transcript(
+            json!([
+                {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": "look first"}},
+                {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": " before"}},
+                {
+                    "sessionUpdate": "tool_call",
+                    "toolCallId": "t1",
+                    "name": "read_file",
+                    "title": "Read file auth.spec.ts",
+                    "kind": "read",
+                    "status": "in_progress",
+                    "rawInput": {"file_path": "auth.spec.ts"},
+                    "locations": [{"path": "/work/auth.spec.ts", "line": 41}]
+                },
+                {
+                    "sessionUpdate": "tool_call_update",
+                    "toolCallId": "t1",
+                    "status": "completed",
+                    "content": [
+                        {"type": "content", "content": {"type": "text", "text": "line one\nline two"}},
+                        {"type": "diff", "path": "/work/auth.spec.ts", "oldText": "old", "newText": "new"}
+                    ]
+                }
+            ]),
+            "end_turn",
+        )],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let kinds = wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    let thoughts: Vec<_> = kinds
+        .iter()
+        .filter_map(|kind| match kind {
+            EventKind::Thought { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(thoughts.concat(), "look first before", "{kinds:?}");
+    let tools: Vec<_> = kinds
+        .iter()
+        .filter(|kind| matches!(kind, EventKind::Tool { .. }))
+        .collect();
+    assert_eq!(tools.len(), 2, "{kinds:?}");
+    let EventKind::Tool {
+        id: call,
+        name,
+        kind,
+        title,
+        status,
+        input,
+        locations,
+        ..
+    } = tools[0]
+    else {
+        unreachable!()
     };
-    assert!(answer.contains("cancelled"), "{answer}");
+    assert_eq!(call, "t1");
+    assert_eq!(name.as_deref(), Some("read_file"));
+    assert_eq!(kind, &Some(ToolKind::Read));
+    assert_eq!(title.as_deref(), Some("Read file auth.spec.ts"));
+    assert_eq!(status, &Some(ToolStatus::InProgress));
+    assert_eq!(
+        input,
+        &Some(json!({"file_path": "auth.spec.ts"})),
+        "the ACP raw input is kept as it arrived"
+    );
+    assert_eq!(
+        locations,
+        &vec![ToolLocation {
+            path: "/work/auth.spec.ts".into(),
+            line: Some(41),
+        }]
+    );
+    let EventKind::Tool {
+        id: call,
+        title,
+        status,
+        output,
+        diff,
+        input,
+        ..
+    } = tools[1]
+    else {
+        unreachable!()
+    };
+    assert_eq!(call, "t1");
+    assert_eq!(status, &Some(ToolStatus::Completed));
+    assert_eq!(output.as_deref(), Some("line one\nline two"));
+    assert_eq!(
+        diff,
+        &vec![ToolDiff {
+            path: "/work/auth.spec.ts".into(),
+            old: Some("old".into()),
+            new: "new".into(),
+        }]
+    );
+    assert!(title.is_none(), "an update need not repeat the title");
+    assert!(input.is_none(), "an update need not repeat the input");
+    let ats: Vec<_> = events(&id, cx).await.iter().map(|event| event.at).collect();
+    assert!(
+        ats.windows(2).all(|pair| pair[0] <= pair[1]),
+        "the log keeps the order things happened: {ats:?}"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn acp_mcp_and_skill_calls_are_plain_tool_events(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_mcp"],
+        &[transcript(
+            json!([
+                {
+                    "sessionUpdate": "tool_call",
+                    "toolCallId": "m1",
+                    "name": "mcp__github__create_issue",
+                    "title": "Create issue",
+                    "kind": "other",
+                    "status": "completed",
+                    "rawInput": {"repo": "acme/webapp"}
+                },
+                {
+                    "sessionUpdate": "tool_call",
+                    "toolCallId": "s1",
+                    "name": "skill_load",
+                    "title": "load skill rust-review",
+                    "kind": "other",
+                    "status": "completed",
+                    "rawInput": {"name": "rust-review"}
+                }
+            ]),
+            "end_turn",
+        )],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let kinds = wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    let calls: Vec<_> = kinds
+        .iter()
+        .filter_map(|kind| match kind {
+            EventKind::Tool { name, input, .. } => Some((name.clone(), input.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        calls,
+        vec![
+            (
+                Some("mcp__github__create_issue".into()),
+                Some(json!({"repo": "acme/webapp"}))
+            ),
+            (
+                Some("skill_load".into()),
+                Some(json!({"name": "rust-review"}))
+            ),
+        ],
+        "{kinds:?}"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn acp_plan_and_usage_are_events(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_plan"],
+        &[transcript(
+            json!([
+                {
+                    "sessionUpdate": "plan",
+                    "entries": [
+                        {"content": "Read the test", "priority": "high", "status": "completed"},
+                        {"content": "Find the race", "priority": "medium", "status": "in_progress"},
+                        {"content": "Fix it", "priority": "low", "status": "pending"}
+                    ]
+                },
+                {"sessionUpdate": "usage_update", "used": 12000, "size": 200000}
+            ]),
+            "end_turn",
+        )],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let kinds = wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    let plan = kinds.iter().find_map(|kind| match kind {
+        EventKind::Plan { entries } => Some(entries.clone()),
+        _ => None,
+    });
+    assert_eq!(
+        plan,
+        Some(vec![
+            PlanEntry {
+                text: "Read the test".into(),
+                status: PlanStatus::Completed,
+            },
+            PlanEntry {
+                text: "Find the race".into(),
+                status: PlanStatus::InProgress,
+            },
+            PlanEntry {
+                text: "Fix it".into(),
+                status: PlanStatus::Pending,
+            },
+        ]),
+        "{kinds:?}"
+    );
+    assert!(
+        kinds.contains(&EventKind::Usage {
+            used: 12000,
+            size: 200000,
+        }),
+        "{kinds:?}"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn acp_approval_allow_once_answers_the_agent(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_allow"],
+        &[asking(calling(), allow_options(), "end_turn")],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let interaction = asked(&id, cx).await;
+    assert!(
+        interaction.title.contains("wants to run a command"),
+        "{}",
+        interaction.title
+    );
+    assert_eq!(
+        interaction.options,
+        vec![
+            InteractionOption {
+                id: "reject-once".into(),
+                label: "Deny".into(),
+                role: Some(OptionRole::Destructive),
+            },
+            InteractionOption {
+                id: "allow-once".into(),
+                label: "Allow once".into(),
+                role: Some(OptionRole::Primary),
+            },
+            InteractionOption {
+                id: "allow-always".into(),
+                label: "Always allow".into(),
+                role: Some(OptionRole::Safe),
+            },
+        ],
+        "the agent's labels and order stay as they are"
+    );
+    let kinds = kinds_of(&id, cx).await;
+    assert!(
+        kinds.iter().any(|kind| matches!(
+            kind,
+            EventKind::Tool {
+                approval: Some(approval),
+                status: Some(ToolStatus::Pending),
+                ..
+            } if approval == &interaction.id
+        )),
+        "the tool row links to its question: {kinds:?}"
+    );
+    cx.update(|cx| Workspace::answer(&id, interaction.id, "allow-once".into(), cx))
+        .await
+        .unwrap();
+    let answer = heard_in(&agent.path("answer"), cx);
+    assert_eq!(answer.trim(), "allow-once");
+    wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    assert!(
+        super::pending(&id, cx).await.is_empty(),
+        "the question is gone once answered"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn acp_approval_deny_answers_the_agent(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_deny"],
+        &[asking(calling(), allow_options(), "end_turn")],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let interaction = asked(&id, cx).await;
+    cx.update(|cx| Workspace::answer(&id, interaction.id, "reject-once".into(), cx))
+        .await
+        .unwrap();
+    let answer = heard_in(&agent.path("answer"), cx);
+    assert_eq!(answer.trim(), "reject-once");
+    wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn acp_cancel_withdraws_the_approval(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_withdraw"],
+        &[asking(calling(), allow_options(), "end_turn")],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    let pid = agent.pid("pid", cx);
+    send(&id, "go", cx).await;
+    let interaction = asked(&id, cx).await;
+    assert!(
+        !interaction.options.is_empty(),
+        "the question shows the agent's options before it is withdrawn"
+    );
+    op(Op::Thread(ThreadOp::Cancel { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for(&id, |kinds| ended(kinds, TurnOutcome::Interrupted), cx).await;
+    assert!(
+        super::pending(&id, cx).await.is_empty(),
+        "the card goes the moment the person cancels"
+    );
+    assert!(
+        !agent.path("answer").exists(),
+        "a withdrawn question never reaches the agent"
+    );
+    assert!(alive(pid), "the agent keeps running");
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn acp_a_permission_request_with_no_options_is_cancelled(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_noopt"], &[asking(calling(), json!([]), "end_turn")]);
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    assert!(
+        super::pending(&id, cx).await.is_empty(),
+        "a request with nothing to choose is never raised"
+    );
+    let refused = heard_in(&agent.path("refused"), cx);
+    assert!(refused.contains("cancelled"), "{refused}");
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 
@@ -729,18 +1127,21 @@ fn update(session: &str, kind: &str, text: &str, message_id: Option<&str>) -> Va
     })
 }
 
-fn permission_request(session: &str) -> Value {
+fn permission_request(session: &str, permission: &Value) -> Value {
     json!({
         "jsonrpc": "2.0",
-        "id": 7,
+        "id": PERMISSION_ID,
         "method": "session/request_permission",
         "params": {
             "sessionId": session,
-            "toolCall": {"toolCallId": "call_1", "title": "read a file", "kind": "read"},
-            "options": [{"optionId": "allow", "name": "Allow once", "kind": "allow_once"}],
+            "toolCall": permission["toolCall"].clone(),
+            "options": permission["options"].clone(),
         },
     })
 }
+
+/// The id kagan sees on every permission request this agent makes.
+const PERMISSION_ID: i64 = 7;
 
 fn sleep_child(dir: &Path) {
     let child = std::process::Command::new("sleep")
@@ -776,7 +1177,8 @@ fn fake_agent() {
     let mut out = std::io::stdout();
     let stdin = std::io::stdin();
     let stdin = stdin.lock();
-    for line in stdin.lines().map_while(Result::ok) {
+    let mut lines = stdin.lines().map_while(Result::ok);
+    while let Some(line) = lines.next() {
         let Ok(message) = serde_json::from_str::<Value>(&line) else {
             continue;
         };
@@ -810,10 +1212,22 @@ fn fake_agent() {
                 if record["sleep"].as_bool() == Some(true) {
                     sleep_child(&dir);
                 }
-                turn_chunks(&mut out, &session, &record, &modes);
-                if record["hold"].as_bool() == Some(true) {
+                match record["updates"].as_array() {
+                    Some(updates) => {
+                        for update in updates {
+                            write(&mut out, &notice(&session, update));
+                        }
+                    }
+                    None => turn_chunks(&mut out, &session, &record, &modes),
+                }
+                let mut answered = false;
+                if let Some(permission) = record.get("permission") {
+                    answered =
+                        permission_step(&dir, &mut lines, &mut out, &session, permission, &id);
+                }
+                if record["hold"].as_bool() == Some(true) && !answered {
                     open = Some((id, record.clone()));
-                } else {
+                } else if !answered {
                     let stop = record["stopReason"].as_str().unwrap_or("end_turn");
                     write(&mut out, &reply(&id, &json!({ "stopReason": stop })));
                 }
@@ -859,9 +1273,6 @@ fn turn_chunks(out: &mut std::io::Stdout, session: &str, record: &Value, modes: 
     if mode("echo") {
         write(out, &update(session, "user_message_chunk", "echo me", None));
     }
-    if mode("permission") {
-        write(out, &permission_request(session));
-    }
     let message_id = mode("ids").then_some("msg_1");
     for chunk in record["chunks"].as_array().cloned().unwrap_or_default() {
         let text = chunk.as_str().unwrap_or_default();
@@ -870,6 +1281,50 @@ fn turn_chunks(out: &mut std::io::Stdout, session: &str, record: &Value, modes: 
             &update(session, "agent_message_chunk", text, message_id),
         );
     }
+}
+
+/// One raw ACP update on the session, as the recording holds it.
+fn notice(session: &str, update: &Value) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {"sessionId": session, "update": update},
+    })
+}
+
+/// Asks the person and waits for kagan's answer. Returns whether the prompt is already answered,
+/// which a cancel does. A selected option is written to `answer`; a cancelled one to `refused`.
+fn permission_step(
+    dir: &Path,
+    lines: &mut impl Iterator<Item = String>,
+    out: &mut std::io::Stdout,
+    session: &str,
+    permission: &Value,
+    prompt: &Value,
+) -> bool {
+    write(out, &permission_request(session, permission));
+    let mut answered = false;
+    while let Some(line) = lines.next() {
+        let Ok(message) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        if message["method"] == "session/cancel" {
+            std::fs::write(dir.join("cancelled"), "").unwrap();
+            write(out, &reply(prompt, &json!({ "stopReason": "cancelled" })));
+            answered = true;
+            continue;
+        }
+        if message["id"] != json!(PERMISSION_ID) {
+            continue;
+        }
+        if let Some(option) = message["result"]["outcome"]["optionId"].as_str() {
+            std::fs::write(dir.join("answer"), option).unwrap();
+        } else {
+            std::fs::write(dir.join("refused"), message.to_string()).unwrap();
+        }
+        break;
+    }
+    answered
 }
 
 /// The next session id the recording holds, taken off the file so the next agent kagan starts

@@ -17,7 +17,7 @@ pub(crate) mod turn_state;
 pub(crate) use agent::note_with;
 
 pub(crate) use extra::Extras;
-pub(crate) use halt::{retire, stop};
+pub(crate) use halt::{drop_questions, retire, stop};
 pub(crate) use interaction::{answer, clear_pending, raise, withdraw};
 pub(crate) use read::{wait, wait_event};
 pub(crate) use run::resolve_program;
@@ -125,7 +125,7 @@ pub(crate) async fn dispatch_thread(
         | ThreadOp::Paste { .. }
         | ThreadOp::Report { .. }) => terminal::run(this, op, cx).await,
         ThreadOp::Send { id, text } => terminal::send(this, id, &text, cx).await,
-        ThreadOp::Cancel { id } => acp::cancel(this, &id, cx),
+        ThreadOp::Cancel { id } => acp::cancel(this, &id, cx).await,
         ThreadOp::Turn(op) => terminal::turn_hook(this, op, cx).await,
         ThreadOp::Terminal(op) => extra::run(this, op, cx).await,
         ThreadOp::Details { id } => details::read(database, id, cx).await,
