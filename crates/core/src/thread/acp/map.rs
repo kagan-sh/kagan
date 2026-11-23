@@ -218,7 +218,10 @@ fn status(status: ToolCallStatus) -> ToolStatus {
         ToolCallStatus::Pending => ToolStatus::Pending,
         ToolCallStatus::InProgress => ToolStatus::InProgress,
         ToolCallStatus::Completed => ToolStatus::Completed,
-        _ => ToolStatus::Failed,
+        ToolCallStatus::Failed => ToolStatus::Failed,
+        // A status kagan has not met is read as still to come: nothing is called failed on the
+        // strength of a word kagan does not know.
+        _ => ToolStatus::Pending,
     }
 }
 
