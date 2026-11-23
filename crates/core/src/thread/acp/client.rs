@@ -14,7 +14,7 @@ use agent_client_protocol::v1::schema::{
 use agent_client_protocol::v1::{SessionMessage, SessionSetup};
 use agent_client_protocol::{Agent, Channel, Client, Dispatch, TransportFrame};
 use gpui_kit::BackgroundExecutor;
-use kg_domain::{TEXT_MAX, TurnOutcome};
+use kg_domain::{TEXT_MAX, ToolStatus, TurnOutcome};
 use kg_process::Process;
 use kg_terminal::Exit;
 
@@ -574,15 +574,23 @@ impl Unread {
 }
 
 /// The output each tool call last reported. ACP re-sends the whole output on every update, so an
-/// update that says nothing but one the log already holds is not written again.
+/// update that says nothing but one the log already holds is not written again. A call's entry goes
+/// when the call completes or fails, so a long session holds only the calls still running.
 #[derive(Default)]
 struct Repeats(HashMap<String, String>);
 
 impl Repeats {
     fn repeats(&mut self, tool: &map::ToolUpdate) -> bool {
+        let last = self.0.remove(&tool.id);
         let Some(output) = &tool.output else {
             return false;
         };
+        if matches!(
+            tool.status,
+            Some(ToolStatus::Completed | ToolStatus::Failed)
+        ) {
+            return false;
+        }
         let only_output = tool.name.is_none()
             && tool.kind.is_none()
             && tool.title.is_none()
@@ -590,13 +598,13 @@ impl Repeats {
             && tool.input.is_none()
             && tool.diff.is_empty()
             && tool.locations.is_empty();
-        let last = self.0.insert(tool.id.clone(), output.clone());
+        self.0.insert(tool.id.clone(), output.clone());
         only_output && last.is_some_and(|last| last == *output)
     }
 }
 
-/// A permission request the connection holds open: the agent waits, and so does the person's
-/// answer. The connection keeps reading meanwhile.
+/// Serves the thread's commands, the agent's messages, and any permission answer until one side is
+/// gone: an update becomes an event, and the prompt's response ends its turn.
 async fn serve(
     session: &mut agent_client_protocol::v1::ActiveSession<'_, Agent>,
     commands: &async_channel::Receiver<AcpCommand>,
