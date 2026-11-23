@@ -1102,6 +1102,7 @@ fn bundled_examples_pass_check() {
     assert_eq!(
         names,
         [
+            "chat",
             "cli",
             "header",
             "instruct",
