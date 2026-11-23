@@ -1,5 +1,6 @@
 use super::{
-    Kagan, SurfaceCommit,
+    Kagan, Shown, SurfaceCommit,
+    screen::Center,
     toast::{Toast, ToastCommand},
 };
 
@@ -89,6 +90,13 @@ impl Kagan {
                 self.select(id.clone(), window, cx);
                 let _ = reply.try_send(Ok(())); // A caller that gave up reads no reply.
             }
+            HostUiEvent::ChatDraft {
+                thread,
+                text,
+                reply,
+            } => {
+                let _ = reply.try_send(self.chat_draft(thread, text.as_deref(), window, cx)); // A caller that gave up reads no reply.
+            }
             HostUiEvent::OpenPanel {
                 plugin,
                 panel,
@@ -177,6 +185,26 @@ impl Kagan {
         if listed {
             self.select(id.clone(), window, cx);
         }
+    }
+
+    // A plugin reads or writes the prompt box of the chat on screen, and nothing else's.
+    fn chat_draft(
+        &mut self,
+        thread: &kg_domain::ThreadId,
+        text: Option<&str>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<String, String> {
+        let view = match self.screen.current() {
+            Center::Work(Shown::Chat(view)) if view.read(cx).thread() == thread => view.clone(),
+            _ => {
+                return Err(format!("the prompt box for {thread} is not on screen"));
+            }
+        };
+        if let Some(text) = text {
+            view.update(cx, |view, cx| view.set_draft(text.to_owned(), window, cx));
+        }
+        Ok(view.read(cx).draft(cx))
     }
 
     pub(super) fn run_command(

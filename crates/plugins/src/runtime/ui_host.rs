@@ -41,6 +41,12 @@ pub enum HostUiEvent {
         id: ThreadId,
         reply: Sender<Result<(), String>>,
     },
+    /// A plugin reads the prompt box of the chat on screen (`text` is `None`) or writes it.
+    ChatDraft {
+        thread: ThreadId,
+        text: Option<String>,
+        reply: Sender<Result<String, String>>,
+    },
     OpenPanel {
         plugin: PluginId,
         panel: String,
@@ -347,6 +353,52 @@ fn open_thread(
     let (reply, replied) = async_channel::bounded(1);
     app(|ui, cx| queue_thread(&ui, id, reply, cx))?;
     Ok(accepted(replied))
+}
+
+pub(crate) fn draft(
+    arguments: &HostArguments,
+) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
+    prompt(arguments, None)
+}
+
+pub(crate) fn set_draft(
+    arguments: &HostArguments,
+) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
+    let text = arguments.string(1)?.to_owned();
+    if text.len() > kg_domain::TEXT_MAX {
+        return Err(HostError::new(format!(
+            "text is over {} MiB",
+            kg_domain::TEXT_MAX >> 20
+        )));
+    }
+    prompt(arguments, Some(text))
+}
+
+// The prompt box is window state, so the window answers: `None` reads it and `Some` writes it.
+fn prompt(
+    arguments: &HostArguments,
+    text: Option<String>,
+) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
+    let thread = ThreadId(arguments.string(0)?.to_owned());
+    let (reply, replied) = async_channel::bounded(1);
+    app(|ui, cx| {
+        ui.update(cx, |_, cx| {
+            cx.emit(HostUiEvent::ChatDraft {
+                thread,
+                text,
+                reply,
+            });
+        });
+        Ok(())
+    })?;
+    Ok(async move {
+        let text = replied
+            .recv()
+            .await
+            .map_err(|_| HostError::new("no kagan window is open"))?
+            .map_err(HostError::new)?;
+        Ok(HostValue::Str(text))
+    })
 }
 
 fn paste_into_thread(

@@ -136,6 +136,17 @@ impl ChatView {
         &self.thread
     }
 
+    /// The prompt box's text, as the person left it.
+    pub(crate) fn draft(&self, cx: &App) -> String {
+        self.prompt.read(cx).value().to_string()
+    }
+
+    pub(crate) fn set_draft(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.prompt
+            .update(cx, |prompt, cx| prompt.set_value(text, window, cx));
+        cx.notify();
+    }
+
     /// Reads what the thread has said so far. The log is the transcript, so the view holds no
     /// second copy of it across a restart.
     fn load(&mut self, cx: &mut Context<Self>) {

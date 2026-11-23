@@ -239,23 +239,29 @@ fn spawn_thread(args: &HostArguments, plugin: &PluginId) -> Result<Op, HostError
 }
 
 // A plugin reads the changes of a thread kagan lists, never of a hidden or archived one.
+/// A thread kagan lists: visible and unarchived. A plugin reads the changes and the transcript of
+/// these, never of a hidden or archived one.
+pub(crate) fn shown_thread(id: &ThreadId, cx: &gpui_kit::App) -> Result<(), HostError> {
+    let listed = Workspace::global(cx)
+        .read(cx)
+        .thread(id)
+        .is_some_and(|thread| {
+            let record = thread.read(cx).record();
+            record.visibility == Visibility::Visible && record.archived_at.is_none()
+        });
+    if listed {
+        Ok(())
+    } else {
+        Err(HostError::new(format!(
+            "thread {id} is not in kagan's thread list"
+        )))
+    }
+}
+
 fn shown_diff(args: &HostArguments, path: Option<String>) -> Result<Op, HostError> {
     let thread_id = ThreadId(args.string(0)?.to_owned());
     let scope: DiffScope = argument(args, 1)?;
-    let listed = with_app(|cx| {
-        Workspace::global(cx)
-            .read(cx)
-            .thread(&thread_id)
-            .is_some_and(|thread| {
-                let record = thread.read(cx).record();
-                record.visibility == Visibility::Visible && record.archived_at.is_none()
-            })
-    })?;
-    if !listed {
-        return Err(HostError::new(format!(
-            "thread {thread_id} is not in kagan's thread list"
-        )));
-    }
+    with_app(|cx| shown_thread(&thread_id, cx))??;
     let query = DiffQuery {
         thread_id,
         scope,

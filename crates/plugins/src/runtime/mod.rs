@@ -1,6 +1,7 @@
 pub(crate) mod area;
 pub(crate) mod ask;
 pub(crate) mod browser;
+pub(crate) mod chat;
 pub(crate) mod clipboard;
 pub(crate) mod commands;
 pub(crate) mod database;

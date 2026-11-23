@@ -1,5 +1,6 @@
 mod browser;
 mod call;
+mod chat;
 mod contributions;
 mod diagnostics;
 mod files;

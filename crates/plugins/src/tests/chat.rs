@@ -1,0 +1,424 @@
+use std::time::Duration;
+
+use gpui_kit::TestAppContext;
+use kg_domain::{
+    Event, EventKind, Link, NoticeSeverity, Op, Plugin, Thread, ThreadId, ThreadOp, ThreadStatus,
+    Timestamp, ToolOutcome, TurnOutcome, Visibility,
+};
+use serde_json::{Value, json};
+
+use super::{
+    dispatched, forward, installed, open_kept, probe_plugin, run, sample_manifest, settled, thread,
+    write_plugin,
+};
+
+const CHAT: &str = "thr_chat";
+const HIDDEN: &str = "thr_hidden";
+
+const CHAT_FORWARD: &str = r#"
+import { View } from "gpui-kit";
+import { next, reply } from "kagan/jobs";
+import * as chat from "kagan/chat";
+
+const modules = { chat };
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        const job = await next();
+        try {
+          const { module, call, args } = job.input;
+          const value = await modules[module][call](...args);
+          reply(job.id, { text: JSON.stringify(value ?? null) });
+        } catch (error) { reply(job.id, { text: String(error), isError: true }); }
+      }
+    });
+  }
+  render() { return "forward"; }
+}
+"#;
+
+fn at(event: EventKind, seq: u64) -> Event {
+    Event {
+        thread_id: ThreadId(CHAT.into()),
+        seq,
+        at: Timestamp(seq.cast_signed()),
+        kind: event,
+    }
+}
+
+fn message(text: &str) -> EventKind {
+    EventKind::Message {
+        role: kg_domain::Role::Agent,
+        text: text.into(),
+        message_id: None,
+        attachments: Vec::new(),
+    }
+}
+
+#[test]
+fn every_kind_a_transcript_draws_maps_and_the_rest_are_left_out() {
+    let mapped = |kind| crate::chat::item(&at(kind, 1)).map(|_| ());
+
+    assert!(mapped(message("hi")).is_some());
+    assert!(
+        mapped(EventKind::Notice {
+            severity: NoticeSeverity::Info,
+            text: "note".into()
+        })
+        .is_some()
+    );
+    assert!(
+        mapped(EventKind::TurnEnded {
+            outcome: TurnOutcome::Completed,
+            error: None
+        })
+        .is_some()
+    );
+    assert!(
+        mapped(EventKind::ToolStarted {
+            id: "t1".into(),
+            name: "skill_load".into()
+        })
+        .is_some()
+    );
+    assert!(
+        mapped(EventKind::ToolEnded {
+            id: "t1".into(),
+            status: ToolOutcome::Ok
+        })
+        .is_some()
+    );
+    for kind in [
+        EventKind::TurnStarted,
+        EventKind::Started,
+        EventKind::Waiting,
+        EventKind::Idle,
+        EventKind::Opened,
+        EventKind::Rewound { before_seq: 0 },
+    ] {
+        let shown = format!("{kind:?}");
+        assert!(mapped(kind).is_none(), "{shown} is not an item");
+    }
+}
+
+#[test]
+fn a_work_item_starts_running_and_ends_ok_or_failed() {
+    let started = serde_json::to_value(
+        crate::chat::item(&at(
+            EventKind::ToolStarted {
+                id: "t1".into(),
+                name: "skill_load".into(),
+            },
+            1,
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(started["kind"], "work");
+    assert_eq!(started["threadId"], CHAT);
+    assert_eq!(started["work"]["id"], "t1");
+    assert_eq!(started["work"]["tool"], "other");
+    assert_eq!(started["work"]["title"], "skill_load");
+    assert_eq!(started["work"]["status"], "running");
+    assert!(started["work"].get("args").is_none());
+
+    let failed = serde_json::to_value(
+        crate::chat::item(&at(
+            EventKind::ToolEnded {
+                id: "t1".into(),
+                status: ToolOutcome::Error,
+            },
+            2,
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(failed["work"]["status"], "error");
+}
+
+#[test]
+fn a_message_keeps_its_text_and_id_as_the_log_wrote_them() {
+    let item = serde_json::to_value(
+        crate::chat::item(&at(
+            EventKind::Message {
+                role: kg_domain::Role::User,
+                text: "say hi".into(),
+                message_id: Some("m1".into()),
+                attachments: Vec::new(),
+            },
+            3,
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(item["kind"], "message");
+    assert_eq!(item["role"], "user");
+    assert_eq!(item["text"], "say hi");
+    assert_eq!(item["messageId"], "m1");
+    assert_eq!(item["seq"], 3);
+}
+
+#[test]
+fn a_page_stops_before_the_item_that_would_pass_the_ceiling() {
+    let items = |count: usize| {
+        (0..count)
+            .map(|seq| crate::chat::item(&at(message(&"x".repeat(1024)), seq as u64 + 1)).unwrap())
+            .collect::<Vec<_>>()
+    };
+    let page = |items| crate::chat::page(items).unwrap().as_array().unwrap().len();
+    assert_eq!(page(items(3)), 3);
+    // 256 KiB of 1 KiB messages is far more than 200; the ceiling stops the page instead.
+    assert!(page(items(400)) < 400);
+    // One item that is over the ceiling on its own still comes back, or it never would.
+    let huge = vec![
+        crate::chat::item(&at(message(&"x".repeat(300 * 1024)), 1)).unwrap(),
+        crate::chat::item(&at(message("after"), 2)).unwrap(),
+    ];
+    assert_eq!(page(huge), 1);
+}
+
+fn chat_plugin() -> (tempfile::TempDir, Plugin) {
+    let plugin = probe_plugin(&["chat"], CHAT_FORWARD);
+    let mut value = sample_manifest();
+    value["powers"] = json!({ "areas": ["chat"] });
+    value["tools"].as_array_mut().unwrap().push(json!({
+        "name": "probe",
+        "description": "Forward a host call",
+        "input": "schemas/any.json",
+        "scope": "all"
+    }));
+    write_plugin(plugin.path(), &value);
+    std::fs::write(plugin.path().join("main.js"), CHAT_FORWARD).unwrap();
+    let installed = installed(plugin.path());
+    (plugin, installed)
+}
+
+/// A window whose data folder already holds a chat thread with a message, a notice and a turn,
+/// and a hidden chat thread.
+fn open_chat(cx: &mut TestAppContext, plugin: Plugin) {
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().to_path_buf();
+    let mut store = kg_store::Store::open(path.join("kagan.sqlite3")).unwrap();
+    store
+        .put_project(&kg_domain::Project {
+            id: kg_domain::ProjectId("prj_test".into()),
+            kind: kg_domain::ProjectKind::Standard,
+            name: "Project".into(),
+            path: dunce::canonicalize(&path).unwrap(),
+            git_remote_url: None,
+            sort: 0,
+            program: None,
+        })
+        .unwrap();
+    let record = |id: &str, visibility| Thread {
+        id: ThreadId(id.into()),
+        project_id: kg_domain::ProjectId("prj_test".into()),
+        environment_id: None,
+        title: "Chat".into(),
+        title_locked: false,
+        provider: "opencode".into(),
+        link: Link::Acp,
+        status: ThreadStatus::Idle,
+        visibility,
+        parent_thread_id: None,
+        quiet: false,
+        notify: kg_domain::ThreadNotify::Default,
+        lifecycle_owner_thread_id: None,
+        section_id: None,
+        pinned: false,
+        last_read_at: None,
+        latest_attention_at: Timestamp(0),
+        mark: kg_domain::ThreadMark::None,
+        archived_at: None,
+        created_at: Timestamp(0),
+        updated_at: Timestamp(0),
+    };
+    store
+        .put_thread(&record(CHAT, Visibility::Visible))
+        .unwrap();
+    store
+        .put_thread(&record(HIDDEN, Visibility::Hidden))
+        .unwrap();
+    store
+        .append_events(
+            &ThreadId(CHAT.into()),
+            Timestamp(1),
+            [
+                EventKind::TurnStarted,
+                message("say hi"),
+                EventKind::Notice {
+                    severity: NoticeSeverity::Info,
+                    text: "a note".into(),
+                },
+                EventKind::TurnEnded {
+                    outcome: TurnOutcome::Completed,
+                    error: None,
+                },
+            ],
+        )
+        .unwrap();
+    drop(store);
+    open_kept(cx, &path, data, &[plugin]);
+}
+
+fn ask(cx: &mut TestAppContext, id: &ThreadId) {
+    run(
+        cx,
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Ship it?".into(),
+            options: vec![
+                kg_domain::InteractionOption {
+                    id: "approve".into(),
+                    label: "Allow".into(),
+                    role: None,
+                },
+                kg_domain::InteractionOption {
+                    id: "decline".into(),
+                    label: "Deny".into(),
+                    role: None,
+                },
+            ],
+            fields: Some(Vec::new()),
+        }),
+    )
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn items_reads_a_chats_log_and_the_approval_waiting_on_it(cx: &mut TestAppContext) {
+    let (_dir, plugin) = chat_plugin();
+    open_chat(cx, plugin);
+    ask(cx, &ThreadId(CHAT.into()));
+
+    let items = forward(cx, "chat", "items", &json!([CHAT, { "order": "asc" }])).unwrap();
+    let items = items.as_array().unwrap().clone();
+    let kinds: Vec<&str> = items
+        .iter()
+        .map(|item| item["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        kinds,
+        ["message", "notice", "turn", "approval"],
+        "{items:?}"
+    );
+    assert_eq!(items[0]["threadId"], CHAT);
+    let approval = &items[3]["approval"];
+    assert_eq!(approval["title"], "Ship it?");
+    assert_eq!(approval["options"][0]["label"], "Allow");
+    assert_eq!(approval["options"][0]["role"], Value::Null);
+    assert!(items[3]["seq"].as_u64().unwrap() >= items[2]["seq"].as_u64().unwrap());
+
+    // The newest page is the default, and the approval is still last.
+    let newest = forward(cx, "chat", "items", &json!([CHAT])).unwrap();
+    let newest = newest.as_array().unwrap();
+    assert_eq!(newest[newest.len() - 1]["kind"], "approval");
+
+    // A page past the log still carries it, or a plugin that paged to the end never learns of it.
+    let past = forward(cx, "chat", "items", &json!([CHAT, { "afterSeq": 99 }])).unwrap();
+    let past = past.as_array().unwrap();
+    assert_eq!(past.len(), 1, "{past:?}");
+    assert_eq!(past[0]["kind"], "approval");
+}
+
+#[gpui_kit::test]
+fn items_refuses_more_than_its_limit_and_a_thread_that_is_not_a_chat(cx: &mut TestAppContext) {
+    let (_dir, plugin) = chat_plugin();
+    open_chat(cx, plugin);
+
+    let refused = forward(cx, "chat", "items", &json!([CHAT, { "limit": 201 }])).unwrap_err();
+    assert!(refused.contains("at most 200 items a call"), "{refused}");
+
+    let terminal = forward(cx, "chat", "items", &json!([thread().0])).unwrap_err();
+    assert!(
+        terminal.contains("is not a chat; its transcript is its terminal"),
+        "{terminal}"
+    );
+
+    let sent = forward(cx, "chat", "send", &json!([thread().0, "hello"])).unwrap_err();
+    assert!(sent.contains("is not a chat"), "{sent}");
+    let cancelled = forward(cx, "chat", "cancel", &json!([thread().0])).unwrap_err();
+    assert!(cancelled.contains("is not a chat"), "{cancelled}");
+}
+
+#[gpui_kit::test]
+fn a_chat_call_leaves_out_a_hidden_or_archived_thread(cx: &mut TestAppContext) {
+    let (_dir, plugin) = chat_plugin();
+    open_chat(cx, plugin);
+    let chat = ThreadId(CHAT.into());
+
+    let hidden = forward(cx, "chat", "items", &json!([HIDDEN])).unwrap_err();
+    assert!(hidden.contains("is not in kagan's thread list"), "{hidden}");
+
+    run(cx, Op::Thread(ThreadOp::Archive { id: chat })).unwrap();
+    let archived = forward(cx, "chat", "items", &json!([CHAT])).unwrap_err();
+    assert!(
+        archived.contains("is not in kagan's thread list"),
+        "{archived}"
+    );
+}
+
+#[gpui_kit::test]
+fn wait_item_returns_the_next_one_then_null_at_the_deadline(cx: &mut TestAppContext) {
+    let (_dir, plugin) = chat_plugin();
+    open_chat(cx, plugin);
+
+    let first = forward(
+        cx,
+        "chat",
+        "waitItem",
+        &json!([CHAT, { "afterSeq": 0, "timeoutMs": 1000 }]),
+    )
+    .unwrap();
+    assert_eq!(first["kind"], "message");
+
+    let last = forward(
+        cx,
+        "chat",
+        "waitItem",
+        &json!([CHAT, { "afterSeq": first["seq"], "timeoutMs": 1000 }]),
+    )
+    .unwrap();
+    assert_eq!(last["kind"], "notice");
+
+    let ended = forward(
+        cx,
+        "chat",
+        "waitItem",
+        &json!([CHAT, { "afterSeq": last["seq"], "timeoutMs": 1000 }]),
+    )
+    .unwrap();
+    assert_eq!(ended["kind"], "turn");
+
+    let waiting = dispatched(
+        cx,
+        super::forwarded(
+            "chat",
+            "waitItem",
+            &json!([CHAT, { "afterSeq": ended["seq"], "timeoutMs": 50 }]),
+        ),
+    );
+    let value = super::forwarded_reply(settled(cx, &waiting, Duration::from_millis(10))).unwrap();
+    assert_eq!(value, Value::Null);
+}
+
+#[gpui_kit::test]
+fn wait_item_answers_null_when_a_question_is_raised(cx: &mut TestAppContext) {
+    let (_dir, plugin) = chat_plugin();
+    open_chat(cx, plugin);
+    let chat = ThreadId(CHAT.into());
+
+    let waiting = dispatched(
+        cx,
+        super::forwarded(
+            "chat",
+            "waitItem",
+            &json!([CHAT, { "afterSeq": 99, "timeoutMs": 5000 }]),
+        ),
+    );
+    cx.run_until_parked();
+    ask(cx, &chat);
+    let value = super::forwarded_reply(settled(cx, &waiting, Duration::from_millis(10))).unwrap();
+    assert_eq!(value, Value::Null);
+}
