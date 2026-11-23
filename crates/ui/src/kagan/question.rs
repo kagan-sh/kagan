@@ -156,6 +156,14 @@ impl Question {
     fn element(&self, kind: &str, option: &str) -> String {
         format!("{kind}-{}{}-{option}", self.region, self.id.0)
     }
+
+    /// Whether the card asks for permission rather than asks a question: an approval, or a question
+    /// with no ask fields. `threads.ask` always sets its fields, even when empty.
+    fn asks_permission(&self) -> bool {
+        self.asked
+            .as_ref()
+            .is_none_or(|asked| asked.fields.is_none())
+    }
 }
 
 fn body(
@@ -169,7 +177,7 @@ fn body(
 ) -> impl IntoElement + use<> {
     let failed = Rc::clone(failed);
     let mut buttons: Vec<AnyElement> = Vec::new();
-    for option in &ordered(&question.options) {
+    for option in &ordered(&question.options, question.asks_permission()) {
         let focus = super::tab_stop(
             window,
             cx,
@@ -249,9 +257,13 @@ fn body(
         .child(h_flex().gap(px(space(SpaceStep::Sm, cx))).children(buttons))
 }
 
-/// The options in the order a card reads: the reject that grants nothing, then the rest, then the
-/// filled one, which is the step the card offers. The agent's order stays within a rank.
-fn ordered(options: &[InteractionOption]) -> Vec<InteractionOption> {
+/// The options in the order a permission card reads: the reject that grants nothing, then the rest,
+/// then the filled one, which is the step the card offers. The agent's order stays within a rank,
+/// and a question that is not a permission request keeps its asker's order as it is.
+fn ordered(options: &[InteractionOption], permission: bool) -> Vec<InteractionOption> {
+    if !permission {
+        return options.to_vec();
+    }
     let rank = |role: Option<OptionRole>| match role {
         Some(OptionRole::Destructive) => 0,
         Some(OptionRole::Primary) => 2,
@@ -304,10 +316,45 @@ mod tests {
             option("allow-always", None),
             option("reject-once", Some(OptionRole::Destructive)),
         ];
-        let ids: Vec<_> = ordered(&agent)
+        let ids: Vec<_> = ordered(&agent, true)
             .into_iter()
             .map(|option| option.id)
             .collect();
         assert_eq!(ids, ["reject-once", "allow-always", "allow-once"]);
+    }
+
+    #[test]
+    fn a_question_keeps_the_order_it_was_asked_in() {
+        let agent = vec![
+            option("allow-once", Some(OptionRole::Primary)),
+            option("reject-once", Some(OptionRole::Destructive)),
+        ];
+        let ids: Vec<_> = ordered(&agent, false)
+            .into_iter()
+            .map(|option| option.id)
+            .collect();
+        assert_eq!(ids, ["allow-once", "reject-once"]);
+    }
+
+    /// A question the agent asked through `threads.ask` carries its fields, even when empty; a
+    /// permission request does not, and an approval is one.
+    #[test]
+    fn only_an_approval_or_a_question_without_fields_asks_permission() {
+        let asked = |fields| PendingInteraction {
+            id: PendingInteractionId("pn_1".into()),
+            thread_id: ThreadId("thr".into()),
+            title: "Which one?".into(),
+            options: vec![option("left", None), option("right", None)],
+            fields,
+            created_at: kg_domain::Timestamp(1),
+        };
+        assert!(!Question::thread(&asked(Some(Vec::new()))).asks_permission());
+        assert!(Question::thread(&asked(None)).asks_permission());
+        let approval = Approval {
+            id: PendingInteractionId("pn_2".into()),
+            title: "Install this plugin?".into(),
+            options: vec![option("install", Some(OptionRole::Primary))],
+        };
+        assert!(Question::standalone(&approval).asks_permission());
     }
 }

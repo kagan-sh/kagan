@@ -13,17 +13,29 @@ use super::changes::line;
 use super::screen::{Activation, Side};
 use super::{Kagan, question};
 
-/// The option a card opens on: the one that grants nothing. The safe way out comes first, then the
-/// option that refuses; the filled grant never opens a card, so Enter never approves by itself.
-fn opening_option(options: &[InteractionOption]) -> Option<&InteractionOption> {
+/// The option a card opens on. A permission card opens on the one that grants nothing: the safe way
+/// out, then the option that refuses, and never the filled grant, so Enter never approves by itself.
+/// A question the asker shaped opens on its filled option, else on its first, as it always has.
+fn opening_option(options: &[InteractionOption], permission: bool) -> Option<&InteractionOption> {
+    if permission {
+        return options
+            .iter()
+            .find(|option| option.role == Some(OptionRole::Safe))
+            .or_else(|| {
+                options
+                    .iter()
+                    .find(|option| option.role == Some(OptionRole::Destructive))
+            });
+    }
     options
         .iter()
-        .find(|option| option.role == Some(OptionRole::Safe))
+        .find(|option| option.role == Some(OptionRole::Primary))
         .or_else(|| {
             options
                 .iter()
-                .find(|option| option.role == Some(OptionRole::Destructive))
+                .find(|option| option.role == Some(OptionRole::Safe))
         })
+        .or_else(|| options.first())
 }
 
 impl Kagan {
@@ -121,8 +133,8 @@ impl Kagan {
         let person: BTreeSet<PendingInteractionId> = {
             let workspace = Workspace::global(cx).read(cx);
             self.waiting(cx)
-                .filter(|(id, _)| workspace.needs_a_person(id))
-                .map(|(id, _)| id.clone())
+                .filter(|(id, _, _)| workspace.needs_a_person(id))
+                .map(|(id, _, _)| id.clone())
                 .collect()
         };
         self.announced.retain(|id| person.contains(id));
@@ -148,9 +160,10 @@ impl Kagan {
 
     pub(super) fn overlay_focus(&self, cx: &App) -> String {
         self.waiting(cx)
-            .filter(|(id, _)| !self.holds(id))
-            .find_map(|(id, options)| {
-                opening_option(options).map(|option| question::answer_focus(&id.0, &option.id))
+            .filter(|(id, _, _)| !self.holds(id))
+            .find_map(|(id, options, permission)| {
+                opening_option(options, permission)
+                    .map(|option| question::answer_focus(&id.0, &option.id))
             })
             .unwrap_or_else(|| {
                 if self.waiting_count(cx) == 0 && self.thread_visible(cx) {
@@ -161,25 +174,27 @@ impl Kagan {
             })
     }
 
+    /// The questions that wait for an answer, and whether each asks for permission: an approval,
+    /// or a question with no ask fields. `threads.ask` always sets its fields, even when empty.
     fn waiting<'a>(
         &'a self,
         cx: &'a App,
-    ) -> impl Iterator<Item = (&'a PendingInteractionId, &'a [InteractionOption])> {
+    ) -> impl Iterator<Item = (&'a PendingInteractionId, &'a [InteractionOption], bool)> {
         Workspace::global(cx)
             .read(cx)
             .approvals()
-            .map(|approval| (&approval.id, approval.options.as_slice()))
+            .map(|approval| (&approval.id, approval.options.as_slice(), true))
             .chain(
                 self.questions
                     .read(cx)
                     .questions
                     .iter()
-                    .map(|asked| (&asked.id, asked.options.as_slice())),
+                    .map(|asked| (&asked.id, asked.options.as_slice(), asked.fields.is_none())),
             )
     }
 
     fn waiting_ids(&self, cx: &App) -> BTreeSet<PendingInteractionId> {
-        self.waiting(cx).map(|(id, _)| id.clone()).collect()
+        self.waiting(cx).map(|(id, _, _)| id.clone()).collect()
     }
 
     pub(super) fn typed(&mut self, cx: &mut Context<Self>) {
@@ -213,22 +228,42 @@ mod tests {
     }
 
     #[test]
-    fn a_card_opens_on_the_option_that_grants_nothing() {
+    fn a_permission_card_opens_on_the_option_that_grants_nothing() {
         let options = vec![
-            option("reject-once", Some(OptionRole::Destructive)),
-            option("allow-always", None),
             option("allow-once", Some(OptionRole::Primary)),
+            option("allow-always", None),
+            option("reject-once", Some(OptionRole::Destructive)),
         ];
         assert_eq!(
-            opening_option(&options).map(|option| option.id.as_str()),
+            opening_option(&options, true).map(|option| option.id.as_str()),
             Some("reject-once"),
             "a permission card never opens on an allow"
+        );
+        assert!(
+            opening_option(&[option("allow-once", Some(OptionRole::Primary))], true).is_none(),
+            "with no way to refuse, the card opens on nothing"
         );
     }
 
     #[test]
-    fn a_card_with_no_reject_option_opens_on_nothing() {
-        assert!(opening_option(&[option("allow-once", Some(OptionRole::Primary))]).is_none());
-        assert!(opening_option(&[option("left", None), option("right", None)]).is_none());
+    fn a_question_opens_on_its_filled_option_else_on_its_first() {
+        let asked = vec![
+            option("left", None),
+            option("right", Some(OptionRole::Destructive)),
+        ];
+        assert_eq!(
+            opening_option(&asked, false).map(|option| option.id.as_str()),
+            Some("left"),
+            "a question keeps the order it was asked in"
+        );
+        let shaped = vec![
+            option("reject-once", Some(OptionRole::Destructive)),
+            option("allow-once", Some(OptionRole::Primary)),
+        ];
+        assert_eq!(
+            opening_option(&shaped, false).map(|option| option.id.as_str()),
+            Some("allow-once"),
+            "a question opens on the option its asker filled"
+        );
     }
 }
