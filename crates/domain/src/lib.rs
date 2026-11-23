@@ -51,7 +51,7 @@ pub use preview::{PreviewCut, PreviewFile, PreviewImageFormat, PreviewKind, Prev
 pub use program::{
     ACP_COMMANDS, AGENT_MARKS, KNOWN_PROGRAMS, LISTED_WHEN_MISSING, PROGRAM_INSTALL_FOLDERS,
     Program, ProgramList, ProgramSource, SAVED_NAME_MAX, SavedProgram, SplitProgramError,
-    acp_command, agent_mark, saved_name, split_program,
+    acp_command, agent_mark, program_label, saved_name, split_program,
 };
 pub use record::{
     ASK_TEXT_MAX_CHARS, AgentTool, AskField, Environment, EnvironmentProvider, EnvironmentStatus,

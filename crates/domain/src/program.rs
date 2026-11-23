@@ -69,6 +69,22 @@ pub fn agent_mark(line: &str) -> Option<(&'static str, &'static str)> {
         .find(|(known, _)| *known == stem)
 }
 
+/// The short name a person knows a program by: its known label, else its file name. A path or
+/// the arguments on the line are dropped; the arguments are never read.
+#[must_use]
+pub fn program_label(line: &str) -> String {
+    let Ok((command, _)) = split_program(line) else {
+        return line.to_owned();
+    };
+    let stem = Path::new(&command)
+        .file_stem()
+        .map_or(command.clone(), |file| file.to_string_lossy().into_owned());
+    KNOWN_PROGRAMS
+        .iter()
+        .find(|(known, _)| *known == stem)
+        .map_or(stem, |(_, label)| (*label).into())
+}
+
 /// The known programs the picker lists even when they are not installed.
 pub const LISTED_WHEN_MISSING: &[&str] = &["claude", "codex"];
 
