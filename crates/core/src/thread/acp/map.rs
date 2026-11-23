@@ -292,6 +292,8 @@ pub(super) fn outcome(reason: StopReason) -> (TurnOutcome, Option<String>) {
 
 #[cfg(test)]
 mod tests {
+    use agent_client_protocol::v1::schema::Diff;
+
     use super::*;
 
     #[test]
@@ -375,5 +377,25 @@ mod tests {
         assert!(cut.len() < TOOL_TEXT_MAX + CUT.len() + 4, "{}", cut.len());
         assert!(cut.ends_with(CUT), "{}", &cut[cut.len() - 40..]);
         assert_eq!(cap("short".into()), "short");
+    }
+
+    /// Both sides of a diff are capped, at a character boundary: a whole file's rewrite must not
+    /// travel in the log either.
+    #[test]
+    fn a_diff_too_long_is_cut_at_a_character_on_both_sides() {
+        let long = "é".repeat(TOOL_TEXT_MAX);
+        let content = vec![ToolCallContent::Diff(
+            Diff::new("a.ts", long.clone()).old_text(long),
+        )];
+        let diff = diffs(&content).remove(0);
+        let old = diff.old.expect("an old side");
+        assert!(old.len() < TOOL_TEXT_MAX + CUT.len() + 4, "{}", old.len());
+        assert!(old.ends_with(CUT), "{}", &old[old.len() - 40..]);
+        assert!(diff.new.len() < TOOL_TEXT_MAX + CUT.len() + 4);
+        assert!(
+            diff.new.ends_with(CUT),
+            "{}",
+            &diff.new[diff.new.len() - 40..]
+        );
     }
 }
