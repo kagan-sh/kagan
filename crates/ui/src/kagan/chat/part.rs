@@ -434,6 +434,11 @@ impl Transcript {
             .unwrap_or_else(|| self.auto_open(index, answering))
     }
 
+    /// Whether a row inside a bundle is open: only a person opens one.
+    pub(super) fn member_open(&self, key: RowKey) -> bool {
+        self.open.get(&key).copied().unwrap_or(false)
+    }
+
     /// Flips the row's own choice and names the row the list must measure, or nothing when no row
     /// has that key.
     pub(super) fn toggle(&mut self, key: RowKey, answering: bool) -> Option<usize> {

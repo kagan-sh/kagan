@@ -178,6 +178,10 @@ impl ChatView {
         self.transcript.is_open(index, self.answering(cx))
     }
 
+    fn member_open(&self, key: part::RowKey) -> bool {
+        self.transcript.member_open(key)
+    }
+
     fn more_open(&self, row: u64) -> bool {
         self.more.contains(&row)
     }

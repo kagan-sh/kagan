@@ -332,6 +332,17 @@ fn looking_work_folds_into_one_bundle(cx: &mut TestAppContext) {
         let row = format!("chat-work-{id}");
         wait_until(cx, |cx| shows(cx, window, &row));
     }
+    // A member opens on its own, and the bundle stays open around it.
+    click(cx, window, "chat-work-1");
+    wait_until(cx, |cx| shows(cx, window, "chat-output-1"));
+    assert_eq!(
+        value_of(cx, window, "chat-work-1").as_deref(),
+        Some("expanded · done")
+    );
+    assert_eq!(
+        value_of(cx, window, "chat-bundle-1").as_deref(),
+        Some("expanded · done")
+    );
 }
 
 #[gpui_kit::test]

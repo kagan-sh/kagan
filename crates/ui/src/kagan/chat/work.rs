@@ -494,7 +494,12 @@ pub(super) fn bundle_row(
         let children: Vec<AnyElement> = members
             .iter()
             .filter_map(|member| match &member.kind {
-                RowKind::Work(tool) => Some(work_row(member, tool, true, false, weak, window, cx)),
+                RowKind::Work(tool) => {
+                    let open = weak
+                        .read_with(cx, |this, _| this.member_open(member.key()))
+                        .unwrap_or(false);
+                    Some(work_row(member, tool, true, open, weak, window, cx))
+                }
                 _ => None,
             })
             .collect();
