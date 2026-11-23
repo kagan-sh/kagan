@@ -11,7 +11,9 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, px,
 };
 use kg_core::{Workspace, WorkspaceEvent};
-use kg_domain::{Event, EventKind, Op, Role as Speaker, ThreadId, ThreadOp, Timestamp};
+use kg_domain::{
+    Event, EventKind, Op, Role as Speaker, ThreadId, ThreadOp, Timestamp, program_label,
+};
 
 use crate::kagan::controls::control;
 use crate::ui_observe::UiObserveExt as _;
@@ -88,9 +90,13 @@ pub(crate) struct ChatView {
     blocks: Vec<Block>,
     /// Whether the last thing read was a message, so only consecutive messages become one block.
     joining: bool,
+    /// The seq of the last event drawn, so an event the load already read is not drawn twice.
+    last_seq: Option<u64>,
+    /// Whether the load has finished. Live events wait in `pending` until it has.
+    loaded: bool,
+    pending: Vec<Event>,
     prompt: gpui_kit::Entity<TextareaState>,
     scroll: gpui_kit::ScrollHandle,
-    focus: FocusHandle,
     notice: Option<SharedString>,
     sending: bool,
     _events: Subscription,
@@ -120,9 +126,11 @@ impl ChatView {
             thread,
             blocks: Vec::new(),
             joining: false,
+            last_seq: None,
+            loaded: false,
+            pending: Vec::new(),
             prompt,
             scroll: gpui_kit::ScrollHandle::new(),
-            focus: cx.focus_handle(),
             notice: None,
             sending: false,
             _events: events,
@@ -153,8 +161,13 @@ impl ChatView {
                 return;
             };
             _ = this.update(cx, |this, cx| {
+                this.loaded = true;
                 for event in events {
                     this.absorb(&event, cx);
+                }
+                let pending = std::mem::take(&mut this.pending);
+                for event in &pending {
+                    this.absorb(event, cx);
                 }
                 cx.notify();
             });
@@ -163,6 +176,14 @@ impl ChatView {
     }
 
     fn absorb(&mut self, event: &Event, cx: &mut Context<Self>) {
+        if !self.loaded {
+            self.pending.push(event.clone());
+            return;
+        }
+        if self.last_seq.is_some_and(|seq| event.seq <= seq) {
+            return;
+        }
+        self.last_seq = Some(event.seq);
         let Some(part) = Part::of(&event.kind) else {
             self.joining = false;
             return;
@@ -197,8 +218,16 @@ impl ChatView {
             }
         }
         self.joining = true;
-        self.scroll.scroll_to_bottom();
+        // A person reading earlier text keeps their place; the transcript follows only at its end.
+        if self.at_bottom() {
+            self.scroll.scroll_to_bottom();
+        }
         cx.notify();
+    }
+
+    fn at_bottom(&self) -> bool {
+        let max = self.scroll.max_offset().y;
+        max <= px(0.) || -self.scroll.offset().y >= max - px(24.)
     }
 
     fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -279,22 +308,26 @@ impl ChatView {
             .map(|thread| (thread.read(cx).record().status, thread.read(cx).busy()))
     }
 
-    /// Who the agent's blocks belong to: the program the thread runs.
+    /// Who the agent's blocks belong to: the program the thread runs, by its short name.
     fn who(&self, cx: &App) -> SharedString {
         Workspace::global(cx)
             .read(cx)
             .thread(&self.thread)
             .map_or_else(
                 || "Agent".into(),
-                |thread| thread.read(cx).record().provider.as_str().into(),
+                |thread| program_label(&thread.read(cx).record().provider).into(),
             )
     }
 
-    fn hint(answering: bool, running: bool) -> SharedString {
-        if answering {
+    fn hint(answering: bool, running: bool, empty: bool, sending: bool) -> SharedString {
+        if sending {
+            "Sending…".into()
+        } else if answering {
             "The agent is answering. Cancel it to send something else.".into()
         } else if !running {
             "The agent is not running. Start it again below.".into()
+        } else if empty {
+            "Type a prompt to send it.".into()
         } else {
             "Enter sends, Shift+Enter adds a line.".into()
         }
@@ -302,8 +335,8 @@ impl ChatView {
 }
 
 impl Focusable for ChatView {
-    fn focus_handle(&self, _: &App) -> FocusHandle {
-        self.focus.clone()
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.prompt.read(cx).focus_handle(cx)
     }
 }
 
@@ -363,7 +396,8 @@ impl ChatView {
     fn composer(&self, answering: bool, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let prompt = self.prompt.read(cx).value().to_string();
-        let ready = running && !prompt.trim().is_empty() && !self.sending;
+        let empty = prompt.trim().is_empty();
+        let ready = running && !empty && !self.sending;
         let button = if answering {
             control(
                 "chat-cancel",
@@ -408,7 +442,7 @@ impl ChatView {
                                     role: Role::TextInput,
                                     name: "Prompt".into(),
                                     value: Some(prompt.into()),
-                                    disabled: answering,
+                                    disabled: false,
                                     selected: None,
                                     focus: Some(self.prompt.read(cx).focus_handle(cx)),
                                     hint: None,
@@ -441,7 +475,16 @@ impl ChatView {
                         .id("chat-hint")
                         .type_caption(cx)
                         .text_color(muted)
-                        .child(Self::hint(answering, running)),
+                        .ui_observe_as(Facts {
+                            role: Role::Label,
+                            name: "Hint".into(),
+                            value: Some(Self::hint(answering, running, empty, self.sending)),
+                            disabled: false,
+                            selected: None,
+                            focus: None,
+                            hint: None,
+                        })
+                        .child(Self::hint(answering, running, empty, self.sending)),
                 ),
         )
     }
@@ -530,12 +573,12 @@ fn message_view(index: usize, block: &Block, who: &str, cx: &mut Context<ChatVie
         .group("chat-message")
         .ui_observe_as(Facts {
             role: Role::Label,
-            name: format!("{label}: {}", block.text).into(),
+            name: format!("{label}, {}", clock(block.at)).into(),
             value: Some(block.text.clone().into()),
             disabled: false,
             selected: None,
             focus: None,
-            hint: Some(label.into()),
+            hint: None,
         })
         .child(body)
         .into_any_element()

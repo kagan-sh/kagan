@@ -35,7 +35,7 @@ _Avoid_: Environment type, backend
 
 **Thread**:
 One program running in one environment, with a status (`pending`, `idle`, `starting`, `active`, `stopping`, `error`) and an append-only event log. Its link is how the program is reached: a terminal, or the agent's own ACP connection, fixed when the thread starts.
-_Avoid_: Session, chat, task
+_Avoid_: task
 
 **Turn**:
 The stretch a program's title shows a spinner, until that title stays plain, or the program stops or exits while the spinner is up. `turn.started` and `turn.ended` record it. An ACP thread's turn is one prompt, from sending it to the agent's stop reason.

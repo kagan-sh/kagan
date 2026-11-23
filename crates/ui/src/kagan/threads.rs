@@ -251,15 +251,23 @@ impl Kagan {
     }
 
     /// Asks an ACP thread's agent to end its reply. The agent stays, so the thread can be
-    /// prompted again.
+    /// prompted again. With no reply open, Escape is left for whatever else handles it.
     pub(super) fn cancel_turn(&mut self, _: &CancelTurn, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(id) = self.shown_thread(cx) {
-            self.run(
-                Op::Thread(ThreadOp::Cancel { id }),
-                "cancel the agent's reply",
-                cx,
-            );
+        let Some(id) = self.shown_thread(cx) else {
+            return;
+        };
+        let busy = Workspace::global(cx)
+            .read(cx)
+            .thread(&id)
+            .is_some_and(|thread| thread.read(cx).busy());
+        if !busy {
+            return;
         }
+        self.run(
+            Op::Thread(ThreadOp::Cancel { id }),
+            "cancel the agent's reply",
+            cx,
+        );
     }
 
     pub(super) fn save_diagnostics(

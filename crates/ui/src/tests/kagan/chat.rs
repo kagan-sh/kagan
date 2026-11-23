@@ -1,4 +1,4 @@
-use gpui_kit::TestAppContext;
+use gpui_kit::{AnyWindowHandle, Entity, TestAppContext};
 use kg_domain::{Link, Thread, ThreadId, ThreadStatus, Timestamp};
 
 use super::{click, open, shows, value_of, wait_until};
@@ -56,9 +56,15 @@ fn seed_acp_thread(data: &std::path::Path) -> ThreadId {
     id
 }
 
-#[gpui_kit::test]
-fn an_acp_thread_shows_its_transcript_and_prompt_box(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open(cx);
+/// Opens a window on a seeded ACP thread and shows its chat.
+fn show_chat(
+    cx: &mut TestAppContext,
+) -> (
+    Entity<crate::kagan::Kagan>,
+    AnyWindowHandle,
+    tempfile::TempDir,
+) {
+    let (kagan, window, data) = open(cx);
     let id = seed_acp_thread(data.path());
     // A thread written behind the window's back arrives with the next refresh, which marking it
     // read asks for.
@@ -72,6 +78,12 @@ fn an_acp_thread_shows_its_transcript_and_prompt_box(cx: &mut TestAppContext) {
     wait_until(cx, |cx| shows(cx, window, &format!("thread-{}", id.0)));
     click(cx, window, &format!("thread-{}", id.0));
     wait_until(cx, |cx| shows(cx, window, "chat-transcript"));
+    (kagan, window, data)
+}
+
+#[gpui_kit::test]
+fn an_acp_thread_shows_its_transcript_and_prompt_box(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat(cx);
     assert!(!shows(cx, window, "terminal"));
     wait_until(cx, |cx| {
         value_of(cx, window, "chat-message-1").is_some_and(|text| text.contains("hi there"))
@@ -82,4 +94,18 @@ fn an_acp_thread_shows_its_transcript_and_prompt_box(cx: &mut TestAppContext) {
     );
     assert!(shows(cx, window, "chat-prompt"));
     assert!(shows(cx, window, "chat-send"));
+    // The hint says what this state wants, and `kg ui` can read it.
+    assert_eq!(
+        value_of(cx, window, "chat-hint").as_deref(),
+        Some("The agent is not running. Start it again below.")
+    );
+}
+
+/// Escape with no reply open is left for whatever else handles it: a stopped thread says nothing.
+#[gpui_kit::test]
+fn escape_with_no_reply_open_says_nothing(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat(cx);
+    cx.dispatch_action(window, crate::kagan::CancelTurn);
+    cx.run_until_parked();
+    assert!(!shows(cx, window, "note"));
 }

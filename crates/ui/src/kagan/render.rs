@@ -143,7 +143,6 @@ impl Render for Kagan {
             .on_action(cx.listener(Self::use_project_folder))
             .on_action(cx.listener(Self::use_terminal_link))
             .on_action(cx.listener(Self::use_chat_link))
-            .on_action(cx.listener(Self::cancel_turn))
             .on_action(cx.listener(Self::use_worktree_folder))
             .on_action(cx.listener(Self::retry_branches_action))
             .on_action(cx.listener(Self::retry_programs))
