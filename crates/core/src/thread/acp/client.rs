@@ -194,8 +194,8 @@ fn tail_text(tail: &Arc<Mutex<VecDeque<String>>>) -> Option<String> {
 
 /// A pipe the agent writes on, read from one thread on either platform.
 trait Output: Send {
-    /// The next line, or None when the agent's output ended.
-    fn next_line(&mut self) -> Option<Vec<u8>>;
+    /// Fills `into` with the next bytes, up to its length. None when the agent's output ended.
+    fn fill(&mut self, into: &mut [u8]) -> Option<usize>;
 }
 
 /// A pipe the agent's connection writes on.
@@ -206,12 +206,10 @@ trait Input: Send {
 
 #[cfg(unix)]
 impl Output for std::io::BufReader<File> {
-    fn next_line(&mut self) -> Option<Vec<u8>> {
-        use std::io::BufRead as _;
-        let mut line = Vec::new();
-        match self.read_until(b'\n', &mut line) {
+    fn fill(&mut self, into: &mut [u8]) -> Option<usize> {
+        match std::io::Read::read(self, into) {
             Ok(0) | Err(_) => None,
-            Ok(_) => Some(line),
+            Ok(read) => Some(read),
         }
     }
 }
@@ -232,15 +230,12 @@ impl<R> Output for Read<R>
 where
     R: futures::AsyncRead + Unpin + Send,
 {
-    fn next_line(&mut self) -> Option<Vec<u8>> {
-        use futures::AsyncBufReadExt as _;
-        futures::executor::block_on(async {
-            let mut line = Vec::new();
-            match self.0.read_until(b'\n', &mut line).await {
-                Ok(0) | Err(_) => None,
-                Ok(_) => Some(line),
-            }
-        })
+    fn fill(&mut self, into: &mut [u8]) -> Option<usize> {
+        use futures::AsyncReadExt as _;
+        match futures::executor::block_on(self.0.read(into)) {
+            Ok(0) | Err(_) => None,
+            Ok(read) => Some(read),
+        }
     }
 }
 
@@ -294,15 +289,58 @@ fn carry(process: &mut Process, tail: &Arc<Mutex<VecDeque<String>>>) -> Result<T
 
 /// The reader body both platforms share. A line is capped, and its bytes that are not UTF-8 are
 /// replaced, so an agent's output is never dropped without a trace.
-fn read_lines(mut output: impl Output, mut on_line: impl FnMut(String)) {
-    while let Some(line) = output.next_line() {
-        let line = &line[..line.len().min(LINE_MAX)];
-        on_line(
-            String::from_utf8_lossy(line)
-                .trim_end_matches(['\n', '\r'])
-                .to_owned(),
-        );
+fn read_lines(output: impl Output, mut on_line: impl FnMut(String)) {
+    let mut lines = Lines::new(output);
+    while let Some(line) = lines.next() {
+        on_line(line);
     }
+}
+
+/// The agent's output as lines, from a read in chunks: the bytes past the last line are kept for
+/// the next one.
+struct Lines<O> {
+    output: O,
+    ahead: Vec<u8>,
+}
+
+impl<O: Output> Lines<O> {
+    fn new(output: O) -> Self {
+        Self {
+            output,
+            ahead: Vec::new(),
+        }
+    }
+
+    /// One line, at most `LINE_MAX` bytes. What is left of a longer line is read and dropped, so
+    /// an agent that never sends a newline cannot grow kagan's memory.
+    fn next(&mut self) -> Option<String> {
+        let mut line = Vec::new();
+        loop {
+            if self.ahead.is_empty() {
+                let mut chunk = [0; 512];
+                let Some(read) = self.output.fill(&mut chunk) else {
+                    return (!line.is_empty()).then(|| text(line));
+                };
+                self.ahead.extend_from_slice(&chunk[..read]);
+            }
+            let end = self.ahead.iter().position(|&byte| byte == b'\n');
+            let taken = end.map_or(self.ahead.len(), |at| at + 1);
+            let room = LINE_MAX.saturating_sub(line.len());
+            let kept = taken.min(room);
+            line.extend_from_slice(&self.ahead[..kept]);
+            self.ahead.drain(..taken);
+            if end.is_some() {
+                return Some(text(line));
+            }
+        }
+    }
+}
+
+/// The line as kagan keeps it: its bytes that are not UTF-8 replaced, its own end removed.
+fn text(line: Vec<u8>) -> String {
+    String::from_utf8_lossy(&line)
+        .trim_end_matches(['\n', '\r'])
+        .to_owned()
 }
 
 fn write_frames(
@@ -649,11 +687,37 @@ fn exit_code(code: i32) -> Exit {
 
 #[cfg(test)]
 mod tests {
-    use super::exit_code;
+    use super::{LINE_MAX, Lines, Output, exit_code};
     use kg_terminal::Exit;
+
+    struct Bytes(std::io::Cursor<Vec<u8>>);
+
+    impl Output for Bytes {
+        fn fill(&mut self, into: &mut [u8]) -> Option<usize> {
+            use std::io::Read as _;
+            match self.0.read(into) {
+                Ok(0) | Err(_) => None,
+                Ok(read) => Some(read),
+            }
+        }
+    }
+
+    fn lines(text: &str) -> Vec<String> {
+        let mut lines = Lines::new(Bytes(std::io::Cursor::new(text.as_bytes().to_vec())));
+        std::iter::from_fn(|| lines.next()).collect()
+    }
 
     #[test]
     fn a_status_above_i32_max_keeps_its_number() {
         assert_eq!(exit_code(-1073741819), Exit::Code(0xC000_0005));
+    }
+
+    #[test]
+    fn a_line_longer_than_kagan_keeps_is_cut_and_the_next_one_still_arrives() {
+        let long = "a".repeat(LINE_MAX * 2);
+        let read = lines(&format!("{long}\nlast"));
+        assert_eq!(read.len(), 2, "{read:?}");
+        assert_eq!(read[0].len(), LINE_MAX);
+        assert_eq!(read[1], "last", "the rest of the long line is not a line");
     }
 }
