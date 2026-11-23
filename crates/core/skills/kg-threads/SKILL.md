@@ -25,6 +25,10 @@ A parent is told by a line typed into its terminal when the child's turn ends, t
 
 Report the new thread id. Do not build a URL for it.
 
+## A chat thread
+
+A thread whose link is `acp` (started with `--link acp`, or by the window's own agent picker) draws a chat instead of a terminal: its transcript is its events, and the prompt box is the way in. `kg thread send <id> <text>` sends the prompt, and `kg thread cancel <id>` ends the reply and keeps the agent. `kg thread events <id>` reads what the agent said; a terminal thread has no chat and `screen`, `resize` and `paste` are refused for one. A plugin with the `chat` area reads the same transcript with `kagan/chat`, and the person may let a plugin draw it. Tell the person `kg thread run --link acp`, not `screen`.
+
 ## Start one
 
 ```sh

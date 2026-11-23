@@ -11,3 +11,4 @@ Read `kg guide customize` first. It has every command, key, file, and limit.
 4. For an agent rule, use `kg instructions set` (or `--project <id>` for one project), and check the chapter for its size and which agents read it.
 5. For a skill, create or add it with the `kg skill` commands, then check it with `kg skill list`.
 6. Read the value back, and tell the person what changed and where.
+7. For who draws the sidebar, the review or the chat, use `kg plugin use threads|review|chat <plugin|kagan>`; the window's Settings → Installed → Replace parts does the same.
