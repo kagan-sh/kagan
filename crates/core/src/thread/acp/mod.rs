@@ -21,6 +21,9 @@ use crate::{
 
 mod client;
 mod map;
+#[cfg(test)]
+#[path = "acp_test.rs"]
+mod tests;
 
 use client::{AcpCommand, AcpEvent};
 
