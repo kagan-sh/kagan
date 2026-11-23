@@ -918,6 +918,62 @@ async fn acp_cancel_withdraws_the_approval(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+async fn acp_cancel_withdraws_the_agent_approval_and_leaves_the_threads_question(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_cancel_ask"],
+        &[asking(&calling(), &allow_options(), "end_turn")],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let approval = asked(&id, cx).await;
+    let option = |id: &str| InteractionOption {
+        id: id.into(),
+        label: id.into(),
+        role: None,
+    };
+    let OpResult::Text(asked_by_agent) = op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Which way?".into(),
+            options: vec![option("left"), option("right")],
+            fields: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("ask")
+    };
+    assert_eq!(
+        super::pending(&id, cx).await.len(),
+        2,
+        "both questions wait"
+    );
+    op(Op::Thread(ThreadOp::Cancel { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for(&id, |kinds| ended(kinds, TurnOutcome::Interrupted), cx).await;
+    let pending = super::pending(&id, cx).await;
+    assert_eq!(
+        pending.len(),
+        1,
+        "cancel took the agent's card only: {pending:?}"
+    );
+    assert_eq!(pending[0].id.to_string(), asked_by_agent);
+    assert_ne!(pending[0].id, approval.id);
+    // The question the agent asked through kagan still has its waiter.
+    let question = PendingInteractionId(asked_by_agent);
+    cx.update(|cx| Workspace::answer(&id, question, "left".into(), cx))
+        .await
+        .unwrap();
+    assert!(super::pending(&id, cx).await.is_empty());
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
 async fn acp_a_permission_request_with_no_options_is_cancelled(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let agent = Agent::new(

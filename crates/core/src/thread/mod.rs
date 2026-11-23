@@ -17,7 +17,8 @@ pub(crate) mod turn_state;
 pub(crate) use agent::note_with;
 
 pub(crate) use extra::Extras;
-pub(crate) use halt::{drop_questions, retire, stop};
+pub(crate) use halt::{retire, stop};
+pub(crate) use interaction::Raised;
 pub(crate) use interaction::{answer, clear_pending, raise, withdraw};
 pub(crate) use read::{wait, wait_event};
 pub(crate) use run::resolve_program;
