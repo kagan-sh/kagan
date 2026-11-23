@@ -13,8 +13,8 @@ use kg_domain::{PlanEntry, PlanStatus, ToolDiff};
 
 use crate::kagan::attention;
 use crate::kagan::chat::ChatView;
+use crate::kagan::chat::kind::WorkKind;
 use crate::kagan::chat::part::ToolRow;
-use crate::kagan::chat::work::WorkKind;
 use crate::kagan::question;
 use crate::theme::{Tone, TypeScale as _, added, terminal_color};
 use crate::ui_observe::UiObserveExt as _;

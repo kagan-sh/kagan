@@ -21,6 +21,7 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 mod body;
+mod kind;
 mod part;
 mod work;
 

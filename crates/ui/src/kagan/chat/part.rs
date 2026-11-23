@@ -6,6 +6,8 @@ use kg_domain::{
     ToolLocation, ToolStatus, TurnOutcome,
 };
 
+use super::kind::WorkKind;
+
 /// The parts a transcript can hold, each drawn by its own function and named in its element id, so
 /// a plugin can replace one later.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -115,12 +117,13 @@ impl ToolRow {
         self.running() && self.output.is_some() && self.kind != Some(ToolKind::Execute)
     }
 
-    /// A finished look at the codebase, which folds into a bundle.
+    /// A finished look at the codebase, which folds into a bundle. An MCP call or a skill load
+    /// the agent reports as a read is still work, so what the row is decides, once.
     pub(super) fn folds(&self) -> bool {
         self.status == Some(ToolStatus::Completed)
             && matches!(
-                self.kind,
-                Some(ToolKind::Read | ToolKind::Search | ToolKind::Fetch)
+                WorkKind::of(self),
+                WorkKind::Read | WorkKind::Search | WorkKind::Fetch
             )
     }
 
@@ -628,6 +631,43 @@ mod tests {
             panic!("one bundle");
         };
         assert_eq!(members.len(), 3);
+    }
+
+    /// An MCP call the agent reports as a read is doing work, so it never folds into a look.
+    #[test]
+    fn an_mcp_call_reported_as_a_read_stays_a_row() {
+        let mut transcript = Transcript::default();
+        for call in 1..=2u64 {
+            let id = format!("t{call}");
+            let first = (call - 1) * 2 + 1;
+            for (seq, status) in [
+                (first, ToolStatus::InProgress),
+                (first + 1, ToolStatus::Completed),
+            ] {
+                transcript.absorb(&event(
+                    seq,
+                    EventKind::Tool {
+                        id: id.clone(),
+                        name: Some("mcp__github__create_issue".into()),
+                        kind: Some(ToolKind::Read),
+                        title: Some("Create an issue".into()),
+                        status: Some(status),
+                        input: Some(serde_json::json!({"title": "one"})),
+                        output: Some("ok".into()),
+                        diff: Vec::new(),
+                        locations: Vec::new(),
+                        approval: None,
+                    },
+                ));
+            }
+        }
+        assert_eq!(transcript.rows.len(), 2, "neither call folds");
+        assert!(
+            transcript
+                .rows
+                .iter()
+                .all(|row| matches!(row.kind, RowKind::Work(_)))
+        );
     }
 
     #[test]
