@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use kg_domain::{
@@ -38,6 +39,16 @@ impl Part {
 pub(super) struct Row {
     pub(super) id: u64,
     pub(super) kind: RowKind,
+}
+
+/// What the person's choice is kept under: a bundle's id is its first member's, so the two rows
+/// need a key apart.
+pub(super) type RowKey = (bool, u64);
+
+impl Row {
+    pub(super) fn key(&self) -> RowKey {
+        (matches!(self.kind, RowKind::Bundle(_)), self.id)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -135,6 +146,8 @@ pub(super) struct Transcript {
     pub(super) rows: Vec<Row>,
     pub(super) usage: Option<(u64, u64)>,
     pub(super) last_outcome: Option<TurnOutcome>,
+    /// The person's own expand and collapse choices: they always win over the rules.
+    open: BTreeMap<RowKey, bool>,
     last_seq: Option<u64>,
     turn: Option<Timestamp>,
     plan: Option<usize>,
@@ -409,6 +422,49 @@ impl Transcript {
             .iter()
             .rposition(|row| !matches!(row.kind, RowKind::Divider { .. }))
     }
+
+    /// Whether the row is open: the person's choice, else the rules.
+    pub(super) fn is_open(&self, index: usize, answering: bool) -> bool {
+        let Some(row) = self.rows.get(index) else {
+            return false;
+        };
+        self.open
+            .get(&row.key())
+            .copied()
+            .unwrap_or_else(|| self.auto_open(index, answering))
+    }
+
+    /// Flips the row's own choice and names the row the list must measure, or nothing when no row
+    /// has that key.
+    pub(super) fn toggle(&mut self, key: RowKey, answering: bool) -> Option<usize> {
+        let (top, member) = self.place(key)?;
+        let open = match member {
+            Some(_) => self.open.get(&key).copied().unwrap_or(false),
+            None => self.is_open(top, answering),
+        };
+        self.open.insert(key, !open);
+        Some(top)
+    }
+
+    /// Where the row with this key is: its place in the transcript, and its place among a bundle's
+    /// members when it is one.
+    fn place(&self, key: RowKey) -> Option<(usize, Option<usize>)> {
+        self.rows
+            .iter()
+            .enumerate()
+            .find_map(|(top, row)| match &row.kind {
+                RowKind::Bundle(members) => {
+                    if row.key() == key {
+                        return Some((top, None));
+                    }
+                    members
+                        .iter()
+                        .position(|member| member.key() == key)
+                        .map(|member| (top, Some(member)))
+                }
+                _ => (row.key() == key).then_some((top, None)),
+            })
+    }
 }
 
 /// Keeps every field the update names and leaves the rest as they were.
@@ -609,6 +665,67 @@ mod tests {
         ));
         transcript.absorb(&event(4, EventKind::TurnStarted));
         assert!(!transcript.auto_open(0, false));
+    }
+
+    /// The bundle that is still growing is the live frontier: open while the turn runs, closed
+    /// once it ends.
+    #[test]
+    fn the_live_bundle_opens_while_the_turn_runs_and_closes_after_it() {
+        let mut transcript = Transcript::default();
+        transcript.absorb(&event(1, EventKind::TurnStarted));
+        transcript.absorb(&tool(2, ToolKind::Read, ToolStatus::Completed));
+        transcript.absorb(&tool(3, ToolKind::Read, ToolStatus::Completed));
+        assert!(transcript.is_open(0, true));
+        transcript.absorb(&event(
+            4,
+            EventKind::TurnEnded {
+                outcome: TurnOutcome::Completed,
+                error: None,
+            },
+        ));
+        assert!(!transcript.is_open(0, false));
+    }
+
+    #[test]
+    fn a_live_thought_opens_only_while_the_turn_runs() {
+        let mut transcript = Transcript::default();
+        transcript.absorb(&event(1, EventKind::TurnStarted));
+        transcript.absorb(&event(
+            2,
+            EventKind::Thought {
+                text: "look".into(),
+                message_id: None,
+            },
+        ));
+        assert!(transcript.is_open(0, true));
+        assert!(!transcript.is_open(0, false));
+    }
+
+    /// A person's click wins, and the next event does not reopen the row the rules would open.
+    #[test]
+    fn a_person_collapsing_an_open_row_keeps_it_closed() {
+        let mut transcript = Transcript::default();
+        transcript.absorb(&event(1, EventKind::TurnStarted));
+        transcript.absorb(&call(2, "t1", ToolKind::Execute, ToolStatus::Failed, None));
+        transcript.absorb(&event(
+            3,
+            EventKind::TurnEnded {
+                outcome: TurnOutcome::Failed,
+                error: None,
+            },
+        ));
+        assert!(transcript.is_open(0, false));
+        let key = transcript.rows[0].key();
+        assert_eq!(transcript.toggle(key, false), Some(0));
+        assert!(!transcript.is_open(0, false));
+        transcript.absorb(&event(
+            4,
+            EventKind::Notice {
+                severity: kg_domain::NoticeSeverity::Info,
+                text: "hi".into(),
+            },
+        ));
+        assert!(!transcript.is_open(0, false), "the next event reopened it");
     }
 
     #[test]

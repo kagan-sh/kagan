@@ -15,7 +15,7 @@ use kg_domain::{PlanStatus, Timestamp, ToolDiff, ToolKind};
 
 use crate::kagan::chat::ChatView;
 use crate::kagan::chat::body;
-use crate::kagan::chat::part::{Part, Row, RowKind, ThoughtRow, ToolRow};
+use crate::kagan::chat::part::{Part, Row, RowKey, RowKind, ThoughtRow, ToolRow};
 use crate::theme::{Tone, TypeScale as _, row_height};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -351,7 +351,7 @@ pub(super) fn work_row(
     face(
         Face {
             id: row_id(Part::Work, row.id),
-            row: row.id,
+            key: row.key(),
             icon: kind.icon(),
             label: kind.label(done),
             title: kind.title(tool),
@@ -405,7 +405,7 @@ pub(super) fn thought_row(
     face(
         Face {
             id: row_id(Part::Thought, row.id),
-            row: row.id,
+            key: row.key(),
             icon: IconName::Brain,
             label,
             title: None,
@@ -509,7 +509,7 @@ pub(super) fn bundle_row(
     face(
         Face {
             id: row_id(Part::Bundle, row.id),
-            row: row.id,
+            key: row.key(),
             icon: IconName::Layers,
             label: words.join(", "),
             title: None,
@@ -549,7 +549,7 @@ pub(super) fn plan_row(
     face(
         Face {
             id: row_id(Part::Plan, row.id),
-            row: row.id,
+            key: row.key(),
             icon: IconName::ListTodo,
             label: "Plan".into(),
             title: None,
@@ -576,7 +576,7 @@ fn span_of(from: Timestamp, to: Timestamp) -> Duration {
 
 struct Face {
     id: gpui_kit::ElementId,
-    row: u64,
+    key: RowKey,
     icon: IconName,
     label: String,
     title: Option<String>,
@@ -604,9 +604,9 @@ fn face(
     let focused = focus.is_focused(window);
     let toggle: Rc<dyn Fn(&mut App)> = {
         let weak = weak.clone();
-        let row = face.row;
+        let key = face.key;
         Rc::new(move |cx| {
-            _ = weak.update(cx, |this, cx| this.toggle(row, cx));
+            _ = weak.update(cx, |this, cx| this.toggle(key, cx));
         })
     };
     let (on_key, on_click) = (toggle.clone(), toggle);

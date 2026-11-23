@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use crate::theme::TypeScale as _;
 use gpui_kit::component::ActiveTheme as _;
@@ -37,8 +37,6 @@ pub(crate) struct ChatView {
     pending: Vec<Event>,
     prompt: gpui_kit::Entity<TextareaState>,
     scroller: gpui_kit::Entity<MessageScrollerState>,
-    /// The person's own expand and collapse choices: they always win over the rules.
-    open: BTreeMap<u64, bool>,
     /// The rows whose arguments show every line.
     more: BTreeSet<u64>,
     /// Whether the trailing "Working…" row is drawn.
@@ -81,7 +79,6 @@ impl ChatView {
             pending: Vec::new(),
             prompt,
             scroller,
-            open: BTreeMap::new(),
             more: BTreeSet::new(),
             working: false,
             notice: None,
@@ -169,25 +166,16 @@ impl ChatView {
             .update(cx, |state, cx| state.remeasure_items(index..index + 1, cx))
     }
 
-    fn toggle(&mut self, row: u64, cx: &mut Context<Self>) {
-        let Some(index) = self.transcript.rows.iter().position(|line| line.id == row) else {
-            return;
-        };
-        let open = self.is_open(index, cx);
-        self.open.insert(row, !open);
-        self.row_changed(index, cx);
+    fn toggle(&mut self, key: part::RowKey, cx: &mut Context<Self>) {
+        let answering = self.answering(cx);
+        if let Some(index) = self.transcript.toggle(key, answering) {
+            self.row_changed(index, cx);
+        }
         cx.notify();
     }
 
     fn is_open(&self, index: usize, cx: &App) -> bool {
-        let Some(row) = self.transcript.rows.get(index) else {
-            return false;
-        };
-        let answering = self.answering(cx);
-        self.open
-            .get(&row.id)
-            .copied()
-            .unwrap_or_else(|| self.transcript.auto_open(index, answering))
+        self.transcript.is_open(index, self.answering(cx))
     }
 
     fn more_open(&self, row: u64) -> bool {
