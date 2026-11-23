@@ -1,10 +1,10 @@
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, TestAppContext};
 use kg_domain::{
-    EventKind, InteractionOption, Link, OptionRole, PendingInteraction, PendingInteractionId, Role,
-    Thread, ThreadId, ThreadStatus, Timestamp, ToolKind, ToolStatus,
+    Event, EventKind, InteractionOption, Link, OptionRole, PendingInteraction,
+    PendingInteractionId, Role, Thread, ThreadId, ThreadStatus, Timestamp, ToolKind, ToolStatus,
 };
 
-use super::{click, focused_of, open, shows, shows_within, value_of, wait_until};
+use super::{click, focused_of, label, open, shows, shows_within, value_of, wait_until};
 
 /// A thread the store already holds: an ACP one has no program in this process, so the center
 /// shows its transcript and prompt box.
@@ -38,6 +38,11 @@ fn seed_thread(data: &std::path::Path, events: Vec<EventKind>) -> ThreadId {
         .unwrap();
     store.append_events(&id, Timestamp(1), events).unwrap();
     id
+}
+
+/// A seeded ACP thread with nothing logged, for a test whose load never reads an event.
+fn seed_acp_thread(data: &std::path::Path) -> ThreadId {
+    seed_thread(data, Vec::new())
 }
 
 /// Opens a window on a seeded ACP thread and shows its chat.
@@ -410,4 +415,95 @@ fn escape_with_no_reply_open_says_nothing(cx: &mut TestAppContext) {
     cx.dispatch_action(window, crate::kagan::CancelTurn);
     cx.run_until_parked();
     assert!(!shows(cx, window, "note"));
+}
+
+/// A message is named by who spoke and when, and its words are the value, so a reader hears both.
+#[gpui_kit::test]
+fn a_message_is_named_by_who_spoke_and_when(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat(cx);
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-message-2").is_some_and(|text| text.contains("hi there"))
+    });
+    let agent = label(cx, window, "chat-message-2");
+    assert!(
+        agent.starts_with("OpenCode, "),
+        "the program's short name and the time: {agent}"
+    );
+    assert!(!agent.contains("hi there"), "{agent}");
+    let user = label(cx, window, "chat-message-1");
+    assert!(user.starts_with("You, "), "{user}");
+}
+
+/// What the workspace emits for an event, which is what the view's subscription hears.
+fn emit(cx: &mut TestAppContext, event: Event) {
+    cx.update(|cx| {
+        kg_core::Workspace::global(cx).update(cx, |_, cx| {
+            cx.emit(kg_core::WorkspaceEvent::Event {
+                event: Box::new(event),
+                project_id: kg_domain::ProjectId("prj_kagan".into()),
+            });
+        });
+    });
+}
+
+fn agent_said(id: &ThreadId, seq: u64, text: &str) -> Event {
+    Event {
+        thread_id: id.clone(),
+        seq,
+        at: Timestamp(2),
+        kind: EventKind::Message {
+            role: Role::Agent,
+            text: text.into(),
+            message_id: None,
+            attachments: Vec::new(),
+        },
+    }
+}
+
+/// An event the load has already read is drawn once, not twice and out of order.
+#[gpui_kit::test]
+fn an_event_the_load_already_read_is_drawn_once(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat(cx);
+    let id = ThreadId("thr_chat".into());
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-message-2").is_some_and(|text| text.contains("hi there"))
+    });
+    emit(cx, agent_said(&id, 2, "hi there"));
+    assert_eq!(
+        value_of(cx, window, "chat-message-2").as_deref(),
+        Some("hi there"),
+        "the chunk the load already read is not written again"
+    );
+    emit(
+        cx,
+        Event {
+            thread_id: id.clone(),
+            seq: 3,
+            at: Timestamp(3),
+            kind: EventKind::Notice {
+                severity: kg_domain::NoticeSeverity::Info,
+                text: "and again".into(),
+            },
+        },
+    );
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-notice-3").is_some_and(|text| text.contains("and again"))
+    });
+}
+
+/// A load that fails still ends the wait, so the live events behind it are drawn.
+#[gpui_kit::test]
+fn a_load_that_fails_still_draws_the_events_after_it(cx: &mut TestAppContext) {
+    let (_kagan, _window, data) = open(cx);
+    // The store holds this thread and the workspace has never heard of it, so its load fails.
+    let id = seed_acp_thread(data.path());
+    let window = cx
+        .add_window(|window, cx| crate::kagan::chat::ChatView::new(id.clone(), window, cx))
+        .into();
+    cx.run_until_parked();
+    assert!(!shows(cx, window, "chat-message-1"), "nothing was read");
+    emit(cx, agent_said(&id, 1, "the first word"));
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-message-1").as_deref() == Some("the first word")
+    });
 }

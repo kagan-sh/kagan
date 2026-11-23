@@ -1,5 +1,6 @@
 use std::collections::{HashSet, VecDeque};
 use std::ffi::OsString;
+#[cfg(unix)]
 use std::fs::File;
 use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
@@ -208,8 +209,8 @@ fn tail_text(tail: &Arc<Mutex<VecDeque<String>>>) -> Option<String> {
 
 /// A pipe the agent writes on, read from one thread on either platform.
 trait Output: Send {
-    /// The next line, or None when the agent's output ended.
-    fn next_line(&mut self) -> Option<Vec<u8>>;
+    /// Fills `into` with the next bytes, up to its length. None when the agent's output ended.
+    fn fill(&mut self, into: &mut [u8]) -> Option<usize>;
 }
 
 /// A pipe the agent's connection writes on.
@@ -220,12 +221,10 @@ trait Input: Send {
 
 #[cfg(unix)]
 impl Output for std::io::BufReader<File> {
-    fn next_line(&mut self) -> Option<Vec<u8>> {
-        use std::io::BufRead as _;
-        let mut line = Vec::new();
-        match self.read_until(b'\n', &mut line) {
+    fn fill(&mut self, into: &mut [u8]) -> Option<usize> {
+        match std::io::Read::read(self, into) {
             Ok(0) | Err(_) => None,
-            Ok(_) => Some(line),
+            Ok(read) => Some(read),
         }
     }
 }
@@ -246,15 +245,12 @@ impl<R> Output for Read<R>
 where
     R: futures::AsyncRead + Unpin + Send,
 {
-    fn next_line(&mut self) -> Option<Vec<u8>> {
-        use futures::AsyncBufReadExt as _;
-        futures::executor::block_on(async {
-            let mut line = Vec::new();
-            match self.0.read_until(b'\n', &mut line).await {
-                Ok(0) | Err(_) => None,
-                Ok(_) => Some(line),
-            }
-        })
+    fn fill(&mut self, into: &mut [u8]) -> Option<usize> {
+        use futures::AsyncReadExt as _;
+        match futures::executor::block_on(self.0.read(into)) {
+            Ok(0) | Err(_) => None,
+            Ok(read) => Some(read),
+        }
     }
 }
 
@@ -308,15 +304,58 @@ fn carry(process: &mut Process, tail: &Arc<Mutex<VecDeque<String>>>) -> Result<T
 
 /// The reader body both platforms share. A line is capped, and its bytes that are not UTF-8 are
 /// replaced, so an agent's output is never dropped without a trace.
-fn read_lines(mut output: impl Output, mut on_line: impl FnMut(String)) {
-    while let Some(line) = output.next_line() {
-        let line = &line[..line.len().min(LINE_MAX)];
-        on_line(
-            String::from_utf8_lossy(line)
-                .trim_end_matches(['\n', '\r'])
-                .to_owned(),
-        );
+fn read_lines(output: impl Output, mut on_line: impl FnMut(String)) {
+    let mut lines = Lines::new(output);
+    while let Some(line) = lines.next() {
+        on_line(line);
     }
+}
+
+/// The agent's output as lines, from a read in chunks: the bytes past the last line are kept for
+/// the next one.
+struct Lines<O> {
+    output: O,
+    ahead: Vec<u8>,
+}
+
+impl<O: Output> Lines<O> {
+    fn new(output: O) -> Self {
+        Self {
+            output,
+            ahead: Vec::new(),
+        }
+    }
+
+    /// One line, at most `LINE_MAX` bytes. What is left of a longer line is read and dropped, so
+    /// an agent that never sends a newline cannot grow kagan's memory.
+    fn next(&mut self) -> Option<String> {
+        let mut line = Vec::new();
+        loop {
+            if self.ahead.is_empty() {
+                let mut chunk = [0; 512];
+                let Some(read) = self.output.fill(&mut chunk) else {
+                    return (!line.is_empty()).then(|| text(&line));
+                };
+                self.ahead.extend_from_slice(&chunk[..read]);
+            }
+            let end = self.ahead.iter().position(|&byte| byte == b'\n');
+            let taken = end.map_or(self.ahead.len(), |at| at + 1);
+            let room = LINE_MAX.saturating_sub(line.len());
+            let kept = taken.min(room);
+            line.extend_from_slice(&self.ahead[..kept]);
+            self.ahead.drain(..taken);
+            if end.is_some() {
+                return Some(text(&line));
+            }
+        }
+    }
+}
+
+/// The line as kagan keeps it: its bytes that are not UTF-8 replaced, its own end removed.
+fn text(line: &[u8]) -> String {
+    String::from_utf8_lossy(line)
+        .trim_end_matches(['\n', '\r'])
+        .to_owned()
 }
 
 fn write_frames(
@@ -383,7 +422,16 @@ fn blocking(fd: std::os::fd::OwnedFd) -> Result<File, String> {
 /// Windows pipes answer through async-process's blocking thread pool, so the same three threads
 /// wait on them through it, and one reader body still serves both platforms.
 #[cfg(windows)]
-fn pipes(process: &mut Process) -> Result<(impl Input, impl Output, impl Output), String> {
+fn pipes(
+    process: &mut Process,
+) -> Result<
+    (
+        impl Input + 'static,
+        impl Output + 'static,
+        impl Output + 'static,
+    ),
+    String,
+> {
     let child = process.child();
     let (Some(input), Some(output), Some(errors)) =
         (child.stdin.take(), child.stdout.take(), child.stderr.take())
@@ -422,10 +470,18 @@ async fn pump(
                 }
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
-                    // The agent stopped writing: the connection sees its input end, and the run
-                    // reports the exit now instead of waiting out a grace it no longer needs.
+                    // The agent stopped writing. The connection still reads the frames queued
+                    // ahead of that end, so it is polled until it has answered them.
                     frames.close_channel();
-                    return Ok(());
+                    return match futures::future::select(
+                        connection.as_mut(),
+                        executor.timer(EXIT_GRACE),
+                    )
+                    .await
+                    {
+                        futures::future::Either::Left((result, _)) => result,
+                        futures::future::Either::Right(_) => Ok(()),
+                    };
                 }
             }
         }
@@ -509,6 +565,13 @@ impl Unread {
             eprintln!("kg: the agent asked for {method}, which kagan does not serve yet");
         }
     }
+
+    /// A message kind this build's protocol version cannot name.
+    fn other(&mut self) {
+        if self.0.insert("another kind of message".to_owned()) {
+            eprintln!("kg: the agent sent something kagan does not read yet");
+        }
+    }
 }
 
 /// A permission request the connection holds open: the agent waits, and so does the person's
@@ -556,7 +619,6 @@ async fn serve(
             Step::Update(Ok(message)) => {
                 heard(*message, events, &mut unread, &mut asking).await;
             }
-            Step::Update(Err(error)) => return Err(error.to_string()),
             Step::Answer(Ok(option)) => {
                 if let Some(asking) = asking.pop_front() {
                     let _ = asking.responder.respond(selected(option));
@@ -583,7 +645,10 @@ async fn serve(
                     let _ = asking.responder.respond(cancelled());
                 }
             }
-            Step::Closed => return Ok(()),
+            // The update stream closes when the agent's output ends, and the commands when the
+            // thread does. Either way the connection is over, not failed: the exit and the tail
+            // say how it ended.
+            Step::Update(Err(_)) | Step::Closed => return Ok(()),
         }
     }
 }
@@ -616,7 +681,8 @@ async fn heard(
         SessionMessage::Message(dispatch) => {
             answer(dispatch.into_raw(), events, unread, asking).await;
         }
-        _ => eprintln!("kg: the agent sent something kagan does not read yet"),
+        // A kind this build does not name, logged once rather than on every chunk.
+        _ => unread.other(),
     }
 }
 
@@ -755,8 +821,15 @@ fn exit_of(status: ExitStatus) -> Option<Exit> {
     if let Some(signal) = std::os::unix::process::ExitStatusExt::signal(&status) {
         return Some(Exit::Signal(signal));
     }
-    status
-        .code()
-        .and_then(|code| u32::try_from(code).ok())
-        .map(Exit::Code)
+    status.code().map(exit_code)
 }
+
+/// How Windows reports a code above `i32::MAX`: as a negative number. The sign is cast away, not
+/// refused, so a thread says the same code a terminal does.
+fn exit_code(code: i32) -> Exit {
+    Exit::Code(code.cast_unsigned())
+}
+
+#[cfg(test)]
+#[path = "client_test.rs"]
+mod tests;

@@ -21,6 +21,9 @@ use crate::{
 
 mod client;
 mod map;
+#[cfg(test)]
+#[path = "acp_test.rs"]
+mod tests;
 
 use client::{AcpCommand, AcpEvent};
 
@@ -41,7 +44,7 @@ impl Acp {
 
     /// Closes the commands, for a test that needs a prompt refused while the run still holds the
     /// connection.
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn close(&self) {
         self.commands.close();
     }
@@ -141,12 +144,9 @@ async fn launch(
     if let Some(locale) = cx.background_spawn(async { utf8_locale() }).await {
         env.push(("LANG".into(), locale.into()));
     }
-    let args = std::iter::once(OsString::from(subcommand))
-        .chain(program.args)
-        .collect();
     Ok(client::Launch {
         program: program.path,
-        args,
+        args: acp.args,
         cwd: folder.to_owned(),
         env,
     })
