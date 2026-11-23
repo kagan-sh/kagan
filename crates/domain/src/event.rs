@@ -57,7 +57,7 @@ pub enum EventKind {
     /// One thought chunk; chunks with the same `messageId` belong to one thought.
     Thought {
         text: String,
-        #[serde(default, skip_serializing_if = "Option::is_none", alias = "message_id")]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         message_id: Option<String>,
     },
     /// The agent's whole plan; a later plan replaces it.
@@ -74,19 +74,26 @@ pub enum EventKind {
     Tool {
         #[serde(default)]
         id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
         name: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         kind: Option<ToolKind>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         title: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         status: Option<ToolStatus>,
         /// ACP raw input.
+        #[serde(skip_serializing_if = "Option::is_none")]
         input: Option<serde_json::Value>,
         /// ACP content text and raw output, flattened.
+        #[serde(skip_serializing_if = "Option::is_none")]
         output: Option<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         diff: Vec<ToolDiff>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         locations: Vec<ToolLocation>,
         /// Set only by a permission request, which links the row to its question.
+        #[serde(skip_serializing_if = "Option::is_none")]
         approval: Option<PendingInteractionId>,
     },
     /// kagan handed this tool call to a plugin, or served `skill_load` itself.
