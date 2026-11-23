@@ -22,6 +22,7 @@ use crate::{
 
 mod client;
 mod map;
+mod permission;
 
 use client::{AcpCommand, AcpEvent};
 
