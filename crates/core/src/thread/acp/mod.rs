@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::path::Path;
 
 use crate::thread::terminal::{exit_end, utf8_locale, waiting};
@@ -17,7 +16,7 @@ use crate::{
     thread::agent::{self, Start},
     thread::halt::status,
     thread::turn_state::{Signal, Source},
-    thread::{finish, resolve_program},
+    thread::{finish, resolve_acp},
 };
 
 mod client;
@@ -141,38 +140,26 @@ async fn launch(
 ) -> Result<client::Launch> {
     let environment = crate::host::program::program_environment_of(this, cx);
     let home = crate::host::program::program_home_of(this, cx);
-    let program = resolve_program(&record.provider, environment.as_ref(), home.as_deref())
-        .map_err(|error| OpError::Invalid(error.to_string()))?;
-    let subcommand = acp_command(&record.provider)
+    let command = acp_command(&record.provider)
         .ok_or_else(|| OpError::Invalid(format!("{} has no ACP command", record.provider)))?;
-    let acp = acp_line(&program.path, subcommand, &program.args);
-    let integration = agent::integrate(this, record, &acp, folder, start, cx).await?;
+    let program = resolve_acp(
+        &record.provider,
+        command,
+        environment.as_ref(),
+        home.as_deref(),
+    )
+    .map_err(|error| OpError::Invalid(error.to_string()))?;
+    let integration = agent::integrate(this, record, &program, folder, start, cx).await?;
     let mut env = integration.env;
     if let Some(locale) = cx.background_spawn(async { utf8_locale() }).await {
         env.push(("LANG".into(), locale.into()));
     }
     Ok(client::Launch {
         program: program.path,
-        args: acp.args,
+        args: program.args,
         cwd: folder.to_owned(),
         env,
     })
-}
-
-// The same program, with the ACP subcommand among its arguments, so the agent integration sees
-// the subcommand line and adds nothing of its own. The integration's flags are dropped: the ACP
-// command is the agent's own line, and slice 5 settles the rest.
-fn acp_line(
-    path: &Path,
-    subcommand: &str,
-    args: &[OsString],
-) -> crate::thread::run::ResolvedProgram {
-    crate::thread::run::ResolvedProgram {
-        path: path.to_owned(),
-        args: std::iter::once(OsString::from(subcommand))
-            .chain(args.iter().cloned())
-            .collect(),
-    }
 }
 
 /// Applies the connection's events in the order they happened.

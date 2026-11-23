@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{
-    EventKind, NoticeSeverity, OpError, OpResult, Run, ThreadId, ThreadStatus, program_label,
+    EventKind, Link, NoticeSeverity, OpError, OpResult, Run, ThreadId, ThreadStatus, program_label,
 };
 use kg_process::pathext;
 
@@ -48,6 +48,28 @@ pub(crate) fn resolve_program(
     Ok(ResolvedProgram {
         path: found,
         args: args.into_iter().map(OsString::from).collect(),
+    })
+}
+
+/// The program and arguments that start the agent `line` runs over ACP. When the command names the
+/// person's own program, the person's line is resolved instead and its arguments follow the ACP
+/// ones; a command that names another program, such as the adapter's `npx`, is resolved on its own.
+pub(crate) fn resolve_acp(
+    line: &str,
+    (program, args): (&str, &[&str]),
+    environment: Option<&crate::host::program::ProgramEnvironment>,
+    home: Option<&Path>,
+) -> std::result::Result<ResolvedProgram, ResolveError> {
+    let (name, person_args) = kg_domain::split_program(line).map_err(ResolveError::Line)?;
+    let own = Path::new(&name).file_stem() == Path::new(program).file_stem();
+    let found = resolve_program(if own { line } else { program }, environment, home)?;
+    let mut args: Vec<OsString> = args.iter().map(OsString::from).collect();
+    if own {
+        args.extend(person_args.into_iter().map(OsString::from));
+    }
+    Ok(ResolvedProgram {
+        path: found.path,
+        args,
     })
 }
 
@@ -129,6 +151,12 @@ pub(crate) async fn prepare(
     let home = crate::host::program::program_home_of(this, cx);
     resolve_program(&run.program, environment.as_ref(), home.as_deref())
         .map_err(|error| OpError::Invalid(error.to_string()))?;
+    if run.link == Link::Acp {
+        let command = kg_domain::acp_command(&run.program)
+            .ok_or_else(|| OpError::Invalid(format!("{} has no ACP command", run.program)))?;
+        resolve_acp(&run.program, command, environment.as_ref(), home.as_deref())
+            .map_err(|error| OpError::Invalid(error.to_string()))?;
+    }
     let program = run.program.clone();
     let project_id = run.project_id.clone();
     let database = crate::workspace::database(this, cx)?;

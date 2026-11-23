@@ -44,6 +44,7 @@ fn spawning() -> Value {
 
 struct Agent {
     dir: tempfile::TempDir,
+    program: PathBuf,
     previous: Option<std::ffi::OsString>,
 }
 
@@ -51,6 +52,22 @@ impl Agent {
     /// Records `sessions` and `turns`, and puts a program named `opencode` on the thread's line
     /// that re-runs this test binary as the agent.
     fn new(sessions: &[&str], turns: &[Value]) -> Self {
+        Self::named("opencode", sessions, turns, None)
+    }
+
+    /// One agent's conversation recorded against that agent's own ACP server: the session it named
+    /// and the turns it answered, or the error it refused the session with.
+    fn recorded(agent: &str, recording: &str) -> Self {
+        let record: Value = serde_json::from_str(recording).unwrap();
+        if let Some(error) = record.get("error") {
+            return Self::named(agent, &[], &[], Some(error.clone()));
+        }
+        let session = record["session"].as_str().unwrap();
+        let turns: Vec<Value> = record["turns"].as_array().cloned().unwrap_or_default();
+        Self::named(agent, &[session], &turns, None)
+    }
+
+    fn named(agent: &str, sessions: &[&str], turns: &[Value], refuse: Option<Value>) -> Self {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("sessions"), sessions.join("\n") + "\n").unwrap();
         let turns: Vec<String> = turns
@@ -59,21 +76,30 @@ impl Agent {
             .map(|line| line + "\n")
             .collect();
         std::fs::write(dir.path().join("turns.ndjson"), turns.concat()).unwrap();
-        let program = dir.path().join("opencode");
+        if let Some(error) = refuse {
+            std::fs::write(dir.path().join("refuse"), error.to_string()).unwrap();
+        }
+        let program = dir.path().join(agent);
         let exe = std::env::current_exe().unwrap();
         // Quiet libtest still prints a progress dot: a line that is not JSON is skipped below.
+        let script = format!(
+            "#!/bin/sh\nexec '{}' -q --exact tests::acp::fake_agent --nocapture\n",
+            exe.display()
+        );
+        std::fs::write(&program, &script).unwrap();
+        // The npm adapters run through `npx`, whose arguments are the launch command's.
+        let npx = dir.path().join("npx");
         std::fs::write(
-            &program,
-            format!(
-                "#!/bin/sh\nexec '{}' -q --exact tests::acp::fake_agent --nocapture\n",
-                exe.display()
-            ),
+            &npx,
+            format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$KG_FAKE_ACP_DIR/args\"\n{script}"),
         )
         .unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+            for path in [&program, &npx] {
+                std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            }
         }
         let previous = std::env::var_os("KG_FAKE_ACP_DIR");
         // SAFETY: nextest runs each test in its own process, so this test owns the variable while
@@ -81,11 +107,20 @@ impl Agent {
         unsafe {
             std::env::set_var("KG_FAKE_ACP_DIR", dir.path());
         }
-        Self { dir, previous }
+        Self {
+            dir,
+            program,
+            previous,
+        }
     }
 
     fn program(&self) -> String {
-        self.dir.path().join("opencode").display().to_string()
+        self.program.display().to_string()
+    }
+
+    /// The folder the test gives the workspace as its `PATH`, so `npx` is the recorded one.
+    fn bin(&self) -> &Path {
+        self.dir.path()
     }
 
     fn path(&self, name: &str) -> PathBuf {
@@ -1272,6 +1307,99 @@ async fn acp_a_prompt_that_cannot_be_sent_writes_nothing(cx: &mut TestAppContext
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 
+/// One agent's real conversation recorded against its own ACP server, replayed through the fake
+/// agent on the thread's line, with the recorded `npx` on the `PATH`.
+async fn replay(
+    agent: &str,
+    recording: &str,
+    cx: &mut TestAppContext,
+) -> (Fixture, Agent, ThreadId, Vec<EventKind>) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::recorded(agent, recording);
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.use_program_environment(agent.bin(), Path::new("/bin/sh"));
+    });
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "hi", cx).await;
+    let kinds = wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    (fixture, agent, id, kinds)
+}
+
+/// The session id the recording named, so a test reads it rather than repeating it.
+fn recorded_session(recording: &str) -> String {
+    serde_json::from_str::<Value>(recording).unwrap()["session"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+fn conversation(fixture: &Fixture, id: &ThreadId) -> String {
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    store.conversation(id).unwrap().unwrap().to_string()
+}
+
+#[gpui_kit::test]
+async fn a_recorded_claude_conversation_replays(cx: &mut TestAppContext) {
+    let recording = include_str!("acp/claude.json");
+    let (fixture, agent, id, kinds) = replay("claude", recording, cx).await;
+    assert_eq!(agent_said(&kinds), "ready");
+    assert!(
+        kinds
+            .iter()
+            .any(|kind| matches!(kind, EventKind::Usage { .. })),
+        "the recorded usage is kept: {kinds:?}"
+    );
+    assert_eq!(conversation(&fixture, &id), recorded_session(recording));
+    assert_eq!(
+        std::fs::read_to_string(agent.path("args")).unwrap(),
+        "-y\n@agentclientprotocol/claude-agent-acp\n"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn a_recorded_codex_conversation_replays(cx: &mut TestAppContext) {
+    let recording = include_str!("acp/codex.json");
+    let (fixture, _agent, id, kinds) = replay("codex", recording, cx).await;
+    assert!(
+        agent_said(&kinds).contains("not supported"),
+        "the agent's own words are the transcript: {kinds:?}"
+    );
+    assert_eq!(conversation(&fixture, &id), recorded_session(recording));
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn a_recorded_kimi_conversation_replays(cx: &mut TestAppContext) {
+    let recording = include_str!("acp/kimi.json");
+    let (fixture, _agent, id, kinds) = replay("kimi", recording, cx).await;
+    // Kimi ended the turn without a message on this machine: its quota is spent, and the ACP
+    // server says so with a plain `end_turn`.
+    assert_eq!(agent_said(&kinds), "");
+    assert_eq!(conversation(&fixture, &id), recorded_session(recording));
+    assert_eq!(thread(&id, cx).await.status, ThreadStatus::Active);
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn a_recorded_session_refusal_fails_the_thread(cx: &mut TestAppContext) {
+    let recording = include_str!("acp/gemini.json");
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::recorded("gemini", recording);
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.use_program_environment(agent.bin(), Path::new("/bin/sh"));
+    });
+    let OpResult::Thread(started) = op(fixture.run_acp(&agent.program()), cx).await.unwrap() else {
+        panic!("thread")
+    };
+    let kinds = wait_for(&started.id, |kinds| failed(kinds).is_some(), cx).await;
+    assert!(
+        failed(&kinds).is_some_and(|error| error.contains("no longer supported")),
+        "the agent's refusal is what the thread says: {kinds:?}"
+    );
+    wait_for_status(&started.id, ThreadStatus::Error, cx).await;
+}
+
 async fn send(id: &ThreadId, text: &str, cx: &mut TestAppContext) {
     op(
         Op::Thread(ThreadOp::Input {
@@ -1381,8 +1509,9 @@ fn fake_agent() {
                 );
             }
             "session/new" => {
-                session = take_session(&dir);
-                write(&mut out, &reply(&id, &json!({ "sessionId": session })));
+                if let Some(named) = new_session(&dir, &mut out, &id) {
+                    session = named;
+                }
             }
             "session/prompt" => {
                 let record = turns.next().unwrap_or_else(|| turn(&[], "end_turn"));
@@ -1525,6 +1654,19 @@ fn permission_step(
         break;
     }
     answered
+}
+
+/// The session the agent names, or the refusal a recording holds instead. `None` when it refused.
+fn new_session(dir: &Path, out: &mut std::io::Stdout, id: &Value) -> Option<String> {
+    if let Ok(refused) = std::fs::read_to_string(dir.join("refuse")) {
+        let error = serde_json::from_str::<Value>(&refused)
+            .unwrap_or_else(|_| json!({"code": -1, "message": refused}));
+        write(out, &json!({"jsonrpc": "2.0", "id": id, "error": error}));
+        return None;
+    }
+    let session = take_session(dir);
+    write(out, &reply(id, &json!({ "sessionId": session })));
+    Some(session)
 }
 
 /// The next session id the recording holds, taken off the file so the next agent kagan starts
