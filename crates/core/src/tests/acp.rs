@@ -999,6 +999,7 @@ async fn acp_an_agent_that_hangs_up_with_a_question_open_leaves_nothing_waiting(
         "{}",
         interaction.title
     );
+    std::fs::write(agent.path("hangup"), "").unwrap();
     wait_for_status(&id, ThreadStatus::Idle, cx).await;
     assert!(
         super::pending(&id, cx).await.is_empty(),
@@ -1463,9 +1464,16 @@ fn permission_step(
     prompt: &Value,
 ) -> bool {
     write(out, &permission_request(session, permission));
-    // An agent that hangs up with its request open never answers it, and the person's card must
-    // not outlive it.
+    // An agent that hangs up with its request open never answers it: it waits for the test to say
+    // the card is up, then goes, and the card must not outlive it.
     if permission["hangup"].as_bool() == Some(true) {
+        let signal = dir.join("hangup");
+        for _ in 0..600 {
+            if signal.exists() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
         std::process::exit(0);
     }
     // An agent that ends its turn without waiting for the answer leaves the request open.
