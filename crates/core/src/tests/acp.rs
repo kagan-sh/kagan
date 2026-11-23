@@ -428,6 +428,28 @@ async fn acp_events_are_the_transcript(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+async fn acp_agent_that_fails_before_its_session_leaves_an_error(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_none"], &[]);
+    std::fs::write(agent.path("modes"), "fail_init\n").unwrap();
+    let OpResult::Thread(started) = op(fixture.run_acp(&agent.program()), cx).await.unwrap() else {
+        panic!("thread")
+    };
+    wait_for_status(&started.id, ThreadStatus::Error, cx).await;
+    let kinds = kinds_of(&started.id, cx).await;
+    let error = failed(&kinds).expect("the person is told why");
+    assert!(error.contains("cannot start"), "{error}");
+    assert!(
+        kinds.contains(&EventKind::Exited {
+            code: Some(3),
+            signal: None
+        }),
+        "{kinds:?}"
+    );
+    assert!(!kinds.contains(&EventKind::Started), "{kinds:?}");
+}
+
+#[gpui_kit::test]
 async fn acp_agent_that_crashes_says_why_it_did(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let agent = Agent::new(
@@ -520,6 +542,8 @@ fn fake_agent() {
         .collect::<Vec<_>>()
         .into_iter();
     std::fs::write(dir.join("pid"), std::process::id().to_string()).unwrap();
+    let modes = std::fs::read_to_string(dir.join("modes")).unwrap_or_default();
+    let fail_init = modes.lines().any(|mode| mode == "fail_init");
     let mut open: Option<(Value, Value)> = None;
     let mut session = String::new();
     let mut out = std::io::stdout();
@@ -532,6 +556,10 @@ fn fake_agent() {
         let id = message["id"].clone();
         match message["method"].as_str().unwrap_or_default() {
             "initialize" => {
+                if fail_init {
+                    eprintln!("the agent cannot start");
+                    std::process::exit(3);
+                }
                 write(
                     &mut out,
                     &reply(&id, &json!({"protocolVersion": 1, "agentCapabilities": {}})),
