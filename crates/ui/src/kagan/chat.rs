@@ -520,11 +520,10 @@ fn row_at(
         part::RowKind::Bundle(members) => work::bundle_row(&row, &members, open, weak, window, cx),
         part::RowKind::Plan(entries) => work::plan_row(&row, &entries, open, weak, window, cx),
         part::RowKind::Approval(id) => {
-            let title = weak
-                .read_with(cx, |this, _| this.approval_title(index))
-                .ok()
-                .flatten();
-            body::approval_card(&id, title.as_deref(), weak, window, cx)
+            let (title, worktree) = weak
+                .read_with(cx, |this, cx| this.approval_detail(index, cx))
+                .unwrap_or_default();
+            body::approval_card(&id, title.as_deref(), worktree, weak, window, cx)
         }
         part::RowKind::Notice(text) => notice_view(row.id, &text, cx),
         part::RowKind::Divider { from, to, outcome } => divider_view(row.id, from, to, outcome, cx),
@@ -532,13 +531,26 @@ fn row_at(
 }
 
 impl ChatView {
-    /// The title of the tool row an approval card follows.
-    fn approval_title(&self, index: usize) -> Option<String> {
-        let previous = index.checked_sub(1)?;
-        match &self.transcript.rows.get(previous)?.kind {
-            part::RowKind::Work(tool) => work::title_of(tool),
-            _ => None,
-        }
+    /// What an approval card says about the tool row it follows: its title, and whether the tool
+    /// works in the thread's own folder.
+    fn approval_detail(&self, index: usize, cx: &App) -> (Option<String>, bool) {
+        let tool = index.checked_sub(1).and_then(|previous| {
+            match &self.transcript.rows.get(previous)?.kind {
+                part::RowKind::Work(tool) => Some(tool.as_ref()),
+                _ => None,
+            }
+        });
+        let Some(tool) = tool else {
+            return (None, false);
+        };
+        let environment = Workspace::global(cx)
+            .read(cx)
+            .thread(&self.thread)
+            .is_some_and(|thread| thread.read(cx).record().environment_id.is_some());
+        (
+            work::title_of(tool),
+            body::runs_in_worktree(tool.kind, environment),
+        )
     }
 }
 

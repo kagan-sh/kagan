@@ -9,13 +9,37 @@ use super::{click, focused_of, open, shows, shows_within, value_of, wait_until};
 /// A thread the store already holds: an ACP one has no program in this process, so the center
 /// shows its transcript and prompt box.
 fn seed_thread(data: &std::path::Path, events: Vec<EventKind>) -> ThreadId {
+    seed_thread_in(data, None, events)
+}
+
+/// The same, in a folder of the thread's own.
+fn seed_thread_in(
+    data: &std::path::Path,
+    environment: Option<kg_domain::EnvironmentId>,
+    events: Vec<EventKind>,
+) -> ThreadId {
     let mut store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+    if let Some(environment) = &environment {
+        store
+            .put_environment(&kg_domain::Environment {
+                id: environment.clone(),
+                project_id: kg_domain::ProjectId("prj_kagan".into()),
+                path: data.join("worktree"),
+                status: kg_domain::EnvironmentStatus::Ready,
+                provider: kg_domain::EnvironmentProvider::Worktree,
+                branch: None,
+                base_branch: None,
+                retire_at: None,
+                error: None,
+            })
+            .unwrap();
+    }
     let id = ThreadId("thr_chat".into());
     store
         .put_thread(&Thread {
             id: id.clone(),
             project_id: kg_domain::ProjectId("prj_kagan".into()),
-            environment_id: None,
+            environment_id: environment,
             title: "Chat".into(),
             title_locked: false,
             provider: "opencode".into(),
@@ -319,21 +343,14 @@ fn a_bundle_closes_when_the_turn_ends(cx: &mut TestAppContext) {
     );
 }
 
-#[gpui_kit::test]
-fn the_approval_card_answers_through_the_question(cx: &mut TestAppContext) {
+/// A thread whose running command asks the person, and the card it draws.
+fn show_approval(
+    cx: &mut TestAppContext,
+    kind: ToolKind,
+    options: Vec<InteractionOption>,
+    environment: Option<kg_domain::EnvironmentId>,
+) -> (AnyWindowHandle, tempfile::TempDir) {
     let (_kagan, window, data) = open(cx);
-    let options = vec![
-        InteractionOption {
-            id: "reject-once".into(),
-            label: "Deny".into(),
-            role: Some(OptionRole::Destructive),
-        },
-        InteractionOption {
-            id: "allow-once".into(),
-            label: "Allow once".into(),
-            role: Some(OptionRole::Primary),
-        },
-    ];
     let asked = PendingInteraction {
         id: PendingInteractionId("pn_1".into()),
         thread_id: ThreadId("thr_chat".into()),
@@ -342,12 +359,13 @@ fn the_approval_card_answers_through_the_question(cx: &mut TestAppContext) {
         fields: None,
         created_at: Timestamp(1),
     };
-    let id = seed_thread(
+    let id = seed_thread_in(
         data.path(),
+        environment,
         vec![
             tool(
                 "t1",
-                ToolKind::Execute,
+                kind,
                 ToolStatus::InProgress,
                 "Run the tests",
                 Some(serde_json::json!({"command": "cargo t"})),
@@ -356,7 +374,7 @@ fn the_approval_card_answers_through_the_question(cx: &mut TestAppContext) {
             EventKind::Tool {
                 id: "t1".into(),
                 name: None,
-                kind: Some(ToolKind::Execute),
+                kind: Some(kind),
                 title: Some("Run the tests".into()),
                 status: Some(ToolStatus::Pending),
                 input: Some(serde_json::json!({"command": "cargo t"})),
@@ -381,6 +399,27 @@ fn the_approval_card_answers_through_the_question(cx: &mut TestAppContext) {
     click(cx, window, &format!("thread-{}", id.0));
     wait_until(cx, |cx| shows(cx, window, "chat-transcript"));
     wait_until(cx, |cx| shows(cx, window, "chat-approval-pn_1"));
+    (window, data)
+}
+
+fn permission_options() -> Vec<InteractionOption> {
+    vec![
+        InteractionOption {
+            id: "reject-once".into(),
+            label: "Deny".into(),
+            role: Some(OptionRole::Destructive),
+        },
+        InteractionOption {
+            id: "allow-once".into(),
+            label: "Allow once".into(),
+            role: Some(OptionRole::Primary),
+        },
+    ]
+}
+
+#[gpui_kit::test]
+fn the_approval_card_answers_through_the_question(cx: &mut TestAppContext) {
+    let (window, _data) = show_approval(cx, ToolKind::Execute, permission_options(), None);
     wait_until(cx, |cx| {
         shows_within(cx, window, "answer-pn_1-allow-once", "chat-approval-pn_1")
     });
@@ -391,6 +430,66 @@ fn the_approval_card_answers_through_the_question(cx: &mut TestAppContext) {
         value_of(cx, window, "chat-work-1").as_deref(),
         Some("collapsed · busy")
     );
+    assert!(
+        !shows(cx, window, "chat-approval-runs-pn_1"),
+        "a thread with no folder of its own says nothing about a worktree"
+    );
+}
+
+/// The agent sends its options in its own order; the card reads Deny, then Always allow, then the
+/// filled Allow once.
+#[gpui_kit::test]
+fn the_approval_card_lists_the_reject_first_and_the_filled_option_last(cx: &mut TestAppContext) {
+    let mut options = permission_options();
+    options.pop();
+    let agent_order = vec![
+        InteractionOption {
+            id: "allow-once".into(),
+            label: "Allow once".into(),
+            role: Some(OptionRole::Primary),
+        },
+        InteractionOption {
+            id: "allow-always".into(),
+            label: "Always allow".into(),
+            role: None,
+        },
+        options.remove(0),
+    ];
+    let (window, _data) = show_approval(cx, ToolKind::Execute, agent_order, None);
+    wait_until(cx, |cx| {
+        shows_within(cx, window, "answer-pn_1-allow-always", "chat-approval-pn_1")
+    });
+    // The same card is in the transcript and in Questions, so the search stays in the transcript.
+    let left = |cx: &mut TestAppContext, id: &str| {
+        cx.update_window(window, |_, window, _| {
+            let id = ElementId::Name(id.into());
+            let scope = ElementId::Name("chat-approval-pn_1".into());
+            match crate::ui_registry::locate(window, &id, Some(&scope)) {
+                crate::ui_registry::Located::One(element) => Some(element.bounds.left()),
+                _ => None,
+            }
+        })
+        .unwrap()
+    };
+    let deny = left(cx, "answer-pn_1-reject-once").expect("the deny button");
+    let always = left(cx, "answer-pn_1-allow-always").expect("the always allow button");
+    let once = left(cx, "answer-pn_1-allow-once").expect("the allow once button");
+    assert!(
+        deny < always && always < once,
+        "{deny:?} {always:?} {once:?}"
+    );
+}
+
+#[gpui_kit::test]
+fn a_command_in_a_worktree_says_where_it_runs(cx: &mut TestAppContext) {
+    let (window, _data) = show_approval(
+        cx,
+        ToolKind::Execute,
+        permission_options(),
+        Some(kg_domain::EnvironmentId("env_1".into())),
+    );
+    wait_until(cx, |cx| shows(cx, window, "chat-approval-runs-pn_1"));
+    assert!(shows(cx, window, "chat-approval-value-pn_1"));
 }
 
 #[gpui_kit::test]

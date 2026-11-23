@@ -156,6 +156,7 @@ pub(super) fn plan_body(row: u64, entries: &[PlanEntry], cx: &mut App) -> impl I
 pub(super) fn approval_card(
     id: &kg_domain::PendingInteractionId,
     tool_title: Option<&str>,
+    worktree: bool,
     weak: &WeakEntity<ChatView>,
     window: &mut Window,
     cx: &mut App,
@@ -169,7 +170,7 @@ pub(super) fn approval_card(
     let Some(asked) = asked else {
         return div().into_any_element();
     };
-    let detail = detail(tool_title, cx);
+    let detail = detail(id, tool_title, worktree, cx);
     let failed: question::Failed = {
         let weak = weak.clone();
         Rc::new(move |cx, text| {
@@ -192,7 +193,21 @@ pub(super) fn approval_card(
         .into_any_element()
 }
 
-fn detail(tool_title: Option<&str>, cx: &mut App) -> AnyElement {
+/// Whether the card says where the tool runs: only a command or an edit works in a folder.
+pub(super) fn runs_in_worktree(kind: Option<kg_domain::ToolKind>, environment: bool) -> bool {
+    environment
+        && matches!(
+            kind,
+            Some(kg_domain::ToolKind::Execute | kg_domain::ToolKind::Edit)
+        )
+}
+
+fn detail(
+    id: &kg_domain::PendingInteractionId,
+    tool_title: Option<&str>,
+    worktree: bool,
+    cx: &mut App,
+) -> AnyElement {
     let mono = cx.theme().mono_font_family.clone();
     div()
         .flex()
@@ -200,9 +215,16 @@ fn detail(tool_title: Option<&str>, cx: &mut App) -> AnyElement {
         .gap(px(6.))
         .when_some(tool_title.map(str::to_owned), |detail, title| {
             let tip = title.clone();
+            let fact = Facts {
+                role: gpui_kit::Role::Label,
+                ..Facts::button(title.clone())
+            };
             detail.child(
                 div()
-                    .id(gpui_kit::ElementId::Name("chat-approval-value".into()))
+                    .id(gpui_kit::ElementId::Name(
+                        format!("chat-approval-value-{}", id.0).into(),
+                    ))
+                    .ui_observe_as(fact)
                     .px(px(8.))
                     .py(px(4.))
                     .rounded(cx.theme().radius)
@@ -214,12 +236,21 @@ fn detail(tool_title: Option<&str>, cx: &mut App) -> AnyElement {
                     .child(title),
             )
         })
-        .child(
-            div()
-                .type_caption(cx)
-                .text_color(cx.theme().muted_foreground)
-                .child("It runs in this thread's worktree."),
-        )
+        .when(worktree, |detail| {
+            detail.child(
+                div()
+                    .id(gpui_kit::ElementId::Name(
+                        format!("chat-approval-runs-{}", id.0).into(),
+                    ))
+                    .ui_observe_as(Facts {
+                        role: gpui_kit::Role::Label,
+                        ..Facts::button("It runs in this thread's worktree.")
+                    })
+                    .type_caption(cx)
+                    .text_color(cx.theme().muted_foreground)
+                    .child("It runs in this thread's worktree."),
+            )
+        })
         .into_any_element()
 }
 
@@ -446,4 +477,17 @@ fn diff_out(diffs: &[ToolDiff], output: Option<&str>, cx: &mut App) -> Option<An
             .children(lines)
             .into_any_element(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_command_or_an_edit_in_a_folder_says_where_it_runs() {
+        assert!(runs_in_worktree(Some(kg_domain::ToolKind::Execute), true));
+        assert!(runs_in_worktree(Some(kg_domain::ToolKind::Edit), true));
+        assert!(!runs_in_worktree(Some(kg_domain::ToolKind::Read), true));
+        assert!(!runs_in_worktree(Some(kg_domain::ToolKind::Execute), false));
+    }
 }

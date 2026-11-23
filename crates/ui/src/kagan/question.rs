@@ -147,7 +147,7 @@ fn body(
 ) -> impl IntoElement + use<> {
     let failed = Rc::clone(failed);
     let mut buttons: Vec<AnyElement> = Vec::new();
-    for option in &question.options {
+    for option in &ordered(&question.options) {
         let focus = super::tab_stop(
             window,
             cx,
@@ -227,6 +227,19 @@ fn body(
         .child(h_flex().gap(px(space(SpaceStep::Sm, cx))).children(buttons))
 }
 
+/// The options in the order a card reads: the reject that grants nothing, then the rest, then the
+/// filled one, which is the step the card offers. The agent's order stays within a rank.
+fn ordered(options: &[InteractionOption]) -> Vec<InteractionOption> {
+    let rank = |role: Option<OptionRole>| match role {
+        Some(OptionRole::Destructive) => 0,
+        Some(OptionRole::Primary) => 2,
+        _ => 1,
+    };
+    let mut ordered = options.to_vec();
+    ordered.sort_by_key(|option| rank(option.role));
+    ordered
+}
+
 fn answer(
     thread: Option<ThreadId>,
     id: PendingInteractionId,
@@ -248,4 +261,31 @@ fn answer(
         }
     })
     .detach();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn option(id: &str, role: Option<OptionRole>) -> InteractionOption {
+        InteractionOption {
+            id: id.into(),
+            label: id.into(),
+            role,
+        }
+    }
+
+    #[test]
+    fn a_permission_card_reads_deny_then_always_allow_then_allow_once() {
+        let agent = vec![
+            option("allow-once", Some(OptionRole::Primary)),
+            option("allow-always", None),
+            option("reject-once", Some(OptionRole::Destructive)),
+        ];
+        let ids: Vec<_> = ordered(&agent)
+            .into_iter()
+            .map(|option| option.id)
+            .collect();
+        assert_eq!(ids, ["reject-once", "allow-always", "allow-once"]);
+    }
 }
