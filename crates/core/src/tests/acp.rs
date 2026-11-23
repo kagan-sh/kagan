@@ -565,6 +565,40 @@ async fn acp_a_hung_handshake_ends_with_a_reason(cx: &mut TestAppContext) {
     assert!(gone(pid), "the agent that never answered is gone");
 }
 
+#[gpui_kit::test]
+async fn acp_a_prompt_that_cannot_be_sent_writes_nothing(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_closed"], &[holding()]);
+    let id = started(&fixture, &agent, cx).await;
+    // The run still holds a connection whose commands are closed, as a send that lost its race
+    // with the agent's end would find it.
+    cx.update(|cx| {
+        fixture.workspace.update(cx, |workspace, _| {
+            workspace.run_mut(&id).acp.as_ref().unwrap().close();
+        });
+    });
+    let before = kinds_of(&id, cx).await;
+    let refused = op(
+        Op::Thread(ThreadOp::Input {
+            id: id.clone(),
+            terminal: None,
+            text: "hi".into(),
+        }),
+        cx,
+    )
+    .await;
+    assert!(
+        matches!(refused, Err(OpError::Invalid(ref message)) if message.contains("not running")),
+        "{refused:?}"
+    );
+    assert_eq!(
+        kinds_of(&id, cx).await.len(),
+        before.len(),
+        "a prompt that was not sent leaves no message and no turn"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
 async fn send(id: &ThreadId, text: &str, cx: &mut TestAppContext) {
     op(
         Op::Thread(ThreadOp::Input {

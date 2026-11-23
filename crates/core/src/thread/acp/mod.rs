@@ -38,6 +38,13 @@ impl Acp {
     fn send(&self, command: AcpCommand) -> bool {
         self.commands.try_send(command).is_ok()
     }
+
+    /// Closes the commands, for a test that needs a prompt refused while the run still holds the
+    /// connection.
+    #[cfg(test)]
+    pub(crate) fn close(&self) {
+        self.commands.close();
+    }
 }
 
 /// Starts the agent as its own ACP connection, then lets it name the session.
@@ -291,12 +298,8 @@ pub(super) async fn prompt(
             "the agent is answering; cancel its reply first".into(),
         ));
     }
-    let now = cx.background_executor().now();
-    thread.update(cx, |thread, cx| {
-        thread.turn.apply(Signal::Prompt, now);
-        thread.busy = thread.turn.open();
-        cx.notify();
-    });
+    // The send is synchronous, so a refused one leaves no message and no turn behind.
+    send(this, id, AcpCommand::Prompt(text.to_owned()), cx)?;
     let kinds = vec![
         EventKind::Message {
             role: Role::User,
@@ -307,7 +310,12 @@ pub(super) async fn prompt(
         EventKind::TurnStarted,
     ];
     Workspace::events(this, id.clone(), kinds, cx).await?;
-    send(this, id, AcpCommand::Prompt(text.to_owned()), cx)?;
+    let now = cx.background_executor().now();
+    thread.update(cx, |thread, cx| {
+        thread.turn.apply(Signal::Prompt, now);
+        thread.busy = thread.turn.open();
+        cx.notify();
+    });
     Ok(OpResult::Done)
 }
 
