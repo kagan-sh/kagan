@@ -13,16 +13,16 @@ use super::changes::line;
 use super::screen::{Activation, Side};
 use super::{Kagan, question};
 
-/// The option a card opens on: the one that does not grant anything. A permission card never
-/// opens on an allow, so Enter never approves by itself.
+/// The option a card opens on: the one that grants nothing. The safe way out comes first, then the
+/// option that refuses; the filled grant never opens a card, so Enter never approves by itself.
 fn opening_option(options: &[InteractionOption]) -> Option<&InteractionOption> {
     options
         .iter()
-        .find(|option| option.role == Some(OptionRole::Destructive))
+        .find(|option| option.role == Some(OptionRole::Safe))
         .or_else(|| {
             options
                 .iter()
-                .find(|option| option.role == Some(OptionRole::Safe))
+                .find(|option| option.role == Some(OptionRole::Destructive))
         })
 }
 

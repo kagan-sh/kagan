@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::rc::Rc;
 use std::time::Duration;
 
 use kg_domain::{
@@ -93,6 +94,8 @@ pub(super) struct ToolRow {
     pub(super) input: Option<serde_json::Value>,
     pub(super) output: Option<String>,
     pub(super) diff: Vec<ToolDiff>,
+    /// The lines the diff adds and removes, counted once as the diff arrives, never while drawing.
+    pub(super) counts: (usize, usize),
     pub(super) locations: Vec<ToolLocation>,
     pub(super) approval: Option<PendingInteractionId>,
     pub(super) from: Timestamp,
@@ -146,7 +149,9 @@ pub(super) enum Fold {
 /// view never rebuilds the whole list.
 #[derive(Default)]
 pub(super) struct Transcript {
-    pub(super) rows: Vec<Row>,
+    /// Rows are shared with the renderer, which holds one for the frame, so a frame never copies
+    /// a body's output or a diff to draw it.
+    pub(super) rows: Vec<Rc<Row>>,
     pub(super) usage: Option<(u64, u64)>,
     pub(super) last_outcome: Option<TurnOutcome>,
     /// The person's own expand and collapse choices: they always win over the rules.
@@ -193,6 +198,7 @@ impl Transcript {
                     input: input.clone(),
                     output: output.clone(),
                     diff: diff.clone(),
+                    counts: diff_counts(diff),
                     locations: locations.clone(),
                     approval: approval.clone(),
                     from: event.at,
@@ -209,7 +215,7 @@ impl Transcript {
             }
             EventKind::Plan { entries } => {
                 if let Some(index) = self.plan.filter(|index| *index < self.rows.len()) {
-                    self.rows[index].kind = RowKind::Plan(entries.clone());
+                    Rc::make_mut(&mut self.rows[index]).kind = RowKind::Plan(entries.clone());
                     Fold::Dirty(index)
                 } else {
                     self.plan = Some(self.rows.len());
@@ -253,7 +259,7 @@ impl Transcript {
     }
 
     fn push(&mut self, row: Row) -> Fold {
-        self.rows.push(row);
+        self.rows.push(Rc::new(row));
         Fold::Dirty(self.rows.len() - 1)
     }
 
@@ -285,7 +291,8 @@ impl Transcript {
     ) -> Fold {
         let last = self.rows.len().checked_sub(1);
         if let Some(index) = last {
-            let merges = match (&mut self.rows[index].kind, thought) {
+            let row = Rc::make_mut(&mut self.rows[index]);
+            let merges = match (&mut row.kind, thought) {
                 (
                     RowKind::Message {
                         role: seen,
@@ -299,7 +306,7 @@ impl Transcript {
                 _ => false,
             };
             if merges {
-                match &mut self.rows[index].kind {
+                match &mut row.kind {
                     RowKind::Message { text: joined, .. } => joined.push_str(text),
                     RowKind::Thought(seen) => {
                         seen.text.push_str(text);
@@ -334,7 +341,8 @@ impl Transcript {
     /// Folds one tool delta into the row with its id, wherever that row is, or starts a row.
     fn tool(&mut self, seq: u64, delta: ToolRow) -> Fold {
         if let Some((top, member)) = self.find_tool(&delta.id) {
-            let seen = match (&mut self.rows[top].kind, member) {
+            let row = Rc::make_mut(&mut self.rows[top]);
+            let seen = match (&mut row.kind, member) {
                 (RowKind::Work(tool), None) => Some(tool.as_mut()),
                 (RowKind::Bundle(members), Some(member)) => match &mut members[member].kind {
                     RowKind::Work(tool) => Some(tool.as_mut()),
@@ -347,10 +355,10 @@ impl Transcript {
                 return Fold::Dirty(self.bundle(top));
             }
         }
-        self.rows.push(Row {
+        self.rows.push(Rc::new(Row {
             id: seq,
             kind: RowKind::Work(Box::new(delta)),
-        });
+        }));
         let index = self.rows.len() - 1;
         Fold::Dirty(self.bundle(index))
     }
@@ -371,7 +379,9 @@ impl Transcript {
             return index;
         }
         let row = self.rows.remove(index);
+        let row = Rc::try_unwrap(row).unwrap_or_else(|row| (*row).clone());
         let last = self.rows.remove(previous);
+        let last = Rc::try_unwrap(last).unwrap_or_else(|last| (*last).clone());
         let members = match last.kind {
             RowKind::Bundle(mut members) => {
                 members.push(row);
@@ -382,10 +392,10 @@ impl Transcript {
         let id = members[0].id;
         self.rows.insert(
             previous,
-            Row {
+            Rc::new(Row {
                 id,
                 kind: RowKind::Bundle(members),
-            },
+            }),
         );
         previous
     }
@@ -475,6 +485,20 @@ impl Transcript {
     }
 }
 
+/// The lines a diff adds and removes, counted once as the diff arrives.
+fn diff_counts(diffs: &[ToolDiff]) -> (usize, usize) {
+    diffs.iter().fold((0, 0), |(more, less), diff| {
+        let old = diff.old.as_deref().unwrap_or_default();
+        similar::TextDiff::from_lines(old, &diff.new)
+            .iter_all_changes()
+            .fold((more, less), |(more, less), change| match change.tag() {
+                similar::ChangeTag::Insert => (more + 1, less),
+                similar::ChangeTag::Delete => (more, less + 1),
+                similar::ChangeTag::Equal => (more, less),
+            })
+    })
+}
+
 /// Keeps every field the update names and leaves the rest as they were.
 fn merge(seen: &mut ToolRow, delta: ToolRow) {
     if delta.name.is_some() {
@@ -496,6 +520,7 @@ fn merge(seen: &mut ToolRow, delta: ToolRow) {
         seen.output = delta.output;
     }
     if !delta.diff.is_empty() {
+        seen.counts = diff_counts(&delta.diff);
         seen.diff = delta.diff;
     }
     if !delta.locations.is_empty() {
@@ -679,6 +704,55 @@ mod tests {
     }
 
     /// A failure that ends the turn stays open: the divider is not the last row a reader reads.
+    /// The additions and removals are counted as the diff arrives, not on every frame.
+    #[test]
+    fn a_diff_is_counted_once_as_it_arrives() {
+        let mut transcript = Transcript::default();
+        let diff = vec![ToolDiff {
+            path: "a.ts".into(),
+            old: Some("one\ntwo".into()),
+            new: "one\nthree".into(),
+        }];
+        transcript.absorb(&event(
+            1,
+            EventKind::Tool {
+                id: "t1".into(),
+                name: None,
+                kind: Some(ToolKind::Edit),
+                title: Some("Edited file".into()),
+                status: Some(ToolStatus::InProgress),
+                input: Some(serde_json::json!({"file_path": "a.ts"})),
+                output: None,
+                diff: diff.clone(),
+                locations: Vec::new(),
+                approval: None,
+            },
+        ));
+        let RowKind::Work(tool) = &transcript.rows[0].kind else {
+            panic!("the edit");
+        };
+        assert_eq!(tool.counts, (1, 1));
+        transcript.absorb(&event(
+            2,
+            EventKind::Tool {
+                id: "t1".into(),
+                name: None,
+                kind: None,
+                title: None,
+                status: Some(ToolStatus::Completed),
+                input: None,
+                output: Some("done".into()),
+                diff: Vec::new(),
+                locations: Vec::new(),
+                approval: None,
+            },
+        ));
+        let RowKind::Work(tool) = &transcript.rows[0].kind else {
+            panic!("the edit");
+        };
+        assert_eq!(tool.counts, (1, 1), "a later delta keeps the count it has");
+    }
+
     #[test]
     fn a_failure_that_ends_the_turn_stays_open() {
         let mut transcript = Transcript::default();

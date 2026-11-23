@@ -2,7 +2,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use gpui_kit::assets::IconName;
-use kg_domain::{Timestamp, ToolDiff, ToolKind};
+use kg_domain::{Timestamp, ToolKind};
 
 use crate::kagan::chat::part::ToolRow;
 
@@ -202,10 +202,7 @@ impl WorkKind {
             }),
             Self::Execute => tool.output.as_deref().and_then(exit_word),
             Self::Edit | Self::Delete | Self::Move => {
-                let (more, less) = tool
-                    .diff
-                    .iter()
-                    .fold((0, 0), |counts, diff| add(counts, diff_counts(diff)));
+                let (more, less) = tool.counts;
                 (more > 0 || less > 0).then(|| format!("+{more} −{less}"))
             }
             Self::Mcp { .. }
@@ -295,22 +292,6 @@ fn exit_word(output: &str) -> Option<String> {
     None
 }
 
-/// The lines a diff adds and removes.
-fn diff_counts(diff: &ToolDiff) -> (usize, usize) {
-    let old = diff.old.as_deref().unwrap_or_default();
-    similar::TextDiff::from_lines(old, &diff.new)
-        .iter_all_changes()
-        .fold((0, 0), |(more, less), change| match change.tag() {
-            similar::ChangeTag::Insert => (more + 1, less),
-            similar::ChangeTag::Delete => (more, less + 1),
-            similar::ChangeTag::Equal => (more, less),
-        })
-}
-
-fn add((more, less): (usize, usize), (delta_more, delta_less): (usize, usize)) -> (usize, usize) {
-    (more + delta_more, less + delta_less)
-}
-
 pub(super) fn plural(count: usize, one: &'static str, many: &'static str) -> &'static str {
     if count == 1 { one } else { many }
 }
@@ -335,6 +316,7 @@ mod tests {
             input: Some(input),
             output: None,
             diff: Vec::new(),
+            counts: (0, 0),
             locations: Vec::new(),
             approval: None,
             from: Timestamp(0),

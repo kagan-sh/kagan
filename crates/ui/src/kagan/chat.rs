@@ -74,12 +74,20 @@ impl ChatView {
         // scroller draws (the jump button, the bottom fade) has to bring the view back.
         let scroller_watch = cx.observe(&scroller, |_, _, cx| cx.notify());
         let events = cx.subscribe(&Workspace::global(cx), |this, _, event, cx| {
-            if let WorkspaceEvent::Event { event, .. } = event
-                && event.thread_id == this.thread
-            {
-                this.absorb(event, cx);
+            // Another thread's events are not this transcript's work: the fold meets the log
+            // once per event that is this thread's, and the state's own changes.
+            let sync = match event {
+                WorkspaceEvent::Event { event, .. } if event.thread_id == this.thread => {
+                    this.absorb(event, cx);
+                    false
+                }
+                WorkspaceEvent::Changed => true,
+                WorkspaceEvent::Waiting(id) | WorkspaceEvent::Finished(id) => *id == this.thread,
+                _ => false,
+            };
+            if sync {
+                this.sync(cx);
             }
-            this.sync(cx);
         });
         let mut this = Self {
             thread,
@@ -517,34 +525,36 @@ fn row_at(
             this.answering(cx) && index + 1 == this.transcript.rows.len()
         })
         .unwrap_or(false);
-    match row.kind.clone() {
+    match &row.kind {
         part::RowKind::Message { role, text, at, .. } => {
             let who = weak
                 .read_with(cx, ChatView::who)
                 .unwrap_or_else(|_| "Agent".into());
             message_view(
                 row.id,
-                role,
-                &text,
-                at,
-                if role == Speaker::User { "You" } else { &who },
+                *role,
+                text,
+                *at,
+                if *role == Speaker::User { "You" } else { &who },
                 cx,
             )
         }
         part::RowKind::Thought(thought) => {
-            work::thought_row(&row, &thought, live, open, weak, window, cx)
+            work::thought_row(&row, thought, live, open, weak, window, cx)
         }
-        part::RowKind::Work(tool) => work::work_row(&row, &tool, false, open, weak, window, cx),
-        part::RowKind::Bundle(members) => work::bundle_row(&row, &members, open, weak, window, cx),
-        part::RowKind::Plan(entries) => work::plan_row(&row, &entries, open, weak, window, cx),
+        part::RowKind::Work(tool) => work::work_row(&row, tool, false, open, weak, window, cx),
+        part::RowKind::Bundle(members) => work::bundle_row(&row, members, open, weak, window, cx),
+        part::RowKind::Plan(entries) => work::plan_row(&row, entries, open, weak, window, cx),
         part::RowKind::Approval(id) => {
             let (title, worktree) = weak
                 .read_with(cx, |this, cx| this.approval_detail(index, cx))
                 .unwrap_or_default();
-            body::approval_card(&id, title.as_deref(), worktree, weak, window, cx)
+            body::approval_card(id, title.as_deref(), worktree, weak, window, cx)
         }
-        part::RowKind::Notice(text) => notice_view(row.id, &text, cx),
-        part::RowKind::Divider { from, to, outcome } => divider_view(row.id, from, to, outcome, cx),
+        part::RowKind::Notice(text) => notice_view(row.id, text, cx),
+        part::RowKind::Divider { from, to, outcome } => {
+            divider_view(row.id, *from, *to, *outcome, cx)
+        }
     }
 }
 
