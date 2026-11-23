@@ -1,5 +1,6 @@
 use std::collections::{HashSet, VecDeque};
 use std::ffi::OsString;
+#[cfg(unix)]
 use std::fs::File;
 use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
@@ -368,7 +369,16 @@ fn blocking(fd: std::os::fd::OwnedFd) -> Result<File, String> {
 /// Windows pipes answer through async-process's blocking thread pool, so the same three threads
 /// wait on them through it, and one reader body still serves both platforms.
 #[cfg(windows)]
-fn pipes(process: &mut Process) -> Result<(impl Input, impl Output, impl Output), String> {
+fn pipes(
+    process: &mut Process,
+) -> Result<
+    (
+        impl Input + 'static,
+        impl Output + 'static,
+        impl Output + 'static,
+    ),
+    String,
+> {
     let child = process.child();
     let (Some(input), Some(output), Some(errors)) =
         (child.stdin.take(), child.stdout.take(), child.stderr.take())
