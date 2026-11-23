@@ -710,7 +710,7 @@ fn ask(cx: &mut TestAppContext, thread: &ThreadId) -> kg_domain::PendingInteract
     pending(cx, thread).remove(0)
 }
 
-fn answer_standalone(cx: &mut TestAppContext, option: &str) {
+pub(super) fn answer_standalone(cx: &mut TestAppContext, option: &str) {
     wait_until(cx, |cx| {
         cx.update(|cx| Workspace::global(cx).read(cx).approvals().count()) == 1
     });

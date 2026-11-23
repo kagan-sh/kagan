@@ -8,6 +8,7 @@ use kg_domain::{
 };
 use serde_json::json;
 
+use super::replace::answer_standalone;
 use crate::kagan::{Kagan, replace_read};
 use crate::tests::kagan::{
     chord, click, label, open_with_plugins_then, plugin_log, shows, value_of, wait_until,
@@ -366,4 +367,45 @@ fn the_window_draws_four_prompt_buttons_at_most(cx: &mut TestAppContext) {
         assert!(shows(cx, window, &drawn), "{drawn} is not drawn");
     }
     assert!(!shows(cx, window, "prompt/dev.test.b/improve0"));
+}
+
+#[gpui_kit::test]
+fn a_chat_choice_from_outside_the_window_asks_the_person(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = opened(cx, BODY);
+    let (_keep, gone) = async_channel::bounded::<()>(1);
+    let from_terminal = |cx: &mut TestAppContext, op: Op| {
+        let gone = gone.clone();
+        cx.update(|cx| Workspace::dispatch_for(op, Some(kg_core::Requester::new(gone)), cx))
+    };
+    let choosing = Op::Plugin(PluginOp::Use {
+        slot: Slot::Chat,
+        id: SWAP.parse().unwrap(),
+        thread_id: None,
+    });
+    let declined = from_terminal(cx, choosing.clone());
+    answer_standalone(cx, "decline");
+    assert!(cx.foreground_executor().block_test(declined).is_err());
+    cx.run_until_parked();
+    assert_eq!(saved(cx, Slot::Chat), serde_json::Value::Null);
+    assert!(!filled(cx, &kagan, Slot::Chat));
+
+    let approved = from_terminal(cx, choosing);
+    answer_standalone(cx, "approve");
+    cx.foreground_executor().block_test(approved).unwrap();
+    click(cx, window, &format!("thread-{CHAT}"));
+    wait_until(cx, |cx| shows(cx, window, "chat-body"));
+    assert!(filled(cx, &kagan, Slot::Chat));
+
+    // `chat kagan` is the built-in, so it asks nothing and draws the transcript again.
+    run(
+        cx,
+        Op::Plugin(PluginOp::Use {
+            slot: Slot::Chat,
+            id: "kagan".parse().unwrap(),
+            thread_id: None,
+        }),
+    )
+    .unwrap();
+    wait_until(cx, |cx| shows(cx, window, "chat-transcript"));
+    assert_eq!(saved(cx, Slot::Chat), json!("kagan"));
 }
