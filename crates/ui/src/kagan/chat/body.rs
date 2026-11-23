@@ -43,12 +43,12 @@ pub(super) fn work_body(
         .read_with(cx, |this, _| this.more_open(row))
         .unwrap_or(false);
     let output = match kind {
-        WorkKind::Execute => terminal_out(tool.output.as_deref(), cx),
+        WorkKind::Execute => terminal_out(row, tool.output.as_deref(), cx),
         WorkKind::Edit | WorkKind::Delete | WorkKind::Move => {
-            diff_out(&tool.diff, tool.output.as_deref(), cx)
+            diff_out(row, &tool.diff, tool.output.as_deref(), cx)
         }
         WorkKind::Think => thought_text(row, tool.output.as_deref().unwrap_or_default(), cx),
-        _ => plain_out(tool.output.as_deref(), cx),
+        _ => plain_out(row, tool.output.as_deref(), cx),
     };
     let args = matches!(
         kind,
@@ -347,13 +347,26 @@ fn value_text(value: &serde_json::Value) -> String {
     }
 }
 
+/// What `kg ui` reads of a body's output: the lines the block shows.
+fn output_fact(lines: &[&str]) -> Facts {
+    Facts {
+        role: gpui_kit::Role::Label,
+        value: Some(lines.join("\n").into()),
+        ..Facts::button("Output")
+    }
+}
+
 /// Plain output in a surface block, the first lines only.
-fn plain_out(output: Option<&str>, cx: &mut App) -> Option<AnyElement> {
+fn plain_out(row: u64, output: Option<&str>, cx: &mut App) -> Option<AnyElement> {
     let output = output?;
-    let lines = output.lines().take(OUTPUT_LINES);
+    let lines: Vec<&str> = output.lines().take(OUTPUT_LINES).collect();
+    let fact = output_fact(&lines);
     Some(
         div()
-            .id(gpui_kit::ElementId::Name("chat-output".into()))
+            .id(gpui_kit::ElementId::Name(
+                format!("chat-output-{row}").into(),
+            ))
+            .ui_observe_as(fact)
             .max_h(px(BODY_MAX))
             .overflow_y_scroll()
             .px(px(8.))
@@ -365,7 +378,7 @@ fn plain_out(output: Option<&str>, cx: &mut App) -> Option<AnyElement> {
             .bg(cx.theme().secondary)
             .font_family(cx.theme().mono_font_family.clone())
             .type_small(cx)
-            .children(lines.map(|line| {
+            .children(lines.into_iter().map(|line| {
                 div()
                     .whitespace_nowrap()
                     .child(SharedString::from(line.to_owned()))
@@ -375,13 +388,18 @@ fn plain_out(output: Option<&str>, cx: &mut App) -> Option<AnyElement> {
 }
 
 /// A command's output in the terminal colours, capped and scrollable.
-fn terminal_out(output: Option<&str>, cx: &mut App) -> Option<AnyElement> {
+fn terminal_out(row: u64, output: Option<&str>, cx: &mut App) -> Option<AnyElement> {
     let output = output?;
     let background = terminal_color(kg_core::Color::Background, cx);
     let foreground = terminal_color(kg_core::Color::Foreground, cx);
+    let lines: Vec<&str> = output.lines().take(OUTPUT_LINES).collect();
+    let fact = output_fact(&lines);
     Some(
         div()
-            .id(gpui_kit::ElementId::Name("chat-terminal".into()))
+            .id(gpui_kit::ElementId::Name(
+                format!("chat-terminal-{row}").into(),
+            ))
+            .ui_observe_as(fact)
             .max_h(px(BODY_MAX))
             .overflow_y_scroll()
             .px(px(8.))
@@ -392,7 +410,7 @@ fn terminal_out(output: Option<&str>, cx: &mut App) -> Option<AnyElement> {
             .text_color(foreground)
             .font_family(cx.theme().mono_font_family.clone())
             .type_small(cx)
-            .children(output.lines().map(|line| {
+            .children(lines.into_iter().map(|line| {
                 div()
                     .whitespace_nowrap()
                     .child(SharedString::from(line.to_owned()))
@@ -418,9 +436,14 @@ fn thought_text(row: u64, text: &str, cx: &mut App) -> Option<AnyElement> {
 }
 
 /// The diff, hunked, with `+` in the added colour and `−` in the failed one.
-fn diff_out(diffs: &[ToolDiff], output: Option<&str>, cx: &mut App) -> Option<AnyElement> {
+fn diff_out(
+    row: u64,
+    diffs: &[ToolDiff],
+    output: Option<&str>,
+    cx: &mut App,
+) -> Option<AnyElement> {
     if diffs.is_empty() {
-        return plain_out(output, cx);
+        return plain_out(row, output, cx);
     }
     let background = terminal_color(kg_core::Color::Background, cx);
     let foreground = terminal_color(kg_core::Color::Foreground, cx);
@@ -464,7 +487,7 @@ fn diff_out(diffs: &[ToolDiff], output: Option<&str>, cx: &mut App) -> Option<An
     }
     Some(
         div()
-            .id(gpui_kit::ElementId::Name("chat-diff".into()))
+            .id(gpui_kit::ElementId::Name(format!("chat-diff-{row}").into()))
             .max_h(px(BODY_MAX))
             .overflow_y_scroll()
             .px(px(8.))

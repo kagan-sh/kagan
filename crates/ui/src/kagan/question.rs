@@ -25,6 +25,8 @@ pub(super) struct Question {
     title: String,
     options: Vec<InteractionOption>,
     asked: Option<PendingInteraction>,
+    /// What the card's element and focus ids start with: one question can be drawn in two places.
+    region: &'static str,
 }
 
 impl Question {
@@ -35,6 +37,7 @@ impl Question {
             title: asked.title.clone(),
             options: asked.options.clone(),
             asked: Some(asked.clone()),
+            region: "",
         }
     }
 
@@ -45,6 +48,15 @@ impl Question {
             title: approval.title.clone(),
             options: approval.options.clone(),
             asked: None,
+            region: "",
+        }
+    }
+
+    /// The same card in the transcript, which keeps its own ids apart from the Questions tab.
+    fn in_the_transcript(asked: &PendingInteraction) -> Self {
+        Self {
+            region: "chat-",
+            ..Self::thread(asked)
         }
     }
 }
@@ -85,7 +97,7 @@ pub(super) fn permission_card(
     cx: &mut App,
 ) -> impl IntoElement {
     body(
-        Question::thread(asked),
+        Question::in_the_transcript(asked),
         None,
         detail,
         None,
@@ -136,6 +148,16 @@ pub(super) fn answer_focus(question: &str, option: &str) -> String {
     format!("answer-focus-{question}-{option}")
 }
 
+impl Question {
+    fn focus_key(&self, option: &str) -> String {
+        answer_focus(&format!("{}{}", self.region, self.id.0), option)
+    }
+
+    fn element(&self, kind: &str, option: &str) -> String {
+        format!("{kind}-{}{}-{option}", self.region, self.id.0)
+    }
+}
+
 fn body(
     question: Question,
     form: Option<AnyElement>,
@@ -151,7 +173,7 @@ fn body(
         let focus = super::tab_stop(
             window,
             cx,
-            ElementId::Name(answer_focus(&question.id.0, &option.id).into()),
+            ElementId::Name(question.focus_key(&option.id).into()),
         );
         let answer_now: Rc<dyn Fn(&mut App)> = match (
             question.asked.clone(),
@@ -178,7 +200,7 @@ fn body(
         buttons.push(
             div()
                 .id(ElementId::Name(
-                    format!("answer-{}-{}", question.id.0, option.id).into(),
+                    question.element("answer", &option.id).into(),
                 ))
                 .ui_observe_as(Facts {
                     focus: Some(focus.clone()),
@@ -212,7 +234,7 @@ fn body(
     }
     v_flex()
         .id(ElementId::Name(
-            format!("question-{}", question.id.0).into(),
+            format!("question-{}{}", question.region, question.id.0).into(),
         ))
         .ui_container()
         .p(px(space(SpaceStep::Md, cx)))

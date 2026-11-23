@@ -211,6 +211,38 @@ fn a_work_row_expands_and_collapses(cx: &mut TestAppContext) {
     wait_until(cx, |cx| shows(cx, window, "chat-work-body-1"));
 }
 
+/// Two open rows draw two bodies, each with an id of its own, so neither hides the other.
+#[gpui_kit::test]
+fn two_open_rows_keep_their_own_bodies(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![
+            tool(
+                "t1",
+                ToolKind::Execute,
+                ToolStatus::Completed,
+                "Ran one",
+                Some(serde_json::json!({"command": "one"})),
+                Some("one"),
+            ),
+            tool(
+                "t2",
+                ToolKind::Execute,
+                ToolStatus::Completed,
+                "Ran two",
+                Some(serde_json::json!({"command": "two"})),
+                Some("two"),
+            ),
+        ],
+    );
+    wait_until(cx, |cx| shows(cx, window, "chat-work-1"));
+    click(cx, window, "chat-work-1");
+    wait_until(cx, |cx| shows(cx, window, "chat-terminal-1"));
+    click(cx, window, "chat-work-2");
+    wait_until(cx, |cx| shows(cx, window, "chat-terminal-2"));
+    assert!(shows(cx, window, "chat-terminal-1"), "the first body stays");
+}
+
 #[gpui_kit::test]
 fn a_failed_command_row_reads_failed(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(
@@ -420,12 +452,8 @@ fn permission_options() -> Vec<InteractionOption> {
 #[gpui_kit::test]
 fn the_approval_card_answers_through_the_question(cx: &mut TestAppContext) {
     let (window, _data) = show_approval(cx, ToolKind::Execute, permission_options(), None);
-    wait_until(cx, |cx| {
-        shows_within(cx, window, "answer-pn_1-allow-once", "chat-approval-pn_1")
-    });
-    wait_until(cx, |cx| {
-        shows_within(cx, window, "answer-pn_1-reject-once", "chat-approval-pn_1")
-    });
+    wait_until(cx, |cx| shows(cx, window, "answer-chat-pn_1-allow-once"));
+    wait_until(cx, |cx| shows(cx, window, "answer-chat-pn_1-reject-once"));
     assert_eq!(
         value_of(cx, window, "chat-work-1").as_deref(),
         Some("collapsed · busy")
@@ -457,23 +485,23 @@ fn the_approval_card_lists_the_reject_first_and_the_filled_option_last(cx: &mut 
     ];
     let (window, _data) = show_approval(cx, ToolKind::Execute, agent_order, None);
     wait_until(cx, |cx| {
-        shows_within(cx, window, "answer-pn_1-allow-always", "chat-approval-pn_1")
+        shows_within(
+            cx,
+            window,
+            "answer-chat-pn_1-allow-always",
+            "chat-approval-pn_1",
+        )
     });
-    // The same card is in the transcript and in Questions, so the search stays in the transcript.
     let left = |cx: &mut TestAppContext, id: &str| {
         cx.update_window(window, |_, window, _| {
-            let id = ElementId::Name(id.into());
-            let scope = ElementId::Name("chat-approval-pn_1".into());
-            match crate::ui_registry::locate(window, &id, Some(&scope)) {
-                crate::ui_registry::Located::One(element) => Some(element.bounds.left()),
-                _ => None,
-            }
+            crate::ui_registry::find(window, &ElementId::Name(id.into()))
+                .map(|element| element.bounds.left())
         })
         .unwrap()
     };
-    let deny = left(cx, "answer-pn_1-reject-once").expect("the deny button");
-    let always = left(cx, "answer-pn_1-allow-always").expect("the always allow button");
-    let once = left(cx, "answer-pn_1-allow-once").expect("the allow once button");
+    let deny = left(cx, "answer-chat-pn_1-reject-once").expect("the deny button");
+    let always = left(cx, "answer-chat-pn_1-allow-always").expect("the always allow button");
+    let once = left(cx, "answer-chat-pn_1-allow-once").expect("the allow once button");
     assert!(
         deny < always && always < once,
         "{deny:?} {always:?} {once:?}"
