@@ -80,11 +80,7 @@ struct Work {
     #[serde(skip_serializing_if = "Option::is_none")]
     args: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    args_truncated: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     output: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    output_truncated: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -165,9 +161,7 @@ fn work(id: String, title: String, status: &'static str) -> Work {
         title,
         status,
         args: None,
-        args_truncated: None,
         output: None,
-        output_truncated: None,
     }
 }
 

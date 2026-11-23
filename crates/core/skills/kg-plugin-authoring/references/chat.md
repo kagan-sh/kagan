@@ -16,7 +16,13 @@ an approval, and it never answers one.
    parts, or approves `kg plugin use chat <id>`.
 
    ```js
+   import { View, div } from "gpui-kit";
+   import { v_flex } from "gpui-base";
+   import { context, onContextChanged } from "kagan/host";
    import { approvals, items, setDraft, waitItem } from "kagan/chat";
+
+   // One row per item; yours to style.
+   const draw = (item) => div().child(item.kind === "work" ? item.work.title : item.text || "");
 
    const current = () => (context().props || {}).threadId;
 
@@ -35,7 +41,7 @@ an approval, and it never answers one.
        });
      }
 
-     render() { return this.rows.map(draw); }
+     render() { return v_flex().gap_2().children(this.rows.map(draw)); }
 
      /** Starts again when another chat comes on screen; the old read stops on its own. */
      read() {
@@ -51,9 +57,17 @@ an approval, and it never answers one.
        });
      }
 
-     /** Adds a page and replaces the open approvals, keeping the last 200 rows. */
+     /** Adds a page, folding a tool call's deltas into one row by `work.id`, and replaces the open
+      * approvals, keeping the last 200 rows. */
      take(page, asked) {
-       this.rows = [...this.rows, ...page].slice(-200);
+       for (const item of page) {
+         const row = item.kind === "work"
+           ? this.rows.find((r) => r.kind === "work" && r.work.id === item.work.id)
+           : undefined;
+         if (row) row.work = { ...row.work, ...item.work, title: item.work.title || row.work.title };
+         else this.rows.push(item);
+       }
+       this.rows = this.rows.slice(-200);
        if (asked) this.waiting = asked;
        this.cx.notify();
      }
