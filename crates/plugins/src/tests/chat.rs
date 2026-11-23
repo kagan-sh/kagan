@@ -202,6 +202,21 @@ fn open_chat(cx: &mut TestAppContext, plugin: Plugin) {
 
 /// `notices` more items after the seeded three, to page past the 100 a call returns by default.
 fn open_chat_with(cx: &mut TestAppContext, plugin: Plugin, notices: usize) {
+    open_seeded(cx, plugin, |store| {
+        store
+            .append_events(
+                &ThreadId(CHAT.into()),
+                Timestamp(2),
+                (0..notices).map(|ix| EventKind::Notice {
+                    severity: NoticeSeverity::Info,
+                    text: format!("more {ix}"),
+                }),
+            )
+            .unwrap();
+    });
+}
+
+fn open_seeded(cx: &mut TestAppContext, plugin: Plugin, extra: impl FnOnce(&mut kg_store::Store)) {
     let data = tempfile::tempdir().unwrap();
     let path = data.path().to_path_buf();
     let mut store = kg_store::Store::open(path.join("kagan.sqlite3")).unwrap();
@@ -263,16 +278,7 @@ fn open_chat_with(cx: &mut TestAppContext, plugin: Plugin, notices: usize) {
             ],
         )
         .unwrap();
-    store
-        .append_events(
-            &ThreadId(CHAT.into()),
-            Timestamp(2),
-            (0..notices).map(|ix| EventKind::Notice {
-                severity: NoticeSeverity::Info,
-                text: format!("more {ix}"),
-            }),
-        )
-        .unwrap();
+    extra(&mut store);
     drop(store);
     open_kept(cx, &path, data, &[plugin]);
 }
@@ -302,7 +308,7 @@ fn ask(cx: &mut TestAppContext, id: &ThreadId) {
 }
 
 #[gpui_kit::test]
-fn items_reads_a_chats_log_and_the_approval_waiting_on_it(cx: &mut TestAppContext) {
+fn items_reads_a_chats_log_and_approvals_are_their_own_read(cx: &mut TestAppContext) {
     let (_dir, plugin) = chat_plugin();
     open_chat(cx, plugin);
     ask(cx, &ThreadId(CHAT.into()));
@@ -313,28 +319,24 @@ fn items_reads_a_chats_log_and_the_approval_waiting_on_it(cx: &mut TestAppContex
         .iter()
         .map(|item| item["kind"].as_str().unwrap())
         .collect();
-    assert_eq!(
-        kinds,
-        ["message", "notice", "turn", "approval"],
-        "{items:?}"
-    );
+    assert_eq!(kinds, ["message", "notice", "turn"], "{items:?}");
     assert_eq!(items[0]["threadId"], CHAT);
-    let approval = &items[3]["approval"];
-    assert_eq!(approval["title"], "Ship it?");
-    assert_eq!(approval["options"][0]["label"], "Allow");
-    assert_eq!(approval["options"][0]["role"], Value::Null);
-    assert!(items[3]["seq"].as_u64().unwrap() >= items[2]["seq"].as_u64().unwrap());
 
-    // The newest page is the default, and the approval is still last.
+    // An approval is not a log item, whichever page the caller reads.
     let newest = forward(cx, "chat", "items", &json!([CHAT])).unwrap();
     let newest = newest.as_array().unwrap();
-    assert_eq!(newest[newest.len() - 1]["kind"], "approval");
-
-    // A page past the log still carries it, or a plugin that paged to the end never learns of it.
+    assert_eq!(newest[0]["kind"], "turn", "{newest:?}");
     let past = forward(cx, "chat", "items", &json!([CHAT, { "afterSeq": 99 }])).unwrap();
-    let past = past.as_array().unwrap();
-    assert_eq!(past.len(), 1, "{past:?}");
-    assert_eq!(past[0]["kind"], "approval");
+    assert_eq!(past, json!([]));
+
+    let asked = forward(cx, "chat", "approvals", &json!([CHAT])).unwrap();
+    let asked = asked.as_array().unwrap();
+    assert_eq!(asked.len(), 1, "{asked:?}");
+    assert_eq!(asked[0]["title"], "Ship it?");
+    assert_eq!(asked[0]["options"][0]["label"], "Allow");
+    assert_eq!(asked[0]["options"][0]["role"], Value::Null);
+    assert!(asked[0]["interactionId"].is_string(), "{asked:?}");
+    assert!(asked[0].get("seq").is_none(), "{asked:?}");
 }
 
 #[gpui_kit::test]
@@ -350,6 +352,9 @@ fn items_refuses_more_than_its_limit_and_a_thread_that_is_not_a_chat(cx: &mut Te
         terminal.contains("is not a chat; its transcript is its terminal"),
         "{terminal}"
     );
+
+    let asked = forward(cx, "chat", "approvals", &json!([thread().0])).unwrap_err();
+    assert!(asked.contains("is not a chat"), "{asked}");
 
     let sent = forward(cx, "chat", "send", &json!([thread().0, "hello"])).unwrap_err();
     assert!(sent.contains("is not a chat"), "{sent}");
@@ -372,6 +377,46 @@ fn a_chat_call_leaves_out_a_hidden_or_archived_thread(cx: &mut TestAppContext) {
         archived.contains("is not in kagan's thread list"),
         "{archived}"
     );
+}
+
+#[test]
+fn a_wait_runs_for_a_minute_at_most() {
+    assert_eq!(
+        crate::chat::wait_duration(u64::MAX),
+        Duration::from_millis(60_000)
+    );
+    assert_eq!(crate::chat::wait_duration(5), Duration::from_millis(5));
+}
+
+#[gpui_kit::test]
+fn wait_item_reads_past_a_full_batch_of_events_that_are_not_items(cx: &mut TestAppContext) {
+    let (_dir, plugin) = chat_plugin();
+    open_seeded(cx, plugin, |store| {
+        store
+            .append_events(
+                &ThreadId(CHAT.into()),
+                Timestamp(2),
+                (0..250).map(|_| EventKind::Idle),
+            )
+            .unwrap();
+        store
+            .append_events(
+                &ThreadId(CHAT.into()),
+                Timestamp(3),
+                [message("after the batch")],
+            )
+            .unwrap();
+    });
+
+    let item = forward(
+        cx,
+        "chat",
+        "waitItem",
+        &json!([CHAT, { "afterSeq": 4, "timeoutMs": 50 }]),
+    )
+    .unwrap();
+    assert_eq!(item["kind"], "message", "{item:?}");
+    assert_eq!(item["text"], "after the batch");
 }
 
 #[gpui_kit::test]

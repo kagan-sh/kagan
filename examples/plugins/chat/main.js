@@ -3,7 +3,7 @@ import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { Markdown } from "gpui-component";
 import { context, onContextChanged } from "kagan/host";
-import { draft, items, setDraft, waitItem } from "kagan/chat";
+import { approvals, draft, items, setDraft, waitItem } from "kagan/chat";
 import { fail, next, reply } from "kagan/jobs";
 
 export default class Plugin extends View {
@@ -28,12 +28,13 @@ export default class Plugin extends View {
   }
 }
 
-/** The transcript body. The prompt box, Send, Cancel and approvals stay kagan's. */
+/** The transcript body. The prompt box, Send, Cancel and the approvals stay kagan's. */
 export class Transcript extends View {
   init(_props, cx) {
     this.cx = cx;
     this.thread = null;
     this.rows = [];
+    this.waiting = [];
     this.read(context());
     cx.spawn(async () => {
       for (;;) this.read(await onContextChanged());
@@ -46,8 +47,9 @@ export class Transcript extends View {
     if (!id || id === this.thread) return;
     this.thread = id;
     this.rows = [];
+    this.waiting = [];
     this.follow(id).catch((error) => {
-      this.rows = [{ kind: "notice", text: String(error) }];
+      this.rows = [{ kind: "notice", severity: "error", text: String(error) }];
       this.cx.notify();
     });
   }
@@ -56,10 +58,15 @@ export class Transcript extends View {
   async follow(id) {
     let after = 0;
     while (this.thread === id) {
-      const page = await items(id, { afterSeq: after, order: "asc" });
+      const [page, asked] = await Promise.all([
+        items(id, { afterSeq: after, order: "asc" }),
+        approvals(id),
+      ]);
+      if (this.thread !== id) return;
       for (const item of page) after = Math.max(after, item.seq);
-      if (page.length > 0) this.push(page);
+      this.push(page, asked);
       const item = await waitItem(id, { afterSeq: after, timeoutMs: 30_000 });
+      if (this.thread !== id) return;
       if (item) {
         after = Math.max(after, item.seq);
         this.push([item]);
@@ -67,8 +74,18 @@ export class Transcript extends View {
     }
   }
 
-  push(rows) {
-    this.rows = [...this.rows, ...rows].slice(-200);
+  /** Items are deltas: a tool call's start and end fold into one row by `work.id`. */
+  push(page, asked) {
+    for (const item of page) {
+      const row =
+        item.kind === "work"
+          ? this.rows.find((row) => row.kind === "work" && row.work.id === item.work.id)
+          : undefined;
+      if (row) row.work = { ...row.work, ...item.work, title: item.work.title || row.work.title };
+      else this.rows.push(item);
+    }
+    this.rows = this.rows.slice(-200);
+    if (asked) this.waiting = asked;
     this.cx.notify();
   }
 
@@ -93,6 +110,12 @@ export class Transcript extends View {
       if (item.kind === "turn") return div().h(1).bg(colors.border);
       return div();
     });
+    // The host draws the approval buttons; the rows only say that something waits.
+    if (this.waiting.length > 0) {
+      rows.push(
+        div().id("chat-waiting").text_size(12).text_color(colors.muted_foreground).child("Waiting on you"),
+      );
+    }
     return v_flex().size_full().gap_2().children(rows);
   }
 }

@@ -231,8 +231,8 @@ impl HostUi {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn push_waiter(&mut self, plugin: PluginId, sender: Sender<HostValue>) {
+    #[cfg(any(test, feature = "test"))]
+    pub fn push_waiter(&mut self, plugin: PluginId, sender: Sender<HostValue>) {
         self.waiting.entry(plugin).or_default().push(sender);
     }
 
@@ -382,6 +382,7 @@ fn prompt(
     let thread = ThreadId(arguments.string(0)?.to_owned());
     with_app(|cx| crate::chat::chat(&thread, cx))??;
     let (reply, replied) = async_channel::bounded(1);
+    let writing = text.is_some();
     app(|ui, cx| {
         let thread = thread.clone();
         ui.update(cx, |_, cx| {
@@ -399,7 +400,11 @@ fn prompt(
             .await
             .map_err(|_| HostError::new("no kagan window is open"))?
             .map_err(HostError::new)?;
-        Ok(HostValue::Str(text))
+        Ok(if writing {
+            HostValue::Null
+        } else {
+            HostValue::Str(text)
+        })
     })
 }
 

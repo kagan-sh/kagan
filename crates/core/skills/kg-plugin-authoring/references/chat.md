@@ -16,43 +16,75 @@ an approval, and it never answers one.
    parts, or approves `kg plugin use chat <id>`.
 
    ```js
-   import { draft, items, setDraft, waitItem } from "kagan/chat";
+   import { approvals, items, setDraft, waitItem } from "kagan/chat";
+
+   const current = () => (context().props || {}).threadId;
 
    export class Transcript extends View {
      init(_props, cx) {
+       this.cx = cx;
        this.rows = [];
+       this.waiting = [];
+       this.thread = null;
+       this.read();
        cx.spawn(async () => {
-         let value = context();
          for (;;) {
-           const id = value && value.threadId;
-           if (id) await follow(id, (page) => { this.rows = page; cx.notify(); });
-           value = await onContextChanged();
+           await onContextChanged();
+           this.read();
          }
        });
      }
 
-     render() { return v_flex().gap_2().children(this.rows.map(draw)); }
+     render() { return this.rows.map(draw); }
+
+     /** Starts again when another chat comes on screen; the old read stops on its own. */
+     read() {
+       const id = current();
+       if (!id || id === this.thread) return;
+       this.thread = id;
+       this.rows = [];
+       this.waiting = [];
+       this.cx.notify();
+       follow(id, this).catch((error) => {
+         this.rows = [{ kind: "notice", severity: "error", text: String(error) }];
+         this.cx.notify();
+       });
+     }
+
+     /** Adds a page and replaces the open approvals, keeping the last 200 rows. */
+     take(page, asked) {
+       this.rows = [...this.rows, ...page].slice(-200);
+       if (asked) this.waiting = asked;
+       this.cx.notify();
+     }
    }
 
-   // Read the log forward, then wait for the next item.
-   async function follow(id, show) {
+   // Read the log forward, then wait for the next item, while that chat is the one on screen.
+   async function follow(id, view) {
      let after = 0;
-     for (;;) {
-       const page = await items(id, { afterSeq: after, order: "asc" });
+     while (current() === id) {
+       const [page, asked] = await Promise.all([
+         items(id, { afterSeq: after, order: "asc" }),
+         approvals(id),
+       ]);
+       if (current() !== id) return;
        for (const item of page) after = Math.max(after, item.seq);
-       if (page.length > 0) show(page);
+       view.take(page, asked);
        const item = await waitItem(id, { afterSeq: after, timeoutMs: 30_000 });
-       if (item) { after = Math.max(after, item.seq); show([item]); }
+       if (current() !== id) return;
+       if (item) { after = Math.max(after, item.seq); view.take([item]); }
      }
    }
    ```
 
    An item is `{ seq, threadId, at }` plus one `kind`: `message` `{ role, text, messageId }`, where
-   chunks share one `messageId`; `work` `{ work: { id, tool, title, status, args?, output? } }` for
-   one tool call; `notice` `{ severity, text }`; `turn` `{ outcome, error? }`; and `approval`
-   `{ approval: { interactionId, title, options } }`. `thought` and `plan` are typed and map when the
-   transcript draws them. The open approvals and questions follow every page, so draw them at the
-   end, where the turn waits, and keep them by `interactionId`.
+   chunks share one `messageId`; `work` `{ work: { id, tool, title, status, args?, output? } }`;
+   `notice` `{ severity, text }`; and `turn` `{ outcome, error? }`. An item is one event, not one
+   row: one tool call is a `work` item that starts it and another that ends it, with `title: ""` on
+   the end, so fold them by `work.id`, where the last non-empty title and the last status win.
+   `thought` and `plan` land with the events that fill them. The open approvals and questions are
+   `approvals(id)` — `{ interactionId, title, options }[]`, oldest first, never paged — and the host
+   draws and answers them, so a plugin keeps them by `interactionId` and never draws the buttons.
 
    | want | do |
    |---|---|
@@ -62,13 +94,14 @@ an approval, and it never answers one.
    | a button on the thread's title | `"header": true` |
    | a new thread | `threads.spawn`, which needs `"areas": ["threads"]` |
 
-   Caps, all refused with a sentence that names the number: 200 items a call, 256 KiB a page, 1 MiB
-   a prompt, 1 MiB a draft write, 50 ms a render, 16 ms a slow row. `send(id, text)` is exactly
+   Caps, all refused with a sentence that names the number: 200 items a call, 256 KiB a page (or one
+   item over it, alone), 1 MiB a prompt, 1 MiB a draft write, 60 s a wait, 50 ms a render, 16 ms a
+   slow row. `send(id, text)` is exactly
    `kg thread input`: it is refused while a turn is open or the agent is not running. `cancel(id)` is
    exactly `kg thread cancel`. `draft(id)` reads the prompt box and `setDraft(id, text)` replaces it,
    only for the chat on screen.
 
-   Safety: draw agent text with `Markdown`, never a remote image and never an http link the agent
-   chose, keep no dialog or popup in a replacement, send heavy work to `process.run`, and never
+   Safety: draw agent text with `Markdown`, never a remote image and only an http or https link,
+   keep no dialog or popup in a replacement, send heavy work to `process.run`, and never
    answer an approval or a question. Read `references/manifest.md` for the rest of the manifest and
    `references/ui-controls.md` for the components.

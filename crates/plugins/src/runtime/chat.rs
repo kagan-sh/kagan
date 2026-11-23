@@ -5,7 +5,7 @@ use gpui_shell::{HostArguments, HostError, HostModule, HostValue};
 use kg_core::{Workspace, WorkspaceEvent};
 use kg_domain::{
     Event, EventKind, InteractionOption, Link, NoticeSeverity, Op, OpResult, OptionRole, Order,
-    PendingInteractionId, Role, ThreadId, ThreadOp, Timestamp, TurnOutcome,
+    PendingInteraction, PendingInteractionId, Role, ThreadId, ThreadOp, Timestamp, TurnOutcome,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -13,24 +13,26 @@ use serde_json::Value;
 use crate::area::{argument, awaited, dispatch, error, from_host, to_host, with_app};
 use crate::threads::shown_thread;
 
-/// A call's default and most items, and the page's byte ceiling. All three are in the d.ts.
+/// A call's default and most items, the page's byte ceiling, and the longest a wait runs. All four
+/// are in the d.ts.
 const DEFAULT: u32 = 100;
 const MOST: u32 = 200;
 const PAGE: usize = 256 * 1024;
+const WAIT: u64 = 60_000;
 
 pub(crate) fn module() -> HostModule {
     HostModule::new("kagan/chat")
         .declarations(include_str!("chat.d.ts"))
         .async_function("items", items)
         .async_function("waitItem", wait_item)
+        .async_function("approvals", approvals)
         .async_function("send", send)
         .async_function("cancel", cancel)
         .async_function("draft", crate::ui_host::draft)
         .async_function("setDraft", crate::ui_host::set_draft)
 }
 
-/// One item of a transcript, as a plugin reads it. `thought` and `plan` are typed here and filled
-/// once their events exist.
+/// One item of a transcript, as a plugin reads it.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Item {
@@ -41,11 +43,6 @@ pub(crate) struct Item {
     body: Body,
 }
 
-// `thought` and `plan` are typed for the wire before their events exist; the test below pins them.
-#[allow(
-    dead_code,
-    reason = "typed for the wire; slice 2 writes these two events"
-)]
 #[derive(Serialize)]
 #[serde(
     tag = "kind",
@@ -58,10 +55,6 @@ enum Body {
         text: String,
         message_id: Option<String>,
     },
-    Thought {
-        text: String,
-        done: bool,
-    },
     Work {
         work: Work,
     },
@@ -73,12 +66,6 @@ enum Body {
         outcome: TurnOutcome,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
-    },
-    Approval {
-        approval: Approval,
-    },
-    Plan {
-        plan: Plan,
     },
 }
 
@@ -114,17 +101,6 @@ struct OptionShown {
     id: String,
     label: String,
     role: Option<OptionRole>,
-}
-
-#[derive(Serialize)]
-struct Plan {
-    steps: Vec<Step>,
-}
-
-#[derive(Serialize)]
-struct Step {
-    step: String,
-    status: &'static str,
 }
 
 /// One logged event as a transcript item, or nothing when the transcript does not draw it.
@@ -256,9 +232,9 @@ fn items(
         return Err(HostError::new(format!("at most {MOST} items a call")));
     }
     let order = order.unwrap_or(Order::Desc);
-    let (logged, asked) = with_app(|cx| {
+    let logged = with_app(|cx| {
         chat(&id, cx)?;
-        let logged = awaited(
+        Ok::<_, HostError>(awaited(
             Workspace::dispatch(
                 Op::Thread(ThreadOp::Events {
                     id: id.clone(),
@@ -269,42 +245,46 @@ fn items(
                 cx,
             ),
             cx,
-        );
-        let asked = awaited(
-            Workspace::dispatch(Op::Thread(ThreadOp::Interactions { id: id.clone() }), cx),
-            cx,
-        );
-        Ok::<_, HostError>((logged, asked))
+        ))
     })??;
     Ok(async move {
         let OpResult::Events(events) = logged.await?.map_err(error)? else {
             return Err(HostError::new("the thread's events did not read as events"));
         };
-        let mut shown: Vec<Item> = events.iter().filter_map(item).collect();
-        // An approval is drawn after every item, so it cannot hide behind an `afterSeq` the plugin
-        // already passed. With no item on the page, the asked cursor is the log's newest.
-        let seq = shown
-            .iter()
-            .map(|item| item.seq)
-            .max()
-            .or(after_seq)
-            .unwrap_or(0);
-        if let Ok(OpResult::Interactions(pending)) = asked.await.map_err(error)? {
-            shown.extend(pending.into_iter().map(|interaction| Item {
-                seq,
-                thread_id: interaction.thread_id,
-                at: interaction.created_at,
-                body: Body::Approval {
-                    approval: Approval {
-                        interaction_id: interaction.id,
-                        title: interaction.title,
-                        options: interaction.options.into_iter().map(option).collect(),
-                    },
-                },
-            }));
-        }
+        let shown: Vec<Item> = events.iter().filter_map(item).collect();
         Ok(to_host(page(shown).map_err(error)?))
     })
+}
+
+/// The open approvals and questions of a chat, oldest first, over the same read the host draws from.
+fn approvals(
+    arguments: &HostArguments,
+) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
+    let id = ThreadId(arguments.string(0)?.to_owned());
+    let asked = with_app(|cx| {
+        chat(&id, cx)?;
+        Ok::<_, HostError>(awaited(
+            Workspace::dispatch(Op::Thread(ThreadOp::Interactions { id: id.clone() }), cx),
+            cx,
+        ))
+    })??;
+    Ok(async move {
+        let OpResult::Interactions(pending) = asked.await.map_err(error)?.map_err(error)? else {
+            return Err(HostError::new(
+                "the thread's approvals did not read as approvals",
+            ));
+        };
+        let shown: Vec<Approval> = pending.into_iter().map(approval).collect();
+        Ok(to_host(serde_json::to_value(shown).map_err(error)?))
+    })
+}
+
+fn approval(interaction: PendingInteraction) -> Approval {
+    Approval {
+        interaction_id: interaction.id,
+        title: interaction.title,
+        options: interaction.options.into_iter().map(option).collect(),
+    }
 }
 
 fn option(option: InteractionOption) -> OptionShown {
@@ -335,7 +315,7 @@ fn wait_item(
     } = argument(arguments, 1)?;
     let wait = with_app(|cx| {
         chat(&id, cx)?;
-        let task = wait_in(id.clone(), after_seq, Duration::from_millis(timeout_ms), cx);
+        let task = wait_in(id.clone(), after_seq, wait_duration(timeout_ms), cx);
         Ok::<_, HostError>(awaited(task, cx))
     })??;
     Ok(async move {
@@ -349,6 +329,10 @@ fn wait_item(
 enum Wake {
     Logged,
     Asked,
+}
+
+pub(crate) fn wait_duration(timeout_ms: u64) -> Duration {
+    Duration::from_millis(timeout_ms.min(WAIT))
 }
 
 fn wait_in(
@@ -388,11 +372,16 @@ fn wait_in(
             let OpResult::Events(events) = read.await.map_err(error)? else {
                 return Err(HostError::new("the thread's events did not read as events"));
             };
+            let full = events.len() == MOST as usize;
             for event in events {
                 after = event.seq;
                 if let Some(item) = item(&event) {
                     return Ok(Some(item));
                 }
+            }
+            // A full batch may be hiding the next item behind it, so read again before waiting.
+            if full {
+                continue;
             }
             let next = receiver.recv();
             futures::pin_mut!(next);
@@ -427,7 +416,3 @@ fn cancel(
     with_app(|cx| chat(&id, cx))??;
     dispatch(Op::Thread(ThreadOp::Cancel { id }))
 }
-
-#[cfg(test)]
-#[path = "chat_test.rs"]
-mod tests;
