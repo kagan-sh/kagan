@@ -102,7 +102,7 @@ fn parallel_calls_keep_a_row_each_until_both_finish() {
 }
 
 /// ACP sends a call in progress, then the update that completes it: the row is created
-/// unfinshed, so it only becomes foldable at the update.
+/// unfinished, so it only becomes foldable at the update.
 #[test]
 fn reads_that_finish_after_they_start_fold_into_one_bundle() {
     let mut transcript = Transcript::default();
