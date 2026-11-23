@@ -486,6 +486,66 @@ async fn acp_agent_killed_mid_turn_is_a_failure_not_a_finish(cx: &mut TestAppCon
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Error);
 }
 
+#[gpui_kit::test]
+async fn acp_stop_while_starting_ends_the_agent(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_hang"], &[]);
+    std::fs::write(agent.path("modes"), "hang_init\n").unwrap();
+    let OpResult::Thread(started) = op(fixture.run_acp(&agent.program()), cx).await.unwrap() else {
+        panic!("thread")
+    };
+    let pid = agent.pid("pid", cx);
+    assert_eq!(thread(&started.id, cx).await.status, ThreadStatus::Starting);
+    op(
+        Op::Thread(ThreadOp::Stop {
+            id: started.id.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    wait_for_status(&started.id, ThreadStatus::Idle, cx).await;
+    assert!(gone(pid), "the agent ends with the stop");
+    let kinds = kinds_of(&started.id, cx).await;
+    assert!(!kinds.contains(&EventKind::Started), "{kinds:?}");
+}
+
+#[gpui_kit::test]
+async fn acp_stop_during_an_open_turn_asks_for_nothing(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_stop"], &[holding()]);
+    let id = started(&fixture, &agent, cx).await;
+    let pid = agent.pid("pid", cx);
+    send(&id, "one", cx).await;
+    wait_for(
+        &id,
+        |kinds| count(kinds, |kind| matches!(kind, EventKind::TurnStarted)) == 1,
+        cx,
+    )
+    .await;
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    let kinds = wait_for(&id, |kinds| kinds.contains(&EventKind::Idle), cx).await;
+    assert!(kinds.contains(&EventKind::Stopped), "{kinds:?}");
+    assert!(ended(&kinds, TurnOutcome::Interrupted), "{kinds:?}");
+    assert!(
+        !agent.path("cancelled").exists(),
+        "Stop ends the agent; it does not ask it to cancel first"
+    );
+    assert!(gone(pid), "the agent ends with the thread");
+    let idle = kinds
+        .iter()
+        .position(|kind| matches!(kind, EventKind::Idle))
+        .unwrap();
+    assert_eq!(
+        idle,
+        kinds.len() - 1,
+        "nothing is written after idle: {kinds:?}"
+    );
+    assert_eq!(thread(&id, cx).await.status, ThreadStatus::Idle);
+}
+
 async fn send(id: &ThreadId, text: &str, cx: &mut TestAppContext) {
     op(
         Op::Thread(ThreadOp::Input {
@@ -544,6 +604,7 @@ fn fake_agent() {
     std::fs::write(dir.join("pid"), std::process::id().to_string()).unwrap();
     let modes = std::fs::read_to_string(dir.join("modes")).unwrap_or_default();
     let fail_init = modes.lines().any(|mode| mode == "fail_init");
+    let hang_init = modes.lines().any(|mode| mode == "hang_init");
     let mut open: Option<(Value, Value)> = None;
     let mut session = String::new();
     let mut out = std::io::stdout();
@@ -559,6 +620,9 @@ fn fake_agent() {
                 if fail_init {
                     eprintln!("the agent cannot start");
                     std::process::exit(3);
+                }
+                if hang_init {
+                    continue;
                 }
                 write(
                     &mut out,

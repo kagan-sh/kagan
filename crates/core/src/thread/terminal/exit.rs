@@ -9,6 +9,7 @@ use crate::host::database::Result;
 use crate::thread::finish::{End, ended};
 use crate::workspace::closed;
 
+use super::Run;
 use super::Shown;
 use super::agent::Start;
 use super::screen::keep_screen;
@@ -27,16 +28,24 @@ pub(crate) fn request_stop(workspace: &mut Workspace, id: &ThreadId) -> bool {
     let Some(run) = workspace.runs.get_mut(id) else {
         return false;
     };
-    if let Some(acp) = run.acp.take() {
-        acp.halt();
-        run.stopping.get_or_insert(StopReason::Stop);
+    if !release(run) {
+        return false;
+    }
+    run.stopping.get_or_insert(StopReason::Stop);
+    true
+}
+
+/// Ends what a run owns: the agent's connection and the task that reads it, or its terminal.
+/// Returns whether there was a program to end.
+fn release(run: &mut Run) -> bool {
+    if run.acp.take().is_some() {
+        run.acp_task = None;
         return true;
     }
     let Some(Shown::Running(terminal)) = &run.shown else {
         return false;
     };
     terminal.stop();
-    run.stopping.get_or_insert(StopReason::Stop);
     true
 }
 /// Runs a stopped or recovered thread's program again, in the folder it had.

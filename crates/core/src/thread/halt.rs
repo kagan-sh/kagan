@@ -66,6 +66,8 @@ pub(crate) async fn stop(
     if starting {
         this.update(cx, |workspace, _| {
             workspace.tasks.remove(&thread_id);
+            // The program is running even though the thread is not: Stop ends it here too.
+            super::terminal::request_stop(workspace, &thread_id);
         })
         .map_err(closed)?;
         close_open_turn(this, thread, &thread_id, turn_open, cx).await?;

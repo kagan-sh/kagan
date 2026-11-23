@@ -112,7 +112,7 @@ fn step(thread: &mut Thread, signal: Signal, now: Instant) -> Option<Change> {
     change
 }
 
-pub(crate) fn begin_run(workspace: &Workspace, id: &ThreadId, source: Source, cx: &mut App) {
+pub(crate) fn begin_run(workspace: &mut Workspace, id: &ThreadId, source: Source, cx: &mut App) {
     let Some(thread) = workspace.threads.get(id) else {
         return;
     };
@@ -120,6 +120,8 @@ pub(crate) fn begin_run(workspace: &Workspace, id: &ThreadId, source: Source, cx
         thread.turn = TurnState::new(source);
         thread.busy = false;
     });
+    // A fresh start is not the stop that ended the last one.
+    workspace.run_mut(id).stopping = None;
 }
 
 // Only a known agent's line can start a quiet turn, so a shell never reports one.

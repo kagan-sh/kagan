@@ -38,11 +38,6 @@ impl Acp {
     fn send(&self, command: AcpCommand) -> bool {
         self.commands.try_send(command).is_ok()
     }
-
-    /// Asks the agent to end its reply, then drops the connection, and the process tree with it.
-    pub(crate) fn halt(self) {
-        self.send(AcpCommand::Cancel);
-    }
 }
 
 /// Starts the agent as its own ACP connection, then lets it name the session.
@@ -252,6 +247,11 @@ async fn turn_done(
     cx: &mut AsyncApp,
 ) -> Result<()> {
     let thread = crate::thread::thread(this, id, cx)?;
+    // A response that arrives after Stop or the end must not write a turn or a wait on a stopped
+    // thread.
+    if thread.read_with(cx, |thread, _| thread.record.status) != ThreadStatus::Active {
+        return Ok(());
+    }
     let now = cx.background_executor().now();
     thread.update(cx, |thread, cx| {
         thread.turn.apply(Signal::PromptDone, now);
