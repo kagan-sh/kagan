@@ -578,9 +578,6 @@ async fn serve(
         };
         match step {
             Step::Update(Ok(message)) => heard(*message, events, &mut unread).await,
-            // The update stream closes when the agent's output ends, and the commands when the
-            // thread does. Either way the connection is over, not failed: the exit and the tail
-            // say how it ended.
             Step::Command(AcpCommand::Prompt(text)) => session
                 .send_prompt(text)
                 .map_err(|error| error.to_string())?,
@@ -588,6 +585,9 @@ async fn serve(
                 .connection()
                 .send_notification_to(Agent, CancelNotification::new(session.session_id().clone()))
                 .map_err(|error| error.to_string())?,
+            // The update stream closes when the agent's output ends, and the commands when the
+            // thread does. Either way the connection is over, not failed: the exit and the tail
+            // say how it ended.
             Step::Update(Err(_)) | Step::Closed => return Ok(()),
         }
     }

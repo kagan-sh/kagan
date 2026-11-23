@@ -44,7 +44,7 @@ impl Acp {
 
     /// Closes the commands, for a test that needs a prompt refused while the run still holds the
     /// connection.
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn close(&self) {
         self.commands.close();
     }

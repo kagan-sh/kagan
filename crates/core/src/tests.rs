@@ -128,6 +128,7 @@ impl Fixture {
         }
     }
 
+    #[cfg(unix)]
     fn run_acp(&self, program: &str) -> Op {
         let Op::Thread(ThreadOp::Run(mut run)) = self.run(program) else {
             panic!("a run")
