@@ -2376,7 +2376,7 @@ Usage: kg plugin use [OPTIONS] <SLOT> <ID>
 
 Arguments:
   <SLOT>
-          [possible values: threads, review]
+          [possible values: threads, review, chat]
 
   <ID>
           A plugin id, or `kagan`
