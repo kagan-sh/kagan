@@ -592,6 +592,32 @@ fn a_body_leads_to_where_it_points(cx: &mut TestAppContext) {
     wait_until(cx, |cx| shows(cx, window, "chat-link-review-3"));
 }
 
+/// An MCP row names the server and the tool once, in the label, and the agent's own title beside
+/// it rather than the tool id a second time.
+#[gpui_kit::test]
+fn an_mcp_row_names_its_tool_once(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![EventKind::Tool {
+            id: "t1".into(),
+            name: Some("mcp__github__list_issues".into()),
+            kind: Some(ToolKind::Other),
+            title: Some("List issues".into()),
+            status: Some(ToolStatus::Completed),
+            input: Some(serde_json::json!({"state": "open"})),
+            output: None,
+            diff: Vec::new(),
+            locations: Vec::new(),
+            approval: None,
+        }],
+    );
+    wait_until(cx, |cx| shows(cx, window, "chat-work-1"));
+    assert_eq!(
+        super::label(cx, window, "chat-work-1"),
+        "Called github.list_issues List issues"
+    );
+}
+
 #[gpui_kit::test]
 fn the_approval_card_answers_through_the_question(cx: &mut TestAppContext) {
     let (window, _data) = show_approval(cx, ToolKind::Execute, permission_options(), None);

@@ -183,9 +183,8 @@ impl WorkKind {
                     .map(|diff| file_name(&diff.path).to_owned())
             }),
             Self::Fetch => probe(&["url"]),
-            Self::Mcp { tool: called, .. } => Some(called.clone()),
             Self::Skill { name } => Some(name.clone()),
-            Self::Think | Self::Other { .. } => None,
+            Self::Mcp { .. } | Self::Think | Self::Other { .. } => None,
         };
         named
             .or_else(|| tool.title.clone())

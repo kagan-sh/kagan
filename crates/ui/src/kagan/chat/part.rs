@@ -419,7 +419,6 @@ impl Transcript {
         let last = self.frontier() == Some(index);
         let failed = self.last_outcome == Some(TurnOutcome::Failed);
         match &row.kind {
-            RowKind::Plan(_) => last && answering,
             RowKind::Thought(thought) => last && answering && !thought.text.is_empty(),
             RowKind::Bundle(_) => last && answering,
             RowKind::Work(tool) => {
@@ -886,6 +885,10 @@ mod tests {
             unreachable!()
         };
         assert_eq!(entries.len(), 2);
+        assert!(
+            !transcript.is_open(0, true),
+            "a plan has nothing live to show, so work stays collapsed"
+        );
     }
 
     #[test]
