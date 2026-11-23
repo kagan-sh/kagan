@@ -32,7 +32,6 @@ const NOT_A_TERMINAL: &str =
 pub(crate) struct Acp {
     commands: async_channel::Sender<AcpCommand>,
     _connection: Task<()>,
-    _consumer: Task<()>,
 }
 
 impl Acp {
@@ -84,11 +83,12 @@ pub(super) async fn start(
     };
     this.update(cx, |workspace, cx| {
         crate::thread::terminal::begin_run(workspace, &record.id, Source::Acp, cx);
-        workspace.run_mut(&record.id).acp = Some(Acp {
+        let run = workspace.run_mut(&record.id);
+        run.acp = Some(Acp {
             commands,
             _connection: connection,
-            _consumer: consumer,
         });
+        run.acp_task = Some(consumer);
     })
     .map_err(closed)?;
     // Slice 1 starts a new session rather than loading the earlier one, so the person is told.
@@ -187,7 +187,15 @@ async fn consume(
                 Workspace::events(this, id.clone(), kinds, cx).await
             }
             AcpEvent::TurnDone { outcome, error } => turn_done(this, &id, outcome, error, cx).await,
-            AcpEvent::Ended { code, error } => ended(this, id.clone(), code, error, cx).await,
+            AcpEvent::Ended { code, error } => {
+                // The agent is gone: the next prompt starts it again rather than writing to a
+                // connection that has ended.
+                let cleared = this
+                    .update(cx, |workspace, _| workspace.run_mut(&id).acp = None)
+                    .map_err(|error| OpError::Invalid(error.to_string()));
+                let recorded = ended(this, id.clone(), code, error, cx).await;
+                cleared.and(recorded)
+            }
         };
         if let Err(error) = outcome {
             eprintln!("kg: could not record what the agent said: {error}");

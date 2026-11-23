@@ -338,8 +338,10 @@ fn acp_runs(this: &WeakEntity<Workspace>, id: &ThreadId, cx: &mut AsyncApp) -> R
 #[derive(Default)]
 pub(crate) struct Run {
     pub(crate) shown: Option<Shown>,
-    /// The agent's own connection, for a thread whose link is ACP.
+    /// The agent's own connection, for a thread whose link is ACP. Kept until it ends.
     pub(crate) acp: Option<crate::thread::acp::Acp>,
+    /// The task that writes what the agent says into the log, kept so the run owns it.
+    pub(crate) acp_task: Option<gpui_kit::Task<()>>,
     pub(crate) extras: Extras,
     pub(crate) size: Option<(u16, u16)>,
     pub(crate) started_seq: Option<u64>,
