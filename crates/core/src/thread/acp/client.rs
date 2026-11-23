@@ -1,8 +1,8 @@
+use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::fs::File;
-use std::future::Future;
 use std::path::PathBuf;
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -14,21 +14,31 @@ use agent_client_protocol::v1::schema::{
 use agent_client_protocol::v1::{SessionMessage, SessionSetup};
 use agent_client_protocol::{Agent, Channel, Client, Dispatch, TransportFrame};
 use gpui_kit::BackgroundExecutor;
-use kg_domain::TurnOutcome;
+use kg_domain::{TEXT_MAX, TurnOutcome};
 use kg_process::Process;
+use kg_terminal::Exit;
 
 use super::map;
 
+/// How long the agent is given to answer `initialize` and `session/new`.
+const STARTUP: Duration = Duration::from_secs(30);
 /// How long the agent is given to exit on its own once its output has ended.
 const EXIT_GRACE: Duration = Duration::from_secs(2);
 /// How long to wait between two looks at the agent's exit.
 const EXIT_POLL: Duration = Duration::from_millis(20);
 /// The last lines the agent wrote to stderr, kept for a failure's worth of explanation.
 const TAIL_LINES: usize = 20;
-/// How often the connection looks at what the agent's reader thread has, and the thread at what
-/// the connection said. A thread that reads a pipe must not wake a task on GPUI's executor: the
-/// test scheduler refuses a wake from another thread, and the watcher has always polled.
+/// The most of one line kagan keeps, the same cap a prompt has. An agent that sends more is cut.
+const LINE_MAX: usize = TEXT_MAX;
+/// How often the connection looks at what the agent's reader thread has while it is answering.
 const TICK: Duration = Duration::from_millis(20);
+/// How often it looks once the agent has said nothing for a while. Idle threads cost 4 wakes a
+/// second, not 50; the cost is written in decision 279.
+const IDLE_TICK: Duration = Duration::from_millis(250);
+/// How long after the last line the connection keeps the short tick.
+const BUSY: Duration = Duration::from_secs(1);
+/// How many lines the reader thread may queue before it waits for the connection to take them.
+const READ_BACKLOG: usize = 64;
 
 /// What the connection reports to the thread, in the order it happened.
 #[derive(Debug)]
@@ -44,9 +54,10 @@ pub(super) enum AcpEvent {
         outcome: TurnOutcome,
         error: Option<String>,
     },
-    /// The agent's connection is over. `code` is set when it exited on its own.
+    /// The agent's connection is over. `exit` is how its process ended when kagan saw it, and
+    /// `error` is what failed when it did not.
     Ended {
-        code: Option<u32>,
+        exit: Option<Exit>,
         error: Option<String>,
     },
 }
@@ -79,7 +90,7 @@ pub(super) async fn run(
             send(
                 &events,
                 AcpEvent::Ended {
-                    code: None,
+                    exit: None,
                     error: Some(error),
                 },
             )
@@ -87,14 +98,14 @@ pub(super) async fn run(
             return;
         }
     };
-    let tail = Arc::new(Mutex::new(Vec::new()));
+    let tail = Arc::new(Mutex::new(VecDeque::new()));
     let transport = match carry(&mut process, &tail) {
         Ok(transport) => transport,
         Err(error) => {
             send(
                 &events,
                 AcpEvent::Ended {
-                    code: None,
+                    exit: None,
                     error: Some(error),
                 },
             )
@@ -107,24 +118,40 @@ pub(super) async fn run(
         frames,
         channel,
     } = transport;
-    let failure = pump(
-        lines,
-        frames,
-        connect(channel, folder, &events, commands),
-        &executor,
+    let connection = connect(channel, folder, &events, commands, &executor);
+    let failure = pump(lines, frames, connection, &executor).await.err();
+    let exit = exit_status(&mut process, &executor).await;
+    // A clean exit needs no explanation; anything else gets the agent's own last words.
+    let tail = tail_text(&tail).filter(|_| exit != Some(Exit::Code(0)));
+    send(
+        &events,
+        AcpEvent::Ended {
+            exit,
+            error: join(failure, tail),
+        },
     )
-    .await
-    .err();
-    let code = exit_status(&mut process, &executor).await;
-    let error = failure.map(|error| match tail_text(&tail) {
-        Some(tail) => format!("{error}\n{tail}"),
-        None => error.to_string(),
-    });
-    send(&events, AcpEvent::Ended { code, error }).await;
+    .await;
+}
+
+/// What the agent's pipes are read and written through, and the channel the connection takes.
+struct Transport {
+    /// The lines the agent's reader thread has read, in order.
+    lines: std::sync::mpsc::Receiver<String>,
+    /// Where the pump turns a line into a frame for the connection.
+    frames: futures::channel::mpsc::UnboundedSender<TransportFrame>,
+    channel: Channel,
 }
 
 async fn send(events: &async_channel::Sender<AcpEvent>, event: AcpEvent) {
     let _ = events.send(event).await;
+}
+
+/// What kagan knows about the end in words: why the connection failed, then the agent's own words.
+fn join(failure: Option<String>, tail: Option<String>) -> Option<String> {
+    match (failure, tail) {
+        (Some(failure), Some(tail)) => Some(format!("{failure}\n{tail}")),
+        (failure, tail) => failure.or(tail),
+    }
 }
 
 fn spawn(launch: &Launch) -> Result<Process, String> {
@@ -144,91 +171,188 @@ fn spawn(launch: &Launch) -> Result<Process, String> {
     })
 }
 
-fn remember(tail: &Arc<Mutex<Vec<String>>>, line: String) {
+fn remember(tail: &Arc<Mutex<VecDeque<String>>>, line: String) {
     let Ok(mut tail) = tail.lock() else {
         return;
     };
-    tail.push(line);
-    if tail.len() > TAIL_LINES {
-        tail.remove(0);
+    if tail.len() == TAIL_LINES {
+        tail.pop_front();
+    }
+    tail.push_back(line);
+}
+
+fn tail_text(tail: &Arc<Mutex<VecDeque<String>>>) -> Option<String> {
+    let tail = tail.lock().ok()?;
+    (!tail.is_empty()).then(|| {
+        format!(
+            "the agent said: {}",
+            tail.iter().cloned().collect::<Vec<_>>().join("\n")
+        )
+    })
+}
+
+/// A pipe the agent writes on, read from one thread on either platform.
+trait Output: Send {
+    /// The next line, or None when the agent's output ended.
+    fn next_line(&mut self) -> Option<Vec<u8>>;
+}
+
+/// A pipe the agent's connection writes on.
+trait Input: Send {
+    /// Writes one frame's line. False when the agent's input is gone.
+    fn write_line(&mut self, line: &[u8]) -> bool;
+}
+
+#[cfg(unix)]
+impl Output for std::io::BufReader<File> {
+    fn next_line(&mut self) -> Option<Vec<u8>> {
+        use std::io::BufRead as _;
+        let mut line = Vec::new();
+        match self.read_until(b'\n', &mut line) {
+            Ok(0) | Err(_) => None,
+            Ok(_) => Some(line),
+        }
     }
 }
 
-fn tail_text(tail: &Arc<Mutex<Vec<String>>>) -> Option<String> {
-    let tail = tail.lock().ok()?;
-    (!tail.is_empty()).then(|| format!("the agent said: {}", tail.join("\n")))
-}
-
-/// What the agent's pipes are read and written through, and the channel the connection takes.
-struct Transport {
-    /// The lines the agent's reader thread has read, in order.
-    lines: std::sync::mpsc::Receiver<String>,
-    /// Where the pump turns a line into a frame for the connection.
-    frames: futures::channel::mpsc::UnboundedSender<TransportFrame>,
-    channel: Channel,
-}
-
-/// Carries the connection's frames through two std threads: one writes lines to the agent, one
-/// reads its lines. The connection itself never touches a pipe, and neither thread wakes it: the
-/// pump hands the frames over on the executor's timer.
 #[cfg(unix)]
-fn carry(process: &mut Process, tail: &Arc<Mutex<Vec<String>>>) -> Result<Transport, String> {
-    use std::io::{BufRead as _, BufReader, Write as _};
-    use std::os::fd::OwnedFd;
+impl Input for File {
+    fn write_line(&mut self, line: &[u8]) -> bool {
+        use std::io::Write as _;
+        self.write_all(line).is_ok() && self.flush().is_ok()
+    }
+}
 
-    let child = process.child();
-    let (Some(input), Some(output), Some(errors)) =
-        (child.stdin.take(), child.stdout.take(), child.stderr.take())
-    else {
-        return Err("the agent has no pipes".into());
-    };
-    let errors = blocking(OwnedFd::try_from(errors).map_err(|error| error.to_string())?)?;
+#[cfg(windows)]
+struct Read<R>(futures::io::BufReader<R>);
+
+#[cfg(windows)]
+impl<R> Output for Read<R>
+where
+    R: futures::AsyncRead + Unpin + Send,
+{
+    fn next_line(&mut self) -> Option<Vec<u8>> {
+        use futures::AsyncBufReadExt as _;
+        futures::executor::block_on(async {
+            let mut line = Vec::new();
+            match self.0.read_until(b'\n', &mut line).await {
+                Ok(0) | Err(_) => None,
+                Ok(_) => Some(line),
+            }
+        })
+    }
+}
+
+#[cfg(windows)]
+struct Write<W>(W);
+
+#[cfg(windows)]
+impl<W> Input for Write<W>
+where
+    W: futures::AsyncWrite + Unpin + Send,
+{
+    fn write_line(&mut self, line: &[u8]) -> bool {
+        use futures::AsyncWriteExt as _;
+        futures::executor::block_on(self.0.write_all(line)).is_ok()
+    }
+}
+
+/// Carries the connection's frames through three std threads: one writes lines to the agent, one
+/// reads its lines, one keeps its stderr. The reader thread cannot wake the connection itself
+/// (GPUI's test scheduler refuses a wake from another thread), so the pump hands its lines over
+/// on the executor's timer.
+fn carry(process: &mut Process, tail: &Arc<Mutex<VecDeque<String>>>) -> Result<Transport, String> {
+    let (input, output, errors) = pipes(process)?;
     let reader = Arc::clone(tail);
     std::thread::Builder::new()
         .name("kg-acp-stderr".into())
-        .spawn(move || {
-            for line in BufReader::new(errors).lines().map_while(Result::ok) {
-                remember(&reader, line);
-            }
-        })
+        .spawn(move || read_lines(errors, |line| remember(&reader, line)))
         .map_err(|error| error.to_string())?;
-    let (lines, read) = std::sync::mpsc::channel();
-    let output = blocking(OwnedFd::try_from(output).map_err(|error| error.to_string())?)?;
+    // Bounded, so an agent that floods its output waits for kagan instead of growing the queue.
+    let (lines, read) = std::sync::mpsc::sync_channel(READ_BACKLOG);
     std::thread::Builder::new()
         .name("kg-acp-read".into())
         .spawn(move || {
-            for line in BufReader::new(output).lines().map_while(Result::ok) {
-                if lines.send(line).is_err() {
-                    return;
-                }
-            }
+            read_lines(output, |line| {
+                let _ = lines.send(line);
+            });
         })
         .map_err(|error| error.to_string())?;
     let (frames, inbound) = futures::channel::mpsc::unbounded::<TransportFrame>();
     let (outbound, written) = futures::channel::mpsc::unbounded::<TransportFrame>();
-    let stdin = blocking(OwnedFd::try_from(input).map_err(|error| error.to_string())?)?;
     std::thread::Builder::new()
         .name("kg-acp-write".into())
-        .spawn(move || {
-            use futures::StreamExt as _;
-            let mut stdin = stdin;
-            let mut written = written;
-            while let Some(frame) = futures::executor::block_on(written.next()) {
-                let Ok(mut line) = frame.to_json() else {
-                    continue;
-                };
-                line.push('\n');
-                if stdin.write_all(line.as_bytes()).is_err() || stdin.flush().is_err() {
-                    return;
-                }
-            }
-        })
+        .spawn(move || write_frames(input, written))
         .map_err(|error| error.to_string())?;
     Ok(Transport {
         lines: read,
         frames,
         channel: Channel::new(inbound, outbound),
     })
+}
+
+/// The reader body both platforms share. A line is capped, and its bytes that are not UTF-8 are
+/// replaced, so an agent's output is never dropped without a trace.
+fn read_lines(mut output: impl Output, mut on_line: impl FnMut(String)) {
+    while let Some(line) = output.next_line() {
+        let line = &line[..line.len().min(LINE_MAX)];
+        on_line(
+            String::from_utf8_lossy(line)
+                .trim_end_matches(['\n', '\r'])
+                .to_owned(),
+        );
+    }
+}
+
+fn write_frames(
+    mut input: impl Input,
+    mut written: futures::channel::mpsc::UnboundedReceiver<TransportFrame>,
+) {
+    use futures::StreamExt as _;
+    while let Some(frame) = futures::executor::block_on(written.next()) {
+        let Ok(mut line) = frame.to_json() else {
+            continue;
+        };
+        line.push('\n');
+        if !input.write_line(line.as_bytes()) {
+            return;
+        }
+    }
+}
+
+/// The agent's pipes: two it writes on, one it reads, blocking on the calling thread.
+#[cfg(unix)]
+fn pipes(
+    process: &mut Process,
+) -> Result<
+    (
+        impl Input + 'static,
+        impl Output + 'static,
+        impl Output + 'static,
+    ),
+    String,
+> {
+    let child = process.child();
+    let (Some(input), Some(output), Some(errors)) =
+        (child.stdin.take(), child.stdout.take(), child.stderr.take())
+    else {
+        return Err("the agent has no pipes".into());
+    };
+    Ok((
+        pipe(input)?,
+        std::io::BufReader::new(pipe(output)?),
+        std::io::BufReader::new(pipe(errors)?),
+    ))
+}
+
+/// A pipe the agent's own process gave kagan, as a file this thread blocks on.
+#[cfg(unix)]
+fn pipe<P>(from: P) -> Result<File, String>
+where
+    P: TryInto<std::os::fd::OwnedFd>,
+    P::Error: std::fmt::Display,
+{
+    blocking(from.try_into().map_err(|error| error.to_string())?)
 }
 
 /// A pipe the agent's own process gave kagan. async-process makes it non-blocking for its own
@@ -241,71 +365,21 @@ fn blocking(fd: std::os::fd::OwnedFd) -> Result<File, String> {
     Ok(File::from(fd))
 }
 
-/// Windows pipes answer through async-process's blocking thread pool, so each thread parks on
-/// its own read or write, and a line goes through a channel of its own.
+/// Windows pipes answer through async-process's blocking thread pool, so the same three threads
+/// wait on them through it, and one reader body still serves both platforms.
 #[cfg(windows)]
-fn carry(process: &mut Process, tail: &Arc<Mutex<Vec<String>>>) -> Result<Transport, String> {
-    use futures::{AsyncBufReadExt as _, AsyncWriteExt as _, StreamExt as _};
-
+fn pipes(process: &mut Process) -> Result<(impl Input, impl Output, impl Output), String> {
     let child = process.child();
     let (Some(input), Some(output), Some(errors)) =
         (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {
         return Err("the agent has no pipes".into());
     };
-    let reader = Arc::clone(tail);
-    std::thread::Builder::new()
-        .name("kg-acp-stderr".into())
-        .spawn(move || {
-            futures::executor::block_on(async move {
-                let mut errors = futures::io::BufReader::new(errors);
-                let mut line = String::new();
-                while errors.read_line(&mut line).await.unwrap_or_default() > 0 {
-                    remember(&reader, std::mem::take(&mut line));
-                }
-            });
-        })
-        .map_err(|error| error.to_string())?;
-    let (lines, read) = std::sync::mpsc::channel();
-    std::thread::Builder::new()
-        .name("kg-acp-read".into())
-        .spawn(move || {
-            futures::executor::block_on(async move {
-                let mut output = futures::io::BufReader::new(output);
-                let mut line = String::new();
-                while output.read_line(&mut line).await.unwrap_or_default() > 0 {
-                    if lines.send(std::mem::take(&mut line)).is_err() {
-                        return;
-                    }
-                }
-            });
-        })
-        .map_err(|error| error.to_string())?;
-    let (frames, inbound) = futures::channel::mpsc::unbounded::<TransportFrame>();
-    let (outbound, written) = futures::channel::mpsc::unbounded::<TransportFrame>();
-    std::thread::Builder::new()
-        .name("kg-acp-write".into())
-        .spawn(move || {
-            futures::executor::block_on(async move {
-                let mut input = input;
-                let mut written = written;
-                while let Some(frame) = written.next().await {
-                    let Ok(mut line) = frame.to_json() else {
-                        continue;
-                    };
-                    line.push('\n');
-                    if input.write_all(line.as_bytes()).await.is_err() {
-                        return;
-                    }
-                }
-            });
-        })
-        .map_err(|error| error.to_string())?;
-    Ok(Transport {
-        lines: read,
-        frames,
-        channel: Channel::new(inbound, outbound),
-    })
+    Ok((
+        Write(input),
+        Read(futures::io::BufReader::new(output)),
+        Read(futures::io::BufReader::new(errors)),
+    ))
 }
 
 /// Hands the reader thread's lines to the connection every tick, and lets the connection run in
@@ -313,17 +387,17 @@ fn carry(process: &mut Process, tail: &Arc<Mutex<Vec<String>>>) -> Result<Transp
 async fn pump(
     lines: std::sync::mpsc::Receiver<String>,
     frames: futures::channel::mpsc::UnboundedSender<TransportFrame>,
-    connection: impl Future<Output = Result<(), agent_client_protocol::Error>>,
+    connection: impl Future<Output = Result<(), String>>,
     executor: &BackgroundExecutor,
-) -> Result<(), agent_client_protocol::Error> {
+) -> Result<(), String> {
     use std::sync::mpsc::TryRecvError;
     let mut connection = Box::pin(connection);
-    let mut closed_at = None;
+    let mut heard = Instant::now();
     loop {
-        let mut open = true;
         loop {
             match lines.try_recv() {
                 Ok(line) => {
+                    heard = Instant::now();
                     if frames
                         .unbounded_send(TransportFrame::parse_json(&line))
                         .is_err()
@@ -333,55 +407,73 @@ async fn pump(
                 }
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
-                    open = false;
-                    break;
+                    // The agent stopped writing: the connection sees its input end, and the run
+                    // reports the exit now instead of waiting out a grace it no longer needs.
+                    frames.close_channel();
+                    return Ok(());
                 }
             }
         }
-        // The agent stopped writing: the connection sees its input end, and is given a moment to
-        // report what it made of the last lines.
-        if !open {
-            closed_at.get_or_insert_with(Instant::now);
-        }
-        if closed_at.is_some_and(|at| at.elapsed() > EXIT_GRACE) {
-            return Ok(());
-        }
-        let tick = executor.timer(TICK);
+        let tick = if heard.elapsed() < BUSY {
+            TICK
+        } else {
+            IDLE_TICK
+        };
         if let futures::future::Either::Left((result, _)) =
-            futures::future::select(connection.as_mut(), tick).await
+            futures::future::select(connection.as_mut(), executor.timer(tick)).await
         {
             return result;
         }
     }
 }
 
-/// Talks ACP until the agent's output ends or the connection fails.
+/// Talks ACP until the agent's output ends or the connection fails. `initialize` and
+/// `session/new` share one limit: an agent that never answers is reported, not waited on.
 async fn connect(
     transport: Channel,
     folder: PathBuf,
     events: &async_channel::Sender<AcpEvent>,
     commands: async_channel::Receiver<AcpCommand>,
-) -> Result<(), agent_client_protocol::Error> {
-    Client
+    executor: &BackgroundExecutor,
+) -> Result<(), String> {
+    let result = Client
         .v1()
         .name("kagan")
         .connect_with(transport, async |cx| {
-            cx.send_request(InitializeRequest::new(ProtocolVersion::V1))
-                .block_task()
-                .await?;
-            cx.build_session(&folder)
-                .block_task()
-                .run_until(async |SessionSetup { mut session, .. }| {
-                    let id = session.session_id().to_string();
-                    events
-                        .send(AcpEvent::Session(id))
-                        .await
-                        .map_err(|_| agent_client_protocol::Error::internal_error())?;
-                    serve(&mut session, &commands, events).await
-                })
-                .await
+            let handshake = async {
+                cx.send_request(InitializeRequest::new(ProtocolVersion::V1))
+                    .block_task()
+                    .await?;
+                cx.build_session(&folder).block_task().start_session().await
+            };
+            let setup = match futures::future::select(
+                Box::pin(handshake),
+                Box::pin(executor.timer(STARTUP)),
+            )
+            .await
+            {
+                futures::future::Either::Left((Ok(setup), _)) => setup,
+                futures::future::Either::Left((Err(error), _)) => return Err(error),
+                futures::future::Either::Right(_) => {
+                    return Ok(Err(format!(
+                        "the agent did not answer in {} s",
+                        STARTUP.as_secs()
+                    )));
+                }
+            };
+            let SessionSetup { mut session, .. } = setup;
+            let id = session.session_id().to_string();
+            if events.send(AcpEvent::Session(id)).await.is_err() {
+                return Ok(Err("the thread ended".to_owned()));
+            }
+            Ok(serve(&mut session, &commands, events).await)
         })
-        .await
+        .await;
+    match result {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(failure)) => Err(failure),
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 /// Serves the thread's commands and the agent's messages until one side is gone: a reply chunk
@@ -390,7 +482,7 @@ async fn serve(
     session: &mut agent_client_protocol::v1::ActiveSession<'_, Agent>,
     commands: &async_channel::Receiver<AcpCommand>,
     events: &async_channel::Sender<AcpEvent>,
-) -> Result<(), agent_client_protocol::Error> {
+) -> Result<(), String> {
     loop {
         let step = {
             let update = Box::pin(session.read_update());
@@ -402,12 +494,14 @@ async fn serve(
         };
         match step {
             Step::Update(Ok(message)) => heard(*message, events).await,
-            Step::Update(Err(error)) => return Err(error),
-            Step::Command(AcpCommand::Prompt(text)) => session.send_prompt(text)?,
-            Step::Command(AcpCommand::Cancel) => session.connection().send_notification_to(
-                Agent,
-                CancelNotification::new(session.session_id().clone()),
-            )?,
+            Step::Update(Err(error)) => return Err(error.to_string()),
+            Step::Command(AcpCommand::Prompt(text)) => session
+                .send_prompt(text)
+                .map_err(|error| error.to_string())?,
+            Step::Command(AcpCommand::Cancel) => session
+                .connection()
+                .send_notification_to(Agent, CancelNotification::new(session.session_id().clone()))
+                .map_err(|error| error.to_string())?,
             Step::Closed => return Ok(()),
         }
     }
@@ -425,6 +519,7 @@ async fn heard(message: SessionMessage, events: &async_channel::Sender<AcpEvent>
             send(events, AcpEvent::TurnDone { outcome, error }).await;
         }
         SessionMessage::Message(dispatch) => answer(dispatch.into_raw(), events).await,
+        // Slice 2 reads the rest; until then a kind kagan does not draw is not an answer.
         _ => {}
     }
 }
@@ -435,8 +530,9 @@ enum Step {
     Closed,
 }
 
-/// One message from the agent for this session: a reply chunk, or a permission request that
-/// slice 1 answers with `cancelled`.
+/// One message from the agent for this session: a reply chunk, or a request that slice 1 does
+/// not serve. A request kagan drops is answered by the protocol with an error, so the agent's
+/// call cannot wait forever.
 async fn answer(dispatch: Dispatch, events: &async_channel::Sender<AcpEvent>) {
     let dispatch = match dispatch.into_notification::<SessionNotification>() {
         Ok(Ok(notification)) => {
@@ -462,18 +558,42 @@ async fn answer(dispatch: Dispatch, events: &async_channel::Sender<AcpEvent>) {
     }
 }
 
-/// Waits a moment for the agent to exit on its own, then ends its tree and reports its code.
-async fn exit_status(process: &mut Process, executor: &BackgroundExecutor) -> Option<u32> {
+/// Waits a moment for the agent to exit on its own, then ends its tree and reports how it ended.
+async fn exit_status(process: &mut Process, executor: &BackgroundExecutor) -> Option<Exit> {
     let started = Instant::now();
     loop {
         match process.child().try_status() {
-            Ok(Some(status)) => return status.code().and_then(|code| u32::try_from(code).ok()),
+            Ok(Some(status)) => return exit_of(status),
             Ok(None) if started.elapsed() < EXIT_GRACE => executor.timer(EXIT_POLL).await,
             Ok(None) => {
                 process.kill();
-                return None;
+                return killed(process, executor).await;
             }
             Err(_) => return None,
         }
     }
+}
+
+/// The status kagan's own kill leaves. It arrives at once on both platforms, so a moment is
+/// enough to read it.
+async fn killed(process: &mut Process, executor: &BackgroundExecutor) -> Option<Exit> {
+    for _ in 0..10 {
+        if let Ok(Some(status)) = process.child().try_status() {
+            return exit_of(status);
+        }
+        executor.timer(EXIT_POLL).await;
+    }
+    None
+}
+
+/// How the process ended: its code, or the signal that ended it.
+fn exit_of(status: ExitStatus) -> Option<Exit> {
+    #[cfg(unix)]
+    if let Some(signal) = std::os::unix::process::ExitStatusExt::signal(&status) {
+        return Some(Exit::Signal(signal));
+    }
+    status
+        .code()
+        .and_then(|code| u32::try_from(code).ok())
+        .map(Exit::Code)
 }

@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::path::Path;
 
-use crate::thread::terminal::{utf8_locale, waiting};
+use crate::thread::terminal::{exit_end, utf8_locale, waiting};
 use gpui_kit::{AppContext as _, AsyncApp, Entity, Task, WeakEntity};
 use kg_domain::{
     Conversation, EventKind, Link, NoticeSeverity, OpError, OpResult, Role, ThreadId, ThreadStatus,
@@ -187,13 +187,13 @@ async fn consume(
                 Workspace::events(this, id.clone(), kinds, cx).await
             }
             AcpEvent::TurnDone { outcome, error } => turn_done(this, &id, outcome, error, cx).await,
-            AcpEvent::Ended { code, error } => {
+            AcpEvent::Ended { exit, error } => {
                 // The agent is gone: the next prompt starts it again rather than writing to a
                 // connection that has ended.
                 let cleared = this
                     .update(cx, |workspace, _| workspace.run_mut(&id).acp = None)
                     .map_err(|error| OpError::Invalid(error.to_string()));
-                let recorded = ended(this, id.clone(), code, error, cx).await;
+                let recorded = ended(this, id.clone(), exit, error, cx).await;
                 cleared.and(recorded)
             }
         };
@@ -265,31 +265,11 @@ async fn turn_done(
 async fn ended(
     this: &WeakEntity<Workspace>,
     id: ThreadId,
-    code: Option<u32>,
+    exit: Option<kg_terminal::Exit>,
     error: Option<String>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    let exited = EventKind::Exited { code, signal: None };
-    let end = match (code, error) {
-        (_, Some(error)) => finish::End {
-            turn: Some((TurnOutcome::Failed, Some(error.clone()))),
-            events: vec![exited, EventKind::Failed { error: Some(error) }],
-            status: ThreadStatus::Error,
-        },
-        (Some(0) | None, None) => finish::End {
-            turn: Some((TurnOutcome::Completed, None)),
-            events: vec![exited, EventKind::Idle],
-            status: ThreadStatus::Idle,
-        },
-        (Some(code), None) => {
-            let error = format!("the agent exited with code {code}");
-            finish::End {
-                turn: Some((TurnOutcome::Failed, Some(error.clone()))),
-                events: vec![exited, EventKind::Failed { error: Some(error) }],
-                status: ThreadStatus::Error,
-            }
-        }
-    };
+    let end = exit_end(exit, error);
     finish::ended(this, id, end, cx).await?;
     Ok(())
 }

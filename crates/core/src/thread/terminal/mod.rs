@@ -20,7 +20,7 @@ mod screen;
 mod turn;
 
 pub(crate) use exit::StopReason;
-pub(crate) use exit::{exited, request_stop, start_again};
+pub(crate) use exit::{exit_end, exited, request_stop, start_again};
 pub(crate) use screen::follow_terminals;
 #[cfg(test)]
 pub(crate) use screen::remember;

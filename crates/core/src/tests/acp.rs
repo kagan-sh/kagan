@@ -143,6 +143,14 @@ fn ended(kinds: &[EventKind], outcome: TurnOutcome) -> bool {
         .any(|kind| matches!(kind, EventKind::TurnEnded { outcome: got, .. } if *got == outcome))
 }
 
+/// What kagan said went wrong, if it recorded a failure.
+fn failed(kinds: &[EventKind]) -> Option<String> {
+    kinds.iter().find_map(|kind| match kind {
+        EventKind::Failed { error } => error.clone(),
+        _ => None,
+    })
+}
+
 fn agent_said(kinds: &[EventKind]) -> String {
     kinds
         .iter()
@@ -419,6 +427,43 @@ async fn acp_events_are_the_transcript(cx: &mut TestAppContext) {
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 
+#[gpui_kit::test]
+async fn acp_agent_that_crashes_says_why_it_did(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_crash"],
+        &[json!({
+            "chunks": [],
+            "stopReason": "end_turn",
+            "stderr": ["no model is configured"],
+            "exit": 3,
+        })],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let kinds = wait_for(&id, |kinds| failed(kinds).is_some(), cx).await;
+    let error = failed(&kinds).unwrap();
+    assert!(error.contains("code 3"), "{error}");
+    assert!(error.contains("no model is configured"), "{error}");
+    assert_eq!(thread(&id, cx).await.status, ThreadStatus::Error);
+}
+
+#[gpui_kit::test]
+async fn acp_agent_killed_mid_turn_is_a_failure_not_a_finish(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_killed"],
+        &[json!({ "chunks": [], "hold": true, "signal": true })],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let kinds = wait_for(&id, |kinds| failed(kinds).is_some(), cx).await;
+    let error = failed(&kinds).unwrap();
+    assert!(error.contains("signal 9"), "{error}");
+    assert!(!ended(&kinds, TurnOutcome::Completed), "{kinds:?}");
+    assert_eq!(thread(&id, cx).await.status, ThreadStatus::Error);
+}
+
 async fn send(id: &ThreadId, text: &str, cx: &mut TestAppContext) {
     op(
         Op::Thread(ThreadOp::Input {
@@ -513,6 +558,17 @@ fn fake_agent() {
                 }
                 if record["quit"].as_bool() == Some(true) {
                     return;
+                }
+                for line in record["stderr"].as_array().cloned().unwrap_or_default() {
+                    eprintln!("{}", line.as_str().unwrap_or_default());
+                }
+                if let Some(code) = record["exit"].as_i64() {
+                    std::process::exit(i32::try_from(code).unwrap_or(1));
+                }
+                if record["signal"].as_bool() == Some(true) {
+                    let _ = std::process::Command::new("kill")
+                        .args(["-9", &std::process::id().to_string()])
+                        .status();
                 }
             }
             "session/cancel" => {

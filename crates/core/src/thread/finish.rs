@@ -29,7 +29,12 @@ pub(crate) async fn ended(
     };
     let (current, turn_open) =
         thread.read_with(cx, |thread, _| (thread.record.status, thread.turn.open()));
-    if !matches!(current, ThreadStatus::Active | ThreadStatus::Stopping) {
+    // An agent can end before it names its session, while the thread is still Starting; a
+    // terminal is Active before its watcher can report an exit.
+    if !matches!(
+        current,
+        ThreadStatus::Starting | ThreadStatus::Active | ThreadStatus::Stopping
+    ) {
         return Ok(OpResult::Done);
     }
     let now = cx.background_executor().now();
