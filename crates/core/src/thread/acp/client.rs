@@ -638,8 +638,22 @@ fn exit_of(status: ExitStatus) -> Option<Exit> {
     if let Some(signal) = std::os::unix::process::ExitStatusExt::signal(&status) {
         return Some(Exit::Signal(signal));
     }
-    status
-        .code()
-        .and_then(|code| u32::try_from(code).ok())
-        .map(Exit::Code)
+    status.code().map(exit_code)
+}
+
+/// How Windows reports a code above `i32::MAX`: as a negative number. The sign is cast away, not
+/// refused, so a thread says the same code a terminal does.
+fn exit_code(code: i32) -> Exit {
+    Exit::Code(code.cast_unsigned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::exit_code;
+    use kg_terminal::Exit;
+
+    #[test]
+    fn a_status_above_i32_max_keeps_its_number() {
+        assert_eq!(exit_code(-1073741819), Exit::Code(0xC000_0005));
+    }
 }
