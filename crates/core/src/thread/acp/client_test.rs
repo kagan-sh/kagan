@@ -23,7 +23,7 @@ fn lines(text: &str) -> Vec<String> {
 
 #[test]
 fn a_status_above_i32_max_keeps_its_number() {
-    assert_eq!(exit_code(-1073741819), Exit::Code(0xC000_0005));
+    assert_eq!(exit_code(-1_073_741_819), Exit::Code(0xC000_0005));
 }
 
 #[test]

@@ -319,7 +319,7 @@ impl<O: Output> Lines<O> {
             if self.ahead.is_empty() {
                 let mut chunk = [0; 512];
                 let Some(read) = self.output.fill(&mut chunk) else {
-                    return (!line.is_empty()).then(|| text(line));
+                    return (!line.is_empty()).then(|| text(&line));
                 };
                 self.ahead.extend_from_slice(&chunk[..read]);
             }
@@ -330,15 +330,15 @@ impl<O: Output> Lines<O> {
             line.extend_from_slice(&self.ahead[..kept]);
             self.ahead.drain(..taken);
             if end.is_some() {
-                return Some(text(line));
+                return Some(text(&line));
             }
         }
     }
 }
 
 /// The line as kagan keeps it: its bytes that are not UTF-8 replaced, its own end removed.
-fn text(line: Vec<u8>) -> String {
-    String::from_utf8_lossy(&line)
+fn text(line: &[u8]) -> String {
+    String::from_utf8_lossy(line)
         .trim_end_matches(['\n', '\r'])
         .to_owned()
 }
@@ -578,9 +578,9 @@ async fn serve(
         };
         match step {
             Step::Update(Ok(message)) => heard(*message, events, &mut unread).await,
-            // The update stream closes when the agent's output ends. That is the end of the
-            // connection, not a failure of it: the exit and the tail say how it ended.
-            Step::Update(Err(_)) => return Ok(()),
+            // The update stream closes when the agent's output ends, and the commands when the
+            // thread does. Either way the connection is over, not failed: the exit and the tail
+            // say how it ended.
             Step::Command(AcpCommand::Prompt(text)) => session
                 .send_prompt(text)
                 .map_err(|error| error.to_string())?,
@@ -588,7 +588,7 @@ async fn serve(
                 .connection()
                 .send_notification_to(Agent, CancelNotification::new(session.session_id().clone()))
                 .map_err(|error| error.to_string())?,
-            Step::Closed => return Ok(()),
+            Step::Update(Err(_)) | Step::Closed => return Ok(()),
         }
     }
 }

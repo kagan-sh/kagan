@@ -1,4 +1,4 @@
-use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, TestAppContext};
+use gpui_kit::{AnyWindowHandle, Entity, TestAppContext};
 use kg_domain::{Event, EventKind, Link, Role, Thread, ThreadId, ThreadStatus, Timestamp};
 
 use super::{click, label, open, shows, value_of, wait_until};
