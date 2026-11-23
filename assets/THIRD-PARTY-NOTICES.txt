@@ -1,5 +1,5 @@
 Third-party notices for the kg binary.
-cargo-lock 712e8e03648b6479febb00555f7131fec1b1e7a820b904868753e17979949398
+cargo-lock 4f3376e9fc27153f380114756bbccf4ed5804f782f6de79cbb9c55b894eed94c
 
 kagan itself is Apache-2.0. See LICENSE.
 
@@ -5964,7 +5964,7 @@ limitations under the License.
 
 ================================================================================
 Apache-2.0
-cookie 0.18.2
+cookie 0.18.3
 
                               Apache License
                         Version 2.0, January 2004
@@ -8930,7 +8930,7 @@ find-msvc-tools 0.1.15
 fixedbitset 0.5.9
 flate2 1.1.11
 fnv 1.0.7
-form_urlencoded 1.2.2
+form_urlencoded 1.2.3
 fraction 0.17.0
 fs-set-times 0.20.3
 fs2 0.4.3
@@ -9060,7 +9060,7 @@ unicode-segmentation 1.13.3
 unicode-vo 0.1.0
 unicode-width 0.2.3
 unicode-xid 0.2.6
-url 2.5.8
+url 2.5.9
 uuid 1.29.2
 version_check 0.9.5
 wait-timeout 0.2.1
