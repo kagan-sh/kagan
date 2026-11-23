@@ -418,7 +418,7 @@ mod tests {
     fn running(provider: &str) -> kg_domain::Thread {
         serde_json::from_value(json!({
             "id": "thr_1", "projectId": "prj_1", "environmentId": null, "title": "T",
-            "provider": provider, "status": "idle", "visibility": "visible",
+            "provider": provider, "link": "terminal", "status": "idle", "visibility": "visible",
             "parentThreadId": null, "lifecycleOwnerThreadId": null, "sectionId": null,
             "pinned": false, "lastReadAt": null, "latestAttentionAt": 0, "archivedAt": null,
             "createdAt": 0, "updatedAt": 0
