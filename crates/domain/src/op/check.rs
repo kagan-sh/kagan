@@ -188,7 +188,7 @@ fn acp_link(program: &str) -> Result<(), String> {
     if acp_command(program).is_some() {
         return Ok(());
     }
-    let known: Vec<_> = ACP_COMMANDS.iter().map(|(name, _)| *name).collect();
+    let known: Vec<_> = ACP_COMMANDS.iter().map(|(name, _, _)| *name).collect();
     Err(format!(
         "{} cannot be an ACP thread; kagan knows {}",
         split_program(program).map_or_else(|_| program.to_owned(), |(name, _)| name),

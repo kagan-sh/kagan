@@ -42,19 +42,31 @@ pub const AGENT_MARKS: &[(&str, &str)] = &[
     ("kimi", "agents/kimi.svg"),
 ];
 
-/// The subcommand each agent answers the agent protocol on. Slice 1 knows one agent.
-pub const ACP_COMMANDS: &[(&str, &str)] = &[("opencode", "acp")];
+/// The command that starts each agent over the agent protocol: the agent, the program to run, and
+/// that program's arguments. An agent whose protocol comes from an npm package names `npx` there,
+/// so the adapter runs without the person installing anything.
+pub const ACP_COMMANDS: &[(&str, &str, &[&str])] = &[
+    (
+        "claude",
+        "npx",
+        &["-y", "@agentclientprotocol/claude-agent-acp"],
+    ),
+    ("codex", "npx", &["-y", "@agentclientprotocol/codex-acp"]),
+    ("gemini", "gemini", &["--acp"]),
+    ("kimi", "kimi", &["acp"]),
+    ("opencode", "opencode", &["acp"]),
+];
 
-/// The ACP subcommand of the agent `line` runs. A path or a file extension on the command is
-/// dropped; the arguments are never read.
+/// The ACP command of the agent `line` runs: the program to run and its arguments. A path or a
+/// file extension on the command is dropped; the arguments are never read.
 #[must_use]
-pub fn acp_command(line: &str) -> Option<&'static str> {
+pub fn acp_command(line: &str) -> Option<(&'static str, &'static [&'static str])> {
     let (command, _) = split_program(line).ok()?;
     let stem = Path::new(&command).file_stem()?.to_str()?;
     ACP_COMMANDS
         .iter()
-        .find(|(known, _)| *known == stem)
-        .map(|(_, acp)| *acp)
+        .find(|(known, _, _)| *known == stem)
+        .map(|(_, program, args)| (*program, *args))
 }
 
 /// The [`AGENT_MARKS`] entry, command name and mark path, of the agent `line` runs. A path or a

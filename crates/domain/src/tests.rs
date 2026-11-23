@@ -1286,15 +1286,34 @@ fn an_acp_run_needs_an_agent_kagan_knows() {
     assert_eq!(crate::check(&acp("/opt/bin/opencode --model fast")), Ok(()));
     assert_eq!(
         crate::check(&acp("bash")),
-        Err("bash cannot be an ACP thread; kagan knows opencode".into())
+        Err(
+            "bash cannot be an ACP thread; kagan knows claude, codex, gemini, kimi, opencode"
+                .into()
+        )
     );
-    assert_eq!(crate::acp_command("opencode"), Some("acp"));
+    assert_eq!(
+        crate::acp_command("opencode"),
+        Some(("opencode", &["acp"][..]))
+    );
     assert_eq!(
         crate::acp_command("/usr/local/bin/opencode --model x"),
-        Some("acp")
+        Some(("opencode", &["acp"][..]))
     );
-    assert_eq!(crate::acp_command("claude"), None);
+    assert_eq!(
+        crate::acp_command("claude --model sonnet"),
+        Some(("npx", &["-y", "@agentclientprotocol/claude-agent-acp"][..]))
+    );
+    assert_eq!(crate::acp_command("bash"), None);
     assert_eq!(crate::acp_command("'opencode"), None);
+}
+
+#[test]
+fn every_agent_that_answers_acp_is_a_known_program() {
+    assert!(crate::ACP_COMMANDS.iter().all(|(agent, _, _)| {
+        crate::KNOWN_PROGRAMS
+            .iter()
+            .any(|(known, _)| known == agent)
+    }));
 }
 
 #[test]
