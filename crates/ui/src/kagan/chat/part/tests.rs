@@ -167,8 +167,29 @@ fn a_running_read_never_folds() {
     assert_eq!(transcript.rows.len(), 2, "the running row is a row");
 }
 
-/// A failure that ends the turn stays open: the divider is not the last row a reader reads.
-/// The additions and removals are counted as the diff arrives, not on every frame.
+/// Two reads run at once and finish out of order: the second one's finish cannot join the first,
+/// which is still running, so the first one's finish has to join the row after it.
+#[test]
+fn reads_that_finish_out_of_order_still_fold_into_one_bundle() {
+    let mut transcript = Transcript::default();
+    transcript.absorb(&call(1, "t1", ToolKind::Read, ToolStatus::InProgress, None));
+    transcript.absorb(&call(2, "t2", ToolKind::Read, ToolStatus::InProgress, None));
+    transcript.absorb(&call(3, "t2", ToolKind::Read, ToolStatus::Completed, None));
+    assert_eq!(transcript.rows.len(), 2, "nothing to join yet");
+    transcript.absorb(&call(4, "t1", ToolKind::Read, ToolStatus::Completed, None));
+    assert_eq!(transcript.rows.len(), 1, "the two reads are one bundle");
+    let RowKind::Bundle(members) = &transcript.rows[0].kind else {
+        panic!("one bundle");
+    };
+    assert_eq!(members.len(), 2);
+    let ids: Vec<_> = members.iter().map(|member| member.id).collect();
+    assert_eq!(
+        ids,
+        [1, 2],
+        "the bundle keeps the order the reads started in"
+    );
+}
+
 #[test]
 fn a_diff_is_counted_once_as_it_arrives() {
     let mut transcript = Transcript::default();
@@ -217,6 +238,8 @@ fn a_diff_is_counted_once_as_it_arrives() {
     assert_eq!(tool.counts, (1, 1), "a later delta keeps the count it has");
 }
 
+/// A failure that ends the turn stays open: neither the divider nor a notice after it is the last
+/// row a reader reads.
 #[test]
 fn a_failure_that_ends_the_turn_stays_open() {
     let mut transcript = Transcript::default();
@@ -229,7 +252,15 @@ fn a_failure_that_ends_the_turn_stays_open() {
             error: None,
         },
     ));
+    transcript.absorb(&event(
+        4,
+        EventKind::Notice {
+            severity: kg_domain::NoticeSeverity::Info,
+            text: "Start again".into(),
+        },
+    ));
     assert!(matches!(transcript.rows[1].kind, RowKind::Divider { .. }));
+    assert!(matches!(transcript.rows[2].kind, RowKind::Notice(_)));
     assert!(transcript.auto_open(0, false));
 }
 

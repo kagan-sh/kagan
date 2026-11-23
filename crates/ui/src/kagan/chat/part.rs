@@ -363,41 +363,63 @@ impl Transcript {
         Fold::Dirty(self.bundle(index))
     }
 
-    /// Folds the row at `index` with the row before it when both are finished looking work, and
-    /// names the row the list has to measure: the bundle's place, or the row's own.
+    /// Folds the row at `index` with a finished neighbour on either side, so a row that finishes
+    /// last still finds its pair, and names the row the list has to measure: the bundle's place, or
+    /// the row's own.
     fn bundle(&mut self, index: usize) -> usize {
-        let folds = matches!(&self.rows[index].kind, RowKind::Work(tool) if tool.folds());
-        let Some(previous) = index.checked_sub(1).filter(|_| folds) else {
-            return index;
-        };
-        let joins = match &self.rows[previous].kind {
-            RowKind::Work(tool) => tool.folds(),
-            RowKind::Bundle(_) => true,
-            _ => false,
-        };
-        if !joins {
+        let index = self.join_before(index);
+        self.join_after(index)
+    }
+
+    /// Folds the row at `index` with the row before it when the two are one bundle.
+    fn join_before(&mut self, index: usize) -> usize {
+        if index == 0 || !self.bundles(index) || !self.bundles(index - 1) {
             return index;
         }
-        let row = self.rows.remove(index);
-        let row = Rc::try_unwrap(row).unwrap_or_else(|row| (*row).clone());
-        let last = self.rows.remove(previous);
-        let last = Rc::try_unwrap(last).unwrap_or_else(|last| (*last).clone());
-        let members = match last.kind {
-            RowKind::Bundle(mut members) => {
-                members.push(row);
-                members
-            }
-            _ => vec![last, row],
+        self.join(index - 1)
+    }
+
+    /// Folds the row after `index` into it when the two are one bundle: two reads that finish out
+    /// of order join at the second one's finish, not before it.
+    fn join_after(&mut self, index: usize) -> usize {
+        if !self.bundles(index) || !self.bundles(index + 1) {
+            return index;
+        }
+        self.join(index)
+    }
+
+    /// Whether the row at `index` is a bundle, or finished looking work that folds into one.
+    fn bundles(&self, index: usize) -> bool {
+        match self.rows.get(index).map(|row| &row.kind) {
+            Some(RowKind::Work(tool)) => tool.folds(),
+            Some(RowKind::Bundle(_)) => true,
+            _ => false,
+        }
+    }
+
+    /// Puts the rows at `first` and `first + 1` into one bundle at `first`.
+    fn join(&mut self, first: usize) -> usize {
+        let second = self.rows.remove(first + 1);
+        let second = Rc::try_unwrap(second).unwrap_or_else(|row| (*row).clone());
+        let lead = self.rows.remove(first);
+        let lead = Rc::try_unwrap(lead).unwrap_or_else(|row| (*row).clone());
+        let mut members = match lead.kind {
+            RowKind::Bundle(members) => members,
+            _ => vec![lead],
         };
+        match second.kind {
+            RowKind::Bundle(more) => members.extend(more),
+            _ => members.push(second),
+        }
         let id = members[0].id;
         self.rows.insert(
-            previous,
+            first,
             Rc::new(Row {
                 id,
                 kind: RowKind::Bundle(members),
             }),
         );
-        previous
+        first
     }
 
     /// The last row has something streaming into it, so it is the live frontier and no "Working…"
@@ -428,11 +450,12 @@ impl Transcript {
         }
     }
 
-    /// The last row a reader reads as content: the divider is a quiet line under the turn.
+    /// The last row a reader reads as content: the divider under a turn is a quiet line, and so is
+    /// a notice, so a failure that ended the turn stays the last row it reads.
     fn frontier(&self) -> Option<usize> {
         self.rows
             .iter()
-            .rposition(|row| !matches!(row.kind, RowKind::Divider { .. }))
+            .rposition(|row| !matches!(row.kind, RowKind::Divider { .. } | RowKind::Notice(_)))
     }
 
     /// Whether the row is open: the person's choice, else the rules.
