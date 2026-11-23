@@ -248,6 +248,10 @@ impl Kagan {
     }
 
     pub(super) fn wake_chat_plugin(&self, cx: &mut App) {
+        // A chat plugin wakes only while its view is mounted, which a terminal thread takes away.
+        if !self.slots.replaced.mounted.contains_key(&Slot::Chat) {
+            return;
+        }
         if let (Some(plugin), Some(host)) = (
             self.slots.replaced.chosen.get(&Slot::Chat),
             HostUi::global(cx),

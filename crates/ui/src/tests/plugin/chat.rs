@@ -13,10 +13,12 @@ use crate::kagan::{Kagan, replace_read};
 use crate::tests::kagan::{
     chord, click, label, open_with_plugins_then, plugin_log, shows, value_of, wait_until,
 };
+use kg_plugins::HostUi;
 
 const SWAP: &str = "dev.test.chat";
 const CHAT: &str = "thr_chat";
 const SHELL: &str = "thr_shell";
+const OTHER: &str = "thr_other";
 
 const BODY: &str = "return div()
       .track_focus(this.focus)
@@ -77,7 +79,7 @@ export class Transcript extends View {{
       new KgButton("chat-body").label("Transcript"),
       new KgButton("chat-draft").label("Read").on_click(() => call(() => draft(thread()))),
       new KgButton("chat-set").label("Write").on_click(() => call(() => setDraft(thread(), "written"))),
-      new KgButton("chat-elsewhere").label("Other").on_click(() => call(() => setDraft("{SHELL}", "x"))),
+      new KgButton("chat-elsewhere").label("Other").on_click(() => call(() => setDraft("{OTHER}", "x"))),
       new KgButton("chat-huge").label("Huge").on_click(() => call(() => setDraft(thread(), "x".repeat(1048577)))),
       new KgButton("chat-said").label(this.said),
     ];
@@ -123,6 +125,7 @@ fn seed(path: &Path) {
     };
     store.put_thread(&record(CHAT, Link::Acp)).unwrap();
     store.put_thread(&record(SHELL, Link::Terminal)).unwrap();
+    store.put_thread(&record(OTHER, Link::Acp)).unwrap();
     store
         .append_events(
             &ThreadId(CHAT.into()),
@@ -277,6 +280,8 @@ fn draft_reads_and_writes_the_prompt_box_and_refuses_a_thread_it_does_not_show(
     wait_until(cx, |cx| {
         value_of(cx, window, "chat-prompt").as_deref() == Some("written")
     });
+    // A write resolves with nothing, as the d.ts says, not with the text it wrote.
+    assert_eq!(label(cx, window, "chat-said"), "null");
 
     click(cx, window, "chat-draft");
     wait_until(cx, |cx| label(cx, window, "chat-said") == "written");
@@ -330,6 +335,30 @@ fn a_draft_for_an_archived_chat_is_refused(cx: &mut TestAppContext) {
         Some(""),
         "the archived chat left the screen, so the refusal proves nothing"
     );
+}
+
+#[gpui_kit::test]
+fn a_terminal_thread_does_not_wake_the_chat_plugin(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = opened(cx, BODY);
+    choose(cx, Slot::Chat, SWAP);
+    click(cx, window, &format!("thread-{CHAT}"));
+    wait_until(cx, |cx| shows(cx, window, "chat-body"));
+
+    let wake = |cx: &mut TestAppContext| {
+        let (sender, receiver) = async_channel::bounded(1);
+        cx.update(|cx| {
+            HostUi::global(cx).unwrap().update(cx, |host, _| {
+                host.push_waiter(PluginId(SWAP.into()), sender);
+            });
+            kagan.update(cx, |kagan, cx| replace_read::wake_chat(kagan, cx));
+        });
+        receiver.try_recv().is_ok()
+    };
+    assert!(wake(cx), "a chat on screen is not woken");
+
+    click(cx, window, &format!("thread-{SHELL}"));
+    wait_until(cx, |cx| !shows(cx, window, "chat-body"));
+    assert!(!wake(cx), "a terminal thread woke the chat plugin");
 }
 
 #[gpui_kit::test]
