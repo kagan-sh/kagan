@@ -13,7 +13,8 @@ use serde_json::Value;
 use crate::area::{argument, awaited, dispatch, error, from_host, to_host, with_app};
 use crate::threads::shown_thread;
 
-/// The most items one call returns, and the page's byte ceiling. Both are published in the d.ts.
+/// A call's default and most items, and the page's byte ceiling. All three are in the d.ts.
+const DEFAULT: u32 = 100;
 const MOST: u32 = 200;
 const PAGE: usize = 256 * 1024;
 
@@ -262,7 +263,7 @@ fn items(
                 Op::Thread(ThreadOp::Events {
                     id: id.clone(),
                     after_seq,
-                    limit: Some(limit.unwrap_or(MOST)),
+                    limit: Some(limit.unwrap_or(DEFAULT)),
                     order: Some(order),
                 }),
                 cx,

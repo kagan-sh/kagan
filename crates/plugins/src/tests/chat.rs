@@ -197,6 +197,11 @@ fn chat_plugin() -> (tempfile::TempDir, Plugin) {
 /// A window whose data folder already holds a chat thread with a message, a notice and a turn,
 /// and a hidden chat thread.
 fn open_chat(cx: &mut TestAppContext, plugin: Plugin) {
+    open_chat_with(cx, plugin, 0);
+}
+
+/// `notices` more items after the seeded three, to page past the 100 a call returns by default.
+fn open_chat_with(cx: &mut TestAppContext, plugin: Plugin, notices: usize) {
     let data = tempfile::tempdir().unwrap();
     let path = data.path().to_path_buf();
     let mut store = kg_store::Store::open(path.join("kagan.sqlite3")).unwrap();
@@ -256,6 +261,16 @@ fn open_chat(cx: &mut TestAppContext, plugin: Plugin) {
                     error: None,
                 },
             ],
+        )
+        .unwrap();
+    store
+        .append_events(
+            &ThreadId(CHAT.into()),
+            Timestamp(2),
+            (0..notices).map(|ix| EventKind::Notice {
+                severity: NoticeSeverity::Info,
+                text: format!("more {ix}"),
+            }),
         )
         .unwrap();
     drop(store);
@@ -421,4 +436,12 @@ fn wait_item_answers_null_when_a_question_is_raised(cx: &mut TestAppContext) {
     ask(cx, &chat);
     let value = super::forwarded_reply(settled(cx, &waiting, Duration::from_millis(10))).unwrap();
     assert_eq!(value, Value::Null);
+}
+
+#[gpui_kit::test]
+fn items_reads_a_hundred_a_call_by_default(cx: &mut TestAppContext) {
+    let (_dir, plugin) = chat_plugin();
+    open_chat_with(cx, plugin, 150);
+    let page = forward(cx, "chat", "items", &json!([CHAT])).unwrap();
+    assert_eq!(page.as_array().unwrap().len(), 100, "{page:?}");
 }
