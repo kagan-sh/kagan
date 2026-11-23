@@ -550,6 +550,13 @@ impl Unread {
             eprintln!("kg: the agent asked for {method}, which kagan does not serve yet");
         }
     }
+
+    /// A message kind this build's protocol version cannot name.
+    fn other(&mut self) {
+        if self.0.insert("another kind of message".to_owned()) {
+            eprintln!("kg: the agent sent something kagan does not read yet");
+        }
+    }
 }
 
 /// Serves the thread's commands and the agent's messages until one side is gone: a reply chunk
@@ -603,7 +610,7 @@ async fn heard(
         }
         SessionMessage::Message(dispatch) => answer(dispatch.into_raw(), events, unread).await,
         // Slice 2 reads the rest; until then a kind kagan does not draw is not an answer.
-        _ => eprintln!("kg: the agent sent something kagan does not read yet"),
+        _ => unread.other(),
     }
 }
 
