@@ -517,6 +517,81 @@ fn permission_options() -> Vec<InteractionOption> {
     ]
 }
 
+fn tool_with(
+    id: &str,
+    name: &str,
+    kind: ToolKind,
+    title: &str,
+    input: serde_json::Value,
+) -> EventKind {
+    EventKind::Tool {
+        id: id.into(),
+        name: Some(name.into()),
+        kind: Some(kind),
+        title: Some(title.into()),
+        status: Some(ToolStatus::Completed),
+        input: Some(input),
+        output: Some("one".into()),
+        diff: Vec::new(),
+        locations: Vec::new(),
+        approval: None,
+    }
+}
+
+/// A body leads to the place it talks about, and an MCP answer says how much it carries.
+#[gpui_kit::test]
+fn a_body_leads_to_where_it_points(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![
+            EventKind::Tool {
+                id: "t1".into(),
+                name: Some("mcp__github__list_issues".into()),
+                kind: Some(ToolKind::Other),
+                title: Some("List issues".into()),
+                status: Some(ToolStatus::Completed),
+                input: Some(serde_json::json!({"state": "open"})),
+                output: Some(r#"[{"number":1},{"number":2}]"#.into()),
+                diff: Vec::new(),
+                locations: Vec::new(),
+                approval: None,
+            },
+            tool_with(
+                "t2",
+                "skill_load",
+                ToolKind::Other,
+                "Load a skill",
+                serde_json::json!({"name": "rust-review"}),
+            ),
+            EventKind::Tool {
+                id: "t3".into(),
+                name: None,
+                kind: Some(ToolKind::Edit),
+                title: Some("Edited file".into()),
+                status: Some(ToolStatus::Completed),
+                input: Some(serde_json::json!({"file_path": "a.ts"})),
+                output: None,
+                diff: vec![kg_domain::ToolDiff {
+                    path: "a.ts".into(),
+                    old: Some("one".into()),
+                    new: "two".into(),
+                }],
+                locations: Vec::new(),
+                approval: None,
+            },
+        ],
+    );
+    wait_until(cx, |cx| shows(cx, window, "chat-work-1"));
+    click(cx, window, "chat-work-1");
+    wait_until(cx, |cx| {
+        super::label(cx, window, "chat-items-1").as_str() == "2 items"
+    });
+    click(cx, window, "chat-work-2");
+    wait_until(cx, |cx| shows(cx, window, "chat-link-skill-2"));
+    click(cx, window, "chat-work-3");
+    wait_until(cx, |cx| shows(cx, window, "chat-link-review-3"));
+}
+
 #[gpui_kit::test]
 fn the_approval_card_answers_through_the_question(cx: &mut TestAppContext) {
     let (window, _data) = show_approval(cx, ToolKind::Execute, permission_options(), None);

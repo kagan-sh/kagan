@@ -48,7 +48,13 @@ pub(super) fn work_body(
             diff_out(row, &tool.diff, tool.output.as_deref(), cx)
         }
         WorkKind::Think => thought_text(row, tool.output.as_deref().unwrap_or_default(), cx),
+        WorkKind::Mcp { .. } => mcp_out(row, tool, cx),
         _ => plain_out(row, tool.output.as_deref(), cx),
+    };
+    let link = match kind {
+        WorkKind::Edit | WorkKind::Delete | WorkKind::Move => review_link(row, tool, weak, cx),
+        WorkKind::Skill { .. } => skill_link(row),
+        _ => None,
     };
     let args = matches!(
         kind,
@@ -73,7 +79,103 @@ pub(super) fn work_body(
         .min_w_0()
         .children(args)
         .children(output)
+        .children(link)
         .ui_container()
+}
+
+/// A tool's own way on: the file in the review, or the skill in its window. It is idle while the
+/// row still runs.
+fn review_link(
+    row: u64,
+    tool: &ToolRow,
+    weak: &WeakEntity<ChatView>,
+    cx: &mut App,
+) -> Option<AnyElement> {
+    if !tool.diff.is_empty() && tool.running() {
+        return None;
+    }
+    let path = tool.diff.first()?.path.clone();
+    let kagan = weak.read_with(cx, |this, _| this.kagan()).ok()?;
+    link(row, "review", "Open in review", move |window, cx| {
+        _ = kagan.update(cx, |kagan, cx| {
+            kagan.open_review(path.clone(), window, cx);
+        });
+    })
+}
+
+fn skill_link(row: u64) -> Option<AnyElement> {
+    link(row, "skill", "Open skill", |_, cx| {
+        _ = crate::kagan::show_skills(cx);
+    })
+}
+
+/// One idle button under a body, so a row leads to the place the body talks about.
+fn link(
+    row: u64,
+    name: &'static str,
+    label: &'static str,
+    action: impl Fn(&mut Window, &mut App) + 'static,
+) -> Option<AnyElement> {
+    let id = format!("chat-link-{name}-{row}");
+    Some(
+        div()
+            .id(gpui_kit::ElementId::Name(id.clone().into()))
+            .ui_observe_as(Facts::button(label))
+            .child(
+                Button::new(SharedString::from(format!("{id}-button")))
+                    .small()
+                    .ghost()
+                    .label(label)
+                    .on_click(move |_, window, cx| action(window, cx)),
+            )
+            .into_any_element(),
+    )
+}
+
+/// An MCP call's answer: how many things it carries, then the text the server sent.
+fn mcp_out(row: u64, tool: &ToolRow, cx: &mut App) -> Option<AnyElement> {
+    let output = tool.output.as_deref()?;
+    let items = serde_json::from_str::<serde_json::Value>(output)
+        .ok()
+        .and_then(|value| {
+            let list = match &value {
+                serde_json::Value::Array(items) => Some(items),
+                serde_json::Value::Object(map) => {
+                    map.get("items").and_then(serde_json::Value::as_array)
+                }
+                _ => None,
+            };
+            list.map(Vec::len)
+        });
+    let count = items.map(|items| {
+        let id = format!("chat-items-{row}");
+        div()
+            .id(gpui_kit::ElementId::Name(id.into()))
+            .ui_observe_as(Facts::button(format!(
+                "{items} {}",
+                if items == 1 { "item" } else { "items" }
+            )))
+            .type_caption(cx)
+            .text_color(cx.theme().muted_foreground)
+            .child(format!(
+                "{items} {}",
+                if items == 1 { "item" } else { "items" }
+            ))
+            .into_any_element()
+    });
+    let text = plain_out(row, Some(output), cx);
+    match (count, text) {
+        (None, None) => None,
+        (count, text) => Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(4.))
+                .children(count)
+                .children(text)
+                .into_any_element(),
+        ),
+    }
 }
 
 /// The reasoning, muted, markdown, capped and scrollable.

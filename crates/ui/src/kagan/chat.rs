@@ -16,6 +16,7 @@ use gpui_kit::{
 use kg_core::{Workspace, WorkspaceEvent};
 use kg_domain::{Event, Op, Role as Speaker, ThreadId, ThreadOp, Timestamp, program_label};
 
+use crate::kagan::Kagan;
 use crate::kagan::controls::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -32,6 +33,8 @@ pub(crate) const CONTEXT: &str = "Chat";
 /// answers it. The thread's events are the transcript, so nothing is kept here that the log lacks.
 pub(crate) struct ChatView {
     thread: ThreadId,
+    /// The window's own view, so a row's link can open the review or the skills it names.
+    kagan: gpui_kit::WeakEntity<Kagan>,
     transcript: part::Transcript,
     /// Whether the load has finished. Live events wait in `pending` until it has.
     loaded: bool,
@@ -50,7 +53,12 @@ pub(crate) struct ChatView {
 }
 
 impl ChatView {
-    pub(crate) fn new(thread: ThreadId, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub(crate) fn new(
+        thread: ThreadId,
+        kagan: gpui_kit::WeakEntity<Kagan>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let prompt = cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 8));
         let prompt_watch = cx.subscribe_in(&prompt, window, |this, _, event, window, cx| {
             if let InputEvent::PressEnter {
@@ -75,6 +83,7 @@ impl ChatView {
         });
         let mut this = Self {
             thread,
+            kagan,
             transcript: part::Transcript::default(),
             loaded: false,
             pending: Vec::new(),
@@ -181,6 +190,10 @@ impl ChatView {
 
     fn member_open(&self, key: part::RowKey) -> bool {
         self.transcript.member_open(key)
+    }
+
+    pub(super) fn kagan(&self) -> gpui_kit::WeakEntity<Kagan> {
+        self.kagan.clone()
     }
 
     fn more_open(&self, row: u64) -> bool {

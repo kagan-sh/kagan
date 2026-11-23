@@ -115,7 +115,9 @@ impl Kagan {
             .record(&id, cx)
             .is_some_and(|thread| thread.link == kg_domain::Link::Acp);
         if chat {
-            let view = cx.new(|cx| crate::kagan::chat::ChatView::new(id.clone(), window, cx));
+            let entity = cx.entity().downgrade();
+            let view =
+                cx.new(|cx| crate::kagan::chat::ChatView::new(id.clone(), entity, window, cx));
             self.show_work(Shown::Chat(view), window, cx);
             self.typed_watch = None;
         } else {
