@@ -6,7 +6,7 @@ use kg_core::{Workspace, WorkspaceEvent};
 use kg_domain::{
     Event, EventKind, InteractionOption, Link, NoticeSeverity, Op, OpResult, OptionRole, Order,
     PendingInteraction, PendingInteractionId, PlanStatus, Role, ThreadId, ThreadOp, Timestamp,
-    ToolKind, ToolOutcome, ToolStatus, TurnOutcome,
+    ToolOutcome, ToolStatus, TurnOutcome, WorkKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -193,12 +193,13 @@ pub(crate) fn item(event: &Event) -> Option<Item> {
         } => {
             let (args, args_truncated) = capped_args(input.as_ref());
             let (output, output_truncated) = capped_output(output.as_deref());
-            let (tool, named) = classify(name.as_deref(), title.as_deref(), *kind, input.as_ref());
+            let work = WorkKind::of(name.as_deref(), title.as_deref(), *kind, input.as_ref());
             Body::Work {
                 work: Work {
                     id: id.clone(),
-                    tool,
-                    title: named
+                    tool: work.word(),
+                    title: work
+                        .named()
                         .or_else(|| title.clone())
                         .or_else(|| name.clone())
                         .unwrap_or_default(),
@@ -227,56 +228,6 @@ pub(crate) fn item(event: &Event) -> Option<Item> {
         at: event.at,
         body,
     })
-}
-
-/// What a work call is about, and the name kagan calls it by: an MCP call by its own name, a skill
-/// load, then the agent's kind. The rules are the host's rows' rules, so a page reads as the
-/// built-in row does.
-fn classify(
-    name: Option<&str>,
-    title: Option<&str>,
-    kind: Option<ToolKind>,
-    input: Option<&Value>,
-) -> (&'static str, Option<String>) {
-    if let Some(rest) = name.and_then(|name| name.strip_prefix("mcp__"))
-        && let Some((server, called)) = rest.split_once("__")
-    {
-        return ("mcp", Some(format!("{server}.{called}")));
-    }
-    // kagan writes its own MCP server as `kagan_<tool>`.
-    if let Some((server, called)) = name.and_then(|name| name.split_once('_'))
-        && server == "kagan"
-    {
-        return ("mcp", Some(format!("{server}.{called}")));
-    }
-    let loads_skill = name == Some("skill_load")
-        || (title.is_some_and(|title| title.starts_with("load skill"))
-            && named_skill(input).is_some());
-    if loads_skill {
-        let named = named_skill(input)
-            .or_else(|| title.and_then(|title| title.strip_prefix("load skill ")))
-            .map_or_else(|| "a skill".into(), str::to_owned);
-        return ("skill", Some(named));
-    }
-    (tool(kind), None)
-}
-
-fn named_skill(input: Option<&Value>) -> Option<&str> {
-    input?.get("name")?.as_str()
-}
-
-fn tool(kind: Option<ToolKind>) -> &'static str {
-    match kind {
-        Some(ToolKind::Read) => "read",
-        Some(ToolKind::Edit) => "edit",
-        Some(ToolKind::Delete) => "delete",
-        Some(ToolKind::Move) => "move",
-        Some(ToolKind::Search) => "search",
-        Some(ToolKind::Execute) => "execute",
-        Some(ToolKind::Think) => "think",
-        Some(ToolKind::Fetch) => "fetch",
-        Some(ToolKind::SwitchMode | ToolKind::Other) | None => "other",
-    }
 }
 
 fn tool_status(status: Option<ToolStatus>) -> &'static str {

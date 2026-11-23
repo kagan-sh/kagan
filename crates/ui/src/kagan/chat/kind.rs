@@ -2,91 +2,25 @@ use std::path::Path;
 use std::time::Duration;
 
 use gpui_kit::assets::IconName;
-use kg_domain::{Timestamp, ToolKind};
+use kg_domain::{Timestamp, WorkKind};
 
 use crate::kagan::chat::part::ToolRow;
 
-/// What a tool row is about, once kagan has read the agent's names and input. Presentation only:
-/// nothing here decides whether the row draws.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum WorkKind {
-    Read,
-    Search,
-    Execute,
-    Edit,
-    Delete,
-    Move,
-    Fetch,
-    Think,
-    Mcp { server: String, tool: String },
-    Skill { name: String },
-    Other { name: Option<String> },
+/// How a work row draws its kind: the icon, the words the window uses, and the row's own title and
+/// meta. A plugin's page reads the same kind, which is why the kind lives in `kg_domain`.
+pub(super) trait WorkKindExt {
+    fn icon(&self) -> IconName;
+    fn hint(&self) -> &'static str;
+    fn label(&self, done: bool) -> String;
+    fn badge(&self) -> Option<String>;
+    fn mono_title(&self) -> bool;
+    fn title(&self, tool: &ToolRow) -> Option<String>;
+    fn meta(&self, tool: &ToolRow) -> Option<String>;
+    fn has_body(&self, tool: &ToolRow) -> bool;
 }
 
-impl WorkKind {
-    pub(super) fn of(tool: &ToolRow) -> Self {
-        if let Some(rest) = tool
-            .name
-            .as_deref()
-            .and_then(|name| name.strip_prefix("mcp__"))
-            && let Some((server, called)) = rest.split_once("__")
-        {
-            return Self::Mcp {
-                server: server.to_owned(),
-                tool: called.to_owned(),
-            };
-        }
-        // kagan writes its own MCP server as `kagan_<tool>`; any other agent's server is only
-        // recognisable when it spells the name `mcp__<server>__<tool>`.
-        if let Some(name) = tool.name.as_deref()
-            && let Some((server, called)) = name.split_once('_')
-            && server == "kagan"
-        {
-            return Self::Mcp {
-                server: server.to_owned(),
-                tool: called.to_owned(),
-            };
-        }
-        if tool.name.as_deref() == Some("skill_load")
-            || (tool
-                .title
-                .as_deref()
-                .is_some_and(|title| title.starts_with("load skill"))
-                && tool.input.as_ref().is_some_and(|input| {
-                    input.get("name").is_some_and(serde_json::Value::is_string)
-                }))
-        {
-            let name = tool
-                .input
-                .as_ref()
-                .and_then(|input| input.get("name"))
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned)
-                .or_else(|| {
-                    tool.title
-                        .as_deref()
-                        .and_then(|title| title.strip_prefix("load skill "))
-                        .map(str::to_owned)
-                })
-                .unwrap_or_else(|| "a skill".into());
-            return Self::Skill { name };
-        }
-        match tool.kind {
-            Some(ToolKind::Read) => Self::Read,
-            Some(ToolKind::Edit) => Self::Edit,
-            Some(ToolKind::Delete) => Self::Delete,
-            Some(ToolKind::Move) => Self::Move,
-            Some(ToolKind::Search) => Self::Search,
-            Some(ToolKind::Execute) => Self::Execute,
-            Some(ToolKind::Think) => Self::Think,
-            Some(ToolKind::Fetch) => Self::Fetch,
-            _ => Self::Other {
-                name: tool.name.clone(),
-            },
-        }
-    }
-
-    pub(super) fn icon(&self) -> IconName {
+impl WorkKindExt for WorkKind {
+    fn icon(&self) -> IconName {
         match self {
             Self::Read => IconName::FileText,
             Self::Search => IconName::Search,
@@ -98,11 +32,11 @@ impl WorkKind {
             Self::Think => IconName::Brain,
             Self::Mcp { .. } => IconName::Puzzle,
             Self::Skill { .. } => IconName::BookOpen,
-            Self::Other { .. } => IconName::Wrench,
+            Self::Other => IconName::Wrench,
         }
     }
 
-    pub(super) fn word(&self) -> &'static str {
+    fn hint(&self) -> &'static str {
         match self {
             Self::Read => "read",
             Self::Search => "search",
@@ -114,11 +48,11 @@ impl WorkKind {
             Self::Think => "think",
             Self::Mcp { .. } => "mcp",
             Self::Skill { .. } => "skill",
-            Self::Other { .. } => "tool",
+            Self::Other => "tool",
         }
     }
 
-    pub(super) fn label(&self, done: bool) -> String {
+    fn label(&self, done: bool) -> String {
         let word = match self {
             Self::Read => pick(done, "Read file", "Reading file"),
             Self::Search => pick(done, "Searched files", "Searching files"),
@@ -136,12 +70,12 @@ impl WorkKind {
                 };
             }
             Self::Skill { .. } => pick(done, "Loaded skill", "Loading skill"),
-            Self::Other { .. } => pick(done, "Used a tool", "Using a tool"),
+            Self::Other => pick(done, "Used a tool", "Using a tool"),
         };
         word.to_owned()
     }
 
-    pub(super) fn badge(&self) -> Option<String> {
+    fn badge(&self) -> Option<String> {
         match self {
             Self::Mcp { server, .. } => Some(server.clone()),
             Self::Skill { .. } => Some("skill".into()),
@@ -149,7 +83,7 @@ impl WorkKind {
         }
     }
 
-    pub(super) fn mono_title(&self) -> bool {
+    fn mono_title(&self) -> bool {
         match self {
             Self::Read
             | Self::Search
@@ -159,12 +93,12 @@ impl WorkKind {
             | Self::Move
             | Self::Fetch
             | Self::Mcp { .. } => true,
-            Self::Think | Self::Skill { .. } | Self::Other { .. } => false,
+            Self::Think | Self::Skill { .. } | Self::Other => false,
         }
     }
 
     /// The most useful short thing about the row: a file name, a command, a query, a URL.
-    pub(super) fn title(&self, tool: &ToolRow) -> Option<String> {
+    fn title(&self, tool: &ToolRow) -> Option<String> {
         let probe = |keys: &[&str]| {
             keys.iter().find_map(|key| {
                 tool.input
@@ -185,7 +119,7 @@ impl WorkKind {
             }),
             Self::Fetch => probe(&["url"]),
             Self::Skill { name } => Some(name.clone()),
-            Self::Mcp { .. } | Self::Think | Self::Other { .. } => None,
+            Self::Mcp { .. } | Self::Think | Self::Other => None,
         };
         named
             .or_else(|| tool.title.clone())
@@ -193,7 +127,7 @@ impl WorkKind {
     }
 
     /// The outcome, or the time it took, right-aligned and muted.
-    pub(super) fn meta(&self, tool: &ToolRow) -> Option<String> {
+    fn meta(&self, tool: &ToolRow) -> Option<String> {
         let span = tool.span().map(span_text);
         let outcome = match self {
             Self::Read => tool.output.as_ref().map(|output| {
@@ -210,7 +144,7 @@ impl WorkKind {
             | Self::Search
             | Self::Fetch
             | Self::Think
-            | Self::Other { .. } => None,
+            | Self::Other => None,
         };
         match (span, outcome) {
             (Some(span), Some(outcome)) => Some(format!("{span} · {outcome}")),
@@ -219,7 +153,7 @@ impl WorkKind {
     }
 
     /// Whether the row has a body, and so a chevron.
-    pub(super) fn has_body(&self, tool: &ToolRow) -> bool {
+    fn has_body(&self, tool: &ToolRow) -> bool {
         match self {
             Self::Edit | Self::Delete | Self::Move => !tool.diff.is_empty(),
             _ => tool.input.is_some() || tool.output.is_some(),
@@ -227,9 +161,19 @@ impl WorkKind {
     }
 }
 
+/// The kind of one row: the rule lives in `kg_domain`, and the row holds its four fields.
+pub(super) fn of(tool: &ToolRow) -> WorkKind {
+    WorkKind::of(
+        tool.name.as_deref(),
+        tool.title.as_deref(),
+        tool.kind,
+        tool.input.as_ref(),
+    )
+}
+
 /// What an approval card calls the tool it asks about.
 pub(super) fn title_of(tool: &ToolRow) -> Option<String> {
-    WorkKind::of(tool).title(tool)
+    of(tool).title(tool)
 }
 
 pub(super) fn pick(done: bool, done_word: &'static str, now_word: &'static str) -> &'static str {
@@ -327,7 +271,7 @@ mod tests {
     #[test]
     fn an_mcp_name_reads_as_its_server_and_tool() {
         assert_eq!(
-            WorkKind::of(&tool(
+            of(&tool(
                 Some("mcp__github__create_issue"),
                 ToolKind::Other,
                 "Create issue",
@@ -343,7 +287,7 @@ mod tests {
     #[test]
     fn kagans_own_server_is_recognised_by_its_name() {
         assert_eq!(
-            WorkKind::of(&tool(
+            of(&tool(
                 Some("kagan_open_pull_request"),
                 ToolKind::Other,
                 "Open PR",
@@ -358,7 +302,7 @@ mod tests {
 
     #[test]
     fn a_skill_load_is_named_by_its_input() {
-        let kind = WorkKind::of(&tool(
+        let kind = of(&tool(
             Some("skill_load"),
             ToolKind::Other,
             "Load a skill",
@@ -370,7 +314,7 @@ mod tests {
                 name: "rust-review".into()
             }
         );
-        let title_only = WorkKind::of(&tool(
+        let title_only = of(&tool(
             None,
             ToolKind::Other,
             "load skill playwright-debugging",
@@ -386,7 +330,7 @@ mod tests {
 
     #[test]
     fn an_unknown_agent_tool_keeps_its_kind_and_title() {
-        let kind = WorkKind::of(&tool(
+        let kind = of(&tool(
             Some("some_agent_tool"),
             ToolKind::Read,
             "Read file",

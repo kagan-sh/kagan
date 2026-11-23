@@ -7,12 +7,12 @@ use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled as _, WeakEntity, Window, div, px,
 };
-use kg_domain::{PlanStatus, Timestamp};
+use kg_domain::{PlanStatus, Timestamp, WorkKind};
 use std::rc::Rc;
 
 use crate::kagan::chat::ChatView;
 use crate::kagan::chat::body;
-use crate::kagan::chat::kind::{self, WorkKind, pick, plural, span_text};
+use crate::kagan::chat::kind::{self, WorkKindExt as _, pick, plural, span_text};
 use crate::kagan::chat::part::{Part, Row, RowKey, RowKind, ThoughtRow, ToolRow};
 use crate::theme::{Tone, TypeScale as _, row_height};
 use crate::ui_observe::UiObserveExt as _;
@@ -33,7 +33,7 @@ pub(super) fn work_row(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let kind = WorkKind::of(tool);
+    let kind = kind::of(tool);
     let done = !tool.running();
     let body = open
         .then(|| body::work_body(row.id, tool, &kind, weak, cx))
@@ -49,7 +49,7 @@ pub(super) fn work_row(
             badge: kind.badge(),
             meta: kind.meta(tool),
             icons: Vec::new(),
-            word: kind.word(),
+            word: kind.hint(),
             open,
             has_body: kind.has_body(tool),
             tone: if tool.failed() {
@@ -74,7 +74,7 @@ pub(super) fn work_row(
 
 /// A running command's last lines, under the row, so its noise never needs the row opened.
 fn live_preview(row: u64, tool: &ToolRow, cx: &mut App) -> Option<AnyElement> {
-    if !tool.running() || WorkKind::of(tool) != WorkKind::Execute {
+    if !tool.running() || kind::of(tool) != WorkKind::Execute {
         return None;
     }
     let lines: Vec<&str> = tool.output.as_deref()?.lines().rev().take(3).collect();
@@ -165,7 +165,7 @@ pub(super) fn bundle_row(
         let RowKind::Work(tool) = &member.kind else {
             return counts;
         };
-        match WorkKind::of(tool) {
+        match kind::of(tool) {
             WorkKind::Read => (counts.0 + 1, counts.1, counts.2),
             WorkKind::Search => (counts.0, counts.1 + 1, counts.2),
             WorkKind::Fetch => (counts.0, counts.1, counts.2 + 1),
@@ -208,7 +208,7 @@ pub(super) fn bundle_row(
         .iter()
         .filter_map(|member| match &member.kind {
             RowKind::Work(tool) => Some(
-                Icon::new(WorkKind::of(tool).icon())
+                Icon::new(kind::of(tool).icon())
                     .xsmall()
                     .text_color(cx.theme().muted_foreground)
                     .into_any_element(),

@@ -294,6 +294,112 @@ pub enum ToolKind {
     Other,
 }
 
+/// What a tool call is about, once kagan reads the agent's name, title and input. Presentation
+/// only: nothing here decides whether a row draws. The window's rows and a plugin's page read the
+/// same rule, so the two never disagree about one call.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum WorkKind {
+    Read,
+    Search,
+    Execute,
+    Edit,
+    Delete,
+    Move,
+    Fetch,
+    Think,
+    Mcp { server: String, tool: String },
+    Skill { name: String },
+    Other,
+}
+
+impl WorkKind {
+    /// Reads one call's names and input. The agent's own kind decides last, so a call the agent
+    /// calls a read still reads as the MCP call or the skill load it names.
+    #[must_use]
+    pub fn of(
+        name: Option<&str>,
+        title: Option<&str>,
+        kind: Option<ToolKind>,
+        input: Option<&serde_json::Value>,
+    ) -> Self {
+        if let Some(rest) = name.and_then(|name| name.strip_prefix("mcp__"))
+            && let Some((server, called)) = rest.split_once("__")
+        {
+            return Self::Mcp {
+                server: server.to_owned(),
+                tool: called.to_owned(),
+            };
+        }
+        // kagan writes its own MCP server as `kagan_<tool>`; any other agent's server is only
+        // recognisable when it spells the name `mcp__<server>__<tool>`.
+        if let Some((server, called)) = name.and_then(|name| name.split_once('_'))
+            && server == "kagan"
+        {
+            return Self::Mcp {
+                server: server.to_owned(),
+                tool: called.to_owned(),
+            };
+        }
+        let named = input
+            .and_then(|input| input.get("name"))
+            .and_then(serde_json::Value::as_str);
+        if name == Some(SKILL_LOAD)
+            || (title.is_some_and(|title| title.starts_with(LOAD_SKILL)) && named.is_some())
+        {
+            let name = named
+                .or_else(|| title.and_then(|title| title.strip_prefix(LOAD_SKILL_NAMED)))
+                .map_or_else(|| A_SKILL.to_owned(), str::to_owned);
+            return Self::Skill { name };
+        }
+        match kind {
+            Some(ToolKind::Read) => Self::Read,
+            Some(ToolKind::Edit) => Self::Edit,
+            Some(ToolKind::Delete) => Self::Delete,
+            Some(ToolKind::Move) => Self::Move,
+            Some(ToolKind::Search) => Self::Search,
+            Some(ToolKind::Execute) => Self::Execute,
+            Some(ToolKind::Think) => Self::Think,
+            Some(ToolKind::Fetch) => Self::Fetch,
+            _ => Self::Other,
+        }
+    }
+
+    /// The one word a plugin's page reads for the call: the `tool` field of a `work` item.
+    #[must_use]
+    pub fn word(&self) -> &'static str {
+        match self {
+            Self::Read => "read",
+            Self::Search => "search",
+            Self::Execute => "execute",
+            Self::Edit => "edit",
+            Self::Delete => "delete",
+            Self::Move => "move",
+            Self::Fetch => "fetch",
+            Self::Think => "think",
+            Self::Mcp { .. } => "mcp",
+            Self::Skill { .. } => "skill",
+            Self::Other => "other",
+        }
+    }
+
+    /// The name kagan calls the call by, when the name says it: `<server>.<tool>` for an MCP call,
+    /// the skill's name for a skill load.
+    #[must_use]
+    pub fn named(&self) -> Option<String> {
+        match self {
+            Self::Mcp { server, tool } => Some(format!("{server}.{tool}")),
+            Self::Skill { name } => Some(name.clone()),
+            _ => None,
+        }
+    }
+}
+
+/// The tool name kagan serves itself, and the titles an agent reports it under.
+const SKILL_LOAD: &str = "skill_load";
+const LOAD_SKILL: &str = "load skill";
+const LOAD_SKILL_NAMED: &str = "load skill ";
+const A_SKILL: &str = "a skill";
+
 /// One file a tool call changed. `old` is absent for a file it created.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

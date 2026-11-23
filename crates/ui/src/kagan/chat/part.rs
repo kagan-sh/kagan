@@ -4,10 +4,10 @@ use std::time::Duration;
 
 use kg_domain::{
     Event, EventKind, PendingInteractionId, PlanEntry, Role, Timestamp, ToolDiff, ToolKind,
-    ToolLocation, ToolStatus, TurnOutcome,
+    ToolLocation, ToolStatus, TurnOutcome, WorkKind,
 };
 
-use super::kind::WorkKind;
+use super::kind;
 
 /// The parts a transcript can hold, each drawn by its own function and named in its element id, so
 /// a plugin can replace one later.
@@ -125,7 +125,7 @@ impl ToolRow {
     pub(super) fn folds(&self) -> bool {
         self.status == Some(ToolStatus::Completed)
             && matches!(
-                WorkKind::of(self),
+                kind::of(self),
                 WorkKind::Read | WorkKind::Search | WorkKind::Fetch
             )
     }

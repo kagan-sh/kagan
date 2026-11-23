@@ -8,11 +8,11 @@ use gpui_kit::{
 use kg_domain::{PlanEntry, PlanStatus, ToolDiff};
 
 use crate::kagan::chat::ChatView;
-use crate::kagan::chat::kind::WorkKind;
 use crate::kagan::chat::part::ToolRow;
 use crate::theme::{Tone, TypeScale as _, added, terminal_color};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
+use kg_domain::WorkKind;
 
 /// The most lines of output a body shows before it stops.
 const OUTPUT_LINES: usize = 40;
@@ -56,7 +56,7 @@ pub(super) fn work_body(
             | WorkKind::Mcp { .. }
             | WorkKind::Skill { .. }
             | WorkKind::Think
-            | WorkKind::Other { .. }
+            | WorkKind::Other
     )
     .then(|| args(tool, more, row, weak, cx))
     .flatten();
