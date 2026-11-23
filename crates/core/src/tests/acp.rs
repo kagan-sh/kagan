@@ -546,6 +546,25 @@ async fn acp_stop_during_an_open_turn_asks_for_nothing(cx: &mut TestAppContext) 
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Idle);
 }
 
+#[gpui_kit::test]
+async fn acp_a_hung_handshake_ends_with_a_reason(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_hung"], &[]);
+    std::fs::write(agent.path("modes"), "hang_init\n").unwrap();
+    let OpResult::Thread(started) = op(fixture.run_acp(&agent.program()), cx).await.unwrap() else {
+        panic!("thread")
+    };
+    let pid = agent.pid("pid", cx);
+    assert_eq!(thread(&started.id, cx).await.status, ThreadStatus::Starting);
+    // The agent never answers initialize, so the one handshake deadline passes.
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(40));
+    wait_for_status(&started.id, ThreadStatus::Error, cx).await;
+    let error = failed(&kinds_of(&started.id, cx).await).expect("the person is told why");
+    assert!(error.contains("did not answer"), "{error}");
+    assert!(gone(pid), "the agent that never answered is gone");
+}
+
 async fn send(id: &ThreadId, text: &str, cx: &mut TestAppContext) {
     op(
         Op::Thread(ThreadOp::Input {
