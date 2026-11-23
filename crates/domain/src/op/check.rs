@@ -185,17 +185,15 @@ fn search(op: &ThreadOp) -> Result<(), String> {
 // An ACP thread spawns the agent's ACP subcommand, so the link needs one kagan knows. The names
 // come from the one per-agent table, so a new agent is listed the day it is added.
 fn acp_link(program: &str) -> Result<(), String> {
-    match acp_command(program) {
-        Some(_) => Ok(()),
-        None => {
-            let known: Vec<_> = ACP_COMMANDS.iter().map(|(name, _)| *name).collect();
-            Err(format!(
-                "{} cannot be an ACP thread; kagan knows {}",
-                split_program(program).map_or_else(|_| program.to_owned(), |(name, _)| name),
-                known.join(", ")
-            ))
-        }
+    if acp_command(program).is_some() {
+        return Ok(());
     }
+    let known: Vec<_> = ACP_COMMANDS.iter().map(|(name, _)| *name).collect();
+    Err(format!(
+        "{} cannot be an ACP thread; kagan knows {}",
+        split_program(program).map_or_else(|_| program.to_owned(), |(name, _)| name),
+        known.join(", ")
+    ))
 }
 
 fn plain(id: &ThreadId) -> Result<(), String> {

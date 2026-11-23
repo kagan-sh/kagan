@@ -810,24 +810,7 @@ fn fake_agent() {
                 if record["sleep"].as_bool() == Some(true) {
                     sleep_child(&dir);
                 }
-                if mode("echo") {
-                    write(
-                        &mut out,
-                        &update(&session, "user_message_chunk", "echo me", None),
-                    );
-                }
-                if mode("permission") {
-                    write(&mut out, &permission_request(&session));
-                }
-                let ids = mode("ids");
-                for chunk in record["chunks"].as_array().cloned().unwrap_or_default() {
-                    let text = chunk.as_str().unwrap_or_default();
-                    let message_id = ids.then_some("msg_1");
-                    write(
-                        &mut out,
-                        &update(&session, "agent_message_chunk", text, message_id),
-                    );
-                }
+                turn_chunks(&mut out, &session, &record, &modes);
                 if record["hold"].as_bool() == Some(true) {
                     open = Some((id, record.clone()));
                 } else {
@@ -867,6 +850,25 @@ fn fake_agent() {
             }
             _ => {}
         }
+    }
+}
+
+/// Writes one recorded turn's chunks, with the prompt echo and the message id the modes ask for.
+fn turn_chunks(out: &mut std::io::Stdout, session: &str, record: &Value, modes: &str) {
+    let mode = |name: &str| modes.lines().any(|line| line == name);
+    if mode("echo") {
+        write(out, &update(session, "user_message_chunk", "echo me", None));
+    }
+    if mode("permission") {
+        write(out, &permission_request(session));
+    }
+    let message_id = mode("ids").then_some("msg_1");
+    for chunk in record["chunks"].as_array().cloned().unwrap_or_default() {
+        let text = chunk.as_str().unwrap_or_default();
+        write(
+            out,
+            &update(session, "agent_message_chunk", text, message_id),
+        );
     }
 }
 

@@ -187,7 +187,7 @@ async fn consume(
         };
         let event = match event {
             AcpEvent::Message { text, message_id } => AcpEvent::Message {
-                text: joined(text, &message_id, &events, &mut pending),
+                text: joined(text, message_id.as_deref(), &events, &mut pending),
                 message_id,
             },
             other => other,
@@ -224,7 +224,7 @@ async fn consume(
 /// write and one event row. Anything else stays queued for the next step.
 fn joined(
     mut text: String,
-    message_id: &Option<String>,
+    message_id: Option<&str>,
     events: &async_channel::Receiver<AcpEvent>,
     pending: &mut Option<AcpEvent>,
 ) -> String {
@@ -234,7 +234,7 @@ fn joined(
                 text: more,
                 message_id: same,
             }) => {
-                if same.as_deref() != message_id.as_deref() {
+                if same.as_deref() != message_id {
                     *pending = Some(AcpEvent::Message {
                         text: more,
                         message_id: same,

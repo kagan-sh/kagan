@@ -319,14 +319,15 @@ impl ChatView {
             )
     }
 
-    fn hint(answering: bool, running: bool, empty: bool, sending: bool) -> SharedString {
-        if sending {
+    /// What to do now, in this state, in one line.
+    fn hint(&self, cx: &App) -> SharedString {
+        if self.sending {
             "Sending…".into()
-        } else if answering {
+        } else if self.answering(cx) {
             "The agent is answering. Cancel it to send something else.".into()
-        } else if !running {
+        } else if !self.running(cx) {
             "The agent is not running. Start it again below.".into()
-        } else if empty {
+        } else if self.prompt.read(cx).value().trim().is_empty() {
             "Type a prompt to send it.".into()
         } else {
             "Enter sends, Shift+Enter adds a line.".into()
@@ -396,8 +397,8 @@ impl ChatView {
     fn composer(&self, answering: bool, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let prompt = self.prompt.read(cx).value().to_string();
-        let empty = prompt.trim().is_empty();
-        let ready = running && !empty && !self.sending;
+        let ready = running && !prompt.trim().is_empty() && !self.sending;
+        let hint = self.hint(cx);
         let button = if answering {
             control(
                 "chat-cancel",
@@ -478,13 +479,13 @@ impl ChatView {
                         .ui_observe_as(Facts {
                             role: Role::Label,
                             name: "Hint".into(),
-                            value: Some(Self::hint(answering, running, empty, self.sending)),
+                            value: Some(hint.clone()),
                             disabled: false,
                             selected: None,
                             focus: None,
                             hint: None,
                         })
-                        .child(Self::hint(answering, running, empty, self.sending)),
+                        .child(hint),
                 ),
         )
     }

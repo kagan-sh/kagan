@@ -16,5 +16,5 @@ ceiling 86331
 allow_expect 8
 crates/core/src/thread/acp/client.rs 635
 crates/core/src/thread/agent/files.rs 754
-crates/ui/src/kagan/chat.rs 621
+crates/ui/src/kagan/chat.rs 622
 crates/ui/src/theme/catalog.rs 646
