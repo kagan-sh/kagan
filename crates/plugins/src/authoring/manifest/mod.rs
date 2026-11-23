@@ -53,6 +53,10 @@ pub(crate) enum Error {
     HeaderCommand,
     #[error("a menu command needs when thread")]
     MenuCommand,
+    #[error("a prompt command needs when thread")]
+    PromptCommand,
+    #[error("at most 4 prompt commands; give the others a key")]
+    PromptCommands,
     #[error("{0}")]
     Schedule(String),
     #[error("{0}")]
@@ -339,6 +343,18 @@ impl Manifest {
             if command.menu && command.when != crate::commands::CommandWhen::Thread {
                 return Err(Error::MenuCommand);
             }
+            if command.prompt && command.when != crate::commands::CommandWhen::Thread {
+                return Err(Error::PromptCommand);
+            }
+        }
+        if self
+            .commands
+            .iter()
+            .filter(|command| command.prompt)
+            .count()
+            > 4
+        {
+            return Err(Error::PromptCommands);
         }
         Ok(())
     }

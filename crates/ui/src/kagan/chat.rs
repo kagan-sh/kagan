@@ -436,6 +436,7 @@ impl ChatView {
                                 .items_center()
                                 .px_2()
                                 .pb_2()
+                                .children(super::header::prompt(cx))
                                 .child(div().flex_1())
                                 .child(button),
                         ),

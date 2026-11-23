@@ -59,6 +59,7 @@ fn a_command_carries_its_placement_to_its_contribution() {
         when: CommandWhen::Thread,
         header,
         menu,
+        prompt: false,
     };
     let plugin = PluginId("dev.test.menu".into());
     let both = CommandContribution::of(&plugin, &command(true, true), &BTreeMap::new());
