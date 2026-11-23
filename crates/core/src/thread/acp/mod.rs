@@ -345,7 +345,8 @@ async fn permission(
             let asked = raised.id.clone();
             // The connection keeps what it asked, so Cancel and the end of the turn take back
             // only its own questions. A connection that is already gone leaves the question to
-            // the end that settles the thread.
+            // the end that settles the thread; when that end has already run, the card stays
+            // until the next Stop or a restart.
             this.update(cx, |workspace, _| {
                 let acp = workspace.runs.get_mut(id)?.acp.as_mut()?;
                 acp.raised.push(raised);

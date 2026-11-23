@@ -28,9 +28,14 @@ target 35000
 # row's mark and word, the bodies' links and counts, and the files the budget asked to split.
 # Product Rust went from main's 84147 to 90340 (+6193), slices 1, 2 and 2b, and both reviews'
 # fixes, together. Decisions 279, 280 and 281 record it.
-ceiling 90340
+# Cost: the second fix round of slices 2 and 2b adds 114 product lines on top of the merged count
+# (90340): one work classification in kg-domain that the window's rows and a plugin's page both read,
+# the permission card's rules scoped to approval cards, a bundle across two reads that finish out of
+# order, a notice under a failed row, and the held output a finished call drops. Product Rust went
+# from main's 84147 to 90455 (+6308).
+ceiling 90455
 allow_expect 9
-crates/core/src/thread/acp/client.rs 798
+crates/core/src/thread/acp/client.rs 806
 crates/core/src/thread/agent/files.rs 754
 crates/plugins/src/runtime/ui_host.rs 630
 crates/ui/src/kagan/chat.rs 780
