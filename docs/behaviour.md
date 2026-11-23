@@ -84,6 +84,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 
 - A thread whose link is `acp` opens as a chat instead of a terminal [decision 279]. The transcript is the thread's events: a person's or agent's `message` reads as one block per run of consecutive chunks, drawn as markdown, and a `notice` reads as one plain line. Each block is a named part (`message`, `notice`) that a plugin will be able to replace [decision 279]. Slice 1 draws messages and notices; tool calls, plans and approvals arrive with slice 2.
 - The prompt box sends with Enter, or with Send. Send is off while the box is empty, while the agent is not running, and while a send is in flight, and the line beside it says which [decision 279].
+- A plugin may draw the transcript body, and only the body: the prompt box, its hint, the strip, the ended line, focus, Send, Cancel and every approval stay kagan's. The person picks it in Settings → Installed → Replace parts, or with `kg plugin use chat <id>`, and Cmd+Alt+N takes it back [decision 280]. A plugin command with `"prompt": true` draws as a small ghost button in the prompt row, before Send, at most four in the window, and runs for the shown thread [decision 280].
 - While the agent answers, the one filled button is Cancel: it ends the reply and keeps the agent. Escape, or the Cancel button, does that [decision 279].
 - The strip over the transcript and the ended line under it are the same ones a terminal thread draws, so Start again and New thread here… sit where they do there.
 
@@ -437,7 +438,7 @@ A preview runs a local plugin in a hidden kagan of its own, so the person's wind
 
 ### `Use`
 
-- **Changes**: saves which plugin fills a slot, `threads` or `review`, as the preference `slot.<slot>`; `kagan` is the built-in. The window switches at once (decision 105) [op/].
+- **Changes**: saves which plugin fills a slot, `threads`, `review` or `chat`, as the preference `slot.<slot>`; `kagan` is the built-in. The window switches at once (decision 105) [op/]. A `chat` plugin draws only the transcript body, and only while an ACP thread is on screen [decision 280].
 - **Refused when**: the plugin is not enabled or offers no panel that replaces that slot — `invalid` [op/].
 
 ### `Rail`
@@ -745,7 +746,7 @@ Built-in shortcut overrides, and the keys of plugin commands, named `<plugin-id>
 
 ## Preference
 
-Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integration`, `notify` [decision 212], `plugin-status` [decision 157], `update-check` [decision 113], `usage-limits` [decision 268], `setup-guide` [decision 218], `sidebar-order`, `sidebar-hide-empty-projects`, `sidebar-unread-first` [decision 232], `terminal-font-size`, `branch-prefix`, `density`, `font-ui`, `font-terminal`, `terminal-copy-on-select`, `terminal-links-browser`, `review-viewed`, `rail-hidden` [decision 239], `slot.threads` and `slot.review` (a plugin id, or `kagan` for the built-in; set from the window or with `kg plugin use`) [docs:plugin-api], and the layout of each window, `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a lowercase id such as `main` [decision 48]. `row-actions` and `footer` were removed as unused: the window never read them. The bare `right-sidebar` name was removed as unused (decision 48). The dock layout is not a preference and not an `Op`; it is `{dataDir}/layout.json` [decision 15]. `predict` still loads and no longer hides hunks; it is not one of these keys [decision 43]. `preview` is written only into a preview's own data folder when it is made, and `kg preference` neither reads nor writes it [decision 277].
+Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integration`, `notify` [decision 212], `plugin-status` [decision 157], `update-check` [decision 113], `usage-limits` [decision 268], `setup-guide` [decision 218], `sidebar-order`, `sidebar-hide-empty-projects`, `sidebar-unread-first` [decision 232], `terminal-font-size`, `branch-prefix`, `density`, `font-ui`, `font-terminal`, `terminal-copy-on-select`, `terminal-links-browser`, `review-viewed`, `rail-hidden` [decision 239], `slot.threads`, `slot.review` and `slot.chat` (a plugin id, or `kagan` for the built-in; set from the window or with `kg plugin use`) [docs:plugin-api], and the layout of each window, `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a lowercase id such as `main` [decision 48]. `row-actions` and `footer` were removed as unused: the window never read them. The bare `right-sidebar` name was removed as unused (decision 48). The dock layout is not a preference and not an `Op`; it is `{dataDir}/layout.json` [decision 15]. `predict` still loads and no longer hides hunks; it is not one of these keys [decision 43]. `preview` is written only into a preview's own data folder when it is made, and `kg preference` neither reads nor writes it [decision 277].
 
 ### `Get`
 
