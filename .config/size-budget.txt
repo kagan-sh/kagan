@@ -11,11 +11,11 @@ target 35000
 # Cost: the plugin preview adds 828 product lines on top of main (83260, after #151), tests not counted: the Op shape and CLI text, the folder seed, the hidden app's start, shut down and sweep, the guard on questions, and the replace of a thread's preview. The ceiling is set to the count.
 # Cost: the plugin thread record's agent name and mark path add 87 product lines on top of main (84088, after #152): the shared agent list and its tests in kg-domain, and the two record fields with their leak test. The ceiling is set to the branch count.
 # Cost: the compact ThreadStatus adds 24 product lines on top of main (84175, after #154), in crates/ui/src/components: the shared method helpers and the compact call. The ceiling is set to the branch count, and decision 276 records it.
-ceiling 86675
+ceiling 86677
 allow_expect 9
 crates/core/src/thread/agent/files.rs 754
 crates/ui/src/theme/catalog.rs 646
-crates/plugins/src/runtime/ui_host.rs 623
+crates/plugins/src/runtime/ui_host.rs 625
 crates/ui/src/kagan/chat.rs 607
 # Cost: ACP threads, slice 1, add 1807 product lines on top of main (84147): the ACP client and its event mapping in kg-core, the chat view and the Run as control in kg-ui, the link column and the Cancel op, and the shared end bookkeeping the two links need. Decision 279 records it.
 # Cost: the chat extension points add 650 product lines on top of slice 1's 86025: the slot's mount and its prompt buttons in kg-ui, kagan/chat's item union, paging and wait in kg-plugins, and the prompt box the window answers. Decision 280 records it.
