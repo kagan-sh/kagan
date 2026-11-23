@@ -138,7 +138,7 @@ impl Kagan {
                 } else {
                     Selected::No
                 };
-                crate::kagan::controls::segment(id, mark, cx)
+                crate::kagan::controls::segment(format!("{id}-segment"), mark, cx)
                     .type_body(cx)
                     .disabled(starting)
                     .child(control(

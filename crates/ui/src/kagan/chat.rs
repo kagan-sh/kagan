@@ -6,12 +6,12 @@ use gpui_kit::component::text::TextView;
 use gpui_kit::component::{Disableable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, ElementId, FocusHandle, Focusable,
+    AnyElement, App, AppContext as _, ClipboardItem, Context, ElementId, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, ParentElement as _, Render, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, px,
 };
 use kg_core::{Workspace, WorkspaceEvent};
-use kg_domain::{Event, EventKind, Op, Role as Speaker, ThreadId, ThreadOp};
+use kg_domain::{Event, EventKind, Op, Role as Speaker, ThreadId, ThreadOp, Timestamp};
 
 use crate::kagan::controls::control;
 use crate::ui_observe::UiObserveExt as _;
@@ -20,8 +20,10 @@ use crate::ui_registry::Facts;
 /// The keys the chat adds: Escape cancels the agent's reply.
 pub(crate) const CONTEXT: &str = "Chat";
 
-/// One part of the transcript, named so a plugin can replace it later. Slice 1 draws messages and
-/// notices; tool calls, plans and approvals arrive with the events that carry them.
+/// The parts a transcript can hold, each drawn by its own function and named in its element id, so
+/// a plugin can replace one later. The table is `message`, `thought`, `work` (a tool, MCP, skill or
+/// sub-agent row), `bundle`, `plan`, `approval`, `notice`. Slice 1 draws a message and a notice; the
+/// rest arrive with the events that carry them, one variant and one arm each.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Part {
     Message,
@@ -50,6 +52,7 @@ struct Block {
     part: Part,
     role: Option<Speaker>,
     message_id: Option<String>,
+    at: Timestamp,
     text: String,
 }
 
@@ -180,22 +183,20 @@ impl ChatView {
                     part,
                     role: Some(*role),
                     message_id: message_id.clone(),
+                    at: event.at,
                     text: text.clone(),
                 }),
                 EventKind::Notice { text, .. } => self.blocks.push(Block {
                     part,
                     role: None,
                     message_id: None,
+                    at: event.at,
                     text: text.clone(),
                 }),
                 _ => return,
             }
         }
         self.joining = true;
-        self.announce(cx);
-    }
-
-    fn announce(&mut self, cx: &mut Context<Self>) {
         self.scroll.scroll_to_bottom();
         cx.notify();
     }
@@ -321,8 +322,8 @@ impl Render for ChatView {
 }
 
 impl ChatView {
-    /// Everything the thread has said, read top to bottom.
-    fn transcript(&self, who: &SharedString, cx: &App) -> impl IntoElement {
+    /// Everything the thread has said, read top to bottom in one column.
+    fn transcript(&self, who: &SharedString, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         v_flex()
             .id("chat-transcript")
@@ -338,12 +339,13 @@ impl ChatView {
                     .max_w(px(760.))
                     .mx_auto()
                     .w_full()
-                    .gap_4()
+                    .gap_3()
                     .children(
                         self.blocks
                             .iter()
                             .enumerate()
-                            .map(|(index, block)| part_view(block.part, index, block, who, cx)),
+                            .map(|(index, block)| part_view(block.part, index, block, who, cx))
+                            .collect::<Vec<_>>(),
                     )
                     .when(self.blocks.is_empty(), |shown| {
                         shown.child(
@@ -357,11 +359,36 @@ impl ChatView {
             )
     }
 
-    /// The prompt box, its hint, and the one filled button this state offers.
+    /// The prompt box, its one line of guidance, and the one filled button this state offers.
     fn composer(&self, answering: bool, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let prompt = self.prompt.read(cx).value().to_string();
         let ready = running && !prompt.trim().is_empty() && !self.sending;
+        let button = if answering {
+            control(
+                "chat-cancel",
+                Facts::button("Cancel"),
+                Button::new("chat-cancel-button")
+                    .small()
+                    .primary()
+                    .label("Cancel")
+                    .on_click(cx.listener(|this, _, window, cx| this.cancel(window, cx))),
+            )
+        } else {
+            control(
+                "chat-send",
+                Facts {
+                    disabled: !ready,
+                    ..Facts::button("Send")
+                },
+                Button::new("chat-send-button")
+                    .small()
+                    .primary()
+                    .label("Send")
+                    .disabled(!ready)
+                    .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
+            )
+        };
         v_flex().flex_none().px_4().pb_4().child(
             v_flex()
                 .max_w(px(760.))
@@ -369,21 +396,37 @@ impl ChatView {
                 .w_full()
                 .gap_2()
                 .child(
-                    div()
-                        .id("chat-prompt")
-                        .ui_observe_as(Facts {
-                            role: Role::TextInput,
-                            name: "Prompt".into(),
-                            value: Some(prompt.into()),
-                            disabled: answering,
-                            selected: None,
-                            focus: Some(self.prompt.read(cx).focus_handle(cx)),
-                            hint: None,
-                        })
+                    v_flex()
+                        .border_1()
+                        .border_color(cx.theme().input)
+                        .rounded(cx.theme().radius)
+                        .bg(cx.theme().secondary)
                         .child(
-                            Textarea::new(&self.prompt)
-                                .text_size(px(crate::theme::type_body(cx)))
-                                .small(),
+                            div()
+                                .id("chat-prompt")
+                                .ui_observe_as(Facts {
+                                    role: Role::TextInput,
+                                    name: "Prompt".into(),
+                                    value: Some(prompt.into()),
+                                    disabled: answering,
+                                    selected: None,
+                                    focus: Some(self.prompt.read(cx).focus_handle(cx)),
+                                    hint: None,
+                                })
+                                .child(
+                                    Textarea::new(&self.prompt)
+                                        .text_size(px(crate::theme::type_body(cx)))
+                                        .small(),
+                                ),
+                        )
+                        .child(
+                            h_flex()
+                                .gap_2()
+                                .items_center()
+                                .px_2()
+                                .pb_2()
+                                .child(div().flex_1())
+                                .child(button),
                         ),
                 )
                 .children(self.notice.clone().map(|notice| {
@@ -394,76 +437,97 @@ impl ChatView {
                         .child(notice)
                 }))
                 .child(
-                    h_flex()
-                        .gap_2()
-                        .items_center()
-                        .child(
-                            div()
-                                .id("chat-hint")
-                                .flex_1()
-                                .min_w_0()
-                                .type_small(cx)
-                                .text_color(muted)
-                                .child(Self::hint(answering, running)),
-                        )
-                        .when(answering, |row| {
-                            row.child(control(
-                                "chat-cancel",
-                                Facts::button("Cancel"),
-                                Button::new("chat-cancel-button")
-                                    .small()
-                                    .primary()
-                                    .label("Cancel")
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.cancel(window, cx);
-                                    })),
-                            ))
-                        })
-                        .when(!answering, |row| {
-                            row.child(control(
-                                "chat-send",
-                                Facts {
-                                    disabled: !ready,
-                                    ..Facts::button("Send")
-                                },
-                                Button::new("chat-send-button")
-                                    .small()
-                                    .primary()
-                                    .label("Send")
-                                    .disabled(!ready)
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.submit(window, cx);
-                                    })),
-                            ))
-                        }),
+                    div()
+                        .id("chat-hint")
+                        .type_caption(cx)
+                        .text_color(muted)
+                        .child(Self::hint(answering, running)),
                 ),
         )
     }
 }
 
 /// Draws one part. This is the table a plugin will replace a part through, one arm per name.
-fn part_view(part: Part, index: usize, block: &Block, who: &str, cx: &App) -> AnyElement {
+fn part_view(
+    part: Part,
+    index: usize,
+    block: &Block,
+    who: &str,
+    cx: &mut Context<ChatView>,
+) -> AnyElement {
     match part {
         Part::Message => message_view(index, block, who, cx),
         Part::Notice => notice_view(index, block, cx),
     }
 }
 
-fn message_view(index: usize, block: &Block, who: &str, cx: &App) -> AnyElement {
+/// A person's message is a raised block with an accent spine; the agent's is its name, the time and
+/// the words, with Copy on hover.
+fn message_view(index: usize, block: &Block, who: &str, cx: &mut Context<ChatView>) -> AnyElement {
     let user = block.role == Some(Speaker::User);
-    let spine = if user {
-        cx.theme().accent
-    } else {
-        cx.theme().border
-    };
+    let id = part_id(Part::Message, index);
     let label = if user {
         "You".to_owned()
     } else {
         who.to_owned()
     };
-    let id = part_id(Part::Message, index);
+    let copy = block.text.clone();
+    let row = h_flex()
+        .gap_2()
+        .items_center()
+        .child(
+            div()
+                .type_caption(cx)
+                .font_weight(gpui_kit::FontWeight::MEDIUM)
+                .text_color(cx.theme().muted_foreground)
+                .child(label.clone()),
+        )
+        .child(
+            div()
+                .type_caption(cx)
+                .text_color(cx.theme().muted_foreground)
+                .child(clock(block.at)),
+        )
+        .when(!user, |row| {
+            row.child(div().flex_1()).child(
+                div()
+                    .invisible()
+                    .group_hover("chat-message", gpui_kit::Styled::visible)
+                    .child(control(
+                        format!("chat-copy-{index}"),
+                        Facts::button("Copy"),
+                        Button::new(SharedString::from(format!("chat-copy-{index}-button")))
+                            .small()
+                            .ghost()
+                            .icon(gpui_kit::assets::IconName::Copy)
+                            .tooltip("Copy the message")
+                            .on_click(cx.listener(move |_, _, _, cx| {
+                                cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()));
+                            })),
+                    )),
+            )
+        });
+    let body = v_flex()
+        .gap_1()
+        .when(user, |body| {
+            body.bg(cx.theme().secondary)
+                .rounded(cx.theme().radius)
+                .border_l_2()
+                .border_color(cx.theme().accent)
+                .px_3()
+                .py_2()
+        })
+        .when(!user, gpui_kit::Styled::pl_2)
+        .child(row)
+        .child(
+            div()
+                .type_body(cx)
+                .text_color(cx.theme().foreground)
+                .child(TextView::markdown(id.clone(), block.text.clone())),
+        );
     div()
-        .id(id.clone())
+        .id(id)
+        .group("chat-message")
         .ui_observe_as(Facts {
             role: Role::Label,
             name: format!("{label}: {}", block.text).into(),
@@ -471,31 +535,13 @@ fn message_view(index: usize, block: &Block, who: &str, cx: &App) -> AnyElement 
             disabled: false,
             selected: None,
             focus: None,
-            hint: Some(label.clone().into()),
+            hint: Some(label.into()),
         })
-        .child(
-            v_flex()
-                .gap_1()
-                .pl_3()
-                .border_l_2()
-                .border_color(spine)
-                .child(
-                    div()
-                        .type_caption(cx)
-                        .text_color(cx.theme().muted_foreground)
-                        .child(label),
-                )
-                .child(
-                    div()
-                        .type_body(cx)
-                        .text_color(cx.theme().foreground)
-                        .child(TextView::markdown(id, block.text.clone())),
-                ),
-        )
+        .child(body)
         .into_any_element()
 }
 
-fn notice_view(index: usize, block: &Block, cx: &App) -> AnyElement {
+fn notice_view(index: usize, block: &Block, cx: &mut Context<ChatView>) -> AnyElement {
     div()
         .id(part_id(Part::Notice, index))
         .ui_observe_as(Facts {
@@ -515,4 +561,18 @@ fn notice_view(index: usize, block: &Block, cx: &App) -> AnyElement {
 
 fn part_id(part: Part, index: usize) -> ElementId {
     ElementId::Name(format!("chat-{}-{index}", part.name()).into())
+}
+
+/// The wall clock time of an event, in the person's own zone.
+fn clock(at: Timestamp) -> SharedString {
+    jiff::Timestamp::from_millisecond(at.0).map_or_else(
+        |_| SharedString::default(),
+        |time| {
+            SharedString::from(
+                time.to_zoned_datetime(jiff::tz::TimeZone::system())
+                    .strftime("%H:%M")
+                    .to_string(),
+            )
+        },
+    )
 }

@@ -315,6 +315,27 @@ fn enter_in_the_branch_search_picks_a_branch_and_starts_nothing(cx: &mut TestApp
 }
 
 #[gpui_kit::test]
+fn an_agent_that_answers_acp_is_started_as_a_chat_by_default(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let (_repo, project) = committed_repo(cx, data.path());
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "program-search"));
+    // A program with no ACP command only has a terminal, so the choice is not offered.
+    set_program(cx, window, &kagan, shell());
+    assert!(!shows(cx, window, "run-as-chat"));
+    set_program(cx, window, &kagan, "opencode");
+    // The custom command's fields make the form taller than the window, so Run as is below the fold.
+    scroll_form_to_end(cx, window);
+    wait_until(cx, |cx| shows(cx, window, "run-as-chat"));
+    assert_eq!(label(cx, window, "run-as-caption"), "Run as");
+    assert_eq!(selected_of(cx, window, "run-as-chat"), Some(true));
+    assert_eq!(selected_of(cx, window, "run-as-terminal"), Some(false));
+    click(cx, window, "run-as-terminal");
+    assert_eq!(selected_of(cx, window, "run-as-terminal"), Some(true));
+    assert_eq!(selected_of(cx, window, "run-as-chat"), Some(false));
+}
+
+#[gpui_kit::test]
 fn the_start_key_badge_shows_the_key_that_starts_the_thread(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_git_form(cx);
     assert_eq!(
