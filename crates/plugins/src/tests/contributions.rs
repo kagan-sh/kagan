@@ -215,9 +215,34 @@ fn a_header_command_needs_when_thread() {
     assert!(read_manifest(plugin.path()).is_ok());
 }
 
+#[test]
+fn a_prompt_command_needs_when_thread_and_at_most_four() {
+    let plugin = plugin_dir();
+    let mut declared = sample_manifest();
+    declared["commands"] = json!([{ "id": "improve", "title": "Improve", "prompt": true }]);
+    write_plugin(plugin.path(), &declared);
+    let error = read_manifest(plugin.path()).unwrap_err().to_string();
+    assert!(
+        error.contains("a prompt command needs when thread"),
+        "{error}"
+    );
+
+    let four = |count: usize| {
+        (0..count)
+            .map(|ix| json!({ "id": format!("improve{ix}"), "title": "Improve", "when": "thread", "prompt": true }))
+            .collect::<Vec<_>>()
+    };
+    declared["commands"] = json!(four(4));
+    write_plugin(plugin.path(), &declared);
+    assert!(read_manifest(plugin.path()).is_ok());
+    declared["commands"] = json!(four(5));
+    write_plugin(plugin.path(), &declared);
+    let error = read_manifest(plugin.path()).unwrap_err().to_string();
+    assert!(error.contains("at most 4 prompt commands"), "{error}");
+}
+
 /// A plugin's theme is a file in its folder, checked at install and at check with the schema of
 /// a person's theme file.
-
 #[test]
 fn an_overlay_names_one_exported_view() {
     let plugin = plugin_dir();

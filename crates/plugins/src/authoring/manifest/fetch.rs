@@ -207,6 +207,7 @@ pub(crate) enum Area {
     Database,
     Process,
     Browser,
+    Chat,
 }
 
 impl Area {
@@ -218,6 +219,9 @@ impl Area {
             Self::Database => "keeps its own database",
             Self::Process => "starts and stops the programs listed here",
             Self::Browser => "opens and drives the Browser tab for a thread it names",
+            Self::Chat => {
+                "reads a chat thread's transcript, sends a prompt, cancels the reply, and reads and changes its prompt box"
+            }
         }
     }
 }

@@ -1,5 +1,6 @@
 mod browser;
 mod call;
+mod chat;
 mod contributions;
 mod diagnostics;
 mod files;
@@ -1101,6 +1102,7 @@ fn bundled_examples_pass_check() {
     assert_eq!(
         names,
         [
+            "chat",
             "cli",
             "header",
             "instruct",

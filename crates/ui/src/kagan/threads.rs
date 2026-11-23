@@ -137,6 +137,7 @@ impl Kagan {
         self.load_details(cx);
         self.sync_tabs(window, cx);
         self.tell_host(window, cx);
+        self.sync_replaced(window, cx);
     }
 
     pub(super) fn show_start(

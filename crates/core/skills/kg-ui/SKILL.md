@@ -10,3 +10,5 @@ Drive the instance `kg status --json` just confirmed. Snapshot that window. A se
 `kg plugin install` waits for the person. `kg ui` cannot approve powers. The Op returns `person-only approvals cannot be answered with kg ui`.
 
 For plugin QA, do not drive the person's window. Run `kg plugin preview start <path>` and put the `KG_DATA_DIR` and `KG_SOCKET` it prints in front of each `kg ui` command [decision 274].
+
+A chat thread shows the transcript, the prompt box, Send, Cancel, and each plugin prompt button as `prompt/<plugin>/<command>`; `kg ui click` that id to press it.

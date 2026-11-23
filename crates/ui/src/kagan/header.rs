@@ -7,28 +7,27 @@ use kg_plugins::{CommandContribution, CommandWhen, PluginHost, RunCommand};
 use super::controls::{control, dispatch};
 use crate::ui_registry::Facts;
 
+/// The prompt row draws this many buttons, however many the plugins declare.
+const MOST_PROMPT: usize = 4;
+
 pub(super) fn buttons(cx: &App) -> Vec<AnyElement> {
     placed(cx, |command| command.header)
         .into_iter()
         .map(|command| {
-            let run = RunCommand::new(command.plugin.clone(), command.id.clone());
-            let tooltip = super::controls::tip(&command.title, &run, cx);
-            let key = id_for(&command.plugin, &command.id);
-            control(
-                key.clone(),
-                Facts {
-                    hint: Some(SharedString::from(tooltip.clone())),
-                    ..Facts::button(command.title.clone())
-                },
-                Button::new(key)
-                    .small()
-                    .ghost()
-                    .label(command.title)
-                    .tooltip(tooltip)
-                    .max_w(px(120.))
-                    .on_click(dispatch(run)),
-            )
-            .into_any_element()
+            let id = id_for(&command.plugin, &command.id);
+            row(command, id, cx)
+        })
+        .collect()
+}
+
+/// The plugin commands that sit beside Send, before it.
+pub(super) fn prompt(cx: &App) -> Vec<AnyElement> {
+    placed(cx, |command| command.prompt)
+        .into_iter()
+        .take(MOST_PROMPT)
+        .map(|command| {
+            let id = prompt_id_for(&command.plugin, &command.id);
+            row(command, id, cx)
         })
         .collect()
 }
@@ -43,6 +42,31 @@ pub(crate) fn id_for(plugin: &PluginId, id: &str) -> ElementId {
 
 pub(crate) fn menu_id_for(plugin: &PluginId, id: &str) -> ElementId {
     ElementId::Name(format!("thread-menu/{}", encoded(plugin, id)).into())
+}
+
+pub(crate) fn prompt_id_for(plugin: &PluginId, id: &str) -> ElementId {
+    ElementId::Name(format!("prompt/{}", encoded(plugin, id)).into())
+}
+
+// One ghost button, with no icon, sized like the buttons beside it.
+fn row(command: CommandContribution, id: ElementId, cx: &App) -> AnyElement {
+    let run = RunCommand::new(command.plugin.clone(), command.id.clone());
+    let tooltip = super::controls::tip(&command.title, &run, cx);
+    control(
+        id.clone(),
+        Facts {
+            hint: Some(SharedString::from(tooltip.clone())),
+            ..Facts::button(command.title.clone())
+        },
+        Button::new(id)
+            .small()
+            .ghost()
+            .label(command.title)
+            .tooltip(tooltip)
+            .max_w(px(120.))
+            .on_click(dispatch(run)),
+    )
+    .into_any_element()
 }
 
 // Command ids can hold any byte; %-escaping keeps the "/" separator unambiguous.

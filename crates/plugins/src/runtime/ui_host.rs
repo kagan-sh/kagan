@@ -41,6 +41,12 @@ pub enum HostUiEvent {
         id: ThreadId,
         reply: Sender<Result<(), String>>,
     },
+    /// A plugin reads the prompt box of the chat on screen (`text` is `None`) or writes it.
+    ChatDraft {
+        thread: ThreadId,
+        text: Option<String>,
+        reply: Sender<Result<String, String>>,
+    },
     OpenPanel {
         plugin: PluginId,
         panel: String,
@@ -225,8 +231,8 @@ impl HostUi {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn push_waiter(&mut self, plugin: PluginId, sender: Sender<HostValue>) {
+    #[cfg(any(test, feature = "test"))]
+    pub fn push_waiter(&mut self, plugin: PluginId, sender: Sender<HostValue>) {
         self.waiting.entry(plugin).or_default().push(sender);
     }
 
@@ -347,6 +353,59 @@ fn open_thread(
     let (reply, replied) = async_channel::bounded(1);
     app(|ui, cx| queue_thread(&ui, id, reply, cx))?;
     Ok(accepted(replied))
+}
+
+pub(crate) fn draft(
+    arguments: &HostArguments,
+) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
+    prompt(arguments, None)
+}
+
+pub(crate) fn set_draft(
+    arguments: &HostArguments,
+) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
+    let text = arguments.string(1)?.to_owned();
+    if text.len() > kg_domain::TEXT_MAX {
+        return Err(HostError::new(format!(
+            "text is over {} MiB",
+            kg_domain::TEXT_MAX >> 20
+        )));
+    }
+    prompt(arguments, Some(text))
+}
+
+// The prompt box is window state, so the window answers: `None` reads it and `Some` writes it.
+fn prompt(
+    arguments: &HostArguments,
+    text: Option<String>,
+) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
+    let thread = ThreadId(arguments.string(0)?.to_owned());
+    with_app(|cx| crate::chat::chat(&thread, cx))??;
+    let (reply, replied) = async_channel::bounded(1);
+    let writing = text.is_some();
+    app(|ui, cx| {
+        let thread = thread.clone();
+        ui.update(cx, |_, cx| {
+            cx.emit(HostUiEvent::ChatDraft {
+                thread,
+                text,
+                reply,
+            });
+        });
+        Ok(())
+    })?;
+    Ok(async move {
+        let text = replied
+            .recv()
+            .await
+            .map_err(|_| HostError::new("no kagan window is open"))?
+            .map_err(HostError::new)?;
+        Ok(if writing {
+            HostValue::Null
+        } else {
+            HostValue::Str(text)
+        })
+    })
 }
 
 fn paste_into_thread(

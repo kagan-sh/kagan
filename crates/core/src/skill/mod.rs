@@ -35,6 +35,10 @@ const BUNDLED: &[(&str, &[(&str, &str)])] = &[
                 include_str!("../../skills/kg-plugin-authoring/references/check.md"),
             ),
             (
+                "references/chat.md",
+                include_str!("../../skills/kg-plugin-authoring/references/chat.md"),
+            ),
+            (
                 "references/host-and-jobs.md",
                 include_str!("../../skills/kg-plugin-authoring/references/host-and-jobs.md"),
             ),

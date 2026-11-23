@@ -11,7 +11,8 @@ pub enum SurfacePlacement {
     Center,
 }
 
-/// A part of the window a plugin may replace: the thread list or the file review.
+/// A part of the window a plugin may replace: the thread list, the file review, or a chat's
+/// transcript.
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ValueEnum,
 )]
@@ -19,17 +20,19 @@ pub enum SurfacePlacement {
 pub enum Slot {
     Threads,
     Review,
+    Chat,
 }
 
 impl Slot {
-    pub const ALL: [Self; 2] = [Self::Threads, Self::Review];
+    pub const ALL: [Self; 3] = [Self::Threads, Self::Review, Self::Chat];
 
-    /// The manifest and CLI name: `threads` or `review`.
+    /// The manifest and CLI name: `threads`, `review` or `chat`.
     #[must_use]
     pub fn id(self) -> &'static str {
         match self {
             Self::Threads => "threads",
             Self::Review => "review",
+            Self::Chat => "chat",
         }
     }
 
@@ -39,15 +42,17 @@ impl Slot {
         match self {
             Self::Threads => "slot.threads",
             Self::Review => "slot.review",
+            Self::Chat => "slot.chat",
         }
     }
 
-    /// What a person reads: "replaceable sidebar" or "replaceable review".
+    /// What a person reads: "replaceable sidebar", "replaceable review" or "replaceable chat".
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
             Self::Threads => "replaceable sidebar",
             Self::Review => "replaceable review",
+            Self::Chat => "replaceable chat",
         }
     }
 }

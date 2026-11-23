@@ -53,6 +53,10 @@ pub(super) fn row(kagan: &Kagan, slot: Slot, cx: &App) -> Row {
             "Review",
             "A plugin can draw the changes of a review. Kagan’s footer still sends and discards.",
         ),
+        Slot::Chat => (
+            "Chat",
+            "A plugin can draw an ACP thread’s transcript. The prompt box, approvals and Send stay kagan’s.",
+        ),
     };
     super::row::row(&format!("slot-{}", slot.id()), title, note, control)
 }

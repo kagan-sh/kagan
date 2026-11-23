@@ -56,6 +56,8 @@ pub(crate) struct Command {
     pub(crate) header: bool,
     #[serde(default)]
     pub(crate) menu: bool,
+    #[serde(default)]
+    pub(crate) prompt: bool,
 }
 
 /// Where a command's key comes from. A key the person saved is bound before any manifest's.
@@ -74,6 +76,7 @@ pub struct CommandContribution {
     pub when: CommandWhen,
     pub header: bool,
     pub menu: bool,
+    pub prompt: bool,
     pub source: KeySource,
 }
 
@@ -101,6 +104,7 @@ impl CommandContribution {
             when: command.when,
             header: command.header,
             menu: command.menu,
+            prompt: command.prompt,
             source,
         }
     }

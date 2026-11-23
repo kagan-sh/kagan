@@ -142,6 +142,7 @@ impl Kagan {
         self.sidebar
             .update(cx, |sidebar, _| sidebar.replace(listing, footer));
         self.wake_threads_plugin(cx);
+        self.wake_chat_plugin(cx);
         self.note_shown(cx);
         self.reconcile_setup_guide(cx);
         if matches!(self.screen.shown(), Shown::Nothing) {

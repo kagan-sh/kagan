@@ -454,6 +454,7 @@ impl Kagan {
     pub(super) fn render_chat(
         &self,
         view: &Entity<super::chat::ChatView>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let id = view.read(cx).thread().clone();
@@ -463,11 +464,13 @@ impl Kagan {
         let archived = thread.archived_at.is_some();
         let live = thread.status.running();
         let strip = self.render_strip(cx);
+        let body = self.replaced_body(kg_domain::Slot::Chat, window, cx);
+        let chat = view.update(cx, |view, cx| view.render_with(body, window, cx));
         let ended = (!live).then(|| Self::ended_notice(&id, archived, cx));
         v_flex()
             .size_full()
             .children(strip)
-            .child(div().flex_1().min_h_0().child(view.clone()))
+            .child(div().flex_1().min_h_0().child(chat))
             .children(ended)
             .into_any_element()
     }

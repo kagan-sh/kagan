@@ -98,6 +98,17 @@ impl ChatView {
         &self.thread
     }
 
+    /// The prompt box's text, as the person left it.
+    pub(crate) fn draft(&self, cx: &App) -> String {
+        self.prompt.read(cx).value().to_string()
+    }
+
+    pub(crate) fn set_draft(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.prompt
+            .update(cx, |prompt, cx| prompt.set_value(text, window, cx));
+        cx.notify();
+    }
+
     /// Reads what the thread has said so far. The log is the transcript, so the view holds no
     /// second copy of it across a restart.
     fn load(&mut self, cx: &mut Context<Self>) {
@@ -342,15 +353,32 @@ impl Focusable for ChatView {
 
 impl Render for ChatView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.render_with(None, window, cx)
+    }
+}
+
+impl ChatView {
+    /// The whole chat: the body, which a plugin may draw, and the prompt box, which it may not.
+    pub(crate) fn render_with(
+        &mut self,
+        transcript: Option<AnyElement>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let answering = self.answering(cx);
         let running = self.running(cx);
         let who = self.who(cx);
+        let body = match transcript {
+            Some(transcript) => transcript,
+            None => self.transcript(&who, window, cx).into_any_element(),
+        };
         v_flex()
             .size_full()
             .min_h_0()
             .key_context(CONTEXT)
-            .child(self.transcript(&who, window, cx))
+            .child(body)
             .child(self.composer(answering, running, cx))
+            .into_any_element()
     }
 }
 
@@ -478,6 +506,7 @@ impl ChatView {
                                 .items_center()
                                 .px_2()
                                 .pb_2()
+                                .children(super::header::prompt(cx))
                                 .child(div().flex_1())
                                 .child(button),
                         ),

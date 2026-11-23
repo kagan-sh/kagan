@@ -193,8 +193,12 @@ A plugin view drawn over the center that takes no input. The sidebars drawn over
 _Avoid_: Layer, HUD
 
 **Slot**:
-A part of the window a plugin panel may replace: `threads`, the body of the thread list, or `review`, the body of the file review. The person picks Built-in or one plugin per slot. The host keeps the rail, the questions, the counts and the review footer.
+A part of the window a plugin panel may replace: `threads`, the body of the thread list, `review`, the body of the file review, or `chat`, the body of an ACP thread's transcript. The person picks Built-in or one plugin per slot. The host keeps the rail, the questions, the counts, the review footer, the prompt box and Send.
 _Avoid_: Spot (that word is for what kagan refuses), takeover, override
+
+**Part**:
+One kind of row a chat draws, each a name a plugin may replace on its own: `chat.message`, `chat.thought`, `chat.work`, `chat.plan` and `chat.approval`. A part view draws one item; the host keeps the buttons, the scroll and the answers.
+_Avoid_: Piece, fragment
 
 **Command list**:
 The window's list of every command, with its key, that runs one by name; it also searches threads by title and kept terminal text.

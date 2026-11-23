@@ -7,6 +7,10 @@ pub(crate) fn filled(kagan: &Kagan, slot: Slot) -> bool {
     kagan.slots.replaced.mounted.contains_key(&slot)
 }
 
+pub(crate) fn wake_chat(kagan: &Kagan, cx: &mut App) {
+    kagan.wake_chat_plugin(cx);
+}
+
 pub(crate) fn holds_focus(kagan: &Kagan, slot: Slot, window: &Window, cx: &App) -> bool {
     kagan
         .slots

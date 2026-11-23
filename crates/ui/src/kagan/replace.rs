@@ -9,14 +9,14 @@ use gpui_kit::{
     ParentElement as _, Styled as _, Window, WindowId, actions, div,
 };
 use gpui_shell::ScriptView;
-use kg_domain::{DiffNote, DiffScope, Op, PluginId, PluginOp, Slot, SlotChoice};
+use kg_domain::{DiffNote, DiffScope, Link, Op, PluginId, PluginOp, Slot, SlotChoice};
 use kg_plugins::{HostUi, PluginHost, ReviewComment};
 use serde_json::json;
 
 use super::{Kagan, surface};
 use crate::ui_observe::UiObserveExt as _;
 
-actions!(kagan, [UseBuiltInSidebar, UseBuiltInReview]);
+actions!(kagan, [UseBuiltInSidebar, UseBuiltInReview, UseBuiltInChat]);
 
 const MAX_COMMENT: usize = 4096;
 
@@ -115,10 +115,15 @@ impl Kagan {
             return;
         }
         for slot in Slot::ALL {
+            // A chat's body is replaced only while a chat is the thread on screen.
             let Some(plugin) = self.slots.replaced.chosen.get(&slot).cloned() else {
                 self.slots.replaced.mounted.remove(&slot);
                 continue;
             };
+            if slot == Slot::Chat && !self.chat_shown(cx) {
+                self.slots.replaced.mounted.remove(&slot);
+                continue;
+            }
             if let Err(reason) = self.fill(slot, &plugin, window, cx) {
                 self.fall_back(slot, &reason, window, cx);
             }
@@ -223,6 +228,37 @@ impl Kagan {
     ) {
         self.slots.replaced.chosen.remove(&Slot::Threads);
         self.empty(Slot::Threads, window, cx);
+    }
+
+    pub(super) fn use_built_in_chat(
+        &mut self,
+        _: &UseBuiltInChat,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.slots.replaced.chosen.remove(&Slot::Chat);
+        self.empty(Slot::Chat, window, cx);
+    }
+
+    fn chat_shown(&self, cx: &App) -> bool {
+        self.shown_thread(cx).is_some_and(|id| {
+            self.record(&id, cx)
+                .is_some_and(|thread| thread.link == Link::Acp)
+        })
+    }
+
+    pub(super) fn wake_chat_plugin(&self, cx: &mut App) {
+        // A chat plugin wakes only while its view is mounted, which a terminal thread takes away.
+        if !self.slots.replaced.mounted.contains_key(&Slot::Chat) {
+            return;
+        }
+        if let (Some(plugin), Some(host)) = (
+            self.slots.replaced.chosen.get(&Slot::Chat),
+            HostUi::global(cx),
+        ) {
+            let plugin = plugin.clone();
+            host.update(cx, |host, _| host.wake(&plugin));
+        }
     }
 
     pub(super) fn use_built_in_review(

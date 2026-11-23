@@ -1,0 +1,18 @@
+{
+  "id": "dev.kagan.chat",
+  "name": "Compact chat",
+  "version": "0.1.0",
+  "kagan": ">=0.1.0",
+  "entry": "main.js",
+  "icon": "icon.svg",
+  "instructions": "Offers a replaceable chat: a compact transcript, and an Improve button in the prompt row.",
+  "powers": { "areas": ["chat"] },
+  "ui": {
+    "panels": [
+      { "id": "transcript", "title": "Chat", "view": "Transcript", "placement": "center", "replaces": "chat", "follows": "thread" }
+    ]
+  },
+  "commands": [
+    { "id": "improve", "title": "Improve", "when": "thread", "prompt": true }
+  ]
+}
