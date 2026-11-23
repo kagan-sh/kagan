@@ -22,6 +22,7 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 mod body;
+mod card;
 mod kind;
 mod part;
 mod work;
@@ -335,27 +336,21 @@ impl Focusable for ChatView {
 }
 
 impl Render for ChatView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let answering = self.answering(cx);
         let running = self.running(cx);
-        let who = self.who(cx);
         v_flex()
             .size_full()
             .min_h_0()
             .key_context(CONTEXT)
-            .child(self.transcript(&who, window, cx))
+            .child(self.transcript(cx))
             .child(self.composer(answering, running, cx))
     }
 }
 
 impl ChatView {
     /// Everything the thread has said, read top to bottom in one column.
-    fn transcript(
-        &mut self,
-        _who: &SharedString,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn transcript(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let weak = cx.weak_entity();
         let scroller = self.scroller.clone();
         let usage = self
@@ -515,7 +510,7 @@ fn row_at(
         .ok()
         .flatten()
     else {
-        return working_row(weak, window, cx);
+        return working_row(cx);
     };
     let open = weak
         .read_with(cx, |this, cx| this.is_open(index, cx))
@@ -549,7 +544,7 @@ fn row_at(
             let (title, worktree) = weak
                 .read_with(cx, |this, cx| this.approval_detail(index, cx))
                 .unwrap_or_default();
-            body::approval_card(id, title.as_deref(), worktree, weak, window, cx)
+            card::approval_card(id, title.as_deref(), worktree, weak, window, cx)
         }
         part::RowKind::Notice(text) => notice_view(row.id, text, cx),
         part::RowKind::Divider { from, to, outcome } => {
@@ -576,18 +571,14 @@ impl ChatView {
             .thread(&self.thread)
             .is_some_and(|thread| thread.read(cx).record().environment_id.is_some());
         (
-            work::title_of(tool),
-            body::runs_in_worktree(tool.kind, environment),
+            kind::title_of(tool),
+            card::runs_in_worktree(tool.kind, environment),
         )
     }
 }
 
 /// The trailing row that says the agent is working and nothing else is live.
-fn working_row(
-    _weak: &gpui_kit::WeakEntity<ChatView>,
-    _window: &mut Window,
-    cx: &mut App,
-) -> AnyElement {
+fn working_row(cx: &mut App) -> AnyElement {
     let muted = cx.theme().muted_foreground;
     div()
         .id("chat-working")
@@ -622,7 +613,7 @@ fn message_view(
     cx: &mut App,
 ) -> AnyElement {
     let user = role == Speaker::User;
-    let element = work::row_id(part::Part::Message, id);
+    let element = work::named(part::Part::Message, id);
     let label = who.to_owned();
     let copy = text.to_owned();
     let row = h_flex()
@@ -697,7 +688,7 @@ fn message_view(
 
 fn notice_view(id: u64, text: &str, cx: &mut App) -> AnyElement {
     div()
-        .id(work::row_id(part::Part::Notice, id))
+        .id(work::named(part::Part::Notice, id))
         .ui_observe_as(Facts {
             role: Role::Label,
             name: text.to_owned().into(),
@@ -721,9 +712,7 @@ fn divider_view(
     outcome: kg_domain::TurnOutcome,
     cx: &mut App,
 ) -> AnyElement {
-    let span = work::span_text(std::time::Duration::from_millis(
-        u64::try_from(to.0.saturating_sub(from.0).max(0)).unwrap_or(0),
-    ));
+    let span = kind::span_text(kind::span_of(from, to));
     let text = if outcome == kg_domain::TurnOutcome::Failed {
         format!("Worked for {span} · failed")
     } else {

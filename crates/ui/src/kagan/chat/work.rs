@@ -1,6 +1,3 @@
-use std::rc::Rc;
-use std::time::Duration;
-
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::tooltip::Tooltip;
@@ -11,28 +8,19 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, WeakEntity, Window, div, px,
 };
 use kg_domain::{PlanStatus, Timestamp};
+use std::rc::Rc;
 
 use crate::kagan::chat::ChatView;
 use crate::kagan::chat::body;
-pub(super) use crate::kagan::chat::kind::span_text;
-use crate::kagan::chat::kind::{self, WorkKind, pick, plural};
+use crate::kagan::chat::kind::{self, WorkKind, pick, plural, span_text};
 use crate::kagan::chat::part::{Part, Row, RowKey, RowKind, ThoughtRow, ToolRow};
 use crate::theme::{Tone, TypeScale as _, row_height};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-pub(super) fn row_id(part: Part, id: u64) -> gpui_kit::ElementId {
-    named(part, id)
-}
-
 /// The element id a part's row is found by: `chat-<part>-<id>`, stable across appends.
 pub(super) fn named(part: Part, id: impl std::fmt::Display) -> gpui_kit::ElementId {
     gpui_kit::ElementId::Name(format!("chat-{}-{id}", part.name()).into())
-}
-
-/// What an approval card calls the tool it asks about.
-pub(super) fn title_of(tool: &ToolRow) -> Option<String> {
-    kind::title_of(tool)
 }
 
 /// One work row: `[chevron] [icon] label · title ……… meta`.
@@ -48,11 +36,11 @@ pub(super) fn work_row(
     let kind = WorkKind::of(tool);
     let done = !tool.running();
     let body = open
-        .then(|| body::work_body(row.id, tool, &kind, weak, window, cx))
+        .then(|| body::work_body(row.id, tool, &kind, weak, cx))
         .map(IntoElement::into_any_element);
     let face = face(
         Face {
-            id: row_id(Part::Work, row.id),
+            id: named(Part::Work, row.id),
             key: row.key(),
             icon: kind.icon(),
             label: kind.label(done),
@@ -132,12 +120,9 @@ pub(super) fn thought_row(
     let label = if live {
         "Thinking…".to_owned()
     } else {
-        let span = thought.to.0.saturating_sub(thought.from.0);
         format!(
             "Thought for {}",
-            span_text(Duration::from_millis(
-                u64::try_from(span.max(0)).unwrap_or(0)
-            ))
+            span_text(kind::span_of(thought.from, thought.to))
         )
     };
     let body = open
@@ -145,7 +130,7 @@ pub(super) fn thought_row(
         .map(IntoElement::into_any_element);
     face(
         Face {
-            id: row_id(Part::Thought, row.id),
+            id: named(Part::Thought, row.id),
             key: row.key(),
             icon: IconName::Brain,
             label,
@@ -254,7 +239,7 @@ pub(super) fn bundle_row(
     });
     face(
         Face {
-            id: row_id(Part::Bundle, row.id),
+            id: named(Part::Bundle, row.id),
             key: row.key(),
             icon: IconName::Layers,
             label: words.join(", "),
@@ -294,7 +279,7 @@ pub(super) fn plan_row(
         .map(IntoElement::into_any_element);
     face(
         Face {
-            id: row_id(Part::Plan, row.id),
+            id: named(Part::Plan, row.id),
             key: row.key(),
             icon: IconName::ListTodo,
             label: "Plan".into(),
