@@ -135,6 +135,8 @@ fn a_work_item_starts_running_and_ends_ok_or_failed() {
     )
     .unwrap();
     assert_eq!(failed["work"]["status"], "error");
+    // The end is a delta: it carries no name, so a plugin folds it by `id` and keeps the start's.
+    assert_eq!(failed["work"]["title"], "");
 }
 
 #[test]
