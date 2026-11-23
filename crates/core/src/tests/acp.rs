@@ -973,6 +973,32 @@ async fn acp_cancel_withdraws_the_agent_approval_and_leaves_the_threads_question
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 
+/// A question the agent left open when its turn ended is about a turn that is over.
+#[gpui_kit::test]
+async fn acp_a_question_left_open_when_the_turn_ends_goes_with_it(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_abandon"],
+        &[json!({
+            "updates": [calling()],
+            "permission": {
+                "toolCall": {"toolCallId": "call_1", "title": "Run the tests", "kind": "execute"},
+                "options": allow_options(),
+                "abandon": true,
+            },
+            "stopReason": "end_turn",
+        })],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    assert!(
+        super::pending(&id, cx).await.is_empty(),
+        "a question the agent left behind does not outlive its turn"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
 #[gpui_kit::test]
 async fn acp_a_permission_request_with_no_options_is_cancelled(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -1378,6 +1404,11 @@ fn permission_step(
     prompt: &Value,
 ) -> bool {
     write(out, &permission_request(session, permission));
+    // An agent that ends its turn without waiting for the answer leaves the request open.
+    if permission["abandon"].as_bool() == Some(true) {
+        write(out, &reply(prompt, &json!({ "stopReason": "end_turn" })));
+        return true;
+    }
     let mut answered = false;
     for line in lines.by_ref() {
         let Ok(message) = serde_json::from_str::<Value>(&line) else {

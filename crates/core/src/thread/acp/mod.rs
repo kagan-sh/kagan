@@ -430,6 +430,8 @@ async fn turn_done(
         thread.busy = thread.turn.open();
         cx.notify();
     });
+    // A question the agent asked and left behind is about a turn that is over: the card goes.
+    withdraw_questions(this, id, cx).await?;
     waiting(this, id.clone(), Some((outcome, error)), cx).await
 }
 
