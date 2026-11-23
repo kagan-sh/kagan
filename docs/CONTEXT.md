@@ -50,8 +50,8 @@ The center of an ACP thread: the thread's events as a transcript, and one prompt
 _Avoid_: Terminal, session view
 
 **Work**:
-A chat row for something the agent did rather than said: a tool call, an MCP call, a skill load, or its thinking. One compact row, collapsed until the person opens it or it is the live last row.
-_Avoid_: Tool (as a synonym for the row), step
+A chat row for something the agent did rather than said: a tool call, an MCP call, a skill load, or its thinking. One compact row, collapsed until the person opens it or it is the live last row. The row is a `ToolRow` and the event under it stays a `tool` event.
+_Avoid_: Step
 
 **Bundle**:
 One chat row holding a run of consecutive finished looking work, such as reads, searches and fetches, labelled by what they did. Editing, commands, MCP calls, skill loads and failures never fold.
