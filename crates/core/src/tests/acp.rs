@@ -973,6 +973,65 @@ async fn acp_cancel_withdraws_the_agent_approval_and_leaves_the_threads_question
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 
+/// An agent that exits while its request is open leaves no card and no waiter behind.
+#[gpui_kit::test]
+async fn acp_an_agent_that_hangs_up_with_a_question_open_leaves_nothing_waiting(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_hangup"],
+        &[json!({
+            "updates": [calling()],
+            "permission": {
+                "toolCall": {"toolCallId": "call_1", "title": "Run the tests", "kind": "execute"},
+                "options": allow_options(),
+                "hangup": true,
+            },
+            "stopReason": "end_turn",
+        })],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let interaction = asked(&id, cx).await;
+    assert!(
+        interaction.title.contains("wants to run a command"),
+        "{}",
+        interaction.title
+    );
+    wait_for_status(&id, ThreadStatus::Idle, cx).await;
+    assert!(
+        super::pending(&id, cx).await.is_empty(),
+        "the agent's exit takes its question with it"
+    );
+    assert!(
+        !super::busy_of(&fixture, &id, cx),
+        "and the thread is not left waiting on an answer"
+    );
+}
+
+/// Stop while the agent waits for an answer ends the wait with the agent.
+#[gpui_kit::test]
+async fn acp_stop_with_a_question_open_leaves_nothing_waiting(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_stop_ask"],
+        &[asking(&calling(), &allow_options(), "end_turn")],
+    );
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "go", cx).await;
+    let interaction = asked(&id, cx).await;
+    assert!(!interaction.options.is_empty());
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    assert!(
+        super::pending(&id, cx).await.is_empty(),
+        "the stopped thread has no question"
+    );
+    assert!(!agent.path("answer").exists(), "nobody answered it");
+}
+
 /// A question the agent left open when its turn ended is about a turn that is over.
 #[gpui_kit::test]
 async fn acp_a_question_left_open_when_the_turn_ends_goes_with_it(cx: &mut TestAppContext) {
@@ -1404,6 +1463,11 @@ fn permission_step(
     prompt: &Value,
 ) -> bool {
     write(out, &permission_request(session, permission));
+    // An agent that hangs up with its request open never answers it, and the person's card must
+    // not outlive it.
+    if permission["hangup"].as_bool() == Some(true) {
+        std::process::exit(0);
+    }
     // An agent that ends its turn without waiting for the answer leaves the request open.
     if permission["abandon"].as_bool() == Some(true) {
         write(out, &reply(prompt, &json!({ "stopReason": "end_turn" })));
