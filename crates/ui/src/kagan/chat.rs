@@ -319,16 +319,33 @@ impl Focusable for ChatView {
 }
 
 impl Render for ChatView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.render_with(None, window, cx)
+    }
+}
+
+impl ChatView {
+    /// The whole chat: the body, which a plugin may draw, and the prompt box, which it may not.
+    pub(crate) fn render_with(
+        &mut self,
+        transcript: Option<AnyElement>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let answering = self.answering(cx);
         let running = self.running(cx);
         let who = self.who(cx);
+        let body = match transcript {
+            Some(transcript) => transcript,
+            None => self.transcript(&who, cx).into_any_element(),
+        };
         v_flex()
             .size_full()
             .min_h_0()
             .key_context(CONTEXT)
-            .child(self.transcript(&who, cx))
+            .child(body)
             .child(self.composer(answering, running, cx))
+            .into_any_element()
     }
 }
 
