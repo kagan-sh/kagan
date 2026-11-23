@@ -228,7 +228,7 @@ struct WaitOptions {
 }
 
 /// A thread a chat call may read or drive: one kagan lists, and one whose transcript is its events.
-fn chat(id: &ThreadId, cx: &gpui_kit::App) -> Result<(), HostError> {
+pub(crate) fn chat(id: &ThreadId, cx: &gpui_kit::App) -> Result<(), HostError> {
     shown_thread(id, cx)?;
     let acp = Workspace::global(cx)
         .read(cx)

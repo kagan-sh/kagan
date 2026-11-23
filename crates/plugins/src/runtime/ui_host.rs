@@ -380,8 +380,10 @@ fn prompt(
     text: Option<String>,
 ) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
     let thread = ThreadId(arguments.string(0)?.to_owned());
+    with_app(|cx| crate::chat::chat(&thread, cx))??;
     let (reply, replied) = async_channel::bounded(1);
     app(|ui, cx| {
+        let thread = thread.clone();
         ui.update(cx, |_, cx| {
             cx.emit(HostUiEvent::ChatDraft {
                 thread,

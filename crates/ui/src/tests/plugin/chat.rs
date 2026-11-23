@@ -3,7 +3,7 @@ use std::path::Path;
 use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, TestAppContext, px, size};
 use kg_core::Workspace;
 use kg_domain::{
-    Link, Op, OpResult, Plugin, PluginId, PluginOp, PreferenceOp, Slot, Thread, ThreadId,
+    Link, Op, OpResult, Plugin, PluginId, PluginOp, PreferenceOp, Slot, Thread, ThreadId, ThreadOp,
     ThreadStatus, Timestamp, Visibility,
 };
 use serde_json::json;
@@ -297,6 +297,38 @@ fn draft_reads_and_writes_the_prompt_box_and_refuses_a_thread_it_does_not_show(
     assert_eq!(
         value_of(cx, window, "chat-prompt").as_deref(),
         Some("written")
+    );
+}
+
+#[gpui_kit::test]
+fn a_draft_for_an_archived_chat_is_refused(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = opened(cx, BODY);
+    choose(cx, Slot::Chat, SWAP);
+    click(cx, window, &format!("thread-{CHAT}"));
+    wait_until(cx, |cx| shows(cx, window, "chat-body"));
+
+    run(
+        cx,
+        Op::Thread(ThreadOp::Archive {
+            id: ThreadId(CHAT.into()),
+        }),
+    )
+    .unwrap();
+    cx.run_until_parked();
+
+    click(cx, window, "chat-draft");
+    wait_until(cx, |cx| {
+        label(cx, window, "chat-said").contains("is not in kagan's thread list")
+    });
+
+    click(cx, window, "chat-set");
+    wait_until(cx, |cx| {
+        label(cx, window, "chat-said").contains("is not in kagan's thread list")
+    });
+    assert_eq!(
+        value_of(cx, window, "chat-prompt").as_deref(),
+        Some(""),
+        "the archived chat left the screen, so the refusal proves nothing"
     );
 }
 
