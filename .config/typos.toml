@@ -14,6 +14,8 @@ thr = "thr"
 PNAS = "PNAS"
 PNG = "PNG"
 PNGs = "PNGs"
+# A pending interaction's id is `pn_<n>`.
+pn = "pn"
 thr = "thr"
 
 [type.css]
