@@ -210,6 +210,7 @@ impl Transcript {
             EventKind::TurnStarted => {
                 self.turn = Some(event.at);
                 self.plan = None;
+                self.last_outcome = None;
                 Fold::Ignored
             }
             EventKind::TurnEnded { outcome, .. } => {
@@ -382,6 +383,32 @@ impl Transcript {
             _ => false,
         }
     }
+
+    /// Whether the rules open the row: the live frontier of a running turn, and a failure that
+    /// ended the turn.
+    pub(super) fn auto_open(&self, index: usize, answering: bool) -> bool {
+        let Some(row) = self.rows.get(index) else {
+            return false;
+        };
+        let last = self.frontier() == Some(index);
+        let failed = self.last_outcome == Some(TurnOutcome::Failed);
+        match &row.kind {
+            RowKind::Plan(_) => true,
+            RowKind::Thought(thought) => last && answering && !thought.text.is_empty(),
+            RowKind::Bundle(_) => last && answering,
+            RowKind::Work(tool) => {
+                last && ((answering && tool.live_body()) || (failed && tool.failed()))
+            }
+            _ => false,
+        }
+    }
+
+    /// The last row a reader reads as content: the divider is a quiet line under the turn.
+    fn frontier(&self) -> Option<usize> {
+        self.rows
+            .iter()
+            .rposition(|row| !matches!(row.kind, RowKind::Divider { .. }))
+    }
 }
 
 /// Keeps every field the update names and leaves the rest as they were.
@@ -548,6 +575,40 @@ mod tests {
         transcript.absorb(&tool(1, ToolKind::Read, ToolStatus::InProgress));
         transcript.absorb(&tool(2, ToolKind::Read, ToolStatus::Completed));
         assert_eq!(transcript.rows.len(), 2, "the running row is a row");
+    }
+
+    /// A failure that ends the turn stays open: the divider is not the last row a reader reads.
+    #[test]
+    fn a_failure_that_ends_the_turn_stays_open() {
+        let mut transcript = Transcript::default();
+        transcript.absorb(&event(1, EventKind::TurnStarted));
+        transcript.absorb(&call(2, "t1", ToolKind::Execute, ToolStatus::Failed, None));
+        transcript.absorb(&event(
+            3,
+            EventKind::TurnEnded {
+                outcome: TurnOutcome::Failed,
+                error: None,
+            },
+        ));
+        assert!(matches!(transcript.rows[1].kind, RowKind::Divider { .. }));
+        assert!(transcript.auto_open(0, false));
+    }
+
+    /// The failure belongs to the turn that ended; a new turn starts from no outcome.
+    #[test]
+    fn a_new_turn_clears_the_outcome_the_last_one_ended_with() {
+        let mut transcript = Transcript::default();
+        transcript.absorb(&event(1, EventKind::TurnStarted));
+        transcript.absorb(&call(2, "t1", ToolKind::Execute, ToolStatus::Failed, None));
+        transcript.absorb(&event(
+            3,
+            EventKind::TurnEnded {
+                outcome: TurnOutcome::Failed,
+                error: None,
+            },
+        ));
+        transcript.absorb(&event(4, EventKind::TurnStarted));
+        assert!(!transcript.auto_open(0, false));
     }
 
     #[test]

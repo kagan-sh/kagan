@@ -214,6 +214,34 @@ fn a_failed_command_row_reads_failed(cx: &mut TestAppContext) {
     );
 }
 
+/// A failure that ends the turn stays open, past the divider the turn ends with.
+#[gpui_kit::test]
+fn a_failure_that_ends_the_turn_reads_expanded(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![
+            EventKind::TurnStarted,
+            tool(
+                "t1",
+                ToolKind::Execute,
+                ToolStatus::Failed,
+                "Run the tests",
+                Some(serde_json::json!({"command": "cargo t"})),
+                Some("one failure"),
+            ),
+            EventKind::TurnEnded {
+                outcome: kg_domain::TurnOutcome::Failed,
+                error: None,
+            },
+        ],
+    );
+    wait_until(cx, |cx| shows(cx, window, "chat-divider-3"));
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-work-2").as_deref() == Some("expanded · failed")
+    });
+    assert!(shows(cx, window, "chat-work-body-2"));
+}
+
 #[gpui_kit::test]
 fn looking_work_folds_into_one_bundle(cx: &mut TestAppContext) {
     let mut events = Vec::new();

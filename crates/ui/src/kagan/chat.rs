@@ -183,28 +183,11 @@ impl ChatView {
         let Some(row) = self.transcript.rows.get(index) else {
             return false;
         };
+        let answering = self.answering(cx);
         self.open
             .get(&row.id)
             .copied()
-            .unwrap_or_else(|| self.auto_open(index, cx))
-    }
-
-    /// Recomputed on every event, never stored, so it cannot fight the log.
-    fn auto_open(&self, index: usize, cx: &App) -> bool {
-        let Some(row) = self.transcript.rows.get(index) else {
-            return false;
-        };
-        let last = index + 1 == self.transcript.rows.len();
-        let failed_turn = self.transcript.last_outcome == Some(kg_domain::TurnOutcome::Failed);
-        match &row.kind {
-            part::RowKind::Plan(_) => true,
-            part::RowKind::Thought(thought) => last && !thought.text.is_empty(),
-            part::RowKind::Bundle(_) => last && self.answering(cx),
-            part::RowKind::Work(tool) => {
-                (last && tool.live_body()) || (last && failed_turn && tool.failed())
-            }
-            _ => false,
-        }
+            .unwrap_or_else(|| self.transcript.auto_open(index, answering))
     }
 
     fn more_open(&self, row: u64) -> bool {
