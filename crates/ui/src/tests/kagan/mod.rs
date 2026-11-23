@@ -45,7 +45,7 @@ pub(in crate::tests) use marks::{install_navigator, plugin_log, wait_for_mark};
 pub(in crate::tests) use paint::host_dimensions;
 pub(in crate::tests) use paint::{
     focused_of, highlighted_at, label, painted, point_at, present, quad_at_row, role_of, row_top,
-    selected_of, shows, value_of,
+    selected_of, shows, shows_within, value_of,
 };
 #[cfg(unix)]
 pub(in crate::tests) use plugins::host;

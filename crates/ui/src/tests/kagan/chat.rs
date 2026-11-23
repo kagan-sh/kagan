@@ -1,11 +1,14 @@
-use gpui_kit::{AnyWindowHandle, Entity, TestAppContext};
-use kg_domain::{Link, Thread, ThreadId, ThreadStatus, Timestamp};
+use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, TestAppContext};
+use kg_domain::{
+    EventKind, InteractionOption, Link, OptionRole, PendingInteraction, PendingInteractionId, Role,
+    Thread, ThreadId, ThreadStatus, Timestamp, ToolKind, ToolStatus,
+};
 
-use super::{click, open, shows, value_of, wait_until};
+use super::{click, focused_of, open, shows, shows_within, value_of, wait_until};
 
 /// A thread the store already holds: an ACP one has no program in this process, so the center
 /// shows its transcript and prompt box.
-fn seed_acp_thread(data: &std::path::Path) -> ThreadId {
+fn seed_thread(data: &std::path::Path, events: Vec<EventKind>) -> ThreadId {
     let mut store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
     let id = ThreadId("thr_chat".into());
     store
@@ -33,39 +36,21 @@ fn seed_acp_thread(data: &std::path::Path) -> ThreadId {
             updated_at: Timestamp(0),
         })
         .unwrap();
-    store
-        .append_events(
-            &id,
-            Timestamp(1),
-            [
-                kg_domain::EventKind::Message {
-                    role: kg_domain::Role::User,
-                    text: "say hi".into(),
-                    message_id: None,
-                    attachments: Vec::new(),
-                },
-                kg_domain::EventKind::Message {
-                    role: kg_domain::Role::Agent,
-                    text: "hi there".into(),
-                    message_id: None,
-                    attachments: Vec::new(),
-                },
-            ],
-        )
-        .unwrap();
+    store.append_events(&id, Timestamp(1), events).unwrap();
     id
 }
 
 /// Opens a window on a seeded ACP thread and shows its chat.
-fn show_chat(
+fn show_chat_with(
     cx: &mut TestAppContext,
+    events: Vec<EventKind>,
 ) -> (
     Entity<crate::kagan::Kagan>,
     AnyWindowHandle,
     tempfile::TempDir,
 ) {
     let (kagan, window, data) = open(cx);
-    let id = seed_acp_thread(data.path());
+    let id = seed_thread(data.path(), events);
     // A thread written behind the window's back arrives with the next refresh, which marking it
     // read asks for.
     let read = cx.update(|cx| {
@@ -81,15 +66,73 @@ fn show_chat(
     (kagan, window, data)
 }
 
+fn show_chat(
+    cx: &mut TestAppContext,
+) -> (
+    Entity<crate::kagan::Kagan>,
+    AnyWindowHandle,
+    tempfile::TempDir,
+) {
+    show_chat_with(
+        cx,
+        vec![
+            EventKind::Message {
+                role: Role::User,
+                text: "say hi".into(),
+                message_id: None,
+                attachments: Vec::new(),
+            },
+            EventKind::Message {
+                role: Role::Agent,
+                text: "hi there".into(),
+                message_id: None,
+                attachments: Vec::new(),
+            },
+        ],
+    )
+}
+
+/// One ACP tool delta, as the agent's update becomes it.
+fn tool(
+    id: &str,
+    kind: ToolKind,
+    status: ToolStatus,
+    title: &str,
+    input: Option<serde_json::Value>,
+    output: Option<&str>,
+) -> EventKind {
+    EventKind::Tool {
+        id: id.into(),
+        name: None,
+        kind: Some(kind),
+        title: Some(title.into()),
+        status: Some(status),
+        input,
+        output: output.map(str::to_owned),
+        diff: Vec::new(),
+        locations: Vec::new(),
+        approval: None,
+    }
+}
+
+fn message(message_id: &str, text: &str) -> EventKind {
+    EventKind::Message {
+        role: Role::Agent,
+        text: text.into(),
+        message_id: Some(message_id.into()),
+        attachments: Vec::new(),
+    }
+}
+
 #[gpui_kit::test]
 fn an_acp_thread_shows_its_transcript_and_prompt_box(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat(cx);
     assert!(!shows(cx, window, "terminal"));
     wait_until(cx, |cx| {
-        value_of(cx, window, "chat-message-1").is_some_and(|text| text.contains("hi there"))
+        value_of(cx, window, "chat-message-2").is_some_and(|text| text.contains("hi there"))
     });
     assert_eq!(
-        value_of(cx, window, "chat-message-0").as_deref(),
+        value_of(cx, window, "chat-message-1").as_deref(),
         Some("say hi")
     );
     assert!(shows(cx, window, "chat-prompt"));
@@ -99,6 +142,265 @@ fn an_acp_thread_shows_its_transcript_and_prompt_box(cx: &mut TestAppContext) {
         value_of(cx, window, "chat-hint").as_deref(),
         Some("The agent is not running. Start it again below.")
     );
+}
+
+#[gpui_kit::test]
+fn a_work_row_expands_and_collapses(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![tool(
+            "t1",
+            ToolKind::Read,
+            ToolStatus::Completed,
+            "Read file auth.spec.ts",
+            Some(serde_json::json!({"file_path": "auth.spec.ts"})),
+            Some("one\ntwo"),
+        )],
+    );
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-work-1").is_some_and(|value| value.contains("collapsed"))
+    });
+    assert_eq!(
+        value_of(cx, window, "chat-work-1").as_deref(),
+        Some("collapsed · done")
+    );
+    assert!(!shows(cx, window, "chat-work-body-1"));
+    click(cx, window, "chat-work-1");
+    wait_until(cx, |cx| shows(cx, window, "chat-work-body-1"));
+    assert_eq!(
+        value_of(cx, window, "chat-work-1").as_deref(),
+        Some("expanded · done")
+    );
+    click(cx, window, "chat-work-1");
+    wait_until(cx, |cx| !shows(cx, window, "chat-work-body-1"));
+    // Enter does what the click did, once the row has focus.
+    for _ in 0..40 {
+        cx.simulate_keystrokes(window, "tab");
+        cx.run_until_parked();
+        if focused_of(cx, window, "chat-work-1") != Some(true) {
+            continue;
+        }
+        cx.simulate_keystrokes(window, "enter");
+        cx.run_until_parked();
+        break;
+    }
+    wait_until(cx, |cx| shows(cx, window, "chat-work-body-1"));
+}
+
+#[gpui_kit::test]
+fn a_failed_command_row_reads_failed(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![tool(
+            "t1",
+            ToolKind::Execute,
+            ToolStatus::Failed,
+            "Run the tests",
+            Some(serde_json::json!({"command": "cargo t"})),
+            Some("one failure"),
+        )],
+    );
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-work-1").is_some_and(|value| value.contains("failed"))
+    });
+    assert_eq!(
+        value_of(cx, window, "chat-work-1").as_deref(),
+        Some("collapsed · failed")
+    );
+    assert!(
+        super::label(cx, window, "chat-work-1").contains("Ran command"),
+        "{}",
+        super::label(cx, window, "chat-work-1")
+    );
+}
+
+#[gpui_kit::test]
+fn looking_work_folds_into_one_bundle(cx: &mut TestAppContext) {
+    let mut events = Vec::new();
+    for (id, path) in [("t1", "a.ts"), ("t2", "b.ts"), ("t3", "c.ts")] {
+        events.push(tool(
+            id,
+            ToolKind::Read,
+            ToolStatus::Completed,
+            "Read file",
+            Some(serde_json::json!({"file_path": path})),
+            Some("one line"),
+        ));
+    }
+    events.push(tool(
+        "t4",
+        ToolKind::Edit,
+        ToolStatus::Completed,
+        "Edited file",
+        Some(serde_json::json!({"file_path": "a.ts"})),
+        None,
+    ));
+    let (_kagan, window, _data) = show_chat_with(cx, events);
+    wait_until(cx, |cx| shows(cx, window, "chat-bundle-1"));
+    assert_eq!(
+        super::label(cx, window, "chat-bundle-1"),
+        "Explored 3 files"
+    );
+    assert!(shows(cx, window, "chat-work-4"), "the edit is its own row");
+    assert!(!shows(cx, window, "chat-work-1"), "a bundle hides its rows");
+    click(cx, window, "chat-bundle-1");
+    for id in 1..=3 {
+        let row = format!("chat-work-{id}");
+        wait_until(cx, |cx| shows(cx, window, &row));
+    }
+}
+
+#[gpui_kit::test]
+fn a_bundle_closes_when_the_turn_ends(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![
+            EventKind::TurnStarted,
+            tool(
+                "t1",
+                ToolKind::Read,
+                ToolStatus::Completed,
+                "Read file",
+                Some(serde_json::json!({"file_path": "a.ts"})),
+                Some("one line"),
+            ),
+            tool(
+                "t2",
+                ToolKind::Read,
+                ToolStatus::Completed,
+                "Read file",
+                Some(serde_json::json!({"file_path": "b.ts"})),
+                Some("one line"),
+            ),
+            EventKind::TurnEnded {
+                outcome: kg_domain::TurnOutcome::Completed,
+                error: None,
+            },
+        ],
+    );
+    // The turn started at seq 1, the reads folded at 2, and the divider is seq 4.
+    wait_until(cx, |cx| shows(cx, window, "chat-bundle-2"));
+    assert_eq!(
+        value_of(cx, window, "chat-bundle-2").as_deref(),
+        Some("collapsed · done")
+    );
+    assert!(shows(cx, window, "chat-divider-4"));
+    assert_eq!(
+        value_of(cx, window, "chat-divider-4").as_deref(),
+        Some("Worked for 1 s")
+    );
+}
+
+#[gpui_kit::test]
+fn the_approval_card_answers_through_the_question(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let options = vec![
+        InteractionOption {
+            id: "reject-once".into(),
+            label: "Deny".into(),
+            role: Some(OptionRole::Destructive),
+        },
+        InteractionOption {
+            id: "allow-once".into(),
+            label: "Allow once".into(),
+            role: Some(OptionRole::Primary),
+        },
+    ];
+    let asked = PendingInteraction {
+        id: PendingInteractionId("pn_1".into()),
+        thread_id: ThreadId("thr_chat".into()),
+        title: "opencode wants to run a command".into(),
+        options,
+        fields: None,
+        created_at: Timestamp(1),
+    };
+    let id = seed_thread(
+        data.path(),
+        vec![
+            tool(
+                "t1",
+                ToolKind::Execute,
+                ToolStatus::InProgress,
+                "Run the tests",
+                Some(serde_json::json!({"command": "cargo t"})),
+                None,
+            ),
+            EventKind::Tool {
+                id: "t1".into(),
+                name: None,
+                kind: Some(ToolKind::Execute),
+                title: Some("Run the tests".into()),
+                status: Some(ToolStatus::Pending),
+                input: Some(serde_json::json!({"command": "cargo t"})),
+                output: None,
+                diff: Vec::new(),
+                locations: Vec::new(),
+                approval: Some(asked.id.clone()),
+            },
+        ],
+    );
+    let store = kg_store::Store::open(data.path().join("kagan.sqlite3")).unwrap();
+    store.put_pending_interaction(&asked).unwrap();
+    drop(store);
+    let read = cx.update(|cx| {
+        kg_core::Workspace::dispatch(
+            kg_domain::Op::Thread(kg_domain::ThreadOp::MarkRead { id: id.clone() }),
+            cx,
+        )
+    });
+    let _ = cx.foreground_executor().block_test(read);
+    wait_until(cx, |cx| shows(cx, window, &format!("thread-{}", id.0)));
+    click(cx, window, &format!("thread-{}", id.0));
+    wait_until(cx, |cx| shows(cx, window, "chat-transcript"));
+    wait_until(cx, |cx| shows(cx, window, "chat-approval-pn_1"));
+    wait_until(cx, |cx| {
+        shows_within(cx, window, "answer-pn_1-allow-once", "chat-approval-pn_1")
+    });
+    wait_until(cx, |cx| {
+        shows_within(cx, window, "answer-pn_1-reject-once", "chat-approval-pn_1")
+    });
+    assert_eq!(
+        value_of(cx, window, "chat-work-1").as_deref(),
+        Some("collapsed · busy")
+    );
+}
+
+#[gpui_kit::test]
+fn the_transcript_follows_the_tail_and_offers_jump_to_latest(cx: &mut TestAppContext) {
+    let events: Vec<EventKind> = (0..60)
+        .map(|index| message(&format!("m{index}"), &format!("answer {index}")))
+        .collect();
+    let (_kagan, window, _data) = show_chat_with(cx, events);
+    wait_until(cx, |cx| shows(cx, window, "chat-message-60"));
+    // A wheel scroll up takes the list away from its tail.
+    cx.update_window(window, |_, window, cx| {
+        crate::ui_dispatch::scroll_within(
+            window,
+            &ElementId::Name("chat-message-60".into()),
+            None,
+            gpui_kit::ScrollDelta::Pixels(gpui_kit::point(gpui_kit::px(0.), gpui_kit::px(1200.))),
+            cx,
+        )
+        .expect("the transcript scrolls");
+    })
+    .unwrap();
+    wait_until(cx, |cx| !shows(cx, window, "chat-message-60"));
+    // The list is scrolled up, so the built-in Jump to latest button sits over the bottom of the
+    // transcript. It is gpui-kit's own button, so it is clicked by its place, not an element id.
+    cx.update_window(window, |_, window, cx| {
+        let transcript = ElementId::Name("chat-transcript".into());
+        let bounds = crate::ui_registry::find(window, &transcript)
+            .expect("the transcript")
+            .bounds;
+        crate::ui_dispatch::click_at(
+            window,
+            gpui_kit::point(bounds.center().x, bounds.bottom() - gpui_kit::px(24.)),
+            cx,
+        );
+    })
+    .unwrap();
+    cx.run_until_parked();
+    wait_until(cx, |cx| shows(cx, window, "chat-message-60"));
 }
 
 /// Escape with no reply open is left for whatever else handles it: a stopped thread says nothing.

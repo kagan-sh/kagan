@@ -85,6 +85,24 @@ pub(in crate::tests) fn shows(
     .unwrap()
 }
 
+/// Whether `kg ui` reports an element inside `within` as visible.
+pub(in crate::tests) fn shows_within(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    name: &str,
+    within: &str,
+) -> bool {
+    cx.update_window(window, |_, window, _| {
+        let id = ElementId::Name(name.to_owned().into());
+        let scope = ElementId::Name(within.to_owned().into());
+        matches!(
+            crate::ui_registry::locate(window, &id, Some(&scope)),
+            crate::ui_registry::Located::One(element) if element.visible
+        )
+    })
+    .unwrap()
+}
+
 /// The value `kg ui` reports for an element, if it has one.
 pub(in crate::tests) fn value_of(
     cx: &mut TestAppContext,

@@ -64,7 +64,35 @@ pub(super) fn card(
         let draft = draft?;
         Some(ask_form::fields(asked, draft, entity, window, cx).into_any_element())
     });
-    body(question, form, kagan, window, cx)
+    body(
+        question,
+        form,
+        None,
+        Some(kagan),
+        &failed(kagan),
+        window,
+        cx,
+    )
+}
+
+/// The same card in the transcript: the agent's question with the one line that says what it
+/// wants, and nowhere to put the error but the transcript's own line.
+pub(super) fn permission_card(
+    asked: &PendingInteraction,
+    detail: Option<AnyElement>,
+    failed: &Failed,
+    window: &mut Window,
+    cx: &mut App,
+) -> impl IntoElement {
+    body(
+        Question::thread(asked),
+        None,
+        detail,
+        None,
+        failed,
+        window,
+        cx,
+    )
 }
 
 pub(super) fn form_card(
@@ -80,7 +108,28 @@ pub(super) fn form_card(
         .as_ref()
         .is_some_and(|fields| !fields.is_empty())
         .then(|| ask_form::fields(asked, draft, entity, window, cx).into_any_element());
-    body(Question::thread(asked), form, kagan, window, cx)
+    body(
+        Question::thread(asked),
+        form,
+        None,
+        Some(kagan),
+        &failed(kagan),
+        window,
+        cx,
+    )
+}
+
+/// Where an answer's failure goes: the window's note, or the transcript's line.
+pub(super) type Failed = Rc<dyn Fn(&mut App, String)>;
+
+fn failed(kagan: &WeakEntity<Kagan>) -> Failed {
+    let kagan = kagan.clone();
+    Rc::new(move |cx, text| {
+        _ = kagan.update(cx, |kagan, cx| {
+            kagan.note = Some(text.into());
+            cx.notify();
+        });
+    })
 }
 
 pub(super) fn answer_focus(question: &str, option: &str) -> String {
@@ -90,10 +139,13 @@ pub(super) fn answer_focus(question: &str, option: &str) -> String {
 fn body(
     question: Question,
     form: Option<AnyElement>,
-    kagan: &WeakEntity<Kagan>,
+    detail: Option<AnyElement>,
+    kagan: Option<&WeakEntity<Kagan>>,
+    failed: &Failed,
     window: &mut Window,
     cx: &mut App,
-) -> impl IntoElement {
+) -> impl IntoElement + use<> {
+    let failed = Rc::clone(failed);
     let mut buttons: Vec<AnyElement> = Vec::new();
     for option in &question.options {
         let focus = super::tab_stop(
@@ -101,23 +153,26 @@ fn body(
             cx,
             ElementId::Name(answer_focus(&question.id.0, &option.id).into()),
         );
-        let answer_now: Rc<dyn Fn(&mut App)> =
-            match (question.asked.clone(), question.thread.clone()) {
-                (Some(asked), Some(thread)) if asked.fields.is_some() => {
-                    ask_form::answer_callback(thread, asked, option.id.clone(), kagan.clone())
-                }
-                _ => {
-                    let (thread, id, choice, kagan) = (
-                        question.thread.clone(),
-                        question.id.clone(),
-                        option.id.clone(),
-                        kagan.clone(),
-                    );
-                    Rc::new(move |cx| {
-                        answer(thread.clone(), id.clone(), choice.clone(), &kagan, cx);
-                    })
-                }
-            };
+        let answer_now: Rc<dyn Fn(&mut App)> = match (
+            question.asked.clone(),
+            question.thread.clone(),
+            kagan.cloned(),
+        ) {
+            (Some(asked), Some(thread), Some(kagan)) if asked.fields.is_some() => {
+                ask_form::answer_callback(thread, asked, option.id.clone(), kagan)
+            }
+            _ => {
+                let (thread, id, choice) = (
+                    question.thread.clone(),
+                    question.id.clone(),
+                    option.id.clone(),
+                );
+                let failed = Rc::clone(&failed);
+                Rc::new(move |cx| {
+                    answer(thread.clone(), id.clone(), choice.clone(), cx, &failed);
+                })
+            }
+        };
         let (on_key, on_click) = (answer_now.clone(), answer_now);
         let focused = focus.is_focused(window);
         buttons.push(
@@ -167,6 +222,7 @@ fn body(
         .border_color(cx.theme().warning)
         .bg(cx.theme().muted)
         .child(div().type_body(cx).child(question.title))
+        .children(detail)
         .children(form)
         .child(h_flex().gap(px(space(SpaceStep::Sm, cx))).children(buttons))
 }
@@ -175,8 +231,8 @@ fn answer(
     thread: Option<ThreadId>,
     id: PendingInteractionId,
     option: String,
-    kagan: &WeakEntity<Kagan>,
     cx: &mut App,
+    failed: &Failed,
 ) {
     if crate::synthetic::refuse_for_person() {
         return;
@@ -185,13 +241,10 @@ fn answer(
         Some(thread) => Workspace::answer(&thread, id, option, cx),
         None => Workspace::answer_standalone(id, option, cx),
     };
-    let kagan = kagan.clone();
+    let failed = Rc::clone(failed);
     cx.spawn(async move |cx| {
         if let Err(error) = answered.await {
-            _ = kagan.update(cx, |kagan, cx| {
-                kagan.note = Some(format!("Could not answer: {error}").into());
-                cx.notify();
-            });
+            cx.update(|cx| failed(cx, format!("Could not answer: {error}")));
         }
     })
     .detach();
