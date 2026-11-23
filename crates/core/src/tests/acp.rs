@@ -429,6 +429,32 @@ async fn acp_events_are_the_transcript(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+async fn acp_a_session_id_kagan_cannot_store_is_said(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&[""], &[]);
+    let OpResult::Thread(started) = op(fixture.run_acp(&agent.program()), cx).await.unwrap() else {
+        panic!("thread")
+    };
+    wait_for_status(&started.id, ThreadStatus::Active, cx).await;
+    let kinds = kinds_of(&started.id, cx).await;
+    assert!(
+        kinds.iter().any(|kind| matches!(
+            kind,
+            EventKind::Notice {
+                severity: NoticeSeverity::Warning,
+                text
+            } if text.contains("cannot store")
+        )),
+        "the person is told why the session is not kept: {kinds:?}"
+    );
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    assert!(store.conversation(&started.id).unwrap().is_none());
+    op(Op::Thread(ThreadOp::Stop { id: started.id }), cx)
+        .await
+        .unwrap();
+}
+
+#[gpui_kit::test]
 async fn acp_message_ids_are_kept_with_their_chunks(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let agent = Agent::new(&["ses_ids"], &[turn(&["a", "b"], "end_turn")]);
