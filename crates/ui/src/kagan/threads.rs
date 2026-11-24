@@ -45,6 +45,9 @@ impl Kagan {
         }
     }
     pub(super) fn record<'a>(&'a self, id: &ThreadId, cx: &'a App) -> Option<&'a Thread> {
+        // An archived thread is in no list, so its record comes from the workspace.
+        let workspace = Workspace::global(cx);
+        let workspace = workspace.read(cx);
         self.sidebar
             .read(cx)
             .listing
@@ -52,6 +55,7 @@ impl Kagan {
             .iter()
             .find(|thread| thread.id == *id)
             .or(self.open_thread.as_ref().filter(|thread| thread.id == *id))
+            .or_else(|| workspace.thread(id).map(|t| t.read(cx).record()))
     }
 
     pub(super) fn note_shown(&mut self, cx: &App) {

@@ -263,6 +263,16 @@ impl Transcript {
         Fold::Dirty(self.rows.len() - 1)
     }
 
+    /// The agent's plan as it stands, with the id of the row it draws as, so the card above the
+    /// prompt box can show it without a second copy.
+    pub(super) fn plan(&self) -> Option<(u64, &[PlanEntry])> {
+        let row = self.rows.get(self.plan?)?;
+        match &row.kind {
+            RowKind::Plan(entries) => Some((row.id, entries)),
+            _ => None,
+        }
+    }
+
     /// The row a tool id's events fold into: its place in the transcript, and its place among a
     /// bundle's members when it has one.
     fn find_tool(&self, id: &str) -> Option<(usize, Option<usize>)> {

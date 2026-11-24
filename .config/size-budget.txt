@@ -45,7 +45,12 @@ target 35000
 # acp/launch.rs, which adds 32 product lines to the merged count (90622) and puts client.rs and
 # acp/mod.rs under 600, so their ceiling lines go with it. Product Rust went from main's 84147 to
 # 90654 (+6507). Decision 279 records it.
-ceiling 90654
+# Cost: ACP threads, the composer, adds 530 product lines on top of the merged count (90654): the
+# one prompt box in its own file, the cards over it in another, the action that is Send, Cancel or
+# Start again, the context row, the shared column the transcript and the box draw, and the ended
+# line the chat no longer draws. Product Rust went from main's 84147 to 91184 (+7037). Decision
+# 282 records it.
+ceiling 91184
 allow_expect 9
 crates/core/src/thread/agent/files.rs 754
 crates/plugins/src/runtime/ui_host.rs 630
