@@ -15,16 +15,18 @@ Build a plugin in this order. Each step names the command to run.
 
 4. **Use `KgButton`,** from `gpui-component`, for every button: a plain `Button` cannot be clicked through `kg ui` and `kg plugin check` warns about it. Give every control a stable id.
 
-4b. **Draw or extend the chat.** A `center` panel with `"replaces": "chat"` and `"follows": "thread"`, granted by `"areas": ["chat"]`, draws an ACP thread's transcript with `kagan/chat`; a command with `"prompt": true` sits before Send. The prompt box, Send and approvals stay kagan's. Read `references/chat.md`.
+4b. **Draw or extend the chat.** A `center` panel with `"replaces": "chat"` and `"follows": "thread"`, granted by `"areas": ["chat"]`, draws an ACP thread's transcript with `kagan/chat`; a command with `"prompt": true` sits before Send. Read `references/chat.md`.
 
 5. **Check it.** `kg plugin check <path>` reads the manifest, the entry, and each contribution the same way install does, and reports a refused contribution by name. It also refuses a missing host export and a field constructor the component schema rejects. Fix every error before install.
 
-6. **Preview it first.** `kg plugin preview start <path>` starts a hidden kagan with the plugin and blocks until the person approves it once, in their window. Never approve it yourself.
+6. **Preview it first.** `kg plugin preview start <path>` starts a hidden kagan with the plugin and blocks until the person approves it once, in their window.
 7. **Test in the preview, never in the person's window.** Put the `KG_DATA_DIR` and `KG_SOCKET` it prints before each command: `… kg ui snapshot`, `… kg ui click <id>`, `… kg plugin logs <id>`. A save reloads it and errors go to `watch.log`; added powers fail the reload with `powers grew`, so start the preview again. There, `kg thread run` takes `--project-id personal --environment personal`. Stop with `kg plugin preview stop <id>`, no variables.
 8. **Install, last.** `kg plugin install <path>` runs without the variables and adds it to the person's kagan. The person approves again.
 9. **Share it.** Commit and push the plugin, then run `kg plugin share <path>`. The index entry, the team index, and how teammates install the plugin are in `references/share.md`.
 
 Unavailable host areas fail explicitly. Do not invent an API: if a call is not in `kagan.d.ts`, it does not exist in this version.
+
+Never answer an approval; never approve powers; a chat plugin draws, the host types and answers.
 
 ## References
 

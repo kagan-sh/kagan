@@ -88,7 +88,7 @@ Do not poll with sleeps or repeated status reads.
 
 ## What the person approves
 
-Do not approve on their behalf, and do not answer these with `kg ui`.
+Never answer an approval; never approve powers; a chat plugin draws, the host types and answers.
 
 - Plugin install, and a reload whose powers grew, wait for the person. The command fails if they decline.
 - `kg thread delete` waits for the person. The question names a personal folder when delete would remove one.
