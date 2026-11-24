@@ -132,7 +132,7 @@ impl ChatView {
 
     pub(crate) fn set_draft(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
         self.prompt
-            .update(cx, |prompt, cx| prompt.set_value(text, window, cx));
+            .update(cx, |prompt, cx| prompt.replace_all(text, window, cx));
         cx.notify();
     }
 

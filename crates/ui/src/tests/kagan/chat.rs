@@ -1,3 +1,4 @@
+use gpui_kit::component::input::Undo;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, TestAppContext};
 use kg_domain::{
     Event, EventKind, InteractionOption, Link, OptionRole, PendingInteraction,
@@ -5,8 +6,8 @@ use kg_domain::{
 };
 
 use super::{
-    click, disabled, focused_of, label, open, row_top, shows, shows_within, thread_record,
-    value_of, wait_until,
+    click, disabled, focused_of, label, open, row_top, run_shell, shows, shows_within,
+    thread_record, value_of, wait_until,
 };
 use crate::tests::sidebar::layout::span;
 
@@ -884,6 +885,36 @@ fn a_load_that_fails_still_draws_the_events_after_it(cx: &mut TestAppContext) {
     emit(cx, agent_said(&id, 1, "the first word"));
     wait_until(cx, |cx| {
         value_of(cx, window, "chat-message-1").as_deref() == Some("the first word")
+    });
+}
+
+/// A plugin's rewrite of the draft is one edit in the box's history, so Command Z takes it back.
+#[gpui_kit::test]
+fn a_rewritten_draft_undoes_with_the_normal_key(cx: &mut TestAppContext) {
+    let (kagan, _window, _data) = open(cx);
+    // A running thread, so the box takes typing; the view is drawn on its own so it has the key.
+    let id = run_shell(cx);
+    let handle = cx.add_window(|window, cx| {
+        crate::kagan::chat::ChatView::new(id.clone(), kagan.downgrade(), window, cx)
+    });
+    let chat = handle.root(cx).unwrap();
+    let window: AnyWindowHandle = handle.into();
+    wait_until(cx, |cx| shows(cx, window, "chat-prompt"));
+    assert_eq!(disabled(cx, window, "chat-prompt"), Some(false));
+    click(cx, window, "chat-prompt");
+    wait_until(cx, |cx| focused_of(cx, window, "chat-prompt") == Some(true));
+    cx.update_window(window, |_, window, cx| {
+        chat.update(cx, |chat, cx| {
+            chat.set_draft("improve: ".into(), window, cx)
+        });
+    })
+    .unwrap();
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-prompt").as_deref() == Some("improve: ")
+    });
+    cx.dispatch_action(window, Undo);
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-prompt").as_deref() == Some("")
     });
 }
 
