@@ -4,7 +4,10 @@ use kg_domain::{
     PendingInteractionId, Role, Thread, ThreadId, ThreadStatus, Timestamp, ToolKind, ToolStatus,
 };
 
-use super::{click, focused_of, label, open, row_top, shows, shows_within, value_of, wait_until};
+use super::{
+    click, focused_of, label, open, row_top, shows, shows_within, thread_record, value_of,
+    wait_until,
+};
 use crate::tests::sidebar::layout::span;
 
 /// A thread the store already holds: an ACP one has no program in this process, so the center
@@ -215,7 +218,7 @@ fn an_acp_thread_shows_its_transcript_and_prompt_box(cx: &mut TestAppContext) {
     assert!(!shows(cx, window, "chat-send"));
     assert_eq!(
         value_of(cx, window, "chat-stopped").as_deref(),
-        Some("The agent is not running.")
+        Some("The program is not running.")
     );
     assert!(!shows(cx, window, "ended"), "no second bar under the box");
 }
@@ -935,7 +938,7 @@ fn a_chat_that_exited_says_it_once_and_offers_start_again(cx: &mut TestAppContex
         ],
     );
     wait_until(cx, |cx| {
-        value_of(cx, window, "chat-stopped").as_deref() == Some("The agent stopped (exit 0).")
+        value_of(cx, window, "chat-stopped").as_deref() == Some("Exited with code 0.")
     });
     assert!(shows(cx, window, "chat-start-again"));
     assert!(!shows(cx, window, "chat-send"), "one action, not two");
@@ -1040,4 +1043,77 @@ fn the_child_threads_card_counts_the_ones_that_run(cx: &mut TestAppContext) {
     click(cx, window, "chat-card-children");
     wait_until(cx, |cx| shows(cx, window, "chat-card-children-body"));
     assert!(shows(cx, window, &format!("chat-card-child-{}", child.0)));
+}
+
+/// An archived chat offers no way on: no Start again, no New thread here…, and one line says why.
+#[gpui_kit::test]
+fn an_archived_chat_offers_no_way_on(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let id = seed_thread_in(
+        data.path(),
+        Some(kg_domain::EnvironmentId("env_kagan".into())),
+        vec![
+            EventKind::Started,
+            EventKind::Exited {
+                code: Some(0),
+                signal: None,
+            },
+        ],
+    );
+    reveal(cx, window, &id);
+    wait_until(cx, |cx| shows(cx, window, "chat-start-again"));
+    assert!(shows(cx, window, "chat-new-thread"));
+    cx.dispatch_action(window, crate::kagan::ArchiveThread);
+    wait_until(cx, |cx| thread_record(cx, &id).archived_at.is_some());
+    // An archived row is only reachable from the archived list, and opening it shows the chat
+    // again, read only.
+    click(cx, window, "archived");
+    wait_until(cx, |cx| shows(cx, window, &format!("thread-{}", id.0)));
+    click(cx, window, &format!("thread-{}", id.0));
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-stopped").as_deref() == Some("This thread is archived.")
+    });
+    assert!(!shows(cx, window, "chat-start-again"));
+    assert!(!shows(cx, window, "chat-new-thread"));
+}
+
+/// A run that failed says the agent's own reason, not that nothing was running.
+#[gpui_kit::test]
+fn a_chat_that_failed_says_why(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![
+            EventKind::Started,
+            EventKind::Failed {
+                error: Some("no such file or directory".into()),
+            },
+        ],
+    );
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-stopped").as_deref() == Some("no such file or directory")
+    });
+}
+
+/// A card opens and closes from the keyboard, with Enter and with Space.
+#[gpui_kit::test]
+fn a_card_opens_and_closes_from_the_keyboard(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![EventKind::Plan {
+            entries: vec![kg_domain::PlanEntry {
+                text: "Reproduce it".into(),
+                status: kg_domain::PlanStatus::Pending,
+            }],
+        }],
+    );
+    wait_until(cx, |cx| shows(cx, window, "chat-card-plan"));
+    // A click opens the card and gives it the keyboard; Enter closes it, and Space opens it again.
+    click(cx, window, "chat-card-plan");
+    wait_until(cx, |cx| shows(cx, window, "chat-card-plan-body"));
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    wait_until(cx, |cx| !shows(cx, window, "chat-card-plan-body"));
+    cx.simulate_keystrokes(window, "space");
+    cx.run_until_parked();
+    wait_until(cx, |cx| shows(cx, window, "chat-card-plan-body"));
 }

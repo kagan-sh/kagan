@@ -26,7 +26,9 @@ use crate::ui_registry::Facts;
 
 const WELCOME_MARK_FADE: f32 = 0.3;
 
-fn ended_text(id: &ThreadId, cx: &gpui_kit::App) -> String {
+/// What the ended line says: core's own words for the run, the note about a screen that was not
+/// kept in full, and why nothing ran.
+pub(in crate::kagan) fn ended_text(id: &ThreadId, cx: &gpui_kit::App) -> String {
     let workspace = Workspace::global(cx);
     let workspace = workspace.read(cx);
     let mut line = workspace
@@ -339,7 +341,7 @@ impl Kagan {
         let line = ended_text(id, cx);
         let recovery = Workspace::global(cx).read(cx).recovery(id);
         // Offered only where the new-thread screen can run in the folder, by the same test.
-        let reusable = !archived && crate::kagan::start::Reuse::of(id, cx).is_some();
+        let reusable = crate::kagan::start::Reuse::of(id, cx).is_some();
         h_flex()
             .id("ended")
             .w_full()

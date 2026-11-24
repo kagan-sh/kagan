@@ -65,6 +65,17 @@ impl Facts {
         }
     }
 
+    pub(crate) fn label(
+        name: impl Into<gpui_kit::SharedString>,
+        value: impl Into<gpui_kit::SharedString>,
+    ) -> Self {
+        Self {
+            role: gpui_kit::Role::Label,
+            value: Some(value.into()),
+            ..Self::button(name)
+        }
+    }
+
     pub(crate) fn input(
         name: impl Into<SharedString>,
         input: &Entity<InputState>,

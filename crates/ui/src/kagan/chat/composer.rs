@@ -3,68 +3,29 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
 use gpui_kit::component::{Disableable as _, Icon, Sizable as _, h_flex, v_flex};
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, Focusable as _, Hsla, InteractiveElement as _, IntoElement,
     ParentElement as _, Role, SharedString, Styled as _, Window, div, px,
 };
 use kg_core::Workspace;
-use kg_domain::{EventKind, ThreadId, ThreadStatus};
+use kg_domain::{ThreadId, ThreadStatus};
 
 use super::ChatView;
 use crate::kagan::controls::{control, dispatch};
 use crate::kagan::{SaveDiagnostics, StartAgain};
-use crate::theme::{Tone, TypeScale as _, radius_xs};
+use crate::theme::{Tone, TypeScale as _, control_height, radius_xs};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 /// The one column the transcript, the cards and the prompt box share.
 pub(super) const COLUMN: f32 = 760.;
 
-/// How the shown run ended, from the log's own end event.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum End {
-    Exited {
-        code: Option<u32>,
-        signal: Option<i32>,
-    },
-    Stopped,
-}
-
-impl End {
-    pub(super) fn of(kind: &EventKind) -> Option<Self> {
-        match kind {
-            EventKind::Exited { code, signal } => Some(Self::Exited {
-                code: *code,
-                signal: *signal,
-            }),
-            EventKind::Stopped => Some(Self::Stopped),
-            _ => None,
-        }
-    }
-
-    /// What the box says happened, in the person's words.
-    pub(super) fn line(self) -> String {
-        match self {
-            Self::Exited {
-                code: Some(code), ..
-            } => format!("The agent stopped (exit {code})."),
-            Self::Exited {
-                signal: Some(signal),
-                ..
-            } => format!("The agent stopped (signal {signal})."),
-            Self::Exited { .. } => "The agent stopped.".into(),
-            Self::Stopped => "You stopped the agent.".into(),
-        }
-    }
-}
-
 /// What the box draws this frame, read once so every part of it agrees.
 struct Shown {
     turn: Turn,
     ready: bool,
     focused: bool,
-    empty: bool,
+    archived: bool,
 }
 
 /// Where the shown run is: waiting for a prompt, answering one, or stopped.
@@ -106,7 +67,7 @@ pub(super) fn composer(
         turn: Turn::of(answering, running),
         ready: running && !empty && !view.sending,
         focused: view.prompt.read(cx).focus_handle(cx).is_focused(window),
-        empty,
+        archived: view.archived(cx),
     };
     let cards = super::above::stack(view, window, cx);
     v_flex()
@@ -134,8 +95,11 @@ fn boxed(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyE
         cx.theme().input
     };
     let stopped = (!shown.turn.running()).then(|| {
-        view.end
-            .map_or_else(|| "The agent is not running.".to_owned(), End::line)
+        if shown.archived {
+            "This thread is archived.".to_owned()
+        } else {
+            crate::kagan::shown::ended_text(&view.thread, cx)
+        }
     });
     let notice = view.notice.clone();
     v_flex()
@@ -146,7 +110,7 @@ fn boxed(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyE
         .border_color(border)
         .rounded(cx.theme().radius)
         .bg(cx.theme().secondary)
-        .child(area(view, shown.empty, cx))
+        .child(area(view, cx))
         .children(stopped.map(|line| {
             div()
                 .id("chat-stopped")
@@ -154,7 +118,7 @@ fn boxed(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyE
                 .pb_1()
                 .type_small(cx)
                 .text_color(cx.theme().muted_foreground)
-                .ui_observe_as(label("Stopped", line.clone(), cx))
+                .ui_observe_as(Facts::label("Stopped", line.clone()))
                 .child(line)
         }))
         .children(notice.map(|notice| {
@@ -170,49 +134,35 @@ fn boxed(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyE
         .into_any_element()
 }
 
-/// The text area, with the one line that says what to do while it is empty.
-fn area(view: &ChatView, empty: bool, cx: &App) -> impl IntoElement {
+/// The text area. What to do sits in its own placeholder, so the box draws one thing.
+fn area(view: &ChatView, cx: &App) -> impl IntoElement {
     let value = view.prompt.read(cx).value().to_string();
-    div()
-        .relative()
-        .child(
-            div()
-                .id("chat-prompt")
-                .ui_observe_as(Facts {
-                    role: Role::TextInput,
-                    name: "Prompt".into(),
-                    value: Some(value.into()),
-                    disabled: false,
-                    selected: None,
-                    focus: Some(view.prompt.read(cx).focus_handle(cx)),
-                    hint: None,
-                })
-                .child(
-                    Textarea::new(&view.prompt)
-                        .bordered(false)
-                        .appearance(false)
-                        .text_size(px(crate::theme::type_body(cx)))
-                        .small(),
-                ),
-        )
-        .when(empty, |area| {
-            area.child(
-                div()
-                    .id("chat-placeholder")
-                    .absolute()
-                    .top(px(7.))
-                    .left(px(9.))
-                    .type_body(cx)
-                    .text_color(cx.theme().muted_foreground)
-                    .child("Ask the agent… Enter sends, Shift+Enter adds a line"),
-            )
-        })
+    div().relative().child(
+        div()
+            .id("chat-prompt")
+            .ui_observe_as(Facts {
+                role: Role::TextInput,
+                name: "Prompt".into(),
+                value: Some(value.into()),
+                disabled: false,
+                selected: None,
+                focus: Some(view.prompt.read(cx).focus_handle(cx)),
+                hint: None,
+            })
+            .child(
+                Textarea::new(&view.prompt)
+                    .bordered(false)
+                    .appearance(false)
+                    .text_size(px(crate::theme::type_body(cx)))
+                    .small(),
+            ),
+    )
 }
 
 /// The bar inside the box: what a plugin adds, the way on that stays quiet, and the one action
 /// this state offers.
 fn toolbar(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyElement {
-    let quiet = if shown.turn.running() {
+    let quiet = if shown.turn.running() || shown.archived {
         Vec::new()
     } else {
         stopped_actions(view, cx)
@@ -226,7 +176,7 @@ fn toolbar(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> An
         .children(crate::kagan::header::prompt(cx))
         .children(quiet)
         .child(div().flex_1())
-        .child(action)
+        .children(action)
         .into_any_element()
 }
 
@@ -273,59 +223,68 @@ fn stopped_actions(view: &ChatView, cx: &App) -> Vec<AnyElement> {
     actions
 }
 
-/// The one filled action: Send while the agent waits, Cancel while it answers, Start again after
-/// it stops. All three sit where Send does, so the hand learns one place.
-fn action(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyElement {
+/// The one action, where Send sits: Send while the agent waits, a round stop button while it
+/// answers, Start again after it stops, so the hand learns one place.
+fn action(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> Option<AnyElement> {
+    if shown.archived {
+        return None;
+    }
     if matches!(shown.turn, Turn::Answering) {
-        return control(
-            "chat-cancel",
-            Facts::button("Cancel"),
-            Button::new("chat-cancel-button")
-                .small()
-                .ghost()
-                .icon(IconName::CircleStop)
-                .rounded(px(999.))
-                .accessibility_label("Cancel")
-                .tooltip("Cancel the agent's reply (Esc)")
-                .on_click(cx.listener(|this, _, window, cx| this.cancel(window, cx))),
-        )
-        .into_any_element();
+        return Some(
+            control(
+                "chat-cancel",
+                Facts::button("Cancel"),
+                Button::new("chat-cancel-button")
+                    .small()
+                    .ghost()
+                    .icon(IconName::CircleStop)
+                    .rounded(px(999.))
+                    .accessibility_label("Cancel")
+                    .tooltip("Cancel the agent's reply (Esc)")
+                    .on_click(cx.listener(|this, _, window, cx| this.cancel(window, cx))),
+            )
+            .into_any_element(),
+        );
     }
     if !shown.turn.running() {
         let kagan = view.kagan.clone();
-        return control(
-            "chat-start-again",
-            Facts::button("Start again"),
-            Button::new("chat-start-again-button")
+        return Some(
+            control(
+                "chat-start-again",
+                Facts::button("Start again"),
+                Button::new("chat-start-again-button")
+                    .small()
+                    .primary()
+                    .label("Start again")
+                    .tooltip("Start the agent again in this thread")
+                    .on_click(move |_, window, cx| {
+                        _ = kagan.update(cx, |kagan, cx| {
+                            kagan.start_again(&StartAgain, window, cx);
+                        });
+                    }),
+            )
+            .into_any_element(),
+        );
+    }
+    Some(
+        control(
+            "chat-send",
+            Facts {
+                disabled: !shown.ready,
+                ..Facts::button("Send")
+            },
+            Button::new("chat-send-button")
                 .small()
                 .primary()
-                .label("Start again")
-                .tooltip("Start the agent again in this thread")
-                .on_click(move |_, window, cx| {
-                    _ = kagan.update(cx, |kagan, cx| {
-                        kagan.start_again(&StartAgain, window, cx);
-                    });
-                }),
+                .icon(IconName::ArrowUp)
+                .rounded(px(999.))
+                .accessibility_label("Send")
+                .tooltip("Send this prompt (Enter)")
+                .disabled(!shown.ready)
+                .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
         )
-        .into_any_element();
-    }
-    control(
-        "chat-send",
-        Facts {
-            disabled: !shown.ready,
-            ..Facts::button("Send")
-        },
-        Button::new("chat-send-button")
-            .small()
-            .primary()
-            .icon(IconName::ArrowUp)
-            .rounded(px(999.))
-            .accessibility_label("Send")
-            .tooltip("Send this prompt (Enter)")
-            .disabled(!shown.ready)
-            .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
+        .into_any_element(),
     )
-    .into_any_element()
 }
 
 /// Under the box, like bb's footer: where this runs and what the agent is doing, in one quiet row.
@@ -337,7 +296,7 @@ fn context_row(view: &ChatView, answering: bool, cx: &App) -> impl IntoElement {
         .ui_container()
         .items_center()
         .gap_2()
-        .px(px(2.))
+        .px_1()
         .type_caption(cx)
         .text_color(cx.theme().muted_foreground)
         .children(project.map(|project| {
@@ -356,7 +315,7 @@ fn context_row(view: &ChatView, answering: bool, cx: &App) -> impl IntoElement {
         .child(
             div()
                 .id("chat-state")
-                .ui_observe_as(label("State", state.clone(), cx))
+                .ui_observe_as(Facts::label("State", state.clone()))
                 .text_color(tone)
                 .child(state),
         )
@@ -366,15 +325,15 @@ fn context_row(view: &ChatView, answering: bool, cx: &App) -> impl IntoElement {
 fn chip(id: &'static str, name: &str, icon: IconName, text: SharedString, cx: &App) -> AnyElement {
     h_flex()
         .id(id)
-        .h(px(20.))
-        .px(px(6.))
+        .h(px(control_height(cx)))
+        .px_2()
         .gap_1()
         .items_center()
         .rounded(px(radius_xs(cx)))
         .border_1()
         .border_color(cx.theme().border)
         .text_color(cx.theme().muted_foreground)
-        .ui_observe_as(label(name, text.clone(), cx))
+        .ui_observe_as(Facts::label(name, text.clone()))
         .child(Icon::new(icon).xsmall())
         .child(div().max_w(px(240.)).text_ellipsis().child(text))
         .into_any_element()
@@ -426,19 +385,5 @@ fn state_word(view: &ChatView, answering: bool, cx: &App) -> (SharedString, Hsla
         Some((ThreadStatus::Stopping, _)) => ("Stopping".into(), Tone::Busy.color(cx)),
         Some((status, _)) if status.running() => ("Waiting for you".into(), muted),
         _ => ("Not running".into(), muted),
-    }
-}
-
-/// A muted line the driver can read: a label with its one value.
-fn label(name: &str, value: impl Into<SharedString>, cx: &App) -> Facts {
-    let _ = cx;
-    Facts {
-        role: Role::Label,
-        name: name.to_owned().into(),
-        value: Some(value.into()),
-        disabled: false,
-        selected: None,
-        focus: None,
-        hint: None,
     }
 }

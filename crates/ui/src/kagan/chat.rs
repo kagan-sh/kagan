@@ -14,9 +14,7 @@ use gpui_kit::{
     Styled as _, Subscription, Window, div, px,
 };
 use kg_core::{Workspace, WorkspaceEvent};
-use kg_domain::{
-    Event, EventKind, Op, Role as Speaker, ThreadId, ThreadOp, Timestamp, program_label,
-};
+use kg_domain::{Event, Op, Role as Speaker, ThreadId, ThreadOp, Timestamp, program_label};
 
 use crate::kagan::Kagan;
 use crate::kagan::controls::control;
@@ -56,8 +54,6 @@ pub(crate) struct ChatView {
     cards: above::Cards,
     /// The child threads that run now, read when the workspace says it changed.
     children: Vec<(ThreadId, SharedString)>,
-    /// How the run ended, cleared when it starts again.
-    end: Option<composer::End>,
     _events: Subscription,
     _prompt: Subscription,
     _scroller: Subscription,
@@ -70,7 +66,11 @@ impl ChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let prompt = cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 8));
+        let prompt = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .auto_grow(2, 8)
+                .placeholder("Ask the agent… Enter sends, Shift+Enter adds a line")
+        });
         let prompt_watch = cx.subscribe_in(&prompt, window, |this, _, event, window, cx| {
             if let InputEvent::PressEnter {
                 shift: false,
@@ -117,7 +117,6 @@ impl ChatView {
             sending: false,
             cards: above::Cards::default(),
             children: Vec::new(),
-            end: None,
             _events: events,
             _prompt: prompt_watch,
             _scroller: scroller_watch,
@@ -179,14 +178,6 @@ impl ChatView {
         if !self.loaded {
             self.pending.push(event.clone());
             return;
-        }
-        match &event.kind {
-            EventKind::Started => self.end = None,
-            kind => {
-                if let Some(end) = composer::End::of(kind) {
-                    self.end = Some(end);
-                }
-            }
         }
         if let part::Fold::Dirty(from) = self.transcript.absorb(event) {
             self.sync(cx);
@@ -344,6 +335,14 @@ impl ChatView {
     fn running(&self, cx: &App) -> bool {
         self.thread_state(cx)
             .is_some_and(|(status, _)| status.running())
+    }
+
+    /// Whether the thread is archived, so no action in the box could run.
+    fn archived(&self, cx: &App) -> bool {
+        Workspace::global(cx)
+            .read(cx)
+            .thread(&self.thread)
+            .is_some_and(|thread| thread.read(cx).record().archived_at.is_some())
     }
 
     fn thread_state(&self, cx: &App) -> Option<(kg_domain::ThreadStatus, bool)> {

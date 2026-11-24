@@ -73,11 +73,14 @@ pub(super) struct Reuse {
 }
 
 impl Reuse {
-    // The ended thread's folder, when core would run a new thread in it: the folder must exist,
-    // belong to the thread's project, and be ready.
+    // The ended thread's folder, when core would run a new thread in it: the thread is not
+    // archived, and the folder must exist, belong to the thread's project, and be ready.
     pub(super) fn of(thread: &ThreadId, cx: &App) -> Option<Self> {
         let workspace = Workspace::global(cx).read(cx);
         let record = workspace.thread(thread)?.read(cx).record().clone();
+        if record.archived_at.is_some() {
+            return None;
+        }
         let environment_id = record.environment_id.clone()?;
         let environment = workspace.environment(&environment_id)?.read(cx).record();
         if environment.project_id != record.project_id
