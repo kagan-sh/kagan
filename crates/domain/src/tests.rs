@@ -1303,6 +1303,11 @@ fn an_acp_run_needs_an_agent_kagan_knows() {
         crate::acp_command("claude --model sonnet"),
         Some(("npx", &["-y", "@agentclientprotocol/claude-agent-acp"][..]))
     );
+    assert_eq!(
+        crate::acp_command("gemini"),
+        Some(("gemini", &["--acp"][..]))
+    );
+    assert_eq!(crate::acp_command("kimi"), Some(("kimi", &["acp"][..])));
     assert_eq!(crate::acp_command("bash"), None);
     assert_eq!(crate::acp_command("'opencode"), None);
 }

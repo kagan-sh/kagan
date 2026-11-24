@@ -42,6 +42,7 @@ fn holding() -> Value {
     json!({ "chunks": [], "hold": true })
 }
 
+#[cfg(unix)]
 fn spawning() -> Value {
     json!({ "chunks": [], "stopReason": "end_turn", "sleep": true })
 }
@@ -94,27 +95,29 @@ impl Agent {
         if let Some(error) = refuse {
             std::fs::write(dir.path().join("refuse"), error.to_string()).unwrap();
         }
-        let program = dir.path().join(agent);
-        let exe = std::env::current_exe().unwrap();
-        // Quiet libtest still prints a progress dot: a line that is not JSON is skipped below.
-        let script = format!(
-            "#!/bin/sh\nexec '{}' -q --exact tests::acp::fake_agent --nocapture\n",
-            exe.display()
-        );
-        std::fs::write(&program, &script).unwrap();
+        // The fake agent is this test binary, copied under the agent's own name, so no shell is
+        // needed: the line that runs it carries the arguments that pick `fake_agent`.
+        let program = dir.path().join(if cfg!(windows) {
+            format!("{agent}.exe")
+        } else {
+            agent.to_owned()
+        });
+        std::fs::copy(std::env::current_exe().unwrap(), &program).unwrap();
         // The npm adapters run through `npx`, whose arguments are the launch command's.
-        let npx = dir.path().join("npx");
-        std::fs::write(
-            &npx,
-            format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$KG_FAKE_ACP_DIR/args\"\n{script}"),
-        )
-        .unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            for path in [&program, &npx] {
-                std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
-            }
+            std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let npx = dir.path().join("npx");
+            std::fs::write(
+                &npx,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$KG_FAKE_ACP_DIR/args\"\nexec '{}' -q --exact tests::acp::fake_agent --nocapture\n",
+                    program.display()
+                ),
+            )
+            .unwrap();
+            std::fs::set_permissions(&npx, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
         let previous = std::env::var_os("KG_FAKE_ACP_DIR");
         // SAFETY: nextest runs each test in its own process, so this test owns the variable while
@@ -129,8 +132,12 @@ impl Agent {
         }
     }
 
+    /// The thread's line: this test binary, run again as the fake agent.
     fn program(&self) -> String {
-        self.program.display().to_string()
+        format!(
+            "\"{}\" -q --exact tests::acp::fake_agent --nocapture",
+            self.program.display()
+        )
     }
 
     /// The folder the test gives the workspace as its `PATH`, so `npx` is the recorded one.
@@ -313,6 +320,7 @@ async fn acp_cancel_ends_the_turn_and_keeps_the_agent(cx: &mut TestAppContext) {
     assert!(gone(pid), "the agent ends with the thread");
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn acp_stop_ends_the_agents_process_tree(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -482,7 +490,7 @@ async fn a_recorded_load_replays_without_doubling_the_transcript(cx: &mut TestAp
     let fixture = Fixture::new(cx).await;
     let agent = Agent::recorded("opencode", recording);
     fixture.workspace.update(cx, |workspace, _| {
-        workspace.use_program_environment(agent.bin(), Path::new("/bin/sh"));
+        workspace.use_program_environment(agent.bin(), Path::new(super::program()));
     });
     let id = started(&fixture, &agent, cx).await;
     send(&id, "hi", cx).await;
@@ -550,12 +558,13 @@ async fn a_recorded_load_replays_without_doubling_the_transcript(cx: &mut TestAp
 }
 
 /// The MCP server kagan offers every ACP session, and the files the agent's own integration writes.
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn an_acp_session_gets_kagan_mcp_and_the_agents_files(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let agent = Agent::named("claude", &["ses_mcp"], &[], None);
     fixture.workspace.update(cx, |workspace, _| {
-        workspace.use_program_environment(agent.bin(), Path::new("/bin/sh"));
+        workspace.use_program_environment(agent.bin(), Path::new(super::program()));
     });
     let id = started(&fixture, &agent, cx).await;
     let asked: Value =
@@ -605,7 +614,7 @@ async fn acp_claude_without_npx_is_refused_before_the_thread_starts(cx: &mut Tes
     let dir = tempfile::tempdir().unwrap();
     stub(dir.path(), "claude");
     fixture.workspace.update(cx, |workspace, _| {
-        workspace.use_program_environment(dir.path(), Path::new("/bin/sh"));
+        workspace.use_program_environment(dir.path(), Path::new(super::program()));
     });
     let refused = op(fixture.run_acp("claude"), cx).await;
     assert!(
@@ -1400,6 +1409,7 @@ async fn acp_agent_that_crashes_says_why_it_did(cx: &mut TestAppContext) {
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Error);
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn acp_agent_killed_mid_turn_is_a_failure_not_a_finish(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -1582,7 +1592,7 @@ async fn replay(
     let fixture = Fixture::new(cx).await;
     let agent = Agent::recorded(agent, recording);
     fixture.workspace.update(cx, |workspace, _| {
-        workspace.use_program_environment(agent.bin(), Path::new("/bin/sh"));
+        workspace.use_program_environment(agent.bin(), Path::new(super::program()));
     });
     let id = started(&fixture, &agent, cx).await;
     send(&id, "hi", cx).await;
@@ -1603,6 +1613,7 @@ fn conversation(fixture: &Fixture, id: &ThreadId) -> String {
     store.conversation(id).unwrap().unwrap().to_string()
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn a_recorded_claude_conversation_replays(cx: &mut TestAppContext) {
     let recording = include_str!("acp/claude.json");
@@ -1622,6 +1633,7 @@ async fn a_recorded_claude_conversation_replays(cx: &mut TestAppContext) {
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn a_recorded_codex_conversation_replays(cx: &mut TestAppContext) {
     let recording = include_str!("acp/codex.json");
@@ -1646,13 +1658,16 @@ async fn a_recorded_kimi_conversation_replays(cx: &mut TestAppContext) {
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 
+/// Gemini's own refusal, replayed through the fake agent. The launch command is opencode's: a
+/// copy of this test binary cannot take `--acp`, which its own launch command passes first, so the
+/// per-agent table's arguments are pinned in kg-domain instead.
 #[gpui_kit::test]
 async fn a_recorded_session_refusal_fails_the_thread(cx: &mut TestAppContext) {
     let recording = include_str!("acp/gemini.json");
     let fixture = Fixture::new(cx).await;
-    let agent = Agent::recorded("gemini", recording);
+    let agent = Agent::recorded("opencode", recording);
     fixture.workspace.update(cx, |workspace, _| {
-        workspace.use_program_environment(agent.bin(), Path::new("/bin/sh"));
+        workspace.use_program_environment(agent.bin(), Path::new(super::program()));
     });
     let OpResult::Thread(started) = op(fixture.run_acp(&agent.program()), cx).await.unwrap() else {
         panic!("thread")

@@ -4,7 +4,6 @@
     reason = "a test stops at the first broken step"
 )]
 
-#[cfg(unix)]
 mod acp;
 mod agent;
 mod automation;
@@ -128,7 +127,6 @@ impl Fixture {
         }
     }
 
-    #[cfg(unix)]
     fn run_acp(&self, program: &str) -> Op {
         let Op::Thread(ThreadOp::Run(mut run)) = self.run(program) else {
             panic!("a run")
@@ -654,7 +652,6 @@ fn turn_counts(kinds: &[EventKind]) -> (usize, usize) {
     (started, ended)
 }
 
-#[cfg(unix)]
 async fn finish_quit(cx: &mut TestAppContext, id: &ThreadId, quitting: gpui_kit::Task<Result<()>>) {
     // stop_for_quit's test-clock deadline is 3s; past that it fails with
     // "timed out stopping programs" while a slow kill is still finishing.
@@ -675,7 +672,6 @@ async fn finish_quit(cx: &mut TestAppContext, id: &ThreadId, quitting: gpui_kit:
     quitting.await.unwrap();
 }
 
-#[cfg(unix)]
 fn assert_quit_leaves_the_turn(kinds: &[EventKind]) {
     assert_eq!(
         kinds
