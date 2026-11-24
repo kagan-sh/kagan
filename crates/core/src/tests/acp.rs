@@ -1628,7 +1628,7 @@ async fn a_recorded_claude_conversation_replays(cx: &mut TestAppContext) {
     assert_eq!(conversation(&fixture, &id), recorded_session(recording));
     assert_eq!(
         std::fs::read_to_string(agent.path("args")).unwrap(),
-        "-y\n@agentclientprotocol/claude-agent-acp\n"
+        "-y\n@agentclientprotocol/claude-agent-acp@0.110.1\n"
     );
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
