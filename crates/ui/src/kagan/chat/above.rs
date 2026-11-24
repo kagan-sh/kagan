@@ -3,9 +3,9 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::{Icon, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, ClickEvent, Context, ElementId, InteractiveElement as _, IntoElement,
-    KeyDownEvent, ParentElement as _, Role, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Window, div, px,
+    AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, KeyDownEvent,
+    ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _,
+    WeakEntity, Window, div, px,
 };
 use kg_domain::PlanStatus;
 
@@ -23,6 +23,13 @@ pub(super) struct Cards {
     pub(super) plan: bool,
 }
 
+/// The card a person opened or closed.
+#[derive(Clone, Copy)]
+pub(super) enum Which {
+    Children,
+    Plan,
+}
+
 /// What kagan stacks over the prompt box: the child threads that are working, and the agent's plan
 /// while it has one. Each is one line with a count until the person opens it.
 pub(super) fn stack(
@@ -35,21 +42,14 @@ pub(super) fn stack(
         let body = view.cards.children.then(|| children_body(view, cx));
         cards.push(
             card(
-                "chat-card-children",
-                IconName::Users,
-                "Active child threads",
-                Some(view.children.len().to_string().into()),
-                view.cards.children,
-                cx.listener(|this, _, _, cx| {
-                    this.cards.children = !this.cards.children;
-                    cx.notify();
-                }),
-                cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                    if matches!(event.keystroke.key.as_str(), "enter" | "space") {
-                        this.cards.children = !this.cards.children;
-                        cx.notify();
-                    }
-                }),
+                Head {
+                    id: "chat-card-children",
+                    icon: IconName::Users,
+                    name: "Active child threads",
+                    detail: Some(view.children.len().to_string().into()),
+                    open: view.cards.children,
+                },
+                Which::Children,
                 body,
                 window,
                 cx,
@@ -74,21 +74,14 @@ pub(super) fn stack(
         });
         cards.push(
             card(
-                "chat-card-plan",
-                IconName::ListChecks,
-                "Plan",
-                Some(detail.into()),
-                view.cards.plan,
-                cx.listener(|this, _, _, cx| {
-                    this.cards.plan = !this.cards.plan;
-                    cx.notify();
-                }),
-                cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                    if matches!(event.keystroke.key.as_str(), "enter" | "space") {
-                        this.cards.plan = !this.cards.plan;
-                        cx.notify();
-                    }
-                }),
+                Head {
+                    id: "chat-card-plan",
+                    icon: IconName::ListChecks,
+                    name: "Plan",
+                    detail: Some(detail.into()),
+                    open: view.cards.plan,
+                },
+                Which::Plan,
                 body,
                 window,
                 cx,
@@ -134,26 +127,32 @@ fn children_body(view: &ChatView, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-/// A card is one line — chevron, icon, name, count — and, when open, its body under a hairline.
-fn card(
+/// What a card's one line reads, before its body.
+struct Head {
     id: &'static str,
     icon: IconName,
     name: &'static str,
     detail: Option<SharedString>,
     open: bool,
-    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-    on_key: impl Fn(&KeyDownEvent, &mut Window, &mut App) + 'static,
+}
+
+/// A card is one line — chevron, icon, name, count — and, when open, its body under a hairline.
+fn card(
+    head: Head,
+    which: Which,
     body: Option<AnyElement>,
     window: &mut Window,
-    cx: &mut App,
+    cx: &mut Context<ChatView>,
 ) -> gpui_kit::Div {
-    let focus = crate::kagan::tab_stop(window, cx, ElementId::Name(id.into()));
+    let focus = crate::kagan::tab_stop(window, cx, ElementId::Name(head.id.into()));
     let focused = focus.is_focused(window);
     let muted = cx.theme().muted_foreground;
-    let value = match &detail {
-        Some(detail) => format!("{}, {detail}", pick(open)),
-        None => pick(open).to_owned(),
+    let value = match &head.detail {
+        Some(detail) => format!("{}, {detail}", pick(head.open)),
+        None => pick(head.open).to_owned(),
     };
+    let view = cx.weak_entity();
+    let key = view.clone();
     v_flex()
         .border_1()
         .border_color(cx.theme().border)
@@ -161,13 +160,13 @@ fn card(
         .bg(cx.theme().secondary)
         .child(
             h_flex()
-                .id(id)
+                .id(head.id)
                 .ui_observe_as(Facts {
                     role: Role::Button,
-                    name: name.into(),
+                    name: head.name.into(),
                     value: Some(value.into()),
                     disabled: false,
-                    selected: Some(open),
+                    selected: Some(head.open),
                     focus: Some(focus.clone()),
                     hint: None,
                 })
@@ -176,10 +175,14 @@ fn card(
                 .gap(px(6.))
                 .px_2()
                 .items_center()
-                .text_color(if open { cx.theme().foreground } else { muted })
+                .text_color(if head.open {
+                    cx.theme().foreground
+                } else {
+                    muted
+                })
                 .hover(|row| row.bg(cx.theme().list_hover))
                 .child(
-                    Icon::new(if open {
+                    Icon::new(if head.open {
                         IconName::ChevronDown
                     } else {
                         IconName::ChevronRight
@@ -187,15 +190,20 @@ fn card(
                     .xsmall()
                     .text_color(muted),
                 )
-                .child(Icon::new(icon).xsmall().text_color(muted))
-                .child(div().type_small(cx).child(name))
+                .child(Icon::new(head.icon).xsmall().text_color(muted))
+                .child(div().type_small(cx).child(head.name))
                 .child(div().flex_1())
                 .children(
-                    detail.map(|detail| div().type_caption(cx).text_color(muted).child(detail)),
+                    head.detail
+                        .map(|detail| div().type_caption(cx).text_color(muted).child(detail)),
                 )
                 .when(focused, |row| row.border_1().border_color(cx.theme().ring))
-                .on_click(on_click)
-                .on_key_down(on_key),
+                .on_click(move |_, _, cx| flip(&view, which, cx))
+                .on_key_down(move |event: &KeyDownEvent, _, cx| {
+                    if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                        flip(&key, which, cx);
+                    }
+                }),
         )
         .children(body.map(|body| {
             div()
@@ -203,6 +211,18 @@ fn card(
                 .border_color(cx.theme().border)
                 .child(body)
         }))
+}
+
+/// Opens or closes one card. Enter and Space do what a click does.
+fn flip(view: &WeakEntity<ChatView>, which: Which, cx: &mut App) {
+    _ = view.update(cx, |view, cx| {
+        let open = match which {
+            Which::Children => &mut view.cards.children,
+            Which::Plan => &mut view.cards.plan,
+        };
+        *open = !*open;
+        cx.notify();
+    });
 }
 
 fn pick(open: bool) -> &'static str {

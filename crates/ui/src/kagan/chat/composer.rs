@@ -59,6 +59,38 @@ impl End {
     }
 }
 
+/// What the box draws this frame, read once so every part of it agrees.
+struct Shown {
+    turn: Turn,
+    ready: bool,
+    focused: bool,
+    empty: bool,
+}
+
+/// Where the shown run is: waiting for a prompt, answering one, or stopped.
+#[derive(Clone, Copy)]
+enum Turn {
+    Waiting,
+    Answering,
+    Stopped,
+}
+
+impl Turn {
+    fn of(answering: bool, running: bool) -> Self {
+        if answering {
+            Self::Answering
+        } else if running {
+            Self::Waiting
+        } else {
+            Self::Stopped
+        }
+    }
+
+    fn running(self) -> bool {
+        !matches!(self, Self::Stopped)
+    }
+}
+
 /// The prompt box: the cards over it, the box itself, and one quiet row under it that says where
 /// this runs and what the agent is doing.
 pub(super) fn composer(
@@ -69,8 +101,13 @@ pub(super) fn composer(
     cx: &mut Context<ChatView>,
 ) -> AnyElement {
     let prompt = view.prompt.read(cx).value().to_string();
-    let ready = running && !prompt.trim().is_empty() && !view.sending;
-    let focused = view.prompt.read(cx).focus_handle(cx).is_focused(window);
+    let empty = prompt.trim().is_empty();
+    let shown = Shown {
+        turn: Turn::of(answering, running),
+        ready: running && !empty && !view.sending,
+        focused: view.prompt.read(cx).focus_handle(cx).is_focused(window),
+        empty,
+    };
     let cards = super::above::stack(view, window, cx);
     v_flex()
         .flex_none()
@@ -83,28 +120,20 @@ pub(super) fn composer(
                 .w_full()
                 .gap_2()
                 .children(cards)
-                .child(boxed(view, answering, running, ready, focused, prompt, cx))
+                .child(boxed(view, &shown, cx))
                 .child(context_row(view, answering, cx)),
         )
         .into_any_element()
 }
 
 /// The one rounded box: the text area, what happened when it stopped, and the bar under it.
-fn boxed(
-    view: &mut ChatView,
-    answering: bool,
-    running: bool,
-    ready: bool,
-    focused: bool,
-    prompt: String,
-    cx: &mut Context<ChatView>,
-) -> AnyElement {
-    let border = if focused {
+fn boxed(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyElement {
+    let border = if shown.focused {
         cx.theme().accent
     } else {
         cx.theme().input
     };
-    let stopped = (!running).then(|| {
+    let stopped = (!shown.turn.running()).then(|| {
         view.end
             .map_or_else(|| "The agent is not running.".to_owned(), End::line)
     });
@@ -117,7 +146,7 @@ fn boxed(
         .border_color(border)
         .rounded(cx.theme().radius)
         .bg(cx.theme().secondary)
-        .child(area(view, prompt.trim().is_empty(), cx))
+        .child(area(view, shown.empty, cx))
         .children(stopped.map(|line| {
             div()
                 .id("chat-stopped")
@@ -137,7 +166,7 @@ fn boxed(
                 .text_color(cx.theme().danger)
                 .child(notice)
         }))
-        .child(toolbar(view, answering, running, ready, cx))
+        .child(toolbar(view, shown, cx))
         .into_any_element()
 }
 
@@ -182,17 +211,13 @@ fn area(view: &ChatView, empty: bool, cx: &App) -> impl IntoElement {
 
 /// The bar inside the box: what a plugin adds, the way on that stays quiet, and the one action
 /// this state offers.
-fn toolbar(
-    view: &mut ChatView,
-    answering: bool,
-    running: bool,
-    ready: bool,
-    cx: &mut Context<ChatView>,
-) -> AnyElement {
-    let quiet = (!running)
-        .then(|| stopped_actions(view, cx))
-        .unwrap_or_default();
-    let action = action(view, answering, running, ready, cx);
+fn toolbar(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyElement {
+    let quiet = if shown.turn.running() {
+        Vec::new()
+    } else {
+        stopped_actions(view, cx)
+    };
+    let action = action(view, shown, cx);
     h_flex()
         .items_center()
         .gap_2()
@@ -250,14 +275,8 @@ fn stopped_actions(view: &ChatView, cx: &App) -> Vec<AnyElement> {
 
 /// The one filled action: Send while the agent waits, Cancel while it answers, Start again after
 /// it stops. All three sit where Send does, so the hand learns one place.
-fn action(
-    view: &mut ChatView,
-    answering: bool,
-    running: bool,
-    ready: bool,
-    cx: &mut Context<ChatView>,
-) -> AnyElement {
-    if answering {
+fn action(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyElement {
+    if matches!(shown.turn, Turn::Answering) {
         return control(
             "chat-cancel",
             Facts::button("Cancel"),
@@ -272,7 +291,7 @@ fn action(
         )
         .into_any_element();
     }
-    if !running {
+    if !shown.turn.running() {
         let kagan = view.kagan.clone();
         return control(
             "chat-start-again",
@@ -293,7 +312,7 @@ fn action(
     control(
         "chat-send",
         Facts {
-            disabled: !ready,
+            disabled: !shown.ready,
             ..Facts::button("Send")
         },
         Button::new("chat-send-button")
@@ -303,7 +322,7 @@ fn action(
             .rounded(px(999.))
             .accessibility_label("Send")
             .tooltip("Send this prompt (Enter)")
-            .disabled(!ready)
+            .disabled(!shown.ready)
             .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
     )
     .into_any_element()
@@ -321,10 +340,18 @@ fn context_row(view: &ChatView, answering: bool, cx: &App) -> impl IntoElement {
         .px(px(2.))
         .type_caption(cx)
         .text_color(cx.theme().muted_foreground)
+        .children(project.map(|project| {
+            chip(
+                "chat-context-project",
+                "Project",
+                IconName::Folder,
+                project,
+                cx,
+            )
+        }))
         .children(
-            project.map(|project| chip("chat-context-project", IconName::Folder, project, cx)),
+            folder.map(|(icon, folder)| chip("chat-context-folder", "Folder", icon, folder, cx)),
         )
-        .children(folder.map(|(icon, folder)| chip("chat-context-folder", icon, folder, cx)))
         .child(div().flex_1())
         .child(
             div()
@@ -336,7 +363,7 @@ fn context_row(view: &ChatView, answering: bool, cx: &App) -> impl IntoElement {
 }
 
 /// One quiet chip. It states a fact, so it takes no focus.
-fn chip(id: &'static str, icon: IconName, text: SharedString, cx: &App) -> AnyElement {
+fn chip(id: &'static str, name: &str, icon: IconName, text: SharedString, cx: &App) -> AnyElement {
     h_flex()
         .id(id)
         .h(px(20.))
@@ -347,7 +374,7 @@ fn chip(id: &'static str, icon: IconName, text: SharedString, cx: &App) -> AnyEl
         .border_1()
         .border_color(cx.theme().border)
         .text_color(cx.theme().muted_foreground)
-        .ui_observe_as(label(id, text.clone(), cx))
+        .ui_observe_as(label(name, text.clone(), cx))
         .child(Icon::new(icon).xsmall())
         .child(div().max_w(px(240.)).text_ellipsis().child(text))
         .into_any_element()

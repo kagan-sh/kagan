@@ -36,7 +36,11 @@ target 35000
 # Cost: ACP threads, slice 4, add 28 product lines on top of the merged count (90455): every
 # agent's launch command in the one table, the launch that resolves an adapter's own program, and
 # the check that its program is on the PATH before the thread starts. Decision 279 records it.
-ceiling 90483
+# Cost: ACP threads, the composer, adds 622 product lines on top of the merged count (90483): the
+# one prompt box in its own file, the cards over it in another, the action that is Send, Cancel or
+# Start again, the context row, the shared column the transcript and the box draw, and the ended
+# line the chat no longer draws. Decision 282 records it.
+ceiling 91105
 allow_expect 9
 crates/core/src/thread/acp/client.rs 806
 crates/core/src/thread/agent/files.rs 754
