@@ -190,16 +190,6 @@ pub(crate) async fn submit(
     text: &str,
     cx: &mut AsyncApp,
 ) -> Result<String> {
-    if text.is_empty() {
-        return Err(OpError::Invalid("send needs text".into()));
-    }
-    if text.len() > kg_domain::TEXT_MAX {
-        return Err(OpError::Invalid(format!(
-            "send is {} bytes; the cap is {} MiB",
-            text.len(),
-            kg_domain::TEXT_MAX >> 20
-        )));
-    }
     let (typed, written) = this
         .update(cx, |workspace, _| match workspace.shown(id) {
             Some(Shown::Running(terminal)) => {
@@ -236,9 +226,6 @@ pub(crate) async fn send(
     text: &str,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    if acp_runs(this, &id, cx)? {
-        return crate::thread::acp::prompt(this, &id, text, cx).await;
-    }
     let typed = submit(this, &id, text, cx).await?;
     this.update(cx, |workspace, cx| {
         let now = cx.background_executor().now();
@@ -260,78 +247,51 @@ pub(crate) async fn send(
     Ok(OpResult::Done)
 }
 
-pub(crate) async fn run(
+pub(crate) fn run(
     this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    number: Option<u32>,
     op: ThreadOp,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    let (ThreadOp::Input { id, terminal, .. }
-    | ThreadOp::Resize { id, terminal, .. }
-    | ThreadOp::Screen { id, terminal, .. }
-    | ThreadOp::Scroll { id, terminal, .. }
-    | ThreadOp::Select { id, terminal, .. }
-    | ThreadOp::Copy { id, terminal }
-    | ThreadOp::Paste { id, terminal, .. }
-    | ThreadOp::Report { id, terminal, .. }) = &op
-    else {
-        return Err(OpError::Invalid("not a terminal operation".into()));
-    };
-    let (id, number) = (id.clone(), *terminal);
-    if number.is_none() && self::acp_runs(this, &id, cx)? {
-        if let ThreadOp::Input { text, .. } = &op {
-            return crate::thread::acp::prompt(this, &id, text, cx).await;
-        }
-        return Err(crate::thread::acp::not_a_terminal());
-    }
     // Scrolling and selecting move the view, so the window redraws even when nothing else changed.
     let moves_view = matches!(op, ThreadOp::Scroll { .. } | ThreadOp::Select { .. });
     this.update(cx, |workspace, cx| {
         if number.is_none()
             && let ThreadOp::Resize { cols, rows, .. } = &op
         {
-            workspace.run_mut(&id).size = Some((*cols, *rows));
+            workspace.run_mut(id).size = Some((*cols, *rows));
         }
         if number.is_none() {
             let now = cx.background_executor().now();
             match &op {
                 ThreadOp::Input { text, .. } => {
-                    super::notify::typed(workspace, &id, text, now);
+                    super::notify::typed(workspace, id, text, now);
                     if text.ends_with('\r') {
-                        turn::note_submit(workspace, &id, now, cx);
+                        turn::note_submit(workspace, id, now, cx);
                     }
                 }
-                ThreadOp::Paste { .. } => super::notify::typed(workspace, &id, "", now),
+                ThreadOp::Paste { .. } => super::notify::typed(workspace, id, "", now),
                 _ => {}
             }
         }
         let result = if let Some(number) = number {
-            super::extra::find(workspace, &id, number)
+            super::extra::find(workspace, id, number)
                 .ok_or_else(|| missing("terminal", &number))
                 .map(|terminal| act(Some(terminal), terminal.view(), op))
         } else {
             workspace
-                .shown(&id)
-                .ok_or_else(|| missing("thread", &id))
+                .shown(id)
+                .ok_or_else(|| missing("thread", id))
                 .map(|shown| act(shown.running(), shown.view(), op))
         }?
         .map_err(|error| refused(&error));
         if moves_view {
-            cx.emit(WorkspaceEvent::Screen(id.clone(), number));
+            cx.emit(WorkspaceEvent::Screen((*id).clone(), number));
         }
         result
     })
     .map_err(closed)?
-}
-
-// An ACP thread has no program terminal: everything but a prompt names an extra one.
-fn acp_runs(this: &WeakEntity<Workspace>, id: &ThreadId, cx: &mut AsyncApp) -> Result<bool> {
-    this.update(cx, |workspace, cx| {
-        workspace
-            .threads
-            .get(id)
-            .is_some_and(|thread| thread.read(cx).record.link == kg_domain::Link::Acp)
-    })
-    .map_err(closed)
 }
 
 /// Everything the workspace keeps for one thread's program. Forgetting the thread is one `remove`.

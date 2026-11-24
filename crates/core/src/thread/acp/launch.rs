@@ -3,7 +3,7 @@ use std::path::Path;
 
 use agent_client_protocol::v1::schema::{EnvVariable, McpServer, McpServerStdio};
 use gpui_kit::{AppContext as _, AsyncApp, WeakEntity};
-use kg_domain::{Conversation, OpError, ThreadId, acp_command};
+use kg_domain::{Conversation, OpError, ThreadId};
 
 use crate::Workspace;
 use crate::host::database::Result;
@@ -27,15 +27,8 @@ pub(super) async fn launch(
 ) -> Result<Launch> {
     let environment = crate::host::program::program_environment_of(this, cx);
     let home = crate::host::program::program_home_of(this, cx);
-    let command = acp_command(&record.provider)
-        .ok_or_else(|| OpError::Invalid(format!("{} has no ACP command", record.provider)))?;
-    let program = resolve_acp(
-        &record.provider,
-        command,
-        environment.as_ref(),
-        home.as_deref(),
-    )
-    .map_err(|error| OpError::Invalid(error.to_string()))?;
+    let program = resolve_acp(&record.provider, environment.as_ref(), home.as_deref())
+        .map_err(|error| OpError::Invalid(error.to_string()))?;
     let integration = agent::integrate(this, record, folder, start, cx).await?;
     let (cli, socket) = this
         .update(cx, |workspace, _| {

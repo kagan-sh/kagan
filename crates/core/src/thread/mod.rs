@@ -129,8 +129,8 @@ pub(crate) async fn dispatch_thread(
         | ThreadOp::Select { .. }
         | ThreadOp::Copy { .. }
         | ThreadOp::Paste { .. }
-        | ThreadOp::Report { .. }) => terminal::run(this, op, cx).await,
-        ThreadOp::Send { id, text } => terminal::send(this, id, &text, cx).await,
+        | ThreadOp::Report { .. }) => terminal_op(this, op, cx).await,
+        ThreadOp::Send { id, text } => type_text(this, &id, &text, cx).await,
         ThreadOp::Cancel { id } => acp::cancel(this, &id, cx).await,
         ThreadOp::Turn(op) => terminal::turn_hook(this, op, cx).await,
         ThreadOp::Terminal(op) => extra::run(this, op, cx).await,
@@ -236,6 +236,65 @@ async fn rename(
     ))
 }
 
+/// A thread's link, which decides where its typing and its terminal operations go.
+pub(crate) fn link(
+    this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    cx: &mut AsyncApp,
+) -> Result<kg_domain::Link> {
+    Ok(thread(this, id, cx)?.read_with(cx, |thread, _| thread.record.link))
+}
+
+/// Types text into a thread: a prompt on an ACP thread, a line in a terminal otherwise.
+pub(crate) async fn type_text(
+    this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    text: &str,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    if text.is_empty() {
+        return Err(OpError::Invalid("send needs text".into()));
+    }
+    if text.len() > kg_domain::TEXT_MAX {
+        return Err(OpError::Invalid(format!(
+            "send is {} bytes; the cap is {} MiB",
+            text.len(),
+            kg_domain::TEXT_MAX >> 20
+        )));
+    }
+    if link(this, id, cx)? == kg_domain::Link::Acp {
+        return acp::prompt(this, id, text, cx).await;
+    }
+    terminal::send(this, id.clone(), text, cx).await
+}
+
+/// A prompt and the terminal operations share one entry: an ACP thread's own terminal is the agent,
+/// and every other terminal operation needs one of its extra terminals.
+async fn terminal_op(
+    this: &WeakEntity<Workspace>,
+    op: ThreadOp,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let (id, terminal) = match &op {
+        ThreadOp::Input { id, terminal, .. }
+        | ThreadOp::Resize { id, terminal, .. }
+        | ThreadOp::Screen { id, terminal, .. }
+        | ThreadOp::Scroll { id, terminal, .. }
+        | ThreadOp::Select { id, terminal, .. }
+        | ThreadOp::Copy { id, terminal }
+        | ThreadOp::Paste { id, terminal, .. }
+        | ThreadOp::Report { id, terminal, .. } => (id.clone(), *terminal),
+        _ => return Err(OpError::Invalid("not a terminal operation".into())),
+    };
+    if terminal.is_none() && link(this, &id, cx)? == kg_domain::Link::Acp {
+        return match &op {
+            ThreadOp::Input { text, .. } => acp::prompt(this, &id, text, cx).await,
+            _ => Err(acp::not_a_terminal()),
+        };
+    }
+    terminal::run(this, &id, terminal, op, cx)
+}
+
 /// Starts a thread's program the way its link says: in a pty, or as the agent's own ACP
 /// connection.
 pub(crate) async fn start_program(
@@ -244,7 +303,8 @@ pub(crate) async fn start_program(
     start: agent::Start,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    if thread.read_with(cx, |thread, _| thread.record.link) == kg_domain::Link::Acp {
+    let id = thread.read_with(cx, |thread, _| thread.record.id.clone());
+    if link(this, &id, cx)? == kg_domain::Link::Acp {
         return acp::start(this, thread, start, cx).await;
     }
     terminal::start(this, thread, start, cx).await

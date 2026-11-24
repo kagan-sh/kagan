@@ -159,11 +159,7 @@ fn input(value: &serde_json::Value) -> serde_json::Value {
     if text.len() <= TOOL_INPUT_MAX {
         return value.clone();
     }
-    let mut cut = TOOL_INPUT_MAX;
-    while !text.is_char_boundary(cut) {
-        cut -= 1;
-    }
-    serde_json::Value::String(format!("{}{CUT}", &text[..cut]))
+    serde_json::Value::String(cut(&text, TOOL_INPUT_MAX))
 }
 
 fn diffs(content: &[ToolCallContent]) -> Vec<ToolDiff> {
@@ -191,11 +187,15 @@ fn cap(text: String) -> String {
     if text.len() <= TOOL_TEXT_MAX {
         return text;
     }
-    let mut cut = TOOL_TEXT_MAX;
-    while !text.is_char_boundary(cut) {
-        cut -= 1;
+    cut(&text, TOOL_TEXT_MAX)
+}
+
+fn cut(text: &str, max: usize) -> String {
+    let mut end = max;
+    while !text.is_char_boundary(end) {
+        end -= 1;
     }
-    text[..cut].to_owned() + CUT
+    text[..end].to_owned() + CUT
 }
 
 fn kind(kind: AcpToolKind) -> ToolKind {

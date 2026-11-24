@@ -483,7 +483,7 @@ pub(super) async fn cancel(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     let thread = crate::thread::thread(this, id, cx)?;
-    if thread.read_with(cx, |thread, _| thread.record.link) != Link::Acp {
+    if crate::thread::link(this, id, cx)? != Link::Acp {
         return Err(OpError::Invalid(
             "this is a terminal thread; stop it instead".into(),
         ));

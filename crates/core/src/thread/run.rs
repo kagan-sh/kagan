@@ -17,6 +17,8 @@ use crate::workspace::{Request, RunOutcome, closed, id, missing, time};
 pub(crate) enum ResolveError {
     #[error("{0}")]
     Line(kg_domain::SplitProgramError),
+    #[error("{0} has no ACP command")]
+    NoCommand(String),
     #[error("program {0} was not found")]
     NotFound(String),
 }
@@ -51,16 +53,18 @@ pub(crate) fn resolve_program(
     })
 }
 
-/// The program and arguments that start the agent `line` runs over ACP. When the command names the
-/// person's own program, the person's line is resolved instead and its arguments follow the ACP
-/// ones; a command that names another program, such as the adapter's `npx`, is resolved on its own.
+/// The program and arguments that start the agent `line` runs over ACP, from the one per-agent
+/// table. When the command names the person's own program, the person's line is resolved instead
+/// and its arguments follow the ACP ones; a command that names another program, such as the
+/// adapter's `npx`, is resolved on its own.
 pub(crate) fn resolve_acp(
     line: &str,
-    (program, args): (&str, &[&str]),
     environment: Option<&crate::host::program::ProgramEnvironment>,
     home: Option<&Path>,
 ) -> std::result::Result<ResolvedProgram, ResolveError> {
     let (name, person_args) = kg_domain::split_program(line).map_err(ResolveError::Line)?;
+    let (program, args) =
+        kg_domain::acp_command(line).ok_or_else(|| ResolveError::NoCommand(name.clone()))?;
     let own = Path::new(&name).file_stem() == Path::new(program).file_stem();
     let found = resolve_program(if own { line } else { program }, environment, home)?;
     let mut args: Vec<OsString> = args.iter().map(OsString::from).collect();
@@ -152,9 +156,7 @@ pub(crate) async fn prepare(
     resolve_program(&run.program, environment.as_ref(), home.as_deref())
         .map_err(|error| OpError::Invalid(error.to_string()))?;
     if run.link == Link::Acp {
-        let command = kg_domain::acp_command(&run.program)
-            .ok_or_else(|| OpError::Invalid(format!("{} has no ACP command", run.program)))?;
-        resolve_acp(&run.program, command, environment.as_ref(), home.as_deref())
+        resolve_acp(&run.program, environment.as_ref(), home.as_deref())
             .map_err(|error| OpError::Invalid(error.to_string()))?;
     }
     let program = run.program.clone();

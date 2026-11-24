@@ -6,6 +6,7 @@ use crate::workspace::{closed, time};
 use crate::{Thread, Workspace};
 
 use super::interaction::{clear_interactions, take_thread_replies};
+use super::link;
 
 pub(crate) async fn status(
     this: &WeakEntity<Workspace>,
@@ -88,14 +89,7 @@ pub(crate) async fn stop(
         })
         .map_err(closed)?;
     if ending {
-        let acp = this
-            .update(cx, |workspace, cx| {
-                workspace
-                    .threads
-                    .get(&thread_id)
-                    .is_some_and(|thread| thread.read(cx).record.link == kg_domain::Link::Acp)
-            })
-            .map_err(closed)?;
+        let acp = link(this, &thread_id, cx)? == kg_domain::Link::Acp;
         if acp {
             let reason = this
                 .update(cx, |workspace, _| {
