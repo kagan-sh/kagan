@@ -1,3 +1,4 @@
+use gpui_kit::component::Placement;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::{AnyElement, App, ElementId, IntoElement, SharedString, Styled as _, px};
@@ -15,7 +16,7 @@ pub(super) fn buttons(cx: &App) -> Vec<AnyElement> {
         .into_iter()
         .map(|command| {
             let id = id_for(&command.plugin, &command.id);
-            row(command, id, cx)
+            row(command, id, None, cx)
         })
         .collect()
 }
@@ -27,7 +28,8 @@ pub(super) fn prompt(cx: &App) -> Vec<AnyElement> {
         .take(MOST_PROMPT)
         .map(|command| {
             let id = prompt_id_for(&command.plugin, &command.id);
-            row(command, id, cx)
+            // The bar is under the draft, so its tooltip opens below it, never over the text.
+            row(command, id, Some(Placement::Bottom), cx)
         })
         .collect()
 }
@@ -49,23 +51,32 @@ pub(crate) fn prompt_id_for(plugin: &PluginId, id: &str) -> ElementId {
 }
 
 // One ghost button, with no icon, sized like the buttons beside it.
-fn row(command: CommandContribution, id: ElementId, cx: &App) -> AnyElement {
+fn row(
+    command: CommandContribution,
+    id: ElementId,
+    placement: Option<Placement>,
+    cx: &App,
+) -> AnyElement {
     let run = RunCommand::new(command.plugin.clone(), command.id.clone());
     let tip = command.description.as_deref().unwrap_or(&command.title);
     let tooltip = super::controls::tip(tip, &run, cx);
+    let button = Button::new(id.clone())
+        .small()
+        .ghost()
+        .label(command.title.clone())
+        .tooltip(tooltip.clone())
+        .max_w(px(120.));
+    let button = match placement {
+        Some(side) => button.tooltip_placement(side),
+        None => button,
+    };
     control(
         id.clone(),
         Facts {
             hint: Some(SharedString::from(tooltip.clone())),
             ..Facts::button(command.title.clone())
         },
-        Button::new(id)
-            .small()
-            .ghost()
-            .label(command.title)
-            .tooltip(tooltip)
-            .max_w(px(120.))
-            .on_click(dispatch(run)),
+        button.on_click(dispatch(run)),
     )
     .into_any_element()
 }
