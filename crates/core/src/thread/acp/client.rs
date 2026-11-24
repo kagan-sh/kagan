@@ -26,6 +26,37 @@ const STARTUP: Duration = Duration::from_secs(30);
 /// How long to wait between two looks at the agent's exit.
 const EXIT_POLL: Duration = Duration::from_millis(20);
 
+/// What stopped an ACP connection: starting the agent, its pipes, the handshake, or the protocol.
+#[derive(Debug, thiserror::Error)]
+pub(super) enum AcpError {
+    #[error("could not start {program} in {cwd}: {source}")]
+    Spawn {
+        program: String,
+        cwd: String,
+        source: std::io::Error,
+    },
+    #[error("the agent gave no pipes")]
+    NoPipes,
+    #[error("could not set up the agent's pipes: {0}")]
+    Pipes(#[source] std::io::Error),
+    #[error("the agent did not answer in {} s", .0.as_secs())]
+    Handshake(Duration),
+    #[error(transparent)]
+    Protocol(#[from] agent_client_protocol::Error),
+    #[error("the thread ended")]
+    Ended,
+}
+
+impl From<AcpError> for agent_client_protocol::Error {
+    fn from(error: AcpError) -> Self {
+        // The SDK's closure carries its own error type, so kagan's failure becomes its message.
+        Self::new(
+            agent_client_protocol::ErrorCode::INTERNAL_ERROR,
+            error.to_string(),
+        )
+    }
+}
+
 /// What the connection reports to the thread, in the order it happened.
 #[derive(Debug)]
 pub(super) enum AcpEvent {
@@ -111,7 +142,7 @@ pub(super) async fn run(
                 &events,
                 AcpEvent::Ended {
                     exit: None,
-                    error: Some(error),
+                    error: Some(error.to_string()),
                 },
             )
             .await;
@@ -126,7 +157,7 @@ pub(super) async fn run(
                 &events,
                 AcpEvent::Ended {
                     exit: None,
-                    error: Some(error),
+                    error: Some(error.to_string()),
                 },
             )
             .await;
@@ -146,7 +177,10 @@ pub(super) async fn run(
         commands,
         &executor,
     );
-    let failure = pump(lines, frames, connection, &executor).await.err();
+    let failure = pump(lines, frames, connection, &executor)
+        .await
+        .err()
+        .map(|error| error.to_string());
     let exit = exit_status(&mut process, &executor).await;
     // A clean exit needs no explanation; anything else gets the agent's own last words.
     let tail = tail_text(&tail).filter(|_| exit != Some(Exit::Code(0)));
@@ -181,86 +215,85 @@ async fn connect(
     events: &async_channel::Sender<AcpEvent>,
     commands: async_channel::Receiver<AcpCommand>,
     executor: &BackgroundExecutor,
-) -> Result<(), String> {
-    let Session { resume, servers } = session;
-    let result = Client
+) -> Result<(), AcpError> {
+    // The SDK's closure carries its own error type, so kagan's failure becomes its message there.
+    let failed = Client
         .v1()
         .name("kagan")
         .connect_with(transport, async |cx| {
-            let handshake = async {
-                let initialized = cx
-                    .send_request(InitializeRequest::new(ProtocolVersion::V1))
-                    .block_task()
-                    .await?;
-                // A conversation is loaded only when the agent says it can load one: the answer,
-                // never the agent's name, decides.
-                let resume = resume.filter(|_| initialized.agent_capabilities.load_session);
-                let new = async {
-                    let request = NewSessionRequest::new(&folder).mcp_servers(servers.clone());
-                    let SessionSetup { session, .. } = cx
-                        .build_session_from(request)
-                        .block_task()
-                        .start_session()
-                        .await?;
-                    Ok::<_, agent_client_protocol::Error>(session)
-                };
-                let (session, restored): (_, Restored) = match resume {
-                    Some(conversation) => {
-                        let request = LoadSessionRequest::new(conversation.to_string(), &folder)
-                            .mcp_servers(servers.clone());
-                        match cx
-                            .load_session_from(request)
-                            .block_task()
-                            .start_session()
-                            .await
-                        {
-                            Ok(SessionSetup { mut session, .. }) => {
-                                forget(&mut session);
-                                (session, Restored::Loaded)
-                            }
-                            // A refused load is an agent that cannot continue this conversation
-                            // after all: the person gets a new chat, and the agent's words.
-                            Err(error) => (new.await?, Restored::Refused(error.to_string())),
-                        }
-                    }
-                    None => (new.await?, Restored::New),
-                };
-                Ok::<_, agent_client_protocol::Error>((session, restored))
-            };
-            let setup = match futures::future::select(
-                Box::pin(handshake),
-                Box::pin(executor.timer(STARTUP)),
-            )
-            .await
-            {
-                futures::future::Either::Left((result, _)) => result,
-                futures::future::Either::Right(_) => {
-                    return Ok(Err(format!(
-                        "the agent did not answer in {} s",
-                        STARTUP.as_secs()
-                    )));
-                }
-            };
-            let (mut session, restored) = match setup {
-                Ok(setup) => setup,
-                Err(error) => return Err(error),
-            };
-            let id = session.session_id().to_string();
-            if events
-                .send(AcpEvent::Session { id, restored })
+            talk(cx, folder, session, events, commands, executor)
                 .await
-                .is_err()
-            {
-                return Ok(Err("the thread ended".to_owned()));
-            }
-            Ok(serve(&mut session, &commands, events).await)
+                .map_err(agent_client_protocol::Error::from)
         })
         .await;
-    match result {
-        Ok(Ok(())) => Ok(()),
-        Ok(Err(failure)) => Err(failure),
-        Err(error) => Err(error.to_string()),
+    failed.map_err(AcpError::from)
+}
+
+async fn talk(
+    cx: agent_client_protocol::v1::ConnectionTo<Agent>,
+    folder: PathBuf,
+    session: Session,
+    events: &async_channel::Sender<AcpEvent>,
+    commands: async_channel::Receiver<AcpCommand>,
+    executor: &BackgroundExecutor,
+) -> Result<(), AcpError> {
+    let Session { resume, servers } = session;
+    let handshake = async {
+        let initialized = cx
+            .send_request(InitializeRequest::new(ProtocolVersion::V1))
+            .block_task()
+            .await?;
+        // A conversation is loaded only when the agent says it can load one: the answer,
+        // never the agent's name, decides.
+        let resume = resume.filter(|_| initialized.agent_capabilities.load_session);
+        let new = async {
+            let request = NewSessionRequest::new(&folder).mcp_servers(servers.clone());
+            let SessionSetup { session, .. } = cx
+                .build_session_from(request)
+                .block_task()
+                .start_session()
+                .await?;
+            Ok::<_, AcpError>(session)
+        };
+        let (session, restored): (_, Restored) = match resume {
+            Some(conversation) => {
+                let request = LoadSessionRequest::new(conversation.to_string(), &folder)
+                    .mcp_servers(servers.clone());
+                match cx
+                    .load_session_from(request)
+                    .block_task()
+                    .start_session()
+                    .await
+                {
+                    Ok(SessionSetup { mut session, .. }) => {
+                        forget(&mut session);
+                        (session, Restored::Loaded)
+                    }
+                    // A refused load is an agent that cannot continue this conversation after
+                    // all: the person gets a new chat, and the agent's words.
+                    Err(error) => (new.await?, Restored::Refused(error.to_string())),
+                }
+            }
+            None => (new.await?, Restored::New),
+        };
+        Ok::<_, AcpError>((session, restored))
+    };
+    let setup =
+        match futures::future::select(Box::pin(handshake), Box::pin(executor.timer(STARTUP))).await
+        {
+            futures::future::Either::Left((result, _)) => result?,
+            futures::future::Either::Right(_) => return Err(AcpError::Handshake(STARTUP)),
+        };
+    let (mut session, restored) = setup;
+    let id = session.session_id().to_string();
+    if events
+        .send(AcpEvent::Session { id, restored })
+        .await
+        .is_err()
+    {
+        return Err(AcpError::Ended);
     }
+    serve(&mut session, &commands, events).await
 }
 
 /// Drops the updates a load replays before the thread reads the session again. The replay is the
@@ -334,7 +367,7 @@ async fn serve(
     session: &mut agent_client_protocol::v1::ActiveSession<'_, Agent>,
     commands: &async_channel::Receiver<AcpCommand>,
     events: &async_channel::Sender<AcpEvent>,
-) -> Result<(), String> {
+) -> Result<(), AcpError> {
     let mut unread = Unread::default();
     let mut repeats = Repeats::default();
     let mut asking = Asking::default();
@@ -368,17 +401,12 @@ async fn serve(
                 heard(*message, events, &mut unread, &mut repeats, &mut asking).await;
             }
             Step::Answer(answer) => asking.answered(answer),
-            Step::Command(AcpCommand::Prompt(text)) => session
-                .send_prompt(text)
-                .map_err(|error| error.to_string())?,
+            Step::Command(AcpCommand::Prompt(text)) => session.send_prompt(text)?,
             Step::Command(AcpCommand::Cancel) => {
-                session
-                    .connection()
-                    .send_notification_to(
-                        Agent,
-                        CancelNotification::new(session.session_id().clone()),
-                    )
-                    .map_err(|error| error.to_string())?;
+                session.connection().send_notification_to(
+                    Agent,
+                    CancelNotification::new(session.session_id().clone()),
+                )?;
                 asking.cancel();
             }
             // The update stream closes when the agent's output ends, and the commands when the

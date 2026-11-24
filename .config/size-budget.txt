@@ -54,7 +54,7 @@ target 35000
 # row's stage and its waiting words with the tone's clock mark, the read-only prompt box and its
 # hint, and the optional command description with its check and tooltip. Product Rust went from
 # 91184 to 91292. Decision 283 records it.
-ceiling 91301
+ceiling 91334
 allow_expect 9
 crates/core/src/thread/agent/files.rs 754
 crates/plugins/src/runtime/ui_host.rs 630

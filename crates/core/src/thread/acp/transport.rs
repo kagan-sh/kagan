@@ -10,7 +10,7 @@ use gpui_kit::BackgroundExecutor;
 use kg_domain::TEXT_MAX;
 use kg_process::Process;
 
-use super::client::Launch;
+use super::client::{AcpError, Launch};
 
 /// How long the agent is given to exit on its own once its output has ended.
 pub(super) const EXIT_GRACE: Duration = Duration::from_secs(2);
@@ -37,7 +37,7 @@ pub(super) struct Transport {
     pub(super) channel: Channel,
 }
 
-pub(super) fn spawn(launch: &Launch) -> Result<Process, String> {
+pub(super) fn spawn(launch: &Launch) -> Result<Process, AcpError> {
     let mut command = std::process::Command::new(&launch.program);
     command.args(&launch.args).current_dir(&launch.cwd).envs(
         launch
@@ -45,12 +45,12 @@ pub(super) fn spawn(launch: &Launch) -> Result<Process, String> {
             .iter()
             .map(|(key, value)| (key.as_os_str(), value.as_os_str())),
     );
-    Process::spawn(command, Stdio::piped(), Stdio::piped(), Stdio::piped()).map_err(|error| {
-        format!(
-            "could not start {} in {}: {error}",
-            launch.program.display(),
-            launch.cwd.display()
-        )
+    Process::spawn(command, Stdio::piped(), Stdio::piped(), Stdio::piped()).map_err(|source| {
+        AcpError::Spawn {
+            program: launch.program.display().to_string(),
+            cwd: launch.cwd.display().to_string(),
+            source,
+        }
     })
 }
 
@@ -142,34 +142,36 @@ where
 pub(super) fn carry(
     process: &mut Process,
     tail: &Arc<Mutex<VecDeque<String>>>,
-) -> Result<Transport, String> {
+) -> Result<Transport, AcpError> {
     let (input, output, errors) = pipes(process)?;
     let reader = Arc::clone(tail);
-    std::thread::Builder::new()
-        .name("kg-acp-stderr".into())
-        .spawn(move || read_lines(errors, |line| remember(&reader, line)))
-        .map_err(|error| error.to_string())?;
+    worker("kg-acp-stderr", move || {
+        read_lines(errors, |line| remember(&reader, line));
+    })?;
     // Bounded, so an agent that floods its output waits for kagan instead of growing the queue.
     let (lines, read) = std::sync::mpsc::sync_channel(READ_BACKLOG);
-    std::thread::Builder::new()
-        .name("kg-acp-read".into())
-        .spawn(move || {
-            read_lines(output, |line| {
-                let _ = lines.send(line);
-            });
-        })
-        .map_err(|error| error.to_string())?;
+    worker("kg-acp-read", move || {
+        read_lines(output, |line| {
+            let _ = lines.send(line);
+        });
+    })?;
     let (frames, inbound) = futures::channel::mpsc::unbounded::<TransportFrame>();
     let (outbound, written) = futures::channel::mpsc::unbounded::<TransportFrame>();
-    std::thread::Builder::new()
-        .name("kg-acp-write".into())
-        .spawn(move || write_frames(input, written))
-        .map_err(|error| error.to_string())?;
+    worker("kg-acp-write", move || write_frames(input, written))?;
     Ok(Transport {
         lines: read,
         frames,
         channel: Channel::new(inbound, outbound),
     })
+}
+
+/// One of the three threads that carry the pipes, or why it could not start.
+fn worker(name: &str, body: impl FnOnce() + Send + 'static) -> Result<(), AcpError> {
+    std::thread::Builder::new()
+        .name(name.into())
+        .spawn(body)
+        .map(|_| ())
+        .map_err(AcpError::Pipes)
 }
 
 /// The reader body both platforms share. A line is capped, and its bytes that are not UTF-8 are
@@ -254,13 +256,13 @@ fn pipes(
         impl Output + 'static,
         impl Output + 'static,
     ),
-    String,
+    AcpError,
 > {
     let child = process.child();
     let (Some(input), Some(output), Some(errors)) =
         (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {
-        return Err("the agent has no pipes".into());
+        return Err(AcpError::NoPipes);
     };
     Ok((
         pipe(input)?,
@@ -271,21 +273,24 @@ fn pipes(
 
 /// A pipe the agent's own process gave kagan, as a file this thread blocks on.
 #[cfg(unix)]
-fn pipe<P>(from: P) -> Result<File, String>
+fn pipe<P>(from: P) -> Result<File, AcpError>
 where
     P: TryInto<std::os::fd::OwnedFd>,
     P::Error: std::fmt::Display,
 {
-    blocking(from.try_into().map_err(|error| error.to_string())?)
+    let fd = from
+        .try_into()
+        .map_err(|error: P::Error| AcpError::Pipes(std::io::Error::other(error.to_string())))?;
+    blocking(fd)
 }
 
 /// A pipe the agent's own process gave kagan. async-process makes it non-blocking for its own
 /// reactor; these threads read and write it like any other file.
 #[cfg(unix)]
-fn blocking(fd: std::os::fd::OwnedFd) -> Result<File, String> {
+fn blocking(fd: std::os::fd::OwnedFd) -> Result<File, AcpError> {
     use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
-    let flags = fcntl_getfl(&fd).map_err(|error| error.to_string())?;
-    fcntl_setfl(&fd, flags & !OFlags::NONBLOCK).map_err(|error| error.to_string())?;
+    let flags = fcntl_getfl(&fd).map_err(|error| AcpError::Pipes(error.into()))?;
+    fcntl_setfl(&fd, flags & !OFlags::NONBLOCK).map_err(|error| AcpError::Pipes(error.into()))?;
     Ok(File::from(fd))
 }
 
@@ -300,13 +305,13 @@ fn pipes(
         impl Output + 'static,
         impl Output + 'static,
     ),
-    String,
+    AcpError,
 > {
     let child = process.child();
     let (Some(input), Some(output), Some(errors)) =
         (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {
-        return Err("the agent has no pipes".into());
+        return Err(AcpError::NoPipes);
     };
     Ok((
         Write(input),
@@ -320,9 +325,9 @@ fn pipes(
 pub(super) async fn pump(
     lines: std::sync::mpsc::Receiver<String>,
     frames: futures::channel::mpsc::UnboundedSender<TransportFrame>,
-    connection: impl Future<Output = Result<(), String>>,
+    connection: impl Future<Output = Result<(), AcpError>>,
     executor: &BackgroundExecutor,
-) -> Result<(), String> {
+) -> Result<(), AcpError> {
     use std::sync::mpsc::TryRecvError;
     let mut connection = Box::pin(connection);
     let mut heard = Instant::now();
