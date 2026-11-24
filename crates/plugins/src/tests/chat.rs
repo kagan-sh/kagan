@@ -456,7 +456,7 @@ fn ask(cx: &mut TestAppContext, id: &ThreadId) {
                 kg_domain::InteractionOption {
                     id: "approve".into(),
                     label: "Allow".into(),
-                    role: None,
+                    role: Some(kg_domain::OptionRole::Primary),
                 },
                 kg_domain::InteractionOption {
                     id: "decline".into(),
@@ -497,7 +497,8 @@ fn items_reads_a_chats_log_and_approvals_are_their_own_read(cx: &mut TestAppCont
     assert_eq!(asked.len(), 1, "{asked:?}");
     assert_eq!(asked[0]["title"], "Ship it?");
     assert_eq!(asked[0]["options"][0]["label"], "Allow");
-    assert_eq!(asked[0]["options"][0]["role"], Value::Null);
+    assert_eq!(asked[0]["options"][0]["role"], "primary");
+    assert_eq!(asked[0]["options"][1]["role"], Value::Null);
     assert!(asked[0]["interactionId"].is_string(), "{asked:?}");
     assert!(asked[0].get("seq").is_none(), "{asked:?}");
 }

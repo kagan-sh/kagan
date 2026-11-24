@@ -104,9 +104,11 @@ an approval, and it never answers one.
    `kg plugin types` writes. Every call names a chat: a visible, unarchived `acp` thread. Any other
    thread is refused with `thread <id> is not a chat; its transcript is its terminal`.
 
-   The open approvals and questions are `approvals(id)` — `{ interactionId, title, options }[]`,
-   oldest first, never paged — and the host draws and answers them, so a plugin keeps them by
-   `interactionId` and never draws the buttons.
+   The open approvals and questions are `approvals(id)` —
+   `{ interactionId, title, options: { id, label, role }[] }[]`, oldest first, never paged — where
+   `role` is `"primary"`, `"safe"`, `"destructive"` or `null` and says how the host draws that
+   option. The host draws and answers them, so a plugin keeps them by `interactionId` and never
+   draws the buttons.
 
    A `"prompt": true` command is a button beside Send, at most four a manifest, and `"header": true`
    puts one on the thread's title. A command's `description` (one plain line of at most 200

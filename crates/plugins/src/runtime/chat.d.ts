@@ -31,7 +31,7 @@ export function items(threadId: string, options?: { afterSeq?: number; limit?: n
 /** The next item after `afterSeq`, or null when the wait ended. A null may also mean the open approvals changed: read `approvals()` again either way. At most 60 s. */
 export function waitItem(threadId: string, options: { afterSeq: number; timeoutMs: number }): Promise<ChatItem | null>;
 /** The open approvals and questions of this chat, oldest first. Never paged. The host draws them and answers them; a plugin reads them and never answers one. */
-export function approvals(threadId: string): Promise<{ interactionId: string; title: string; options: { id: string; label: string; role: "safe" | "destructive" | null }[] }[]>;
+export function approvals(threadId: string): Promise<{ interactionId: string; title: string; options: { id: string; label: string; role: "primary" | "safe" | "destructive" | null }[] }[]>;
 /** Sends the prompt, exactly `kg thread input`. Refused while a turn is open or the agent is not running. At most 1 MiB. */
 export function send(threadId: string, text: string): Promise<void>;
 /** Ends the reply and keeps the agent, exactly `kg thread cancel`. */
