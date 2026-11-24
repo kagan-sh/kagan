@@ -569,6 +569,17 @@ async fn an_acp_session_gets_kagan_mcp_and_the_agents_files(cx: &mut TestAppCont
         note.contains("You are running inside kagan thread"),
         "a chat agent gets the note a terminal thread of it gets: {note}"
     );
+    assert!(
+        !fixture
+            .dir
+            .path()
+            .join("agent")
+            .join("threads")
+            .join(&id.0)
+            .join("settings.json")
+            .exists(),
+        "an ACP thread passes no agent flags, so its turn hooks would never run"
+    );
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 

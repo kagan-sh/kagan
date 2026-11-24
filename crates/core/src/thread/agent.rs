@@ -324,7 +324,7 @@ pub(crate) async fn integrate(
         ),
     };
     let mut notices = Vec::new();
-    if matches!(known, Known::Claude) && !sets_hooks(&known, &args) {
+    if matches!(known, Known::Claude) && record.link == Link::Terminal && !hooks {
         notices.push(EventKind::Notice {
             severity: NoticeSeverity::Info,
             text: "Turn hooks are off: this line sets its own --settings, so turns follow the window's spinner."
@@ -386,7 +386,7 @@ async fn configure(
         .map_err(closed)?;
     let (skills_root, skills, skill_errors) =
         skill::mirror(this, agent.clone(), record.project_id.clone(), cx).await?;
-    let hooks = sets_hooks(known, typed);
+    let hooks = record.link == Link::Terminal && sets_hooks(known, typed);
     let files = files::AgentFiles {
         hooks,
         agent: &agent,
