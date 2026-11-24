@@ -404,9 +404,10 @@ async fn acp_start_again_starts_a_new_session(cx: &mut TestAppContext) {
         2,
         "{kinds:?}"
     );
-    assert!(
-        count(&kinds, |kind| matches!(kind, EventKind::Notice { .. })) >= 1,
-        "the person is told the earlier conversation is not restored: {kinds:?}"
+    assert_eq!(
+        count(&kinds, |kind| matches!(kind, EventKind::Notice { .. })),
+        1,
+        "one start writes one notice that the earlier conversation is not restored: {kinds:?}"
     );
     let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
     assert_eq!(
@@ -414,6 +415,47 @@ async fn acp_start_again_starts_a_new_session(cx: &mut TestAppContext) {
         "ses_second"
     );
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+/// An adapter agent whose own program is there and whose `npx` is not: the run is refused before
+/// the thread exists, rather than starting a chat that can never reach its agent.
+#[gpui_kit::test]
+async fn acp_claude_without_npx_is_refused_before_the_thread_starts(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let dir = tempfile::tempdir().unwrap();
+    stub(dir.path(), "claude");
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.use_program_environment(dir.path(), Path::new("/bin/sh"));
+    });
+    let refused = op(fixture.run_acp("claude"), cx).await;
+    assert!(
+        matches!(refused, Err(OpError::Invalid(ref message)) if message.contains("npx") && message.contains("was not found")),
+        "{refused:?}"
+    );
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    assert!(
+        store.all_threads().unwrap().is_empty(),
+        "the run is refused before the thread exists"
+    );
+}
+
+fn stub(dir: &Path, name: &str) {
+    let path = if cfg!(windows) {
+        dir.join(format!("{name}.bat"))
+    } else {
+        dir.join(name)
+    };
+    let text = if cfg!(windows) {
+        "@exit 0\r\n"
+    } else {
+        "#!/bin/sh\nexit 0\n"
+    };
+    std::fs::write(&path, text).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
 }
 
 #[gpui_kit::test]
