@@ -397,7 +397,9 @@ fn the_built_in_chat_key_works_while_the_plugin_holds_focus(cx: &mut TestAppCont
 }
 
 #[gpui_kit::test]
-fn a_prompt_button_sits_before_send_and_runs_for_the_shown_thread(cx: &mut TestAppContext) {
+fn a_prompt_button_sits_before_the_prompt_action_and_runs_for_the_shown_thread(
+    cx: &mut TestAppContext,
+) {
     let (_kagan, window, _data) = opened(cx, BODY);
     choose(cx, Slot::Chat, SWAP);
     click(cx, window, &format!("thread-{CHAT}"));
@@ -405,7 +407,7 @@ fn a_prompt_button_sits_before_send_and_runs_for_the_shown_thread(cx: &mut TestA
 
     let prompt = format!("prompt/{SWAP}/improve0");
     assert!(shows(cx, window, &prompt));
-    assert!(bounds(cx, window, &prompt).origin.x < bounds(cx, window, "chat-send").origin.x);
+    assert!(bounds(cx, window, &prompt).origin.x < bounds(cx, window, "chat-start-again").origin.x);
 
     click(cx, window, &prompt);
     wait_until(cx, |cx| {

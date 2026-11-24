@@ -4,7 +4,8 @@ use kg_domain::{
     PendingInteractionId, Role, Thread, ThreadId, ThreadStatus, Timestamp, ToolKind, ToolStatus,
 };
 
-use super::{click, focused_of, label, open, shows, shows_within, value_of, wait_until};
+use super::{click, focused_of, label, open, row_top, shows, shows_within, value_of, wait_until};
+use crate::tests::sidebar::layout::span;
 
 /// A thread the store already holds: an ACP one has no program in this process, so the center
 /// shows its transcript and prompt box.
@@ -80,6 +81,12 @@ fn show_chat_with(
 ) {
     let (kagan, window, data) = open(cx);
     let id = seed_thread(data.path(), events);
+    reveal(cx, window, &id);
+    (kagan, window, data)
+}
+
+/// Shows a thread written behind the window's back: a refresh, then the row, then its chat.
+fn reveal(cx: &mut TestAppContext, window: AnyWindowHandle, id: &ThreadId) {
     // A thread written behind the window's back arrives with the next refresh, which marking it
     // read asks for.
     let read = cx.update(|cx| {
@@ -92,7 +99,44 @@ fn show_chat_with(
     wait_until(cx, |cx| shows(cx, window, &format!("thread-{}", id.0)));
     click(cx, window, &format!("thread-{}", id.0));
     wait_until(cx, |cx| shows(cx, window, "chat-transcript"));
-    (kagan, window, data)
+}
+
+/// A thread an agent started under the shown one.
+fn seed_child(
+    data: &std::path::Path,
+    parent: &ThreadId,
+    id: &str,
+    title: &str,
+    status: ThreadStatus,
+) -> ThreadId {
+    let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+    let id = ThreadId(id.into());
+    store
+        .put_thread(&Thread {
+            id: id.clone(),
+            project_id: kg_domain::ProjectId("prj_kagan".into()),
+            environment_id: None,
+            title: title.into(),
+            title_locked: false,
+            provider: "opencode".into(),
+            link: Link::Acp,
+            status,
+            visibility: kg_domain::Visibility::Visible,
+            parent_thread_id: Some(parent.clone()),
+            quiet: false,
+            notify: kg_domain::ThreadNotify::Default,
+            lifecycle_owner_thread_id: None,
+            section_id: None,
+            pinned: false,
+            last_read_at: None,
+            latest_attention_at: Timestamp(0),
+            mark: kg_domain::ThreadMark::None,
+            archived_at: None,
+            created_at: Timestamp(0),
+            updated_at: Timestamp(0),
+        })
+        .unwrap();
+    id
 }
 
 fn show_chat(
@@ -165,12 +209,15 @@ fn an_acp_thread_shows_its_transcript_and_prompt_box(cx: &mut TestAppContext) {
         Some("say hi")
     );
     assert!(shows(cx, window, "chat-prompt"));
-    assert!(shows(cx, window, "chat-send"));
-    // The hint says what this state wants, and `kg ui` can read it.
+    assert!(shows(cx, window, "chat-box"));
+    // A stopped agent offers the way on where Send would be, and says why in one line.
+    assert!(shows(cx, window, "chat-start-again"));
+    assert!(!shows(cx, window, "chat-send"));
     assert_eq!(
-        value_of(cx, window, "chat-hint").as_deref(),
-        Some("The agent is not running. Start it again below.")
+        value_of(cx, window, "chat-stopped").as_deref(),
+        Some("The agent is not running.")
     );
+    assert!(!shows(cx, window, "ended"), "no second bar under the box");
 }
 
 #[gpui_kit::test]
@@ -831,4 +878,166 @@ fn a_load_that_fails_still_draws_the_events_after_it(cx: &mut TestAppContext) {
     wait_until(cx, |cx| {
         value_of(cx, window, "chat-message-1").as_deref() == Some("the first word")
     });
+}
+
+/// The composer is one box in the transcript's column, with the text area and the action inside it.
+#[gpui_kit::test]
+fn the_prompt_box_is_one_box_in_the_transcripts_column(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat(cx);
+    let (column_x, column_w) = span(cx, window, "chat-column").expect("the transcript column");
+    let (box_x, box_w) = span(cx, window, "chat-box").expect("the box");
+    assert!(
+        (column_x - box_x).abs() <= 0.5,
+        "the box starts where the transcript does: {box_x} against {column_x}"
+    );
+    assert!(
+        (column_w - box_w).abs() <= 0.5,
+        "the box is as wide as the transcript column: {box_w} against {column_w}"
+    );
+    let (prompt_x, prompt_w) = span(cx, window, "chat-prompt").expect("the text area");
+    assert!(prompt_x >= box_x && prompt_x + prompt_w <= box_x + box_w);
+    let (action_x, action_w) = span(cx, window, "chat-start-again").expect("the action");
+    assert!(
+        action_x >= box_x && action_x + action_w <= box_x + box_w,
+        "Send, Cancel and Start again sit inside the box"
+    );
+    assert!(
+        row_top(cx, window, "chat-context") > row_top(cx, window, "chat-start-again"),
+        "the context row sits under the box"
+    );
+}
+
+/// An empty transcript says so once, centered in the column the box uses.
+#[gpui_kit::test]
+fn an_empty_transcript_centers_one_quiet_line_in_the_column(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(cx, Vec::new());
+    wait_until(cx, |cx| shows(cx, window, "chat-empty"));
+    let (empty_x, empty_w) = span(cx, window, "chat-empty").expect("the empty line");
+    let (box_x, box_w) = span(cx, window, "chat-box").expect("the box");
+    let (empty_mid, box_mid) = (empty_x + empty_w / 2., box_x + box_w / 2.);
+    assert!(
+        (empty_mid - box_mid).abs() <= 1.,
+        "the empty line is centered over the box: {empty_mid} against {box_mid}"
+    );
+}
+
+/// A run that exited says how, once, and Start again takes Send's place.
+#[gpui_kit::test]
+fn a_chat_that_exited_says_it_once_and_offers_start_again(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![
+            EventKind::Started,
+            EventKind::Exited {
+                code: Some(0),
+                signal: None,
+            },
+        ],
+    );
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-stopped").as_deref() == Some("The agent stopped (exit 0).")
+    });
+    assert!(shows(cx, window, "chat-start-again"));
+    assert!(!shows(cx, window, "chat-send"), "one action, not two");
+    assert!(
+        !shows(cx, window, "ended"),
+        "no second bar carries the same news"
+    );
+}
+
+/// The context row names the project and the folder the run writes to.
+#[gpui_kit::test]
+fn the_context_row_names_the_project_and_the_folder(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat(cx);
+    assert_eq!(
+        value_of(cx, window, "chat-context-project").as_deref(),
+        Some("Kagan project")
+    );
+    assert_eq!(
+        value_of(cx, window, "chat-context-folder").as_deref(),
+        Some("Project folder")
+    );
+    assert_eq!(
+        value_of(cx, window, "chat-state").as_deref(),
+        Some("Not running")
+    );
+}
+
+/// A thread in a worktree names its folder instead of the project's.
+#[gpui_kit::test]
+fn a_worktree_thread_names_its_own_folder(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let id = seed_thread_in(
+        data.path(),
+        Some(kg_domain::EnvironmentId("env_kagan".into())),
+        Vec::new(),
+    );
+    reveal(cx, window, &id);
+    assert_eq!(
+        value_of(cx, window, "chat-context-folder").as_deref(),
+        Some("worktree")
+    );
+}
+
+/// The agent's plan stacks over the box as one line, and opens on a click.
+#[gpui_kit::test]
+fn the_plan_card_is_one_line_until_it_is_opened(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![EventKind::Plan {
+            entries: vec![
+                kg_domain::PlanEntry {
+                    text: "Reproduce it".into(),
+                    status: kg_domain::PlanStatus::Completed,
+                },
+                kg_domain::PlanEntry {
+                    text: "Fix it".into(),
+                    status: kg_domain::PlanStatus::Pending,
+                },
+            ],
+        }],
+    );
+    wait_until(cx, |cx| shows(cx, window, "chat-card-plan"));
+    assert_eq!(
+        value_of(cx, window, "chat-card-plan").as_deref(),
+        Some("collapsed, 1 of 2 done")
+    );
+    assert!(!shows(cx, window, "chat-card-plan-body"));
+    click(cx, window, "chat-card-plan");
+    wait_until(cx, |cx| shows(cx, window, "chat-card-plan-body"));
+    assert_eq!(
+        value_of(cx, window, "chat-card-plan").as_deref(),
+        Some("expanded, 1 of 2 done")
+    );
+}
+
+/// The child threads that run are counted in one line over the box, and listed once opened.
+#[gpui_kit::test]
+fn the_child_threads_card_counts_the_ones_that_run(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let parent = seed_thread(data.path(), Vec::new());
+    let child = seed_child(
+        data.path(),
+        &parent,
+        "thr_child_run",
+        "Review the migration",
+        ThreadStatus::Active,
+    );
+    seed_child(
+        data.path(),
+        &parent,
+        "thr_child_idle",
+        "An older one",
+        ThreadStatus::Idle,
+    );
+    reveal(cx, window, &parent);
+    wait_until(cx, |cx| shows(cx, window, "chat-card-children"));
+    assert_eq!(
+        value_of(cx, window, "chat-card-children").as_deref(),
+        Some("collapsed, 1")
+    );
+    assert!(!shows(cx, window, "chat-card-children-body"));
+    click(cx, window, "chat-card-children");
+    wait_until(cx, |cx| shows(cx, window, "chat-card-children-body"));
+    assert!(shows(cx, window, &format!("chat-card-child-{}", child.0)));
 }

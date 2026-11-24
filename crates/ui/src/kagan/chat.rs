@@ -3,10 +3,10 @@ use std::collections::BTreeSet;
 use crate::theme::TypeScale as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
+use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::component::message_scroller::{MessageScroller, MessageScrollerState};
 use gpui_kit::component::text::TextView;
-use gpui_kit::component::{Disableable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, ClipboardItem, Context, ElementId, FocusHandle, Focusable,
@@ -14,15 +14,19 @@ use gpui_kit::{
     Styled as _, Subscription, Window, div, px,
 };
 use kg_core::{Workspace, WorkspaceEvent};
-use kg_domain::{Event, Op, Role as Speaker, ThreadId, ThreadOp, Timestamp, program_label};
+use kg_domain::{
+    Event, EventKind, Op, Role as Speaker, ThreadId, ThreadOp, Timestamp, program_label,
+};
 
 use crate::kagan::Kagan;
 use crate::kagan::controls::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
+mod above;
 mod body;
 mod card;
+mod composer;
 mod kind;
 mod part;
 mod work;
@@ -48,6 +52,12 @@ pub(crate) struct ChatView {
     working: bool,
     notice: Option<SharedString>,
     sending: bool,
+    /// The cards above the prompt box, as the person left them.
+    cards: above::Cards,
+    /// The child threads that run now, read when the workspace says it changed.
+    children: Vec<(ThreadId, SharedString)>,
+    /// How the run ended, cleared when it starts again.
+    end: Option<composer::End>,
     _events: Subscription,
     _prompt: Subscription,
     _scroller: Subscription,
@@ -82,7 +92,10 @@ impl ChatView {
                     this.absorb(event, cx);
                     false
                 }
-                WorkspaceEvent::Changed => true,
+                WorkspaceEvent::Changed => {
+                    this.read_children(cx);
+                    true
+                }
                 WorkspaceEvent::Waiting(id) | WorkspaceEvent::Finished(id) => *id == this.thread,
                 _ => false,
             };
@@ -102,6 +115,9 @@ impl ChatView {
             working: false,
             notice: None,
             sending: false,
+            cards: above::Cards::default(),
+            children: Vec::new(),
+            end: None,
             _events: events,
             _prompt: prompt_watch,
             _scroller: scroller_watch,
@@ -151,6 +167,7 @@ impl ChatView {
                 for event in &pending {
                     this.absorb(event, cx);
                 }
+                this.read_children(cx);
                 this.sync(cx);
                 cx.notify();
             });
@@ -162,6 +179,14 @@ impl ChatView {
         if !self.loaded {
             self.pending.push(event.clone());
             return;
+        }
+        match &event.kind {
+            EventKind::Started => self.end = None,
+            kind => {
+                if let Some(end) = composer::End::of(kind) {
+                    self.end = Some(end);
+                }
+            }
         }
         if let part::Fold::Dirty(from) = self.transcript.absorb(event) {
             self.sync(cx);
@@ -194,6 +219,21 @@ impl ChatView {
     fn row_changed(&mut self, index: usize, cx: &mut Context<Self>) -> bool {
         self.scroller
             .update(cx, |state, cx| state.remeasure_items(index..index + 1, cx))
+    }
+
+    /// The child threads that are running now, which the card over the box counts and lists. The
+    /// parent is the thread itself, so a thread an agent started is already one of these.
+    fn read_children(&mut self, cx: &App) {
+        let workspace = Workspace::global(cx);
+        let workspace = workspace.read(cx);
+        self.children = workspace
+            .thread_records(cx)
+            .into_iter()
+            .filter(|thread| {
+                thread.parent_thread_id.as_ref() == Some(&self.thread) && thread.status.running()
+            })
+            .map(|thread| (thread.id, SharedString::from(thread.title)))
+            .collect();
     }
 
     fn toggle(&mut self, key: part::RowKey, cx: &mut Context<Self>) {
@@ -323,21 +363,6 @@ impl ChatView {
                 |thread| program_label(&thread.read(cx).record().provider).into(),
             )
     }
-
-    /// What to do now, in this state, in one line.
-    fn hint(&self, cx: &App) -> SharedString {
-        if self.sending {
-            "Sending…".into()
-        } else if self.answering(cx) {
-            "The agent is answering. Cancel it to send something else.".into()
-        } else if !self.running(cx) {
-            "The agent is not running. Start it again below.".into()
-        } else if self.prompt.read(cx).value().trim().is_empty() {
-            "Type a prompt to send it.".into()
-        } else {
-            "Enter sends, Shift+Enter adds a line.".into()
-        }
-    }
 }
 
 impl Focusable for ChatView {
@@ -357,7 +382,7 @@ impl ChatView {
     pub(crate) fn render_with(
         &mut self,
         transcript: Option<AnyElement>,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let answering = self.answering(cx);
@@ -371,13 +396,14 @@ impl ChatView {
             .min_h_0()
             .key_context(CONTEXT)
             .child(body)
-            .child(self.composer(answering, running, cx))
+            .child(composer::composer(self, answering, running, window, cx))
             .into_any_element()
     }
 }
 
 impl ChatView {
-    /// Everything the thread has said, read top to bottom in one column.
+    /// Everything the thread has said, in the one column the prompt box shares with it. An empty
+    /// transcript centers its one quiet line in that column instead of hanging off the left.
     fn transcript(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let weak = cx.weak_entity();
         let scroller = self.scroller.clone();
@@ -386,6 +412,7 @@ impl ChatView {
             .usage
             .map(|(used, size)| (Self::compact(used), Self::compact(size)));
         let muted = cx.theme().muted_foreground;
+        let empty = self.transcript.rows.is_empty();
         let list = MessageScroller::new("chat-rows", scroller, move |index, window, cx| {
             row_at(&weak, index, window, cx)
         })
@@ -397,24 +424,37 @@ impl ChatView {
             .flex_1()
             .min_h_0()
             .px_4()
-            .gap_1()
-            .children(usage.map(|(used, size)| {
-                div()
-                    .id("chat-usage")
-                    .type_caption(cx)
-                    .text_color(muted)
-                    .child(format!("{used} of {size} tokens in context"))
-            }))
-            .child(div().flex_1().min_h_0().child(list))
-            .when(self.transcript.rows.is_empty(), |shown| {
-                shown.child(
-                    div()
-                        .id("chat-empty")
-                        .type_body(cx)
-                        .text_color(muted)
-                        .child("Nothing said yet. Type a prompt below."),
-                )
-            })
+            .child(
+                v_flex()
+                    .id("chat-column")
+                    .ui_container()
+                    .max_w(px(composer::COLUMN))
+                    .mx_auto()
+                    .w_full()
+                    .flex_1()
+                    .min_h_0()
+                    .gap_1()
+                    .children(usage.map(|(used, size)| {
+                        div()
+                            .id("chat-usage")
+                            .type_caption(cx)
+                            .text_color(muted)
+                            .child(format!("{used} of {size} tokens in context"))
+                    }))
+                    .when(empty, |column| {
+                        column.items_center().justify_center().child(
+                            div()
+                                .id("chat-empty")
+                                .ui_container()
+                                .type_body(cx)
+                                .text_color(muted)
+                                .child("Nothing said yet. Type a prompt below."),
+                        )
+                    })
+                    .when(!empty, |column| {
+                        column.child(div().flex_1().min_h_0().child(list))
+                    }),
+            )
     }
 
     /// Thousands as "12K", so the context line never eats the width.
@@ -426,104 +466,6 @@ impl ChatView {
         } else {
             tokens.to_string()
         }
-    }
-
-    /// The prompt box, its one line of guidance, and the one filled button this state offers.
-    fn composer(&self, answering: bool, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
-        let muted = cx.theme().muted_foreground;
-        let prompt = self.prompt.read(cx).value().to_string();
-        let ready = running && !prompt.trim().is_empty() && !self.sending;
-        let hint = self.hint(cx);
-        let button = if answering {
-            control(
-                "chat-cancel",
-                Facts::button("Cancel"),
-                Button::new("chat-cancel-button")
-                    .small()
-                    .primary()
-                    .label("Cancel")
-                    .on_click(cx.listener(|this, _, window, cx| this.cancel(window, cx))),
-            )
-        } else {
-            control(
-                "chat-send",
-                Facts {
-                    disabled: !ready,
-                    ..Facts::button("Send")
-                },
-                Button::new("chat-send-button")
-                    .small()
-                    .primary()
-                    .label("Send")
-                    .disabled(!ready)
-                    .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
-            )
-        };
-        v_flex().flex_none().px_4().pb_4().child(
-            v_flex()
-                .max_w(px(760.))
-                .mx_auto()
-                .w_full()
-                .gap_2()
-                .child(
-                    v_flex()
-                        .border_1()
-                        .border_color(cx.theme().input)
-                        .rounded(cx.theme().radius)
-                        .bg(cx.theme().secondary)
-                        .child(
-                            div()
-                                .id("chat-prompt")
-                                .ui_observe_as(Facts {
-                                    role: Role::TextInput,
-                                    name: "Prompt".into(),
-                                    value: Some(prompt.into()),
-                                    disabled: false,
-                                    selected: None,
-                                    focus: Some(self.prompt.read(cx).focus_handle(cx)),
-                                    hint: None,
-                                })
-                                .child(
-                                    Textarea::new(&self.prompt)
-                                        .text_size(px(crate::theme::type_body(cx)))
-                                        .small(),
-                                ),
-                        )
-                        .child(
-                            h_flex()
-                                .gap_2()
-                                .items_center()
-                                .px_2()
-                                .pb_2()
-                                .children(super::header::prompt(cx))
-                                .child(div().flex_1())
-                                .child(button),
-                        ),
-                )
-                .children(self.notice.clone().map(|notice| {
-                    div()
-                        .id("chat-notice")
-                        .type_small(cx)
-                        .text_color(cx.theme().danger)
-                        .child(notice)
-                }))
-                .child(
-                    div()
-                        .id("chat-hint")
-                        .type_caption(cx)
-                        .text_color(muted)
-                        .ui_observe_as(Facts {
-                            role: Role::Label,
-                            name: "Hint".into(),
-                            value: Some(hint.clone()),
-                            disabled: false,
-                            selected: None,
-                            focus: None,
-                            hint: None,
-                        })
-                        .child(hint),
-                ),
-        )
     }
 }
 
