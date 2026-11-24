@@ -4,14 +4,14 @@ use std::time::Duration;
 use gpui_kit::assets::IconName;
 use kg_domain::{Timestamp, WorkKind};
 
-use crate::kagan::chat::part::ToolRow;
+use crate::kagan::chat::part::{ToolRow, ToolStage};
 
 /// How a work row draws its kind: the icon, the words the window uses, and the row's own title and
 /// meta. A plugin's page reads the same kind, which is why the kind lives in `kg_domain`.
 pub(super) trait WorkKindExt {
     fn icon(&self) -> IconName;
     fn hint(&self) -> &'static str;
-    fn label(&self, done: bool) -> String;
+    fn label(&self, stage: ToolStage) -> String;
     fn badge(&self) -> Option<String>;
     fn mono_title(&self) -> bool;
     fn title(&self, tool: &ToolRow) -> Option<String>;
@@ -52,25 +52,55 @@ impl WorkKindExt for WorkKind {
         }
     }
 
-    fn label(&self, done: bool) -> String {
+    fn label(&self, stage: ToolStage) -> String {
         let word = match self {
-            Self::Read => pick(done, "Read file", "Reading file"),
-            Self::Search => pick(done, "Searched files", "Searching files"),
-            Self::Execute => pick(done, "Ran command", "Running command"),
-            Self::Edit => pick(done, "Edited file", "Editing file"),
-            Self::Delete => pick(done, "Deleted file", "Deleting file"),
-            Self::Move => pick(done, "Moved file", "Moving file"),
-            Self::Fetch => pick(done, "Fetched page", "Fetching page"),
-            Self::Think => pick(done, "Thought", "Thinking"),
+            Self::Read => tell(stage, "Waiting to read file", "Reading file", "Read file"),
+            Self::Search => tell(
+                stage,
+                "Waiting to search files",
+                "Searching files",
+                "Searched files",
+            ),
+            Self::Execute => tell(
+                stage,
+                "Waiting to run command",
+                "Running command",
+                "Ran command",
+            ),
+            Self::Edit => tell(stage, "Waiting to edit file", "Editing file", "Edited file"),
+            Self::Delete => tell(
+                stage,
+                "Waiting to delete file",
+                "Deleting file",
+                "Deleted file",
+            ),
+            Self::Move => tell(stage, "Waiting to move file", "Moving file", "Moved file"),
+            Self::Fetch => tell(
+                stage,
+                "Waiting to fetch page",
+                "Fetching page",
+                "Fetched page",
+            ),
+            Self::Think => tell(stage, "Waiting to think", "Thinking", "Thought"),
             Self::Mcp { server, tool } => {
-                return if done {
-                    format!("Called {server}.{tool}")
-                } else {
-                    format!("Calling {server}.{tool}")
+                return match stage {
+                    ToolStage::Waiting => format!("Waiting to call {server}.{tool}"),
+                    ToolStage::Running => format!("Calling {server}.{tool}"),
+                    ToolStage::Settled => format!("Called {server}.{tool}"),
                 };
             }
-            Self::Skill { .. } => pick(done, "Loaded skill", "Loading skill"),
-            Self::Other => pick(done, "Used a tool", "Using a tool"),
+            Self::Skill { .. } => tell(
+                stage,
+                "Waiting to load skill",
+                "Loading skill",
+                "Loaded skill",
+            ),
+            Self::Other => tell(
+                stage,
+                "Waiting to use a tool",
+                "Using a tool",
+                "Used a tool",
+            ),
         };
         word.to_owned()
     }
@@ -178,6 +208,20 @@ pub(super) fn title_of(tool: &ToolRow) -> Option<String> {
 
 pub(super) fn pick(done: bool, done_word: &'static str, now_word: &'static str) -> &'static str {
     if done { done_word } else { now_word }
+}
+
+/// The word a row uses at its stage: before it starts, while it moves, and once it settles.
+pub(super) fn tell(
+    stage: ToolStage,
+    waiting: &'static str,
+    now_word: &'static str,
+    done_word: &'static str,
+) -> &'static str {
+    match stage {
+        ToolStage::Waiting => waiting,
+        ToolStage::Running => now_word,
+        ToolStage::Settled => done_word,
+    }
 }
 
 fn file_name(path: &str) -> &str {
@@ -346,6 +390,19 @@ mod tests {
             )),
             Some("a.ts".into())
         );
+    }
+
+    #[test]
+    fn a_row_waits_until_the_agent_starts_it() {
+        assert_eq!(
+            WorkKind::Execute.label(ToolStage::Waiting),
+            "Waiting to run command"
+        );
+        assert_eq!(
+            WorkKind::Execute.label(ToolStage::Running),
+            "Running command"
+        );
+        assert_eq!(WorkKind::Execute.label(ToolStage::Settled), "Ran command");
     }
 
     #[test]

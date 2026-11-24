@@ -51,10 +51,29 @@ fn a_menu_command_is_accepted_with_when_thread() {
 }
 
 #[test]
+fn a_command_carries_its_description_to_its_contribution() {
+    let manifest = read(&json!([
+        { "id": "improve", "title": "Improve", "when": "thread", "prompt": true,
+          "description": "Rewrites the draft in place" }
+    ]))
+    .unwrap();
+    let contribution = CommandContribution::of(
+        &PluginId("dev.test.menu".into()),
+        &manifest.commands[0],
+        &BTreeMap::new(),
+    );
+    assert_eq!(
+        contribution.description.as_deref(),
+        Some("Rewrites the draft in place")
+    );
+}
+
+#[test]
 fn a_command_carries_its_placement_to_its_contribution() {
     let command = |header, menu| Command {
         id: "notes".into(),
         title: "Notes".into(),
+        description: None,
         key: None,
         when: CommandWhen::Thread,
         header,

@@ -5,8 +5,8 @@ use kg_domain::{
 };
 
 use super::{
-    click, focused_of, label, open, row_top, shows, shows_within, thread_record, value_of,
-    wait_until,
+    click, disabled, focused_of, label, open, row_top, shows, shows_within, thread_record,
+    value_of, wait_until,
 };
 use crate::tests::sidebar::layout::span;
 
@@ -678,10 +678,14 @@ fn the_approval_card_answers_through_the_question(cx: &mut TestAppContext) {
     let (window, _data) = show_approval(cx, ToolKind::Execute, permission_options(), None);
     wait_until(cx, |cx| shows(cx, window, "answer-chat-pn_1-allow-once"));
     wait_until(cx, |cx| shows(cx, window, "answer-chat-pn_1-reject-once"));
+    // A command that is waiting for permission has not started: it says so, with its own mark.
     assert_eq!(
         value_of(cx, window, "chat-work-1").as_deref(),
-        Some("collapsed · busy")
+        Some("collapsed · waiting")
     );
+    let name = label(cx, window, "chat-work-1");
+    assert!(name.contains("Waiting to run command"), "{name}");
+    assert!(!name.contains("Running command"), "{name}");
     assert!(
         !shows(cx, window, "chat-approval-runs-pn_1"),
         "a thread with no folder of its own says nothing about a worktree"
@@ -945,6 +949,38 @@ fn a_chat_that_exited_says_it_once_and_offers_start_again(cx: &mut TestAppContex
     assert!(
         !shows(cx, window, "ended"),
         "no second bar carries the same news"
+    );
+}
+
+/// A stopped run says how it ended, and its box takes no typing: nothing looks ready to send.
+#[gpui_kit::test]
+fn a_stopped_chat_takes_no_typing_in_its_prompt(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![
+            EventKind::Started,
+            EventKind::Exited {
+                code: Some(0),
+                signal: None,
+            },
+        ],
+    );
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-stopped").as_deref() == Some("Exited with code 0.")
+    });
+    assert_eq!(disabled(cx, window, "chat-prompt"), Some(true));
+    click(cx, window, "chat-prompt");
+    assert_eq!(
+        focused_of(cx, window, "chat-prompt"),
+        Some(true),
+        "the box takes focus, and still takes no typing"
+    );
+    cx.simulate_keystrokes(window, "x");
+    cx.run_until_parked();
+    assert_eq!(
+        value_of(cx, window, "chat-prompt").as_deref(),
+        Some(""),
+        "a stopped box keeps no typing"
     );
 }
 

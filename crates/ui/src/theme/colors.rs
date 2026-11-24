@@ -23,6 +23,7 @@ pub(crate) enum Shape {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Tone {
     Busy,
+    Waiting,
     Needs,
     Failed,
     Done,
@@ -63,6 +64,7 @@ impl Tone {
     pub(crate) fn word(self) -> &'static str {
         match self {
             Self::Busy => "busy",
+            Self::Waiting => "waiting",
             Self::Needs => "needs you",
             Self::Failed => "failed",
             Self::Done => "done",
@@ -77,13 +79,14 @@ impl Tone {
             Self::Busy | Self::Done => p.working,
             Self::Needs => p.needs,
             Self::Failed => p.failed,
-            Self::Idle | Self::Ended => p.idle,
+            Self::Waiting | Self::Idle | Self::Ended => p.idle,
         })
     }
 
     pub(crate) fn shape(self) -> Shape {
         match self {
             Self::Busy => Shape::Spinner,
+            Self::Waiting => Shape::Glyph(IconName::Clock),
             Self::Needs => Shape::Glyph(IconName::CircleAlert),
             Self::Failed => Shape::Glyph(IconName::OctagonX),
             Self::Done => Shape::Glyph(IconName::Check),

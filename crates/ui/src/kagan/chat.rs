@@ -66,11 +66,7 @@ impl ChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let prompt = cx.new(|cx| {
-            TextareaState::new(window, cx)
-                .auto_grow(2, 8)
-                .placeholder("Ask the agent… Enter sends, Shift+Enter adds a line")
-        });
+        let prompt = cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 8));
         let prompt_watch = cx.subscribe_in(&prompt, window, |this, _, event, window, cx| {
             if let InputEvent::PressEnter {
                 shift: false,

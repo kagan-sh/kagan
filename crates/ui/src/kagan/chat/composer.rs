@@ -20,6 +20,11 @@ use crate::ui_registry::Facts;
 /// The one column the transcript, the cards and the prompt box share.
 pub(super) const COLUMN: f32 = 760.;
 
+/// What an empty prompt box says: how to send, or how to get back to sending.
+const ASK: &str = "Ask the agent… Enter sends, Shift+Enter adds a line";
+const STOPPED: &str = "Start the agent again to send";
+const ARCHIVED: &str = "This thread is archived";
+
 /// What the box draws this frame, read once so every part of it agrees.
 struct Shown {
     turn: Turn,
@@ -69,6 +74,18 @@ pub(super) fn composer(
         focused: view.prompt.read(cx).focus_handle(cx).is_focused(window),
         archived: view.archived(cx),
     };
+    // The box's hint says what it takes, or how to get the agent back, so a stopped box never
+    // looks like it can send. Read-only, the area keeps the draft and takes no typing.
+    let hint = match (shown.turn.running(), shown.archived) {
+        (true, _) => ASK,
+        (false, true) => ARCHIVED,
+        (false, false) => STOPPED,
+    };
+    let stale = view.prompt.read(cx).presentation().placeholder().as_ref() != hint;
+    if stale {
+        view.prompt
+            .update(cx, |prompt, cx| prompt.set_placeholder(hint, window, cx));
+    }
     let cards = super::above::stack(view, window, cx);
     v_flex()
         .flex_none()
@@ -110,7 +127,7 @@ fn boxed(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyE
         .border_color(border)
         .rounded(cx.theme().radius)
         .bg(cx.theme().secondary)
-        .child(area(view, cx))
+        .child(area(view, !shown.turn.running(), cx))
         .children(stopped.map(|line| {
             div()
                 .id("chat-stopped")
@@ -135,7 +152,7 @@ fn boxed(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyE
 }
 
 /// The text area. What to do sits in its own placeholder, so the box draws one thing.
-fn area(view: &ChatView, cx: &App) -> impl IntoElement {
+fn area(view: &ChatView, stopped: bool, cx: &App) -> impl IntoElement {
     let value = view.prompt.read(cx).value().to_string();
     div().relative().child(
         div()
@@ -144,7 +161,7 @@ fn area(view: &ChatView, cx: &App) -> impl IntoElement {
                 role: Role::TextInput,
                 name: "Prompt".into(),
                 value: Some(value.into()),
-                disabled: false,
+                disabled: stopped,
                 selected: None,
                 focus: Some(view.prompt.read(cx).focus_handle(cx)),
                 hint: None,
@@ -153,6 +170,7 @@ fn area(view: &ChatView, cx: &App) -> impl IntoElement {
                 Textarea::new(&view.prompt)
                     .bordered(false)
                     .appearance(false)
+                    .readonly(stopped)
                     .text_size(px(crate::theme::type_body(cx)))
                     .small(),
             ),

@@ -102,13 +102,27 @@ pub(super) struct ToolRow {
     pub(super) to: Timestamp,
 }
 
+/// How far a tool call has got. A call the agent named but has not started is waiting, not running.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ToolStage {
+    Waiting,
+    Running,
+    Settled,
+}
+
 impl ToolRow {
-    /// A row that is still running: its label shimmers and its meta is the live span.
+    /// The call's stage, which chooses its word, its mark and whether its body is live.
+    pub(super) fn stage(&self) -> ToolStage {
+        match self.status {
+            Some(ToolStatus::Pending) => ToolStage::Waiting,
+            Some(ToolStatus::InProgress) => ToolStage::Running,
+            _ => ToolStage::Settled,
+        }
+    }
+
+    /// A row that has not settled: its label shimmers and its meta is the live span.
     pub(super) fn running(&self) -> bool {
-        matches!(
-            self.status,
-            Some(ToolStatus::Pending | ToolStatus::InProgress)
-        )
+        self.stage() != ToolStage::Settled
     }
 
     pub(super) fn failed(&self) -> bool {

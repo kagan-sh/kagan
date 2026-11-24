@@ -13,7 +13,7 @@ use std::rc::Rc;
 use crate::kagan::chat::ChatView;
 use crate::kagan::chat::body;
 use crate::kagan::chat::kind::{self, WorkKindExt as _, pick, plural, span_text};
-use crate::kagan::chat::part::{Part, Row, RowKey, RowKind, ThoughtRow, ToolRow};
+use crate::kagan::chat::part::{Part, Row, RowKey, RowKind, ThoughtRow, ToolRow, ToolStage};
 use crate::theme::{Tone, TypeScale as _, row_height};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -34,7 +34,7 @@ pub(super) fn work_row(
     cx: &mut App,
 ) -> AnyElement {
     let kind = kind::of(tool);
-    let done = !tool.running();
+    let stage = tool.stage();
     let body = open
         .then(|| body::work_body(row.id, tool, &kind, weak, cx))
         .map(IntoElement::into_any_element);
@@ -43,7 +43,7 @@ pub(super) fn work_row(
             id: named(Part::Work, row.id),
             key: row.key(),
             icon: kind.icon(),
-            label: kind.label(done),
+            label: kind.label(stage),
             title: kind.title(tool),
             title_mono: kind.mono_title(),
             badge: kind.badge(),
@@ -52,12 +52,11 @@ pub(super) fn work_row(
             word: kind.hint(),
             open,
             has_body: kind.has_body(tool),
-            tone: if tool.failed() {
-                Tone::Failed
-            } else if tool.running() {
-                Tone::Busy
-            } else {
-                Tone::Done
+            tone: match (tool.failed(), stage) {
+                (true, _) => Tone::Failed,
+                (false, ToolStage::Waiting) => Tone::Waiting,
+                (false, ToolStage::Running) => Tone::Busy,
+                (false, ToolStage::Settled) => Tone::Done,
             },
             indent: if indented { px(24.) } else { px(4.) },
             body,
@@ -450,7 +449,7 @@ fn content(face: Face, cx: &mut App) -> gpui_kit::Div {
             .justify_center()
             .child(Icon::new(face.icon).xsmall().text_color(muted)),
     );
-    if matches!(face.tone, Tone::Busy | Tone::Failed) {
+    if matches!(face.tone, Tone::Busy | Tone::Waiting | Tone::Failed) {
         line = line.child(div().flex_none().child(face.tone.mark(cx)));
     }
     line = line.child(

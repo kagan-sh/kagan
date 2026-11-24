@@ -149,6 +149,7 @@ fn install(path: &Path, id: &str, prompts: usize, body: &str) {
             json!({
                 "id": format!("improve{ix}"),
                 "title": format!("Improve{ix}"),
+                "description": "Rewrites the draft in place",
                 "when": "thread",
                 "prompt": true,
             })
@@ -245,6 +246,14 @@ fn bounds(cx: &mut TestAppContext, window: AnyWindowHandle, id: &str) -> gpui_ki
             gpui_kit::point(f32::from(bounds.origin.x), f32::from(bounds.origin.y)),
             gpui_kit::size(f32::from(bounds.size.width), f32::from(bounds.size.height)),
         )
+    })
+    .unwrap()
+}
+
+fn hint(cx: &mut TestAppContext, window: AnyWindowHandle, id: &str) -> Option<String> {
+    cx.update_window(window, |_, window, _| {
+        crate::ui_registry::find(window, &gpui_kit::ElementId::Name(id.to_owned().into()))
+            .and_then(|element| element.hint.as_deref().map(str::to_owned))
     })
     .unwrap()
 }
@@ -408,6 +417,11 @@ fn a_prompt_button_sits_before_the_prompt_action_and_runs_for_the_shown_thread(
     let prompt = format!("prompt/{SWAP}/improve0");
     assert!(shows(cx, window, &prompt));
     assert!(bounds(cx, window, &prompt).origin.x < bounds(cx, window, "chat-start-again").origin.x);
+    // The manifest's description is the tooltip, so a person hears what a click does to the draft.
+    assert_eq!(
+        hint(cx, window, &prompt).as_deref(),
+        Some("Rewrites the draft in place")
+    );
 
     click(cx, window, &prompt);
     wait_until(cx, |cx| {

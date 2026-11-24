@@ -51,7 +51,8 @@ pub(crate) fn prompt_id_for(plugin: &PluginId, id: &str) -> ElementId {
 // One ghost button, with no icon, sized like the buttons beside it.
 fn row(command: CommandContribution, id: ElementId, cx: &App) -> AnyElement {
     let run = RunCommand::new(command.plugin.clone(), command.id.clone());
-    let tooltip = super::controls::tip(&command.title, &run, cx);
+    let tip = command.description.as_deref().unwrap_or(&command.title);
+    let tooltip = super::controls::tip(tip, &run, cx);
     control(
         id.clone(),
         Facts {
