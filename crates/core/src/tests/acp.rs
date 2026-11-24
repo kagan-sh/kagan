@@ -1710,10 +1710,7 @@ fn fake_agent() {
                 if hang_init {
                     continue;
                 }
-                let capabilities = std::fs::read_to_string(dir.join("initialize.json"))
-                    .ok()
-                    .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-                    .unwrap_or_else(|| json!({"loadSession": mode("refuse_load")}));
+                let capabilities = capabilities(&dir, &modes);
                 write(
                     &mut out,
                     &reply(
@@ -1729,52 +1726,24 @@ fn fake_agent() {
                 }
             }
             "session/load" => {
-                let _ = std::fs::write(dir.join("load"), &line);
-                if mode("refuse_load") {
-                    write(
-                        &mut out,
-                        &json!({
-                            "jsonrpc": "2.0",
-                            "id": id,
-                            "error": {"code": -32000, "message": "this conversation is gone"},
-                        }),
-                    );
-                    continue;
+                if let Some(named) = loaded(&dir, &mut out, &id, &line, &modes) {
+                    session = named;
                 }
-                session = message["params"]["sessionId"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_owned();
-                for update in replay_updates(&dir) {
-                    write(&mut out, &notice(&session, &update));
-                }
-                write(&mut out, &reply(&id, &json!({})));
             }
             "session/prompt" => {
-                let record = turns.next().unwrap_or_else(|| turn(&[], "end_turn"));
-                if record["sleep"].as_bool() == Some(true) {
-                    sleep_child(&dir);
+                let after = prompted(
+                    &dir,
+                    &mut out,
+                    &mut lines,
+                    &modes,
+                    &session,
+                    &id,
+                    &turns.next().unwrap_or_else(|| turn(&[], "end_turn")),
+                );
+                if let Some(held) = after.hold {
+                    open = Some(held);
                 }
-                match record["updates"].as_array() {
-                    Some(updates) => {
-                        for update in updates {
-                            write(&mut out, &notice(&session, update));
-                        }
-                    }
-                    None => turn_chunks(&mut out, &session, &record, &modes),
-                }
-                let mut answered = false;
-                if let Some(permission) = record.get("permission") {
-                    answered =
-                        permission_step(&dir, &mut lines, &mut out, &session, permission, &id);
-                }
-                if record["hold"].as_bool() == Some(true) && !answered {
-                    open = Some((id, record.clone()));
-                } else if !answered {
-                    let stop = record["stopReason"].as_str().unwrap_or("end_turn");
-                    write(&mut out, &reply(&id, &json!({ "stopReason": stop })));
-                }
-                if record["quit"].as_bool() == Some(true) || ends(&record) {
+                if after.quit {
                     return;
                 }
             }
@@ -1830,6 +1799,90 @@ fn turn_chunks(out: &mut std::io::Stdout, session: &str, record: &Value, modes: 
             &update(session, "agent_message_chunk", text, message_id),
         );
     }
+}
+
+/// What one prompt leaves the fake agent doing: holding the request open, or stopping.
+struct After {
+    hold: Option<(Value, Value)>,
+    quit: bool,
+}
+
+/// One recorded turn: its updates, its permission request, and its stop reason.
+fn prompted(
+    dir: &Path,
+    out: &mut std::io::Stdout,
+    lines: &mut impl Iterator<Item = String>,
+    modes: &str,
+    session: &str,
+    id: &Value,
+    record: &Value,
+) -> After {
+    if record["sleep"].as_bool() == Some(true) {
+        sleep_child(dir);
+    }
+    match record["updates"].as_array() {
+        Some(updates) => {
+            for update in updates {
+                write(out, &notice(session, update));
+            }
+        }
+        None => turn_chunks(out, session, record, modes),
+    }
+    let mut answered = false;
+    if let Some(permission) = record.get("permission") {
+        answered = permission_step(dir, lines, out, session, permission, id);
+    }
+    let hold = record["hold"].as_bool() == Some(true) && !answered;
+    if !answered && !hold {
+        let stop = record["stopReason"].as_str().unwrap_or("end_turn");
+        write(out, &reply(id, &json!({ "stopReason": stop })));
+    }
+    After {
+        hold: hold.then(|| (id.clone(), record.clone())),
+        quit: record["quit"].as_bool() == Some(true) || ends(record),
+    }
+}
+
+/// The capabilities the agent advertises: the recording's own answer, or a synthetic agent's.
+fn capabilities(dir: &Path, modes: &str) -> Value {
+    std::fs::read_to_string(dir.join("initialize.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .unwrap_or_else(
+            || json!({ "loadSession": modes.lines().any(|mode| mode == "refuse_load") }),
+        )
+}
+
+/// A load: the session the request names and its replay, or the refusal. `None` when it refused.
+fn loaded(
+    dir: &Path,
+    out: &mut std::io::Stdout,
+    id: &Value,
+    line: &str,
+    modes: &str,
+) -> Option<String> {
+    let _ = std::fs::write(dir.join("load"), line);
+    if modes.lines().any(|mode| mode == "refuse_load") {
+        write(
+            out,
+            &json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {"code": -32000, "message": "this conversation is gone"},
+            }),
+        );
+        return None;
+    }
+    let request: Value = serde_json::from_str(line).unwrap_or_default();
+    let session = request["params"]["sessionId"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    for update in replay_updates(dir) {
+        write(out, &notice(&session, &update));
+    }
+    write(out, &reply(id, &json!({})));
+    Some(session)
 }
 
 /// The updates a recorded load replays, in the order the agent sent them.
