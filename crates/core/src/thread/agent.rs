@@ -2,7 +2,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
 use gpui_kit::{AppContext as _, AsyncApp, WeakEntity};
-use kg_domain::{EventKind, NoticeSeverity, OpResult, ThreadId};
+use kg_domain::{EventKind, Link, NoticeSeverity, OpError, OpResult, ThreadId};
 use serde_json::Value;
 
 use crate::host::database::Result;
@@ -10,7 +10,6 @@ use crate::workspace::closed;
 use crate::{PluginRequest, Workspace, skill};
 
 use super::conversation;
-use super::run::ResolvedProgram;
 
 // https://code.claude.com/docs/en/cli-reference: the commands in its table, and the aliases plugins and kill.
 const CLAUDE_SUBCOMMANDS: &[&str] = &[
@@ -257,7 +256,6 @@ pub(super) async fn variables(
 pub(crate) async fn integrate(
     this: &WeakEntity<Workspace>,
     record: &kg_domain::Thread,
-    program: &ResolvedProgram,
     folder: &Path,
     start: Start,
     cx: &mut AsyncApp,
@@ -277,7 +275,11 @@ pub(crate) async fn integrate(
         .call(|store| store.setting(kg_domain::prefs::AGENT_INTEGRATION))
         .await?
         != Some(Value::Bool(false));
-    let Some(known) = known(&program.path).filter(|known| on && !subcommand(known, &program.args))
+    // The agent is the one the thread's line names, not the program that ends up running: an ACP
+    // thread may start its agent through an adapter, and the adapter's files are the CLI's files.
+    let (name, args) = kg_domain::split_program(&record.provider)
+        .map_err(|error| OpError::Invalid(error.to_string()))?;
+    let Some(known) = known(Path::new(&name)).filter(|known| on && !subcommand(known, &args))
     else {
         // A closed workspace has no thread to clear.
         let _ = this.update(cx, |workspace, cx| {
@@ -295,7 +297,7 @@ pub(crate) async fn integrate(
         Setup {
             this,
             record,
-            program,
+            args: &args,
             folder,
             start,
             data_dir: &data_dir,
@@ -305,9 +307,9 @@ pub(crate) async fn integrate(
         },
         cx,
     );
-    let (args, notice, warning, hooks) = match setup.await {
-        Ok((args, notice, warning, hooks)) => (
-            args,
+    let (flags, notice, warning, hooks) = match setup.await {
+        Ok((flags, notice, warning, hooks)) => (
+            flags,
             notice.map(|text| (NoticeSeverity::Info, text.to_owned())),
             warning,
             hooks,
@@ -322,7 +324,7 @@ pub(crate) async fn integrate(
         ),
     };
     let mut notices = Vec::new();
-    if matches!(known, Known::Claude) && !sets_hooks(&known, &program.args) {
+    if matches!(known, Known::Claude) && !sets_hooks(&known, &args) {
         notices.push(EventKind::Notice {
             severity: NoticeSeverity::Info,
             text: "Turn hooks are off: this line sets its own --settings, so turns follow the window's spinner."
@@ -341,13 +343,17 @@ pub(crate) async fn integrate(
     if !notices.is_empty() {
         Workspace::events(this, record.id.clone(), notices, cx).await?;
     }
-    Ok(Integration { env, args, hooks })
+    Ok(Integration {
+        env,
+        args: flags,
+        hooks,
+    })
 }
 
 struct Setup<'a> {
     this: &'a WeakEntity<Workspace>,
     record: &'a kg_domain::Thread,
-    program: &'a ResolvedProgram,
+    args: &'a [String],
     folder: &'a Path,
     start: Start,
     data_dir: &'a Path,
@@ -363,7 +369,7 @@ async fn configure(
     let Setup {
         this,
         record,
-        program,
+        args: typed,
         folder,
         start,
         data_dir,
@@ -380,7 +386,7 @@ async fn configure(
         .map_err(closed)?;
     let (skills_root, skills, skill_errors) =
         skill::mirror(this, agent.clone(), record.project_id.clone(), cx).await?;
-    let hooks = sets_hooks(known, &program.args);
+    let hooks = sets_hooks(known, typed);
     let files = files::AgentFiles {
         hooks,
         agent: &agent,
@@ -429,19 +435,22 @@ async fn configure(
         warning = Some(joined(warning, text));
     }
     let mut args = flags(known, &files);
-    let (conversation, notice) =
-        conversation::args(this, known, record, &program.args, folder, start, cx).await?;
-    args.extend(conversation);
+    // A terminal thread picks its conversation in its own arguments. An ACP thread's conversation
+    // is its session, which the agent names over the protocol.
+    let mut notice = None;
+    if record.link == Link::Terminal {
+        let (conversation, picked) =
+            conversation::args(this, known, record, typed, folder, start, cx).await?;
+        args.extend(conversation);
+        notice = picked;
+    }
     Ok((args, notice, warning, hooks))
 }
 
 // Claude reads `--settings` as an extra source, so a line that already sets one keeps its own and
 // kagan's turn hooks are left out.
-fn sets_hooks(known: &Known, args: &[OsString]) -> bool {
-    matches!(known, Known::Claude)
-        && !args
-            .iter()
-            .any(|arg| arg.to_string_lossy().starts_with("--settings"))
+fn sets_hooks(known: &Known, args: &[String]) -> bool {
+    matches!(known, Known::Claude) && !args.iter().any(|arg| arg.starts_with("--settings"))
 }
 
 fn joined(warning: Option<String>, text: String) -> String {
@@ -473,46 +482,35 @@ fn known(program: &Path) -> Option<Known> {
 // takes its flags before a subcommand, so its overrides always apply. A Cursor subcommand is not
 // its conversation, so kagan adds nothing to that line either. The other programs take flags
 // before a subcommand, and a subcommand line is not a conversation.
-fn subcommand(known: &Known, args: &[OsString]) -> bool {
+fn subcommand(known: &Known, args: &[String]) -> bool {
     match known {
         Known::Claude => args
             .iter()
-            .find(|arg| {
-                !CLAUDE_PERMISSION_FLAGS
-                    .iter()
-                    .any(|flag| arg.as_os_str() == OsStr::new(flag))
-            })
-            .and_then(|arg| arg.to_str())
-            .is_some_and(|arg| CLAUDE_SUBCOMMANDS.contains(&arg)),
-        Known::Cursor => first_word(args, CURSOR_VALUE_FLAGS, true)
+            .find(|arg| !CLAUDE_PERMISSION_FLAGS.iter().any(|flag| arg == flag))
+            .is_some_and(|arg| CLAUDE_SUBCOMMANDS.contains(&arg.as_str())),
+        Known::Cursor => first_word(args, CURSOR_VALUE_FLAGS)
             .is_some_and(|arg| CURSOR_SUBCOMMANDS.contains(&arg)),
-        Known::Kimi => first_word(args, KIMI_VALUE_FLAGS, false)
-            .is_some_and(|arg| KIMI_SUBCOMMANDS.contains(&arg)),
-        Known::OpenCode => first_word(args, OPENCODE_VALUE_FLAGS, false)
+        Known::Kimi => {
+            first_word(args, KIMI_VALUE_FLAGS).is_some_and(|arg| KIMI_SUBCOMMANDS.contains(&arg))
+        }
+        Known::OpenCode => first_word(args, OPENCODE_VALUE_FLAGS)
             .is_some_and(|arg| OPENCODE_SUBCOMMANDS.contains(&arg)),
         Known::Pi => {
-            first_word(args, PI_VALUE_FLAGS, false).is_some_and(|arg| PI_SUBCOMMANDS.contains(&arg))
+            first_word(args, PI_VALUE_FLAGS).is_some_and(|arg| PI_SUBCOMMANDS.contains(&arg))
         }
         Known::Codex => false,
     }
 }
 
-// The first argument that is not a flag, past the values of `value_flags`. An argument that is not
-// UTF-8 is skipped, or ends the search when `strict`.
-fn first_word<'a>(args: &'a [OsString], value_flags: &[&str], strict: bool) -> Option<&'a str> {
+// The first argument that is not a flag, past the values of `value_flags`.
+fn first_word<'a>(args: &'a [String], value_flags: &[&str]) -> Option<&'a str> {
     let mut args = args.iter();
-    while let Some(arg) = args.next() {
-        let Some(text) = arg.to_str() else {
-            if strict {
-                return None;
-            }
-            continue;
-        };
+    while let Some(text) = args.next() {
         if text == "--" {
-            return args.next().and_then(|arg| arg.to_str());
+            return args.next().map(String::as_str);
         }
         if text.starts_with('-') {
-            if !text.contains('=') && value_flags.contains(&text) {
+            if !text.contains('=') && value_flags.contains(&text.as_str()) {
                 args.next();
             }
             continue;

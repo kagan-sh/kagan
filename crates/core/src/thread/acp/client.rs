@@ -9,9 +9,10 @@ use std::time::{Duration, Instant};
 
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::v1::schema::{
-    CancelNotification, InitializeRequest, RequestPermissionRequest, SessionNotification,
+    CancelNotification, InitializeRequest, LoadSessionRequest, McpServer, NewSessionRequest,
+    RequestPermissionRequest, SessionNotification,
 };
-use agent_client_protocol::v1::{SessionMessage, SessionSetup};
+use agent_client_protocol::v1::{ActiveSession, SessionMessage, SessionSetup};
 use agent_client_protocol::{Agent, Channel, Client, Dispatch, TransportFrame};
 use gpui_kit::BackgroundExecutor;
 use kg_domain::{TEXT_MAX, ToolStatus, TurnOutcome};
@@ -44,8 +45,9 @@ const READ_BACKLOG: usize = 64;
 /// What the connection reports to the thread, in the order it happened.
 #[derive(Debug)]
 pub(super) enum AcpEvent {
-    /// The agent named its session. It is the thread's conversation.
-    Session(String),
+    /// The agent named its session. It is the thread's conversation, and `restored` says whether
+    /// it is the one the start asked for.
+    Session { id: String, restored: Restored },
     /// One chunk of the agent's reply or its reasoning.
     Chunk {
         thought: bool,
@@ -84,17 +86,36 @@ pub(super) enum AcpCommand {
     Cancel,
 }
 
+/// What Start again did with the conversation the thread stored, so the thread can say it.
+#[derive(Debug)]
+pub(super) enum Restored {
+    /// The agent loaded the earlier conversation: the thread is the same session as before.
+    Loaded,
+    /// A new session, because there was nothing to load or the agent cannot load.
+    New,
+    /// The agent was asked for the earlier conversation and refused: its own words.
+    Refused(String),
+}
+
+/// What the thread asks the agent for besides running it: the conversation to continue, and the
+/// MCP server kagan offers it.
+#[derive(Debug)]
+pub(super) struct Session {
+    pub(super) resume: Option<kg_domain::Conversation>,
+    pub(super) servers: Vec<McpServer>,
+}
+
 pub(super) struct Launch {
     pub(super) program: PathBuf,
     pub(super) args: Vec<OsString>,
     pub(super) cwd: PathBuf,
     pub(super) env: Vec<(OsString, OsString)>,
+    pub(super) session: Session,
 }
 
 /// Runs one agent for the life of its thread: spawn it, talk ACP, and report how it ended.
 pub(super) async fn run(
     launch: Launch,
-    folder: PathBuf,
     executor: BackgroundExecutor,
     events: async_channel::Sender<AcpEvent>,
     commands: async_channel::Receiver<AcpCommand>,
@@ -133,7 +154,14 @@ pub(super) async fn run(
         frames,
         channel,
     } = transport;
-    let connection = connect(channel, folder, &events, commands, &executor);
+    let connection = connect(
+        channel,
+        launch.cwd.clone(),
+        launch.session,
+        &events,
+        commands,
+        &executor,
+    );
     let failure = pump(lines, frames, connection, &executor).await.err();
     let exit = exit_status(&mut process, &executor).await;
     // A clean exit needs no explanation; anything else gets the agent's own last words.
@@ -497,24 +525,60 @@ async fn pump(
     }
 }
 
-/// Talks ACP until the agent's output ends or the connection fails. `initialize` and
-/// `session/new` share one limit: an agent that never answers is reported, not waited on.
+/// Talks ACP until the agent's output ends or the connection fails. `initialize` and the session
+/// share one limit: an agent that never answers is reported, not waited on.
 async fn connect(
     transport: Channel,
     folder: PathBuf,
+    session: Session,
     events: &async_channel::Sender<AcpEvent>,
     commands: async_channel::Receiver<AcpCommand>,
     executor: &BackgroundExecutor,
 ) -> Result<(), String> {
+    let Session { resume, servers } = session;
     let result = Client
         .v1()
         .name("kagan")
         .connect_with(transport, async |cx| {
             let handshake = async {
-                cx.send_request(InitializeRequest::new(ProtocolVersion::V1))
+                let initialized = cx
+                    .send_request(InitializeRequest::new(ProtocolVersion::V1))
                     .block_task()
                     .await?;
-                cx.build_session(&folder).block_task().start_session().await
+                // A conversation is loaded only when the agent says it can load one: the answer,
+                // never the agent's name, decides.
+                let resume = resume.filter(|_| initialized.agent_capabilities.load_session);
+                let new = async {
+                    let request = NewSessionRequest::new(&folder).mcp_servers(servers.clone());
+                    let SessionSetup { session, .. } = cx
+                        .build_session_from(request)
+                        .block_task()
+                        .start_session()
+                        .await?;
+                    Ok::<_, agent_client_protocol::Error>(session)
+                };
+                let (session, restored): (_, Restored) = match resume {
+                    Some(conversation) => {
+                        let request = LoadSessionRequest::new(conversation.to_string(), &folder)
+                            .mcp_servers(servers.clone());
+                        match cx
+                            .load_session_from(request)
+                            .block_task()
+                            .start_session()
+                            .await
+                        {
+                            Ok(SessionSetup { mut session, .. }) => {
+                                forget(&mut session);
+                                (session, Restored::Loaded)
+                            }
+                            // A refused load is an agent that cannot continue this conversation
+                            // after all: the person gets a new chat, and the agent's words.
+                            Err(error) => (new.await?, Restored::Refused(error.to_string())),
+                        }
+                    }
+                    None => (new.await?, Restored::New),
+                };
+                Ok::<_, agent_client_protocol::Error>((session, restored))
             };
             let setup = match futures::future::select(
                 Box::pin(handshake),
@@ -522,8 +586,7 @@ async fn connect(
             )
             .await
             {
-                futures::future::Either::Left((Ok(setup), _)) => setup,
-                futures::future::Either::Left((Err(error), _)) => return Err(error),
+                futures::future::Either::Left((result, _)) => result,
                 futures::future::Either::Right(_) => {
                     return Ok(Err(format!(
                         "the agent did not answer in {} s",
@@ -531,9 +594,16 @@ async fn connect(
                     )));
                 }
             };
-            let SessionSetup { mut session, .. } = setup;
+            let (mut session, restored) = match setup {
+                Ok(setup) => setup,
+                Err(error) => return Err(error),
+            };
             let id = session.session_id().to_string();
-            if events.send(AcpEvent::Session(id)).await.is_err() {
+            if events
+                .send(AcpEvent::Session { id, restored })
+                .await
+                .is_err()
+            {
                 return Ok(Err("the thread ended".to_owned()));
             }
             Ok(serve(&mut session, &commands, events).await)
@@ -544,6 +614,13 @@ async fn connect(
         Ok(Err(failure)) => Err(failure),
         Err(error) => Err(error.to_string()),
     }
+}
+
+/// Drops the updates a load replays before the thread reads the session again. The replay is the
+/// conversation kagan already stores, so writing it would double the transcript.
+fn forget(session: &mut ActiveSession<'_, Agent>) {
+    use futures::FutureExt as _;
+    while matches!(session.read_update().now_or_never(), Some(Ok(_))) {}
 }
 
 /// What the agent sent that slice 1 does not read, so each kind is logged once per connection

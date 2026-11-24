@@ -36,13 +36,19 @@ target 35000
 # Cost: ACP threads, slice 4, add 28 product lines on top of the merged count (90455): every
 # agent's launch command in the one table, the launch that resolves an adapter's own program, and
 # the check that its program is on the PATH before the thread starts. Decision 279 records it.
-# Cost: ACP threads, the composer, adds 622 product lines on top of the merged count (90483): the
+# Cost: ACP threads, slice 5, add 139 product lines on top of the merged count (90483): the load
+# of the stored conversation when the agent advertises it with the fallback to a new chat, the
+# MCP server every session is offered, and the agent integration decided by the thread's line
+# rather than the adapter's program. Decision 279 records it. Product Rust went from main's
+# 84147 to 90622 (+6475).
+# Cost: ACP threads, the composer, adds product lines on top of the merged count (90622): the
 # one prompt box in its own file, the cards over it in another, the action that is Send, Cancel or
 # Start again, the context row, the shared column the transcript and the box draw, and the ended
 # line the chat no longer draws. Decision 282 records it.
-ceiling 91105
+ceiling 91244
 allow_expect 9
-crates/core/src/thread/acp/client.rs 806
+crates/core/src/thread/acp/client.rs 883
+crates/core/src/thread/acp/mod.rs 626
 crates/core/src/thread/agent/files.rs 754
 crates/plugins/src/runtime/ui_host.rs 630
 crates/ui/src/kagan/chat.rs 780

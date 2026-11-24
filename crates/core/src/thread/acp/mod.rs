@@ -1,6 +1,7 @@
+use std::ffi::OsStr;
 use std::path::Path;
 
-use crate::thread::terminal::{exit_end, utf8_locale, waiting};
+use agent_client_protocol::v1::schema::{EnvVariable, McpServer, McpServerStdio};
 use gpui_kit::{AppContext as _, AsyncApp, Entity, Task, WeakEntity};
 use kg_domain::{
     Conversation, EventKind, Link, NoticeSeverity, OpError, OpResult, Role, ThreadId, ThreadStatus,
@@ -9,6 +10,7 @@ use kg_domain::{
 
 use crate::Thread;
 use crate::host::database::Result;
+use crate::thread::terminal::{exit_end, utf8_locale, waiting};
 use crate::workspace::closed;
 use crate::{
     Workspace,
@@ -27,11 +29,13 @@ mod permission;
 #[path = "acp_test.rs"]
 mod tests;
 
-use client::{AcpCommand, AcpEvent};
+use client::{AcpCommand, AcpEvent, Restored, Session};
 
 const NO_AGENT: &str = "the agent is not running; start the thread again";
 const NOT_A_TERMINAL: &str =
     "this is an ACP thread, not a terminal; read the transcript with kg thread events";
+const NOT_RESTORED: &str =
+    "This is a new chat with the agent; the earlier conversation is not restored.";
 
 /// A live ACP connection. Dropping it cancels the connection, and the process tree with it.
 pub(crate) struct Acp {
@@ -76,19 +80,21 @@ pub(super) async fn start(
     crate::workspace::hold(this, crate::workspace::Hold::Start, cx).await;
     // Taken before the program starts, so what it begins in that moment counts as after the start.
     let at = crate::workspace::time(this, cx)?;
-    let launch = match launch(this, &record, &folder, start, cx).await {
+    let conversation = stored(this, &record.id, cx).await?;
+    let launch = match launch(this, &record, &folder, start, conversation.clone(), cx).await {
         Ok(launch) => launch,
         Err(error) => return failed(this, thread, error, cx).await,
     };
     let (events, received) = async_channel::unbounded();
     let (commands, sent) = async_channel::unbounded();
     let executor = cx.background_executor().clone();
-    let connection = cx.background_spawn(client::run(launch, folder, executor, events, sent));
+    let connection = cx.background_spawn(client::run(launch, executor, events, sent));
     let id = record.id.clone();
+    let again = matches!(start, Start::Again);
     let consumer = {
         let this = this.clone();
         cx.spawn(async move |cx| {
-            consume(&this, id, at, received, cx).await;
+            consume(&this, id, at, again, received, cx).await;
         })
     };
     this.update(cx, |workspace, cx| {
@@ -102,16 +108,18 @@ pub(super) async fn start(
         run.acp_task = Some(consumer);
     })
     .map_err(closed)?;
-    // Slice 1 starts a new session rather than loading the earlier one, so the person is told.
-    if matches!(start, Start::Again) {
-        let kinds = vec![EventKind::Notice {
-            severity: NoticeSeverity::Info,
-            text: "This is a new chat with the agent; the earlier conversation is not restored."
-                .into(),
-        }];
-        Workspace::events(this, record.id, kinds, cx).await?;
-    }
     Ok(())
+}
+
+/// The session the thread's earlier start stored, which a start now loads when the agent can.
+async fn stored(
+    this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    cx: &mut AsyncApp,
+) -> Result<Option<Conversation>> {
+    let database = crate::workspace::database(this, cx)?;
+    let id = id.clone();
+    database.call(move |store| store.conversation(&id)).await
 }
 
 async fn failed(
@@ -130,12 +138,14 @@ async fn failed(
 }
 
 /// Builds the command that starts the agent's ACP server: the launch command's program and its
-/// arguments, in the thread's folder, with kagan's variables.
+/// arguments, in the thread's folder, with kagan's variables. The session's own part is the
+/// conversation it loads and the MCP server it is offered.
 async fn launch(
     this: &WeakEntity<Workspace>,
     record: &kg_domain::Thread,
     folder: &Path,
     start: Start,
+    resume: Option<Conversation>,
     cx: &mut AsyncApp,
 ) -> Result<client::Launch> {
     let environment = crate::host::program::program_environment_of(this, cx);
@@ -149,7 +159,12 @@ async fn launch(
         home.as_deref(),
     )
     .map_err(|error| OpError::Invalid(error.to_string()))?;
-    let integration = agent::integrate(this, record, &program, folder, start, cx).await?;
+    let integration = agent::integrate(this, record, folder, start, cx).await?;
+    let (cli, socket) = this
+        .update(cx, |workspace, _| {
+            (workspace.cli.clone(), workspace.socket.clone())
+        })
+        .map_err(closed)?;
     let mut env = integration.env;
     if let Some(locale) = cx.background_spawn(async { utf8_locale() }).await {
         env.push(("LANG".into(), locale.into()));
@@ -159,7 +174,28 @@ async fn launch(
         args: program.args,
         cwd: folder.to_owned(),
         env,
+        session: Session {
+            resume,
+            servers: mcp_servers(&record.id, &cli, socket.as_deref()),
+        },
     })
+}
+
+/// The server every ACP session is offered: kagan's own, for this thread, the same one a terminal
+/// thread's config names.
+fn mcp_servers(id: &ThreadId, cli: &Path, socket: Option<&OsStr>) -> Vec<McpServer> {
+    let mut server = McpServerStdio::new("kagan", cli).args(vec![
+        "mcp".to_owned(),
+        "--thread".to_owned(),
+        id.0.clone(),
+    ]);
+    if let Some(socket) = socket {
+        server = server.env(vec![EnvVariable::new(
+            "KG_SOCKET",
+            socket.to_string_lossy(),
+        )]);
+    }
+    vec![McpServer::Stdio(server)]
 }
 
 /// Applies the connection's events in the order they happened.
@@ -167,6 +203,7 @@ async fn consume(
     this: &WeakEntity<Workspace>,
     id: ThreadId,
     at: kg_domain::Timestamp,
+    again: bool,
     events: async_channel::Receiver<AcpEvent>,
     cx: &mut AsyncApp,
 ) {
@@ -192,7 +229,10 @@ async fn consume(
             other => other,
         };
         let outcome = match event {
-            AcpEvent::Session(session) => named(this, &id, &session, at, cx).await,
+            AcpEvent::Session {
+                id: session,
+                restored,
+            } => named(this, &id, &session, restored, again, at, cx).await,
             AcpEvent::Chunk {
                 thought: false,
                 text,
@@ -353,11 +393,14 @@ async fn permission(
     tool_event(this, id, pending, approval, cx).await
 }
 
-/// The agent named its session: that id is the thread's conversation, and the thread is running.
+/// The agent named its session: that id is the thread's conversation, and the thread is running. A
+/// start that asked for the earlier conversation and got a new one says so.
 async fn named(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
     session: &str,
+    restored: Restored,
+    again: bool,
     at: kg_domain::Timestamp,
     cx: &mut AsyncApp,
 ) -> Result<()> {
@@ -388,12 +431,36 @@ async fn named(
     let saved = database
         .call(move |store| store.claim_conversation(&thread_id, &claimed, previous, at))
         .await?;
-    if saved {
-        return Ok(());
+    if !saved {
+        let kinds = vec![EventKind::Notice {
+            severity: NoticeSeverity::Warning,
+            text: "the agent named a session another thread holds, so kagan did not store it"
+                .into(),
+        }];
+        Workspace::events(this, id.clone(), kinds, cx).await?;
     }
+    match restored {
+        Restored::Loaded => Ok(()),
+        Restored::New if !again => Ok(()),
+        Restored::New => notice(this, id, NOT_RESTORED, cx).await,
+        Restored::Refused(error) => {
+            let text = format!(
+                "the agent could not load the earlier conversation, so this is a new chat: {error}"
+            );
+            notice(this, id, &text, cx).await
+        }
+    }
+}
+
+async fn notice(
+    this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    text: &str,
+    cx: &mut AsyncApp,
+) -> Result<()> {
     let kinds = vec![EventKind::Notice {
-        severity: NoticeSeverity::Warning,
-        text: "the agent named a session another thread holds, so kagan did not store it".into(),
+        severity: NoticeSeverity::Info,
+        text: text.to_owned(),
     }];
     Workspace::events(this, id.clone(), kinds, cx).await
 }

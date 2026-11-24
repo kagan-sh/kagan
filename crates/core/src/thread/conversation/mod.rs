@@ -93,7 +93,7 @@ pub(super) async fn args(
     this: &WeakEntity<Workspace>,
     known: &Known,
     record: &kg_domain::Thread,
-    args: &[OsString],
+    args: &[String],
     folder: &Path,
     start: Start,
     cx: &mut AsyncApp,
@@ -336,8 +336,8 @@ fn kimi_resume(conversation: &Conversation) -> Vec<OsString> {
     ]
 }
 
-fn picks(args: &[OsString], flags: &[&str]) -> bool {
-    args.iter().filter_map(|arg| arg.to_str()).any(|arg| {
+fn picks(args: &[String], flags: &[&str]) -> bool {
+    args.iter().any(|arg| {
         flags.iter().any(|flag| {
             arg.strip_prefix(flag)
                 .is_some_and(|rest| rest.is_empty() || rest.starts_with('='))
@@ -345,12 +345,9 @@ fn picks(args: &[OsString], flags: &[&str]) -> bool {
     })
 }
 
-fn picks_codex(args: &[OsString]) -> bool {
-    args.iter().any(|arg| {
-        CODEX_SUBCOMMANDS
-            .iter()
-            .any(|word| arg.as_os_str() == OsStr::new(word))
-    })
+fn picks_codex(args: &[String]) -> bool {
+    args.iter()
+        .any(|arg| CODEX_SUBCOMMANDS.contains(&arg.as_str()))
 }
 
 impl Workspace {
@@ -524,8 +521,8 @@ fn entries(folder: &Path) -> impl Iterator<Item = PathBuf> + use<> {
 mod tests {
     use super::*;
 
-    fn args(items: &[&str]) -> Vec<OsString> {
-        items.iter().map(OsString::from).collect()
+    fn args(items: &[&str]) -> Vec<String> {
+        items.iter().map(|item| (*item).to_owned()).collect()
     }
 
     #[test]

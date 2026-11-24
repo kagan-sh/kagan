@@ -64,7 +64,18 @@ impl Agent {
         }
         let session = record["session"].as_str().unwrap();
         let turns: Vec<Value> = record["turns"].as_array().cloned().unwrap_or_default();
-        Self::named(agent, &[session], &turns, None)
+        let agent = Self::named(agent, &[session], &turns, None);
+        if let Some(initialize) = record.get("initialize") {
+            std::fs::write(agent.path("initialize.json"), initialize.to_string()).unwrap();
+        }
+        if let Some(replay) = record.get("replay").and_then(Value::as_array) {
+            let lines: String = replay
+                .iter()
+                .map(|update| update.to_string() + "\n")
+                .collect();
+            std::fs::write(agent.path("replay.ndjson"), lines).unwrap();
+        }
+        agent
     }
 
     fn named(agent: &str, sessions: &[&str], turns: &[Value], refuse: Option<Value>) -> Self {
@@ -404,9 +415,14 @@ async fn acp_start_again_starts_a_new_session(cx: &mut TestAppContext) {
         2,
         "{kinds:?}"
     );
+    assert_eq!(
+        count(&kinds, |kind| matches!(kind, EventKind::Notice { .. })),
+        1,
+        "one start writes one notice that the earlier conversation is not restored: {kinds:?}"
+    );
     assert!(
-        count(&kinds, |kind| matches!(kind, EventKind::Notice { .. })) >= 1,
-        "the person is told the earlier conversation is not restored: {kinds:?}"
+        !agent.path("load").exists(),
+        "an agent that cannot load is never asked to"
     );
     let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
     assert_eq!(
@@ -414,6 +430,197 @@ async fn acp_start_again_starts_a_new_session(cx: &mut TestAppContext) {
         "ses_second"
     );
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn a_refused_load_starts_a_new_session_and_says_why(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_first", "ses_second"], &[turn(&["done"], "end_turn")]);
+    std::fs::write(agent.path("modes"), "refuse_load\n").unwrap();
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "hi", cx).await;
+    wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Idle, cx).await;
+    op(Op::Thread(ThreadOp::StartAgain { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Active, cx).await;
+    let kinds = kinds_of(&id, cx).await;
+    let text = kinds
+        .iter()
+        .find_map(|kind| match kind {
+            EventKind::Notice { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .expect("the person is told the load failed");
+    assert!(text.contains("could not load"), "{text}");
+    assert!(
+        text.contains("this conversation is gone"),
+        "the agent's own words are why: {text}"
+    );
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    assert_eq!(
+        store.conversation(&id).unwrap().unwrap().to_string(),
+        "ses_second",
+        "a refused load falls back to a new session, and the thread keeps that one"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+/// One agent's recorded conversation, then a start that loads it: the replay comes from the same
+/// agent's own `session/load`, and the transcript stays the one kagan already stores.
+#[gpui_kit::test]
+async fn a_recorded_load_replays_without_doubling_the_transcript(cx: &mut TestAppContext) {
+    let recording = include_str!("acp/opencode-load.json");
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::recorded("opencode", recording);
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.use_program_environment(agent.bin(), Path::new("/bin/sh"));
+    });
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "hi", cx).await;
+    let kinds = wait_for(&id, |kinds| ended(kinds, TurnOutcome::Completed), cx).await;
+    assert_eq!(agent_said(&kinds), "ready");
+    let before: Vec<EventKind> = events(&id, cx)
+        .await
+        .into_iter()
+        .map(|event| event.kind)
+        .collect();
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Idle, cx).await;
+    op(Op::Thread(ThreadOp::StartAgain { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Active, cx).await;
+    let asked: Value =
+        serde_json::from_str(&std::fs::read_to_string(agent.path("load")).unwrap()).unwrap();
+    assert_eq!(
+        asked["params"]["sessionId"],
+        recorded_session(recording),
+        "the load names the conversation the thread stored"
+    );
+    assert_mcp_server(&asked["params"], &id);
+    let kinds = kinds_of(&id, cx).await;
+    assert!(
+        !kinds
+            .iter()
+            .any(|kind| matches!(kind, EventKind::Notice { .. })),
+        "a load needs no notice about a new chat: {kinds:?}"
+    );
+    assert_eq!(
+        agent_said(&kinds),
+        agent_said(&before),
+        "the replayed updates are the words already stored, written once: {kinds:?}"
+    );
+    assert_eq!(
+        count(&kinds, |kind| matches!(
+            kind,
+            EventKind::Message {
+                role: Role::Agent,
+                ..
+            }
+        )),
+        count(&before, |kind| matches!(
+            kind,
+            EventKind::Message {
+                role: Role::Agent,
+                ..
+            }
+        )),
+        "{kinds:?}"
+    );
+    assert_eq!(conversation(&fixture, &id), recorded_session(recording));
+    send(&id, "again", cx).await;
+    wait_for(
+        &id,
+        |kinds| count(kinds, |kind| matches!(kind, EventKind::TurnEnded { .. })) == 2,
+        cx,
+    )
+    .await;
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+/// The MCP server kagan offers every ACP session, and the files the agent's own integration writes.
+#[gpui_kit::test]
+async fn an_acp_session_gets_kagan_mcp_and_the_agents_files(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::named("claude", &["ses_mcp"], &[], None);
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.use_program_environment(agent.bin(), Path::new("/bin/sh"));
+    });
+    let id = started(&fixture, &agent, cx).await;
+    let asked: Value =
+        serde_json::from_str(&std::fs::read_to_string(agent.path("new")).unwrap()).unwrap();
+    assert_mcp_server(&asked["params"], &id);
+    let note = fixture
+        .dir
+        .path()
+        .join("agent")
+        .join("threads")
+        .join(&id.0)
+        .join("note.txt");
+    let note = std::fs::read_to_string(&note).unwrap_or_default();
+    assert!(
+        note.contains("You are running inside kagan thread"),
+        "a chat agent gets the note a terminal thread of it gets: {note}"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+fn assert_mcp_server(params: &Value, id: &ThreadId) {
+    let server = &params["mcpServers"][0];
+    assert_eq!(server["name"], "kagan", "{params}");
+    assert_eq!(server["args"], json!(["mcp", "--thread", id.0]), "{params}");
+    assert_eq!(
+        server["env"][0]["name"], "KG_SOCKET",
+        "the server talks to this app: {params}"
+    );
+}
+
+/// An adapter agent whose own program is there and whose `npx` is not: the run is refused before
+/// the thread exists, rather than starting a chat that can never reach its agent.
+#[gpui_kit::test]
+async fn acp_claude_without_npx_is_refused_before_the_thread_starts(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let dir = tempfile::tempdir().unwrap();
+    stub(dir.path(), "claude");
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.use_program_environment(dir.path(), Path::new("/bin/sh"));
+    });
+    let refused = op(fixture.run_acp("claude"), cx).await;
+    assert!(
+        matches!(refused, Err(OpError::Invalid(ref message)) if message.contains("npx") && message.contains("was not found")),
+        "{refused:?}"
+    );
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    assert!(
+        store.all_threads().unwrap().is_empty(),
+        "the run is refused before the thread exists"
+    );
+}
+
+fn stub(dir: &Path, name: &str) {
+    let path = if cfg!(windows) {
+        dir.join(format!("{name}.bat"))
+    } else {
+        dir.join(name)
+    };
+    let text = if cfg!(windows) {
+        "@exit 0\r\n"
+    } else {
+        "#!/bin/sh\nexit 0\n"
+    };
+    std::fs::write(&path, text).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
 }
 
 #[gpui_kit::test]
@@ -1503,41 +1710,40 @@ fn fake_agent() {
                 if hang_init {
                     continue;
                 }
+                let capabilities = capabilities(&dir, &modes);
                 write(
                     &mut out,
-                    &reply(&id, &json!({"protocolVersion": 1, "agentCapabilities": {}})),
+                    &reply(
+                        &id,
+                        &json!({"protocolVersion": 1, "agentCapabilities": capabilities}),
+                    ),
                 );
             }
             "session/new" => {
+                let _ = std::fs::write(dir.join("new"), &line);
                 if let Some(named) = new_session(&dir, &mut out, &id) {
                     session = named;
                 }
             }
+            "session/load" => {
+                if let Some(named) = loaded(&dir, &mut out, &id, &line, &modes) {
+                    session = named;
+                }
+            }
             "session/prompt" => {
-                let record = turns.next().unwrap_or_else(|| turn(&[], "end_turn"));
-                if record["sleep"].as_bool() == Some(true) {
-                    sleep_child(&dir);
+                let after = prompted(
+                    &dir,
+                    &mut out,
+                    &mut lines,
+                    &modes,
+                    &session,
+                    &id,
+                    &turns.next().unwrap_or_else(|| turn(&[], "end_turn")),
+                );
+                if let Some(held) = after.hold {
+                    open = Some(held);
                 }
-                match record["updates"].as_array() {
-                    Some(updates) => {
-                        for update in updates {
-                            write(&mut out, &notice(&session, update));
-                        }
-                    }
-                    None => turn_chunks(&mut out, &session, &record, &modes),
-                }
-                let mut answered = false;
-                if let Some(permission) = record.get("permission") {
-                    answered =
-                        permission_step(&dir, &mut lines, &mut out, &session, permission, &id);
-                }
-                if record["hold"].as_bool() == Some(true) && !answered {
-                    open = Some((id, record.clone()));
-                } else if !answered {
-                    let stop = record["stopReason"].as_str().unwrap_or("end_turn");
-                    write(&mut out, &reply(&id, &json!({ "stopReason": stop })));
-                }
-                if record["quit"].as_bool() == Some(true) || ends(&record) {
+                if after.quit {
                     return;
                 }
             }
@@ -1593,6 +1799,99 @@ fn turn_chunks(out: &mut std::io::Stdout, session: &str, record: &Value, modes: 
             &update(session, "agent_message_chunk", text, message_id),
         );
     }
+}
+
+/// What one prompt leaves the fake agent doing: holding the request open, or stopping.
+struct After {
+    hold: Option<(Value, Value)>,
+    quit: bool,
+}
+
+/// One recorded turn: its updates, its permission request, and its stop reason.
+fn prompted(
+    dir: &Path,
+    out: &mut std::io::Stdout,
+    lines: &mut impl Iterator<Item = String>,
+    modes: &str,
+    session: &str,
+    id: &Value,
+    record: &Value,
+) -> After {
+    if record["sleep"].as_bool() == Some(true) {
+        sleep_child(dir);
+    }
+    match record["updates"].as_array() {
+        Some(updates) => {
+            for update in updates {
+                write(out, &notice(session, update));
+            }
+        }
+        None => turn_chunks(out, session, record, modes),
+    }
+    let mut answered = false;
+    if let Some(permission) = record.get("permission") {
+        answered = permission_step(dir, lines, out, session, permission, id);
+    }
+    let hold = record["hold"].as_bool() == Some(true) && !answered;
+    if !answered && !hold {
+        let stop = record["stopReason"].as_str().unwrap_or("end_turn");
+        write(out, &reply(id, &json!({ "stopReason": stop })));
+    }
+    After {
+        hold: hold.then(|| (id.clone(), record.clone())),
+        quit: record["quit"].as_bool() == Some(true) || ends(record),
+    }
+}
+
+/// The capabilities the agent advertises: the recording's own answer, or a synthetic agent's.
+fn capabilities(dir: &Path, modes: &str) -> Value {
+    std::fs::read_to_string(dir.join("initialize.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .unwrap_or_else(
+            || json!({ "loadSession": modes.lines().any(|mode| mode == "refuse_load") }),
+        )
+}
+
+/// A load: the session the request names and its replay, or the refusal. `None` when it refused.
+fn loaded(
+    dir: &Path,
+    out: &mut std::io::Stdout,
+    id: &Value,
+    line: &str,
+    modes: &str,
+) -> Option<String> {
+    let _ = std::fs::write(dir.join("load"), line);
+    if modes.lines().any(|mode| mode == "refuse_load") {
+        write(
+            out,
+            &json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {"code": -32000, "message": "this conversation is gone"},
+            }),
+        );
+        return None;
+    }
+    let request: Value = serde_json::from_str(line).unwrap_or_default();
+    let session = request["params"]["sessionId"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    for update in replay_updates(dir) {
+        write(out, &notice(&session, &update));
+    }
+    write(out, &reply(id, &json!({})));
+    Some(session)
+}
+
+/// The updates a recorded load replays, in the order the agent sent them.
+fn replay_updates(dir: &Path) -> Vec<Value> {
+    std::fs::read_to_string(dir.join("replay.ndjson"))
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .collect()
 }
 
 /// One raw ACP update on the session, as the recording holds it.

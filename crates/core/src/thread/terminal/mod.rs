@@ -98,7 +98,7 @@ async fn spawn(
     let home = crate::host::program::program_home_of(this, cx);
     let program = resolve_program(&record.provider, environment.as_ref(), home.as_deref())
         .map_err(|error| OpError::Invalid(error.to_string()))?;
-    let integration = agent::integrate(this, record, &program, &folder, start, cx).await?;
+    let integration = agent::integrate(this, record, &folder, start, cx).await?;
     this.update(cx, |workspace, cx| {
         let source = if integration.hooks {
             crate::thread::turn_state::Source::Hook
