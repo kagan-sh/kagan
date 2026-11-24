@@ -8,186 +8,174 @@ use crate::kagan::chat::part::{ToolRow, ToolStage};
 
 /// How a work row draws its kind: the icon, the words the window uses, and the row's own title and
 /// meta. A plugin's page reads the same kind, which is why the kind lives in `kg_domain`.
-pub(super) trait WorkKindExt {
-    fn icon(&self) -> IconName;
-    fn hint(&self) -> &'static str;
-    fn label(&self, stage: ToolStage) -> String;
-    fn badge(&self) -> Option<String>;
-    fn mono_title(&self) -> bool;
-    fn title(&self, tool: &ToolRow) -> Option<String>;
-    fn meta(&self, tool: &ToolRow) -> Option<String>;
-    fn has_body(&self, tool: &ToolRow) -> bool;
+pub(super) fn icon(kind: &WorkKind) -> IconName {
+    match kind {
+        WorkKind::Read => IconName::FileText,
+        WorkKind::Search => IconName::Search,
+        WorkKind::Execute => IconName::Terminal,
+        WorkKind::Edit => IconName::Pencil,
+        WorkKind::Delete => IconName::Trash,
+        WorkKind::Move => IconName::Move,
+        WorkKind::Fetch => IconName::Globe,
+        WorkKind::Think => IconName::Brain,
+        WorkKind::Mcp { .. } => IconName::Puzzle,
+        WorkKind::Skill { .. } => IconName::BookOpen,
+        WorkKind::Other => IconName::Wrench,
+    }
 }
 
-impl WorkKindExt for WorkKind {
-    fn icon(&self) -> IconName {
-        match self {
-            Self::Read => IconName::FileText,
-            Self::Search => IconName::Search,
-            Self::Execute => IconName::Terminal,
-            Self::Edit => IconName::Pencil,
-            Self::Delete => IconName::Trash,
-            Self::Move => IconName::Move,
-            Self::Fetch => IconName::Globe,
-            Self::Think => IconName::Brain,
-            Self::Mcp { .. } => IconName::Puzzle,
-            Self::Skill { .. } => IconName::BookOpen,
-            Self::Other => IconName::Wrench,
+pub(super) fn hint(kind: &WorkKind) -> &'static str {
+    match kind {
+        WorkKind::Read => "read",
+        WorkKind::Search => "search",
+        WorkKind::Execute => "command",
+        WorkKind::Edit => "edit",
+        WorkKind::Delete => "delete",
+        WorkKind::Move => "move",
+        WorkKind::Fetch => "fetch",
+        WorkKind::Think => "think",
+        WorkKind::Mcp { .. } => "mcp",
+        WorkKind::Skill { .. } => "skill",
+        WorkKind::Other => "tool",
+    }
+}
+
+pub(super) fn label(kind: &WorkKind, stage: ToolStage) -> String {
+    let word = match kind {
+        WorkKind::Read => tell(stage, "Waiting to read file", "Reading file", "Read file"),
+        WorkKind::Search => tell(
+            stage,
+            "Waiting to search files",
+            "Searching files",
+            "Searched files",
+        ),
+        WorkKind::Execute => tell(
+            stage,
+            "Waiting to run command",
+            "Running command",
+            "Ran command",
+        ),
+        WorkKind::Edit => tell(stage, "Waiting to edit file", "Editing file", "Edited file"),
+        WorkKind::Delete => tell(
+            stage,
+            "Waiting to delete file",
+            "Deleting file",
+            "Deleted file",
+        ),
+        WorkKind::Move => tell(stage, "Waiting to move file", "Moving file", "Moved file"),
+        WorkKind::Fetch => tell(
+            stage,
+            "Waiting to fetch page",
+            "Fetching page",
+            "Fetched page",
+        ),
+        WorkKind::Think => tell(stage, "Waiting to think", "Thinking", "Thought"),
+        WorkKind::Mcp { server, tool } => {
+            return match stage {
+                ToolStage::Waiting => format!("Waiting to call {server}.{tool}"),
+                ToolStage::Running => format!("Calling {server}.{tool}"),
+                ToolStage::Settled => format!("Called {server}.{tool}"),
+            };
         }
-    }
+        WorkKind::Skill { .. } => tell(
+            stage,
+            "Waiting to load skill",
+            "Loading skill",
+            "Loaded skill",
+        ),
+        WorkKind::Other => tell(
+            stage,
+            "Waiting to use a tool",
+            "Using a tool",
+            "Used a tool",
+        ),
+    };
+    word.to_owned()
+}
 
-    fn hint(&self) -> &'static str {
-        match self {
-            Self::Read => "read",
-            Self::Search => "search",
-            Self::Execute => "command",
-            Self::Edit => "edit",
-            Self::Delete => "delete",
-            Self::Move => "move",
-            Self::Fetch => "fetch",
-            Self::Think => "think",
-            Self::Mcp { .. } => "mcp",
-            Self::Skill { .. } => "skill",
-            Self::Other => "tool",
-        }
+pub(super) fn badge(kind: &WorkKind) -> Option<String> {
+    match kind {
+        WorkKind::Mcp { server, .. } => Some(server.clone()),
+        WorkKind::Skill { .. } => Some("skill".into()),
+        _ => None,
     }
+}
 
-    fn label(&self, stage: ToolStage) -> String {
-        let word = match self {
-            Self::Read => tell(stage, "Waiting to read file", "Reading file", "Read file"),
-            Self::Search => tell(
-                stage,
-                "Waiting to search files",
-                "Searching files",
-                "Searched files",
-            ),
-            Self::Execute => tell(
-                stage,
-                "Waiting to run command",
-                "Running command",
-                "Ran command",
-            ),
-            Self::Edit => tell(stage, "Waiting to edit file", "Editing file", "Edited file"),
-            Self::Delete => tell(
-                stage,
-                "Waiting to delete file",
-                "Deleting file",
-                "Deleted file",
-            ),
-            Self::Move => tell(stage, "Waiting to move file", "Moving file", "Moved file"),
-            Self::Fetch => tell(
-                stage,
-                "Waiting to fetch page",
-                "Fetching page",
-                "Fetched page",
-            ),
-            Self::Think => tell(stage, "Waiting to think", "Thinking", "Thought"),
-            Self::Mcp { server, tool } => {
-                return match stage {
-                    ToolStage::Waiting => format!("Waiting to call {server}.{tool}"),
-                    ToolStage::Running => format!("Calling {server}.{tool}"),
-                    ToolStage::Settled => format!("Called {server}.{tool}"),
-                };
-            }
-            Self::Skill { .. } => tell(
-                stage,
-                "Waiting to load skill",
-                "Loading skill",
-                "Loaded skill",
-            ),
-            Self::Other => tell(
-                stage,
-                "Waiting to use a tool",
-                "Using a tool",
-                "Used a tool",
-            ),
-        };
-        word.to_owned()
+pub(super) fn mono_title(kind: &WorkKind) -> bool {
+    match kind {
+        WorkKind::Read
+        | WorkKind::Search
+        | WorkKind::Execute
+        | WorkKind::Edit
+        | WorkKind::Delete
+        | WorkKind::Move
+        | WorkKind::Fetch
+        | WorkKind::Mcp { .. } => true,
+        WorkKind::Think | WorkKind::Skill { .. } | WorkKind::Other => false,
     }
+}
 
-    fn badge(&self) -> Option<String> {
-        match self {
-            Self::Mcp { server, .. } => Some(server.clone()),
-            Self::Skill { .. } => Some("skill".into()),
-            _ => None,
-        }
-    }
-
-    fn mono_title(&self) -> bool {
-        match self {
-            Self::Read
-            | Self::Search
-            | Self::Execute
-            | Self::Edit
-            | Self::Delete
-            | Self::Move
-            | Self::Fetch
-            | Self::Mcp { .. } => true,
-            Self::Think | Self::Skill { .. } | Self::Other => false,
-        }
-    }
-
-    /// The most useful short thing about the row: a file name, a command, a query, a URL.
-    fn title(&self, tool: &ToolRow) -> Option<String> {
-        let probe = |keys: &[&str]| {
-            keys.iter().find_map(|key| {
-                tool.input
-                    .as_ref()
-                    .and_then(|input| input.get(*key))
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_owned)
-            })
-        };
-        let named = match self {
-            Self::Read => probe(&["file_path", "path"]),
-            Self::Search => probe(&["pattern", "query", "glob"]),
-            Self::Execute => probe(&["command", "cmd"]),
-            Self::Edit | Self::Delete | Self::Move => probe(&["file_path", "path"]).or_else(|| {
+/// The most useful short thing about the row: a file name, a command, a query, a URL.
+pub(super) fn title(kind: &WorkKind, tool: &ToolRow) -> Option<String> {
+    let probe = |keys: &[&str]| {
+        keys.iter().find_map(|key| {
+            tool.input
+                .as_ref()
+                .and_then(|input| input.get(*key))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+        })
+    };
+    let named = match kind {
+        WorkKind::Read => probe(&["file_path", "path"]),
+        WorkKind::Search => probe(&["pattern", "query", "glob"]),
+        WorkKind::Execute => probe(&["command", "cmd"]),
+        WorkKind::Edit | WorkKind::Delete | WorkKind::Move => probe(&["file_path", "path"])
+            .or_else(|| {
                 tool.diff
                     .first()
                     .map(|diff| file_name(&diff.path).to_owned())
             }),
-            Self::Fetch => probe(&["url"]),
-            Self::Skill { name } => Some(name.clone()),
-            Self::Mcp { .. } | Self::Think | Self::Other => None,
-        };
-        named
-            .or_else(|| tool.title.clone())
-            .map(|title| cut(&title, 120))
-    }
+        WorkKind::Fetch => probe(&["url"]),
+        WorkKind::Skill { name } => Some(name.clone()),
+        WorkKind::Mcp { .. } | WorkKind::Think | WorkKind::Other => None,
+    };
+    named
+        .or_else(|| tool.title.clone())
+        .map(|title| cut(&title, 120))
+}
 
-    /// The outcome, or the time it took, right-aligned and muted.
-    fn meta(&self, tool: &ToolRow) -> Option<String> {
-        let span = tool.span().map(span_text);
-        let outcome = match self {
-            Self::Read => tool.output.as_ref().map(|output| {
-                let lines = output.lines().count();
-                format!("{lines} {}", plural(lines, "line", "lines"))
-            }),
-            Self::Execute => tool.output.as_deref().and_then(exit_word),
-            Self::Edit | Self::Delete | Self::Move => {
-                let (more, less) = tool.counts;
-                (more > 0 || less > 0).then(|| format!("+{more} −{less}"))
-            }
-            Self::Mcp { .. }
-            | Self::Skill { .. }
-            | Self::Search
-            | Self::Fetch
-            | Self::Think
-            | Self::Other => None,
-        };
-        match (span, outcome) {
-            (Some(span), Some(outcome)) => Some(format!("{span} · {outcome}")),
-            (span, outcome) => outcome.or(span),
+/// The outcome, or the time it took, right-aligned and muted.
+pub(super) fn meta(kind: &WorkKind, tool: &ToolRow) -> Option<String> {
+    let span = tool.span().map(span_text);
+    let outcome = match kind {
+        WorkKind::Read => tool.output.as_ref().map(|output| {
+            let lines = output.lines().count();
+            format!("{lines} {}", plural(lines, "line", "lines"))
+        }),
+        WorkKind::Execute => tool.output.as_deref().and_then(exit_word),
+        WorkKind::Edit | WorkKind::Delete | WorkKind::Move => {
+            let (more, less) = tool.counts;
+            (more > 0 || less > 0).then(|| format!("+{more} −{less}"))
         }
+        WorkKind::Mcp { .. }
+        | WorkKind::Skill { .. }
+        | WorkKind::Search
+        | WorkKind::Fetch
+        | WorkKind::Think
+        | WorkKind::Other => None,
+    };
+    match (span, outcome) {
+        (Some(span), Some(outcome)) => Some(format!("{span} · {outcome}")),
+        (span, outcome) => outcome.or(span),
     }
+}
 
-    /// Whether the row has a body, and so a chevron.
-    fn has_body(&self, tool: &ToolRow) -> bool {
-        match self {
-            Self::Edit | Self::Delete | Self::Move => !tool.diff.is_empty(),
-            _ => tool.input.is_some() || tool.output.is_some(),
-        }
+/// Whether the row has a body, and so a chevron.
+pub(super) fn has_body(kind: &WorkKind, tool: &ToolRow) -> bool {
+    match kind {
+        WorkKind::Edit | WorkKind::Delete | WorkKind::Move => !tool.diff.is_empty(),
+        _ => tool.input.is_some() || tool.output.is_some(),
     }
 }
 
@@ -203,7 +191,7 @@ pub(super) fn of(tool: &ToolRow) -> WorkKind {
 
 /// What an approval card calls the tool it asks about.
 pub(super) fn title_of(tool: &ToolRow) -> Option<String> {
-    of(tool).title(tool)
+    title(&of(tool), tool)
 }
 
 pub(super) fn pick(done: bool, done_word: &'static str, now_word: &'static str) -> &'static str {
@@ -382,12 +370,15 @@ mod tests {
         ));
         assert_eq!(kind, WorkKind::Read);
         assert_eq!(
-            kind.title(&tool(
-                Some("some_agent_tool"),
-                ToolKind::Read,
-                "Read file",
-                serde_json::json!({"path": "a.ts"}),
-            )),
+            title(
+                &kind,
+                &tool(
+                    Some("some_agent_tool"),
+                    ToolKind::Read,
+                    "Read file",
+                    serde_json::json!({"path": "a.ts"}),
+                )
+            ),
             Some("a.ts".into())
         );
     }
@@ -395,14 +386,14 @@ mod tests {
     #[test]
     fn a_row_waits_until_the_agent_starts_it() {
         assert_eq!(
-            WorkKind::Execute.label(ToolStage::Waiting),
+            label(&WorkKind::Execute, ToolStage::Waiting),
             "Waiting to run command"
         );
         assert_eq!(
-            WorkKind::Execute.label(ToolStage::Running),
+            label(&WorkKind::Execute, ToolStage::Running),
             "Running command"
         );
-        assert_eq!(WorkKind::Execute.label(ToolStage::Settled), "Ran command");
+        assert_eq!(label(&WorkKind::Execute, ToolStage::Settled), "Ran command");
     }
 
     #[test]

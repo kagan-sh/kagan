@@ -12,7 +12,7 @@ use std::rc::Rc;
 
 use crate::kagan::chat::ChatView;
 use crate::kagan::chat::body;
-use crate::kagan::chat::kind::{self, WorkKindExt as _, pick, plural, span_text};
+use crate::kagan::chat::kind::{self, pick, plural, span_text};
 use crate::kagan::chat::part::{Part, Row, RowKey, RowKind, ThoughtRow, ToolRow, ToolStage};
 use crate::theme::{Tone, TypeScale as _, row_height};
 use crate::ui_observe::UiObserveExt as _;
@@ -42,16 +42,16 @@ pub(super) fn work_row(
         Face {
             id: named(Part::Work, row.id),
             key: row.key(),
-            icon: kind.icon(),
-            label: kind.label(stage),
-            title: kind.title(tool),
-            title_mono: kind.mono_title(),
-            badge: kind.badge(),
-            meta: kind.meta(tool),
+            icon: kind::icon(&kind),
+            label: kind::label(&kind, stage),
+            title: kind::title(&kind, tool),
+            title_mono: kind::mono_title(&kind),
+            badge: kind::badge(&kind),
+            meta: kind::meta(&kind, tool),
             icons: Vec::new(),
-            word: kind.hint(),
+            word: kind::hint(&kind),
             open,
-            has_body: kind.has_body(tool),
+            has_body: kind::has_body(&kind, tool),
             tone: match (tool.failed(), stage) {
                 (true, _) => Tone::Failed,
                 (false, ToolStage::Waiting) => Tone::Waiting,
@@ -207,7 +207,7 @@ pub(super) fn bundle_row(
         .iter()
         .filter_map(|member| match &member.kind {
             RowKind::Work(tool) => Some(
-                Icon::new(kind::of(tool).icon())
+                Icon::new(kind::icon(&kind::of(tool)))
                     .xsmall()
                     .text_color(cx.theme().muted_foreground)
                     .into_any_element(),
