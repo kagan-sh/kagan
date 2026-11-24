@@ -11,7 +11,7 @@ an approval, and it never answers one.
    "commands": [{ "id": "improve", "title": "Improve", "when": "thread", "prompt": true }]
    ```
 
-   `"follows": "thread"` is what gives the view `context().props.threadId`. Without it the view has
+   `"follows": "thread"` is what gives the view `context().props.threadId`; without it the view has
    no thread and can read nothing. The person picks the plugin in Settings → Installed → Replace
    parts, or approves `kg plugin use chat <id>`.
 
@@ -20,9 +20,22 @@ an approval, and it never answers one.
    import { v_flex } from "gpui-base";
    import { Markdown } from "gpui-component";
    import { context, onContextChanged } from "kagan/host";
-   import { approvals, items, setDraft, waitItem } from "kagan/chat";
+   import { cancel, draft, items, send, setDraft, waitItem } from "kagan/chat";
 
-   // One row per item; yours to style. Agent text goes through Markdown.
+   // One row per item, yours to style; agent text goes through Markdown. A tool call arrives as two
+   // `work` items with one `work.id`, so fold them by it, and keep the last 200 rows.
+   function keep(view, page) {
+     for (const item of page) {
+       const row = item.kind === "work"
+         ? view.rows.find((r) => r.kind === "work" && r.work.id === item.work.id)
+         : undefined;
+       if (row) row.work = { ...row.work, ...item.work, title: item.work.title || row.work.title };
+       else view.rows.push(item);
+     }
+     view.rows = view.rows.slice(-200);
+     view.cx.notify();
+   }
+
    const draw = (item) =>
      item.kind === "message" ? new Markdown(`chat-${item.seq}`, item.text)
      : div().child(
@@ -33,13 +46,12 @@ an approval, and it never answers one.
          : `The turn ${item.outcome}.`,
        );
 
-   const current = () => (context().props || {}).threadId;
+   const shown = () => (context().props || {}).threadId;
 
    export class Transcript extends View {
      init(_props, cx) {
        this.cx = cx;
        this.rows = [];
-       this.waiting = [];
        this.thread = null;
        this.read();
        cx.spawn(async () => {
@@ -54,48 +66,27 @@ an approval, and it never answers one.
 
      /** Starts again when another chat comes on screen; the old read stops on its own. */
      read() {
-       const id = current();
+       const id = shown();
        if (!id || id === this.thread) return;
        this.thread = id;
        this.rows = [];
-       this.waiting = [];
        this.cx.notify();
        follow(id, this).catch((error) => {
-         this.rows = [{ kind: "notice", severity: "error", text: String(error) }];
-         this.cx.notify();
+         keep(this, [{ kind: "notice", severity: "error", text: String(error) }]);
        });
      }
-
-     /** Adds a page, folding a tool call's deltas into one row by `work.id`, and replaces the open
-      * approvals, keeping the last 200 rows. */
-     take(page, asked) {
-       for (const item of page) {
-         const row = item.kind === "work"
-           ? this.rows.find((r) => r.kind === "work" && r.work.id === item.work.id)
-           : undefined;
-         if (row) row.work = { ...row.work, ...item.work, title: item.work.title || row.work.title };
-         else this.rows.push(item);
-       }
-       this.rows = this.rows.slice(-200);
-       if (asked) this.waiting = asked;
-       this.cx.notify();
-     }
    }
-
    // Read the log forward, then wait for the next item, while that chat is the one on screen.
    async function follow(id, view) {
      let after = 0;
-     while (current() === id) {
-       const [page, asked] = await Promise.all([
-         items(id, { afterSeq: after, order: "asc" }),
-         approvals(id),
-       ]);
-       if (current() !== id) return;
+     while (shown() === id) {
+       const page = await items(id, { afterSeq: after, order: "asc" });
+       if (shown() !== id) return;
        for (const item of page) after = Math.max(after, item.seq);
-       view.take(page, asked);
+       keep(view, page);
        const item = await waitItem(id, { afterSeq: after, timeoutMs: 30_000 });
-       if (current() !== id) return;
-       if (item) { after = Math.max(after, item.seq); view.take([item]); }
+       if (shown() !== id) return;
+       if (item) { after = Math.max(after, item.seq); keep(view, [item]); }
      }
    }
    ```
@@ -106,44 +97,23 @@ an approval, and it never answers one.
    const text = await draft(job.threadId);
    await setDraft(job.threadId, `Improve this:\n\n${text}`);
    await send(job.threadId, text); // the prompt; refused while a turn is open or the agent is not running
-   await cancel(job.threadId); // ends the reply and keeps the agent
+   await cancel(job.threadId); // ends the reply, keeps the agent; refused when no turn is open
    ```
 
-   An item is `{ seq, threadId, at }` plus one `kind`: `message` `{ role, text, messageId }`, where
-   chunks share one `messageId`; `thought` `{ text, messageId }`, folded the same way; `work`
-   `{ work: { id, tool, title, status, args?, argsTruncated?, output?, outputTruncated? } }`; `plan`
-   `{ plan: { steps: [{ step, status }] } }`, where a later plan replaces the one before it;
-   `notice` `{ severity, text }`; and `turn` `{ outcome, error? }`. Every call names a chat: a visible,
-   unarchived `acp` thread. Any other thread is refused with `thread <id> is not a chat; its transcript
-   is its terminal`. An item is one event, not one
-   row: one tool call is a `work` item that starts it and another that ends it, with `title: ""` on
-   the end, so fold them by `work.id`, where the last non-empty title and the last status win. A
-   `work` item names the call itself: `tool` is one of the agent's kinds (`read`, `edit`, `delete`,
-   `move`, `search`, `execute`, `think`, `fetch`), `mcp` for a call named `mcp__<server>__<tool>` or
-   `kagan_<tool>` with `title` as `<server>.<tool>`, `skill` for a skill load with `title` as the
-   skill's name, and `other` when the event names neither. A
-   `work` item's `args` is the agent's raw input, or its JSON text cut at 4 KiB when `argsTruncated`
-   is true; `output` is the result text cut at 8 KiB when `outputTruncated` is true. `usage` is not
-   an item. The open approvals and questions are `approvals(id)` — `{ interactionId, title,
-   options }[]`, oldest first, never paged — and the host draws and answers them, so a plugin keeps
-   them by `interactionId` and never draws the buttons.
+   Every item kind, its fields, the caps and the fold rules are typed in `chat.d.ts`, which
+   `kg plugin types` writes. Every call names a chat: a visible, unarchived `acp` thread. Any other
+   thread is refused with `thread <id> is not a chat; its transcript is its terminal`.
 
-   | want | do |
-   |---|---|
-   | draw the whole transcript | `"replaces": "chat"` |
-   | one kind of row, the rest kagan's | not yet: `chat.message`, `chat.thought`, `chat.work`, `chat.plan` and `chat.approval` land with per-view props |
-   | a button beside Send | `{ "prompt": true, "when": "thread" }`, at most four a manifest |
-   | a button on the thread's title | `{ "header": true, "when": "thread" }` |
-   | a new thread | `threads.spawn`, which needs `"areas": ["threads"]` |
+   The open approvals and questions are `approvals(id)` — `{ interactionId, title, options }[]`,
+   oldest first, never paged — and the host draws and answers them, so a plugin keeps them by
+   `interactionId` and never draws the buttons.
 
-   Caps, all refused with a sentence that names the number: 200 items a call, 256 KiB a page (or one
-   item over it, alone), 1 MiB a prompt, 1 MiB a draft write, 60 s a wait, 50 ms a render, 16 ms a
-   slow row. `send(id, text)` is exactly
-   `kg thread input`: it is refused while a turn is open or the agent is not running. `cancel(id)` is
-   exactly `kg thread cancel`. `draft(id)` reads the prompt box and `setDraft(id, text)` replaces it,
-   only for the chat on screen.
+   A `"prompt": true` command is a button beside Send, at most four a manifest, and `"header": true`
+   puts one on the thread's title. Drawing one kind of row and leaving the rest to kagan lands with
+   `chat.message`, `chat.thought`, `chat.work`, `chat.plan` and `chat.approval`. A new thread is
+   `threads.spawn`, which needs `"areas": ["threads"]`.
 
    Safety: draw agent text with `Markdown`, never a remote image and only an http or https link,
-   keep no dialog or popup in a replacement, send heavy work to `process.run`, and never
-   answer an approval or a question. Read `references/manifest.md` for the rest of the manifest and
-   `references/ui-controls.md` for the components.
+   keep no dialog or popup in a replacement, and send heavy work to `process.run`. Read
+   `references/manifest.md` for the rest of the manifest and `references/ui-controls.md` for the
+   components.
