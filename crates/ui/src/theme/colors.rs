@@ -35,9 +35,7 @@ impl Tone {
     pub(crate) fn of(thread: &Thread, busy: bool, ended: bool, asked: bool) -> Self {
         let needs = thread.unread() || asked;
         match thread.status {
-            ThreadStatus::Stopping => Self::Busy,
-            ThreadStatus::Starting | ThreadStatus::Active if busy => Self::Busy,
-            ThreadStatus::Error => Self::Failed,
+            // A turn waiting on the person is not working, even while its turn stays open.
             ThreadStatus::Starting
             | ThreadStatus::Active
             | ThreadStatus::Pending
@@ -46,6 +44,9 @@ impl Tone {
             {
                 Self::Needs
             }
+            ThreadStatus::Stopping => Self::Busy,
+            ThreadStatus::Starting | ThreadStatus::Active if busy => Self::Busy,
+            ThreadStatus::Error => Self::Failed,
             ThreadStatus::Starting
             | ThreadStatus::Active
             | ThreadStatus::Pending
