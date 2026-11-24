@@ -9,8 +9,7 @@ use kg_domain::{
 
 use super::kind;
 
-/// The parts a transcript can hold, each drawn by its own function and named in its element id, so
-/// a plugin can replace one later.
+/// The parts a transcript can hold, each drawn by its own function and named in its element id.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Part {
     Message,
