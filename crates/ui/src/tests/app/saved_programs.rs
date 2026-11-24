@@ -75,15 +75,15 @@ fn search(cx: &mut TestAppContext, window: AnyWindowHandle, text: &str) {
 #[gpui_kit::test]
 fn a_saved_program_is_listed_by_name_and_picking_it_starts_its_line(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
-    fixture_programs(cx, data.path(), &["codex"]);
-    save(cx, "Fast codex", "codex --fast");
+    fixture_programs(cx, data.path(), &["aider"]);
+    save(cx, "Fast aider", "aider --fast");
     start_in_plain_folder(cx, window, data.path());
     // The label also says ", selected" when the row is the selected one, so only the name is checked.
-    assert!(label(cx, window, &row_id("Fast codex")).starts_with("Fast codex"));
-    click(cx, window, &row_id("Fast codex"));
+    assert!(label(cx, window, &row_id("Fast aider")).starts_with("Fast aider"));
+    click(cx, window, &row_id("Fast aider"));
     wait_until(cx, |cx| shown(cx, &kagan).is_some());
     let started = shown(cx, &kagan).unwrap();
-    assert_eq!(thread_record(cx, &started).provider, "codex --fast");
+    assert_eq!(thread_record(cx, &started).provider, "aider --fast");
 }
 
 #[gpui_kit::test]

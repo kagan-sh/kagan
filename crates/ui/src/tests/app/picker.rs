@@ -186,15 +186,15 @@ fn a_custom_command_typed_in_its_fields_runs_as_one_program(cx: &mut TestAppCont
 #[gpui_kit::test]
 fn a_row_click_starts_that_program_and_closes_the_custom_command(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
-    fixture_programs(cx, data.path(), &["claude"]);
+    fixture_programs(cx, data.path(), &["aider"]);
     start_in_plain_folder(cx, window, data.path());
     click(cx, window, "custom-command-toggle");
     wait_until(cx, |cx| shows(cx, window, "custom-program"));
     cx.simulate_input(window, "/does/not/exist");
-    click(cx, window, "program-claude");
+    click(cx, window, "program-aider");
     wait_until(cx, |cx| shown(cx, &kagan).is_some());
     let started = shown(cx, &kagan).unwrap();
-    assert_eq!(thread_record(cx, &started).provider, "claude");
+    assert_eq!(thread_record(cx, &started).provider, "aider");
 }
 
 #[cfg(unix)]
@@ -349,6 +349,9 @@ fn the_start_title_stays_put_when_the_custom_command_opens(cx: &mut TestAppConte
 #[gpui_kit::test]
 fn start_sits_under_the_last_field_and_on_screen_in_a_worktree(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
+    // A program that does not answer ACP, so the last field is the worktree hint and the form's
+    // height does not depend on what this machine has installed.
+    let _bin = fixture_programs(cx, data.path(), &["aider"]);
     let (_repo, project) = committed_repo(cx, data.path());
     click(cx, window, &format!("project-new-{}", project.id.0));
     wait_until(cx, |cx| shows(cx, window, "worktree-hint"));
@@ -605,7 +608,7 @@ fn a_command_line_in_program_shows_a_hint(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn a_start_that_works_clears_an_earlier_start_error(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
-    let _bin = fixture_programs(cx, data.path(), &["claude"]);
+    let _bin = fixture_programs(cx, data.path(), &["aider"]);
     start_in_plain_folder(cx, window, data.path());
     let use_program = |cx: &mut TestAppContext, program: &'static str| {
         cx.update_window(window, |_, window, cx| {
@@ -619,7 +622,7 @@ fn a_start_that_works_clears_an_earlier_start_error(cx: &mut TestAppContext) {
     click(cx, window, "start");
     wait_until(cx, |cx| shows(cx, window, "note"));
     assert!(label(cx, window, "note").contains("Could not start the thread"));
-    use_program(cx, "claude");
+    use_program(cx, "aider");
     click(cx, window, "start");
     wait_until(cx, |cx| !shows(cx, window, "note"));
 }
@@ -720,20 +723,20 @@ fn a_search_leaves_only_its_matching_cards_and_the_custom_button(cx: &mut TestAp
 #[gpui_kit::test]
 fn escape_closes_the_custom_command_and_enter_starts_exactly_one_thread(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
-    fixture_programs(cx, data.path(), &["codex"]);
+    fixture_programs(cx, data.path(), &["aider"]);
     let project = start_in_plain_folder(cx, window, data.path());
     click(cx, window, "custom-command-toggle");
     wait_until(cx, |cx| shows(cx, window, "custom-program"));
     cx.simulate_keystrokes(window, "escape");
     cx.run_until_parked();
     assert!(!shows(cx, window, "custom-program"));
-    assert_eq!(label(cx, window, "program-codex"), "Codex, selected");
-    assert_eq!(command(cx, &kagan), Ok("codex".to_owned()));
+    assert_eq!(label(cx, window, "program-aider"), "Aider, selected");
+    assert_eq!(command(cx, &kagan), Ok("aider".to_owned()));
     cx.simulate_keystrokes(window, "enter");
     wait_until(cx, |cx| shown(cx, &kagan).is_some());
     assert_eq!(threads_in(cx, &project).len(), 1);
     let started = shown(cx, &kagan).unwrap();
-    assert_eq!(thread_record(cx, &started).provider, "codex");
+    assert_eq!(thread_record(cx, &started).provider, "aider");
 }
 
 #[gpui_kit::test]

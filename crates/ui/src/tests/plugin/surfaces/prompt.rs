@@ -64,7 +64,7 @@ pub(in crate::tests) fn plugin_agent(cx: &mut TestAppContext, data: &Path, scrip
     use std::os::unix::fs::PermissionsExt as _;
     let bin = data.join("agent-bin");
     std::fs::create_dir_all(&bin).unwrap();
-    let program = bin.join("claude");
+    let program = bin.join("aider");
     std::fs::write(&program, format!("#!/bin/sh\n{script}\n")).unwrap();
     std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
     use_path(cx, &bin);
@@ -148,7 +148,7 @@ fn new_plugin_starts_the_agent_not_the_last_program(cx: &mut TestAppContext) {
     plugin_agent(cx, data.path(), "printf 'Ready> '; read line; sleep 30");
     click(cx, window, "plugins-add");
     let id = wait_for_plugin(cx, &kagan);
-    assert_eq!(thread_record(cx, &id).provider, "claude");
+    assert_eq!(thread_record(cx, &id).provider, "aider");
 }
 
 #[cfg(unix)]
@@ -196,7 +196,7 @@ fn enter_on_a_project_starts_a_thread_there(cx: &mut TestAppContext) {
         let records = cx.update(|cx| Workspace::global(cx).read(cx).thread_records(cx));
         records
             .iter()
-            .any(|t| t.project_id.0 == "prj_kagan" && t.provider == "claude")
+            .any(|t| t.project_id.0 == "prj_kagan" && t.provider == "aider")
     });
 }
 

@@ -246,12 +246,12 @@ fn open_git_form(cx: &mut TestAppContext) -> (Entity<Kagan>, AnyWindowHandle, te
     (kagan, window, data)
 }
 
-// A plain folder with a fake Claude installed. Its program runs in a plain folder, and the first
-// installed program is the one Start runs, so Start is ready.
+// A plain folder with a fake terminal agent installed. Its program runs in a plain folder, and the
+// first installed program is the one Start runs, so Start is ready.
 #[cfg(unix)]
 fn open_plain_form(cx: &mut TestAppContext) -> (Entity<Kagan>, AnyWindowHandle, tempfile::TempDir) {
     let (kagan, window, data) = open(cx);
-    fixture_programs(cx, data.path(), &["claude"]);
+    fixture_programs(cx, data.path(), &["aider"]);
     start_in_plain_folder(cx, window, data.path());
     wait_until(cx, |cx| disabled(cx, window, "start") == Some(false));
     (kagan, window, data)
