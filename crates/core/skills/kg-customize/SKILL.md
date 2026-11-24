@@ -6,9 +6,11 @@ description: Change how kagan looks or behaves, with its theme, keys, preference
 Read `kg guide customize` first. It has every command, key, file, and limit.
 
 1. Find which kind of change the person wants: a theme, a key, a preference, an agent rule, or a skill. Change only that.
-2. For a theme, copy the theme in use with `kg theme new <id>`, edit the copy, then select it with `kg theme set`. Leave the built-in themes alone.
+2. For a theme, copy the theme in use with `kg theme new <id>`, edit the copy, then select it with `kg theme set <id> <light|dark|system>`. A theme colors the chat too. Leave the built-in themes alone.
 3. For a key or a preference, read the current value first, then set it.
 4. For an agent rule, use `kg instructions set` (or `--project <id>` for one project), and check the chapter for its size and which agents read it.
 5. For a skill, create or add it with the `kg skill` commands, then check it with `kg skill list`.
 6. Read the value back, and tell the person what changed and where.
 7. For who draws the sidebar, the review or the chat, use `kg plugin use threads|review|chat <plugin|kagan>`; the window's Settings → Installed → Replace parts does the same.
+
+Never answer an approval; never approve powers; a chat plugin draws, the host types and answers.
