@@ -127,7 +127,8 @@ impl ToolRow {
         }
     }
 
-    /// A row that has not settled: its label shimmers and its meta is the live span.
+    /// A row that has not settled: its label shimmers and, once it starts, its meta is the live
+    /// span.
     pub(super) fn running(&self) -> bool {
         self.stage() != ToolStage::Settled
     }
@@ -152,6 +153,9 @@ impl ToolRow {
     }
 
     pub(super) fn span(&self) -> Option<Duration> {
+        if self.stage() == ToolStage::Waiting {
+            return None;
+        }
         let span = super::kind::span_of(self.from, self.to);
         (!span.is_zero()).then_some(span)
     }

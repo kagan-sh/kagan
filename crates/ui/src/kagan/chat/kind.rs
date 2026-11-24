@@ -397,6 +397,15 @@ mod tests {
     }
 
     #[test]
+    fn a_row_shows_a_span_only_once_it_has_run() {
+        let mut row = tool(None, ToolKind::Execute, "cargo t", serde_json::json!({}));
+        row.status = Some(ToolStatus::Pending);
+        assert_eq!(meta(&WorkKind::Execute, &row), None);
+        row.status = Some(ToolStatus::InProgress);
+        assert_eq!(meta(&WorkKind::Execute, &row).as_deref(), Some("1 s"));
+    }
+
+    #[test]
     fn a_title_is_cut_at_a_word() {
         assert_eq!(cut("one two three", 60), "one two three");
         assert_eq!(cut("one two three four", 9), "one two…");
