@@ -16,7 +16,7 @@ pub(super) fn buttons(cx: &App) -> Vec<AnyElement> {
         .into_iter()
         .map(|command| {
             let id = id_for(&command.plugin, &command.id);
-            row(command, id, None, cx)
+            row(&command, id, None, cx)
         })
         .collect()
 }
@@ -29,7 +29,7 @@ pub(super) fn prompt(cx: &App) -> Vec<AnyElement> {
         .map(|command| {
             let id = prompt_id_for(&command.plugin, &command.id);
             // The bar is under the draft, so its tooltip opens below it, never over the text.
-            row(command, id, Some(Placement::Bottom), cx)
+            row(&command, id, Some(Placement::Bottom), cx)
         })
         .collect()
 }
@@ -52,7 +52,7 @@ pub(crate) fn prompt_id_for(plugin: &PluginId, id: &str) -> ElementId {
 
 // One ghost button, with no icon, sized like the buttons beside it.
 fn row(
-    command: CommandContribution,
+    command: &CommandContribution,
     id: ElementId,
     placement: Option<Placement>,
     cx: &App,
@@ -71,9 +71,9 @@ fn row(
         None => button,
     };
     control(
-        id.clone(),
+        id,
         Facts {
-            hint: Some(SharedString::from(tooltip.clone())),
+            hint: Some(SharedString::from(tooltip)),
             ..Facts::button(command.title.clone())
         },
         button.on_click(dispatch(run)),

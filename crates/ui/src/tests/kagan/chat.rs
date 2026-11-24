@@ -905,7 +905,7 @@ fn a_rewritten_draft_undoes_with_the_normal_key(cx: &mut TestAppContext) {
     wait_until(cx, |cx| focused_of(cx, window, "chat-prompt") == Some(true));
     cx.update_window(window, |_, window, cx| {
         chat.update(cx, |chat, cx| {
-            chat.set_draft("improve: ".into(), window, cx)
+            chat.set_draft("improve: ".into(), window, cx);
         });
     })
     .unwrap();
