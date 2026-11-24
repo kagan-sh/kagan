@@ -69,6 +69,10 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - **Shows**: `New` returns the new terminal; `List` returns each open one with its number and the title its shell set. The terminal Ops above reach one with `--terminal <n>` [decision 110].
 - **Refused when**: a missing thread, or a number that is not open — `not-found` [op/]. `New` on an archived thread or a folder that is not ready — `invalid`. A shell that cannot start — `failed` [decision 110].
 
+### New thread in the window
+
+- A `Run as` control sits under the `Program` choice when that line names an agent kagan can start over ACP (`claude`, `codex`, `gemini`, `kimi`, `opencode`): two segments, Terminal and Chat. Any other program has only a terminal, and the control is not drawn. Chat is the default, and the choice is sent with `ThreadOp::Run` as `--link`; the screen forgets it the next time it opens. With Chat chosen the screen also says `This agent answers in the thread’s transcript. You type prompts here; there is no terminal.` A `claude` or `codex` chat starts its npm adapter, so it needs Node and its first start downloads the package [decision 279].
+
 ### Terminal in the window
 
 - The wheel and trackpad scroll the history. Shift+PageUp and Shift+PageDown page it. Output that arrives while the view is scrolled up does not move it; typing does.
