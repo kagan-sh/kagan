@@ -613,7 +613,6 @@ async fn kinds_of(id: &ThreadId, cx: &mut TestAppContext) -> Vec<EventKind> {
         .collect()
 }
 
-#[cfg(unix)]
 fn busy_of(fixture: &Fixture, id: &ThreadId, cx: &mut TestAppContext) -> bool {
     cx.read(|cx| fixture.workspace.read(cx).thread(id).unwrap().read(cx).busy)
 }
@@ -807,7 +806,6 @@ fn ask_op(id: ThreadId, title: &str, options: Vec<InteractionOption>) -> Op {
     })
 }
 
-#[cfg(unix)]
 async fn pending(id: &ThreadId, cx: &mut TestAppContext) -> Vec<PendingInteraction> {
     let OpResult::Interactions(pending) =
         op(Op::Thread(ThreadOp::Interactions { id: id.clone() }), cx)
