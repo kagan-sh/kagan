@@ -10,8 +10,8 @@ use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, ClipboardItem, Context, ElementId, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, ParentElement as _, Render, Role, SharedString,
-    Styled as _, Subscription, Window, div, px,
+    InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString, Styled as _,
+    Subscription, Window, div, px,
 };
 use kg_core::{Workspace, WorkspaceEvent};
 use kg_domain::{Event, Op, Role as Speaker, ThreadId, ThreadOp, Timestamp, program_label};
@@ -552,15 +552,7 @@ fn working_row(cx: &mut App) -> AnyElement {
     let muted = cx.theme().muted_foreground;
     div()
         .id("chat-working")
-        .ui_observe_as(Facts {
-            role: Role::Label,
-            name: "Working".into(),
-            value: Some("working".into()),
-            disabled: false,
-            selected: None,
-            focus: None,
-            hint: None,
-        })
+        .ui_observe_as(Facts::label("Working", "working"))
         .h(px(crate::theme::row_height(cx)))
         .flex()
         .items_center()
@@ -643,15 +635,10 @@ fn message_view(
     div()
         .id(element)
         .group("chat-message")
-        .ui_observe_as(Facts {
-            role: Role::Label,
-            name: format!("{label}, {}", clock(at)).into(),
-            value: Some(text.to_owned().into()),
-            disabled: false,
-            selected: None,
-            focus: None,
-            hint: None,
-        })
+        .ui_observe_as(Facts::label(
+            format!("{label}, {}", clock(at)),
+            text.to_owned(),
+        ))
         .child(body)
         .into_any_element()
 }
@@ -659,15 +646,7 @@ fn message_view(
 fn notice_view(id: u64, text: &str, cx: &mut App) -> AnyElement {
     div()
         .id(work::named(part::Part::Notice, id))
-        .ui_observe_as(Facts {
-            role: Role::Label,
-            name: text.to_owned().into(),
-            value: Some(text.to_owned().into()),
-            disabled: false,
-            selected: None,
-            focus: None,
-            hint: None,
-        })
+        .ui_observe_as(Facts::label(text.to_owned(), text.to_owned()))
         .type_small(cx)
         .text_color(cx.theme().muted_foreground)
         .child(text.to_owned())
@@ -690,15 +669,7 @@ fn divider_view(
     };
     div()
         .id(ElementId::Name(format!("chat-divider-{id}").into()))
-        .ui_observe_as(Facts {
-            role: Role::Label,
-            name: text.clone().into(),
-            value: Some(text.clone().into()),
-            disabled: false,
-            selected: None,
-            focus: None,
-            hint: None,
-        })
+        .ui_observe_as(Facts::label(text.clone(), text.clone()))
         .py_1()
         .type_caption(cx)
         .text_color(cx.theme().muted_foreground)

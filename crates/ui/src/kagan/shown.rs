@@ -351,11 +351,7 @@ impl Kagan {
             .h_9()
             .type_body(cx)
             .text_color(cx.theme().foreground)
-            .ui_observe_as(Facts {
-                role: Role::Label,
-                value: Some(line.clone().into()),
-                ..Facts::button("Ended")
-            })
+            .ui_observe_as(Facts::label("Ended", line.clone()))
             .child(div().min_w_0().flex_1().text_ellipsis().child(line))
             .when(!archived, |row| {
                 row.child(control(
