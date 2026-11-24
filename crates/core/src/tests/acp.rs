@@ -8,8 +8,12 @@ use gpui_kit::TestAppContext;
 use kg_domain::*;
 use serde_json::{Value, json};
 
-use super::{Fixture, alive, events, gone, kinds_of, op, thread, wait_for_status};
+use super::{
+    Fixture, alive, assert_quit_leaves_the_turn, events, finish_quit, gone, kinds_of, op, thread,
+    wait_for_status,
+};
 use crate::Workspace;
+use crate::workspace::recovery::resume_threads;
 
 /// One recorded turn: the chunks the agent says, and why it stopped. `hold` keeps the prompt
 /// open until a cancel; `sleep` spawns a child that must die with the agent.
@@ -1470,6 +1474,49 @@ async fn acp_stop_during_an_open_turn_asks_for_nothing(cx: &mut TestAppContext) 
         "nothing is written after idle: {kinds:?}"
     );
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Idle);
+}
+
+/// Quit follows the one stop rule: the open turn stays for the next open, which loads it again.
+#[gpui_kit::test]
+async fn acp_quit_leaves_the_turn_to_resume(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_quit"], &[holding()]);
+    std::fs::write(
+        agent.path("initialize.json"),
+        json!({ "loadSession": true }).to_string(),
+    )
+    .unwrap();
+    let id = started(&fixture, &agent, cx).await;
+    send(&id, "one", cx).await;
+    wait_for(
+        &id,
+        |kinds| count(kinds, |kind| matches!(kind, EventKind::TurnStarted)) == 1,
+        cx,
+    )
+    .await;
+    let quitting = cx.update(Workspace::stop_for_quit);
+    finish_quit(cx, &id, quitting).await;
+    assert_quit_leaves_the_turn(&kinds_of(&id, cx).await);
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    assert!(
+        resume_threads(&store).unwrap().contains(&id),
+        "the next open resumes it"
+    );
+    assert_eq!(
+        store.conversation(&id).unwrap().unwrap().to_string(),
+        "ses_quit"
+    );
+    drop(store);
+    let fixture = fixture.restart(cx, |_| {}).await;
+    wait_for_status(&id, ThreadStatus::Active, cx).await;
+    let asked: Value =
+        serde_json::from_str(&std::fs::read_to_string(agent.path("load")).unwrap()).unwrap();
+    assert_eq!(
+        asked["params"]["sessionId"], "ses_quit",
+        "the resume loads the conversation the thread stored"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+    drop(fixture);
 }
 
 #[gpui_kit::test]

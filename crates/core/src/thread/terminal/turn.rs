@@ -7,11 +7,10 @@ use kg_domain::{EventKind, KNOWN_PROGRAMS, OpResult, ThreadId, TurnOp, TurnOutco
 use kg_terminal::Grid;
 
 use crate::host::database::Result;
+use crate::thread::finish::StopReason;
 use crate::thread::turn_state::{Change, Signal, Source, TurnState};
 use crate::workspace::closed;
 use crate::{Thread, Workspace, WorkspaceEvent};
-
-use super::StopReason;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Spin {

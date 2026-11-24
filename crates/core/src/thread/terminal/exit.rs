@@ -6,7 +6,7 @@ use kg_terminal::Exit;
 
 use crate::Workspace;
 use crate::host::database::Result;
-use crate::thread::finish::{End, ended};
+use crate::thread::finish::{End, StopReason, ended, stopped};
 use crate::workspace::closed;
 
 use super::Run;
@@ -14,13 +14,6 @@ use super::Shown;
 use super::agent::Start;
 use super::screen::keep_screen;
 use crate::thread::halt::status;
-
-/// Why a program was asked to stop. Quit still records `stopped` and `idle`, and skips `turn.ended`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum StopReason {
-    Stop,
-    Quit,
-}
 
 /// Asks a running program to end and marks the thread stopping. Its exit records the stop and keeps
 /// the screen. Returns whether there was a program to end.
@@ -107,11 +100,7 @@ pub(crate) async fn exited(
     this.update(cx, |workspace, cx| keep_screen(workspace, &id, cx))
         .map_err(closed)?;
     let end = match reason {
-        Some(reason) => End {
-            turn: (reason != StopReason::Quit).then_some((TurnOutcome::Interrupted, None)),
-            events: vec![EventKind::Stopped, EventKind::Idle],
-            status: ThreadStatus::Idle,
-        },
+        Some(reason) => stopped(reason),
         None => exit_end(Some(exit), None),
     };
     ended(this, id, end, cx).await

@@ -7,6 +7,22 @@ use crate::thread::halt::{settle, status};
 use crate::thread::terminal::done;
 use crate::thread::turn_state::Signal;
 
+/// Why a program was asked to stop. Quit still records `stopped` and `idle`, and skips `turn.ended`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StopReason {
+    Stop,
+    Quit,
+}
+
+/// What a stop leaves behind. Quit leaves the open turn alone, so the next open resumes it.
+pub(crate) fn stopped(reason: StopReason) -> End {
+    End {
+        turn: (reason != StopReason::Quit).then_some((TurnOutcome::Interrupted, None)),
+        events: vec![EventKind::Stopped, EventKind::Idle],
+        status: ThreadStatus::Idle,
+    }
+}
+
 /// What ended a thread's program: the turn it leaves open, the events it records, and the status
 /// it leaves behind.
 pub(crate) struct End {

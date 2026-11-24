@@ -97,13 +97,18 @@ pub(crate) async fn stop(
             })
             .map_err(closed)?;
         if acp {
+            let reason = this
+                .update(cx, |workspace, _| {
+                    workspace
+                        .runs
+                        .get_mut(&thread_id)
+                        .and_then(|run| run.stopping.take())
+                })
+                .map_err(closed)?
+                .unwrap_or(super::StopReason::Stop);
             // An ACP thread has no watcher to report the end, so the stop records it here.
-            let end = crate::thread::finish::End {
-                turn: Some((TurnOutcome::Interrupted, None)),
-                events: vec![EventKind::Stopped, EventKind::Idle],
-                status: ThreadStatus::Idle,
-            };
-            crate::thread::finish::ended(this, thread_id, end, cx).await?;
+            crate::thread::finish::ended(this, thread_id, super::finish::stopped(reason), cx)
+                .await?;
             return Ok(());
         }
         // The program is ending now. Its exit records the stop and sets the thread idle.

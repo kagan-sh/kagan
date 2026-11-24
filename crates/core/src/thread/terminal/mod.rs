@@ -11,6 +11,7 @@ use crate::{Thread, Workspace, WorkspaceEvent};
 
 use super::agent::{self, Start};
 use super::extra::Extras;
+use super::finish::StopReason;
 use super::halt::status;
 use super::resolve_program;
 use crate::end::{End, Loss};
@@ -19,7 +20,6 @@ mod exit;
 mod screen;
 mod turn;
 
-pub(crate) use exit::StopReason;
 pub(crate) use exit::{exit_end, exited, request_stop, start_again};
 pub(crate) use screen::follow_terminals;
 #[cfg(test)]

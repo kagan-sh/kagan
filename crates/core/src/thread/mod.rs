@@ -17,6 +17,7 @@ pub(crate) mod turn_state;
 pub(crate) use agent::note_with;
 
 pub(crate) use extra::Extras;
+pub(crate) use finish::StopReason;
 pub(crate) use halt::{retire, stop};
 pub(crate) use interaction::Raised;
 pub(crate) use interaction::{answer, clear_pending, raise, withdraw};
@@ -25,7 +26,6 @@ pub(crate) use run::resolve_acp;
 pub(crate) use run::resolve_program;
 pub(crate) use run::{PreparedRun, commit as commit_run, start_run};
 pub(crate) use search::search;
-pub(crate) use terminal::StopReason;
 pub(crate) use terminal::exited;
 #[cfg(test)]
 pub(crate) use terminal::remember;
