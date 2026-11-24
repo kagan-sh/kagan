@@ -1,7 +1,6 @@
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::{Icon, Sizable as _, h_flex, v_flex};
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, KeyDownEvent,
     ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _,
@@ -145,7 +144,6 @@ fn card(
     cx: &mut Context<ChatView>,
 ) -> gpui_kit::Div {
     let focus = crate::kagan::tab_stop(window, cx, ElementId::Name(head.id.into()));
-    let focused = focus.is_focused(window);
     let muted = cx.theme().muted_foreground;
     let value = match &head.detail {
         Some(detail) => format!("{}, {detail}", pick(head.open)),
@@ -197,7 +195,7 @@ fn card(
                     head.detail
                         .map(|detail| div().type_caption(cx).text_color(muted).child(detail)),
                 )
-                .when(focused, |row| row.border_1().border_color(cx.theme().ring))
+                .focus_visible(|row| row.border_1().border_color(cx.theme().ring))
                 .on_click(move |_, _, cx| flip(&view, which, cx))
                 .on_key_down(move |event: &KeyDownEvent, _, cx| {
                     if matches!(event.keystroke.key.as_str(), "enter" | "space") {
