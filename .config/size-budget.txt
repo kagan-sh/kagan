@@ -11,52 +11,9 @@ target 35000
 # Cost: the plugin preview adds 828 product lines on top of main (83260, after #151), tests not counted: the Op shape and CLI text, the folder seed, the hidden app's start, shut down and sweep, the guard on questions, and the replace of a thread's preview. The ceiling is set to the count.
 # Cost: the plugin thread record's agent name and mark path add 87 product lines on top of main (84088, after #152): the shared agent list and its tests in kg-domain, and the two record fields with their leak test. The ceiling is set to the branch count.
 # Cost: the compact ThreadStatus adds 24 product lines on top of main (84175, after #154), in crates/ui/src/components: the shared method helpers and the compact call. The ceiling is set to the branch count, and decision 276 records it.
-# Cost: ACP threads, slice 1, add 2184 product lines on top of main (84147): the ACP client and its event mapping in kg-core, the chat view and the Run as control in kg-ui, the link column and the Cancel op, the shared end bookkeeping the two links need, and the fixes the two slice 1 reviews asked for. Decision 279 records it.
-# Cost: ACP threads, slice 2, add the full transcript on top of main (84147): the domain events a
-# tool call, a plan and usage arrive as, the ACP mapping and the permission request in kg-core, and
-# the row fold, work row, bodies, bundling, scroller and approval card in kg-ui. Decision 280 records
-# it. Product Rust went from main's 84147 to 88922 (+4775), slices 1 and 2 together.
-# Cost: ACP threads, slice 2b, add the chat extension points on top of main (84147): the slot's mount,
-# its prompt buttons and the transcript's draft in kg-ui, kagan/chat's item union with paging, wait
-# and approvals in kg-plugins, and the prompt box the window answers. Decision 281 records it.
-# Cost: the last slice 1 fixes add 75 product lines on top of the merged count (89684): the chunked
-# line read with its cap, the poll after the agent's output ends, Escape propagating, and the test
-# module hook. The rest of the fixes are tests. Decision 279 records it.
-# Cost: the fixes the two slice reviews asked for add 581 product lines on top of the merged count
-# (89759): the fold by tool id with the bundle step after a merge, the auto-expand and override rules
-# with their tests, the permission queue in its own file, the caps on what a tool call writes, a
-# row's mark and word, the bodies' links and counts, and the files the budget asked to split.
-# Product Rust went from main's 84147 to 90340 (+6193), slices 1, 2 and 2b, and both reviews'
-# fixes, together. Decisions 279, 280 and 281 record it.
-# Cost: the second fix round of slices 2 and 2b adds 114 product lines on top of the merged count
-# (90340): one work classification in kg-domain that the window's rows and a plugin's page both read,
-# the permission card's rules scoped to approval cards, a bundle across two reads that finish out of
-# order, a notice under a failed row, and the held output a finished call drops. Product Rust went
-# from main's 84147 to 90455 (+6308).
-# Cost: ACP threads, slice 4, add 28 product lines on top of the merged count (90455): every
-# agent's launch command in the one table, the launch that resolves an adapter's own program, and
-# the check that its program is on the PATH before the thread starts. Decision 279 records it.
-# Cost: ACP threads, slice 5, add 139 product lines on top of the merged count (90483): the load
-# of the stored conversation when the agent advertises it with the fallback to a new chat, the
-# MCP server every session is offered, and the agent integration decided by the thread's line
-# rather than the adapter's program. Decision 279 records it. Product Rust went from main's
-# 84147 to 90622 (+6475).
-# Cost: the slice 5 fixes split the agent's pipes into acp/transport.rs and the launch command into
-# acp/launch.rs, which adds 32 product lines to the merged count (90622) and puts client.rs and
-# acp/mod.rs under 600, so their ceiling lines go with it. Product Rust went from main's 84147 to
-# 90654 (+6507). Decision 279 records it.
-# Cost: ACP threads, the composer, adds 530 product lines on top of the merged count (90654): the
-# one prompt box in its own file, the cards over it in another, the action that is Send, Cancel or
-# Start again, the context row, the shared column the transcript and the box draw, and the ended
-# line the chat no longer draws. Product Rust went from main's 84147 to 91184 (+7037). Decision
-# 282 records it.
-# Cost: the SSR round 1 fixes add 108 product lines on top of the merged count (91184): the tool
-# row's stage and its waiting words with the tone's clock mark, the read-only prompt box and its
-# hint, and the optional command description with its check and tooltip. Product Rust went from
-# 91184 to 91292. Decision 283 records it.
-ceiling 91334
+# Cost: ACP threads, one PR: product Rust went from main's 84147 to 91327 (+7180). Decision 279 records it.
+ceiling 91327
 allow_expect 9
-crates/core/src/thread/agent/files.rs 754
 crates/plugins/src/runtime/ui_host.rs 630
-crates/ui/src/kagan/chat.rs 780
-crates/ui/src/theme/catalog.rs 646
+crates/ui/src/kagan/chat.rs 688
+crates/ui/src/theme/catalog.rs 642
