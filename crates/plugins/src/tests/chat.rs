@@ -88,20 +88,6 @@ fn every_kind_a_transcript_draws_maps_and_the_rest_are_left_out() {
         })
         .is_some()
     );
-    assert!(
-        mapped(EventKind::ToolStarted {
-            id: "t1".into(),
-            name: "skill_load".into()
-        })
-        .is_some()
-    );
-    assert!(
-        mapped(EventKind::ToolEnded {
-            id: "t1".into(),
-            status: ToolOutcome::Ok
-        })
-        .is_some()
-    );
     assert!(mapped(delta(None, None, None, None)).is_some());
     // Usage is the header line's, and the rest is turn state the row already shows.
     assert!(mapped(EventKind::Usage { used: 10, size: 20 }).is_none());
@@ -112,6 +98,15 @@ fn every_kind_a_transcript_draws_maps_and_the_rest_are_left_out() {
         EventKind::Idle,
         EventKind::Opened,
         EventKind::Rewound { before_seq: 0 },
+        // The agent reports the same call in its own `tool` delta, so this one is not an item.
+        EventKind::ToolStarted {
+            id: "t1".into(),
+            name: "skill_load".into(),
+        },
+        EventKind::ToolEnded {
+            id: "t1".into(),
+            status: ToolOutcome::Ok,
+        },
     ] {
         let shown = format!("{kind:?}");
         assert!(mapped(kind).is_none(), "{shown} is not an item");
@@ -263,41 +258,19 @@ fn a_plan_maps_its_steps_and_their_state() {
     );
 }
 
+/// Kagan's own MCP call is drawn once, from the agent's `tool` delta; the host folds the same way.
 #[test]
-fn a_work_item_starts_running_and_ends_ok_or_failed() {
-    let started = serde_json::to_value(
-        crate::chat::item(&at(
-            EventKind::ToolStarted {
-                id: "t1".into(),
-                name: "skill_load".into(),
-            },
-            1,
-        ))
-        .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(started["kind"], "work");
-    assert_eq!(started["threadId"], CHAT);
-    assert_eq!(started["work"]["id"], "t1");
-    assert_eq!(started["work"]["tool"], "other");
-    assert_eq!(started["work"]["title"], "skill_load");
-    assert_eq!(started["work"]["status"], "running");
-    assert!(started["work"].get("args").is_none());
-
-    let failed = serde_json::to_value(
-        crate::chat::item(&at(
-            EventKind::ToolEnded {
-                id: "t1".into(),
-                status: ToolOutcome::Error,
-            },
-            2,
-        ))
-        .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(failed["work"]["status"], "error");
-    // The end is a delta: it carries no name, so a plugin folds it by `id` and keeps the start's.
-    assert_eq!(failed["work"]["title"], "");
+fn a_call_kagans_own_mcp_made_is_not_a_second_work_item() {
+    let started = EventKind::ToolStarted {
+        id: "t1".into(),
+        name: "skill_load".into(),
+    };
+    assert!(crate::chat::item(&at(started, 1)).is_none());
+    let ended = EventKind::ToolEnded {
+        id: "t1".into(),
+        status: ToolOutcome::Ok,
+    };
+    assert!(crate::chat::item(&at(ended, 2)).is_none());
 }
 
 #[test]

@@ -1301,7 +1301,10 @@ fn an_acp_run_needs_an_agent_kagan_knows() {
     );
     assert_eq!(
         crate::acp_command("claude --model sonnet"),
-        Some(("npx", &["-y", "@agentclientprotocol/claude-agent-acp"][..]))
+        Some((
+            "npx",
+            &["-y", "@agentclientprotocol/claude-agent-acp@0.110.1"][..]
+        ))
     );
     assert_eq!(
         crate::acp_command("gemini"),

@@ -14,18 +14,20 @@ impl Output for Bytes {
     }
 }
 
-fn lines(text: &str) -> Vec<String> {
-    let mut lines = Lines::new(Bytes(std::io::Cursor::new(text.as_bytes().to_vec())));
-    std::iter::from_fn(|| lines.next()).collect()
-}
-
 #[test]
 fn a_line_longer_than_kagan_keeps_is_cut_and_the_next_one_still_arrives() {
     let long = "a".repeat(LINE_MAX * 2);
-    let read = lines(&format!("{long}\nlast"));
-    assert_eq!(read.len(), 2, "{read:?}");
-    assert_eq!(read[0].len(), LINE_MAX);
-    assert_eq!(read[1], "last", "the rest of the long line is not a line");
+    let mut lines = Lines::new(Bytes(std::io::Cursor::new(
+        format!("{long}\nlast").into_bytes(),
+    )));
+    let first = lines.next().unwrap();
+    assert_eq!(first.len(), LINE_MAX);
+    assert!(lines.noted, "the person is told the line was cut");
+    assert_eq!(
+        lines.next().as_deref(),
+        Some("last"),
+        "the rest of the long line is not a line"
+    );
 }
 
 #[gpui_kit::test]

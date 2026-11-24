@@ -188,6 +188,8 @@ fn read_lines(output: impl Output, mut on_line: impl FnMut(String)) {
 pub(super) struct Lines<O> {
     output: O,
     ahead: Vec<u8>,
+    /// Whether the person was told about a cut line. One note per connection, not per line.
+    noted: bool,
 }
 
 impl<O: Output> Lines<O> {
@@ -195,6 +197,7 @@ impl<O: Output> Lines<O> {
         Self {
             output,
             ahead: Vec::new(),
+            noted: false,
         }
     }
 
@@ -214,6 +217,13 @@ impl<O: Output> Lines<O> {
             let taken = end.map_or(self.ahead.len(), |at| at + 1);
             let room = LINE_MAX.saturating_sub(line.len());
             let kept = taken.min(room);
+            if kept < taken && !self.noted {
+                self.noted = true;
+                eprintln!(
+                    "kg: the agent sent more than {} KiB on one line, so kagan cut it",
+                    LINE_MAX / 1024
+                );
+            }
             line.extend_from_slice(&self.ahead[..kept]);
             self.ahead.drain(..taken);
             if end.is_some() {

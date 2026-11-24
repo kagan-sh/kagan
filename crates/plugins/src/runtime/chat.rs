@@ -6,7 +6,7 @@ use kg_core::{Workspace, WorkspaceEvent};
 use kg_domain::{
     Event, EventKind, InteractionOption, Link, NoticeSeverity, Op, OpResult, OptionRole, Order,
     PendingInteraction, PendingInteractionId, PlanStatus, Role, ThreadId, ThreadOp, Timestamp,
-    ToolOutcome, ToolStatus, TurnOutcome, WorkKind,
+    ToolStatus, TurnOutcome, WorkKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -96,21 +96,6 @@ struct Work {
     output_truncated: Option<bool>,
 }
 
-impl Work {
-    fn new(id: String, title: String, status: &'static str) -> Self {
-        Self {
-            id,
-            tool: "other",
-            title,
-            status,
-            args: None,
-            args_truncated: None,
-            output: None,
-            output_truncated: None,
-        }
-    }
-}
-
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Plan {
@@ -167,19 +152,6 @@ pub(crate) fn item(event: &Event) -> Option<Item> {
                     })
                     .collect(),
             },
-        },
-        EventKind::ToolStarted { id, name } => Body::Work {
-            work: Work::new(id.clone(), name.clone(), "running"),
-        },
-        EventKind::ToolEnded { id, status } => Body::Work {
-            work: Work::new(
-                id.clone(),
-                String::new(),
-                match status {
-                    ToolOutcome::Ok => "ok",
-                    ToolOutcome::Error => "error",
-                },
-            ),
         },
         EventKind::Tool {
             id,

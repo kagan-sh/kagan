@@ -45,11 +45,19 @@ pub(super) struct Row {
 
 /// What the person's choice is kept under: a bundle's id is its first member's, so the two rows
 /// need a key apart.
-pub(super) type RowKey = (bool, u64);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum RowKey {
+    Row(u64),
+    Bundle(u64),
+}
 
 impl Row {
     pub(super) fn key(&self) -> RowKey {
-        (matches!(self.kind, RowKind::Bundle(_)), self.id)
+        if matches!(self.kind, RowKind::Bundle(_)) {
+            RowKey::Bundle(self.id)
+        } else {
+            RowKey::Row(self.id)
+        }
     }
 }
 

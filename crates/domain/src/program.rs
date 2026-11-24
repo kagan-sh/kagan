@@ -49,9 +49,13 @@ pub const ACP_COMMANDS: &[(&str, &str, &[&str])] = &[
     (
         "claude",
         "npx",
-        &["-y", "@agentclientprotocol/claude-agent-acp"],
+        &["-y", "@agentclientprotocol/claude-agent-acp@0.110.1"],
     ),
-    ("codex", "npx", &["-y", "@agentclientprotocol/codex-acp"]),
+    (
+        "codex",
+        "npx",
+        &["-y", "@agentclientprotocol/codex-acp@2.10.0"],
+    ),
     ("gemini", "gemini", &["--acp"]),
     ("kimi", "kimi", &["acp"]),
     ("opencode", "opencode", &["acp"]),
