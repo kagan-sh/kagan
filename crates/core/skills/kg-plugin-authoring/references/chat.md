@@ -18,15 +18,20 @@ an approval, and it never answers one.
    ```js
    import { View, div } from "gpui-kit";
    import { v_flex } from "gpui-base";
+   import { Markdown } from "gpui-component";
    import { context, onContextChanged } from "kagan/host";
    import { approvals, items, setDraft, waitItem } from "kagan/chat";
 
-   // One row per item; yours to style.
-   const draw = (item) => div().child(
-     item.kind === "work" ? item.work.title
-       : item.kind === "plan" ? item.plan.steps.map((step) => step.step).join(" · ")
-       : item.text || "",
-   );
+   // One row per item; yours to style. Agent text goes through Markdown.
+   const draw = (item) =>
+     item.kind === "message" ? new Markdown(`chat-${item.seq}`, item.text)
+     : div().child(
+         item.kind === "thought" ? item.text
+         : item.kind === "plan" ? item.plan.steps.map((step) => step.step).join(" · ")
+         : item.kind === "work" ? `${item.work.status}: ${item.work.title}`
+         : item.kind === "notice" ? `${item.severity}: ${item.text}`
+         : `The turn ${item.outcome}.`,
+       );
 
    const current = () => (context().props || {}).threadId;
 
@@ -95,11 +100,22 @@ an approval, and it never answers one.
    }
    ```
 
+   The prompt box and the reply, from a `"prompt": true` command's job, where `job.threadId` is the chat on screen:
+
+   ```js
+   const text = await draft(job.threadId);
+   await setDraft(job.threadId, `Improve this:\n\n${text}`);
+   await send(job.threadId, text); // the prompt; refused while a turn is open or the agent is not running
+   await cancel(job.threadId); // ends the reply and keeps the agent
+   ```
+
    An item is `{ seq, threadId, at }` plus one `kind`: `message` `{ role, text, messageId }`, where
    chunks share one `messageId`; `thought` `{ text, messageId }`, folded the same way; `work`
    `{ work: { id, tool, title, status, args?, argsTruncated?, output?, outputTruncated? } }`; `plan`
    `{ plan: { steps: [{ step, status }] } }`, where a later plan replaces the one before it;
-   `notice` `{ severity, text }`; and `turn` `{ outcome, error? }`. An item is one event, not one
+   `notice` `{ severity, text }`; and `turn` `{ outcome, error? }`. Every call names a chat: a visible,
+   unarchived `acp` thread. Any other thread is refused with `thread <id> is not a chat; its transcript
+   is its terminal`. An item is one event, not one
    row: one tool call is a `work` item that starts it and another that ends it, with `title: ""` on
    the end, so fold them by `work.id`, where the last non-empty title and the last status win. A
    `work` item names the call itself: `tool` is one of the agent's kinds (`read`, `edit`, `delete`,
@@ -115,9 +131,9 @@ an approval, and it never answers one.
    | want | do |
    |---|---|
    | draw the whole transcript | `"replaces": "chat"` |
-   | one kind of row, the rest kagan's | not yet: the part names land with the transcript's thought, plan and approval rows |
+   | one kind of row, the rest kagan's | not yet: `chat.message`, `chat.thought`, `chat.work`, `chat.plan` and `chat.approval` land with per-view props |
    | a button beside Send | `{ "prompt": true, "when": "thread" }`, at most four a manifest |
-   | a button on the thread's title | `"header": true` |
+   | a button on the thread's title | `{ "header": true, "when": "thread" }` |
    | a new thread | `threads.spawn`, which needs `"areas": ["threads"]` |
 
    Caps, all refused with a sentence that names the number: 200 items a call, 256 KiB a page (or one
