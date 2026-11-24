@@ -129,8 +129,8 @@ async fn failed(
     Err(error)
 }
 
-/// Builds the command that starts the agent's ACP server: the agent's own ACP subcommand, then
-/// the person's arguments, in the thread's folder, with kagan's variables.
+/// Builds the command that starts the agent's ACP server: the launch command's program and its
+/// arguments, in the thread's folder, with kagan's variables.
 async fn launch(
     this: &WeakEntity<Workspace>,
     record: &kg_domain::Thread,
