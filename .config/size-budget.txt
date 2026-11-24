@@ -41,10 +41,12 @@ target 35000
 # MCP server every session is offered, and the agent integration decided by the thread's line
 # rather than the adapter's program. Decision 279 records it. Product Rust went from main's
 # 84147 to 90622 (+6475).
-ceiling 90622
+# Cost: the slice 5 fixes split the agent's pipes into acp/transport.rs and the launch command into
+# acp/launch.rs, which adds 29 product lines to the merged count (90622) and puts client.rs and
+# acp/mod.rs under 600, so their ceiling lines go with it. Product Rust went from main's 84147 to
+# 90651 (+6504). Decision 279 records it.
+ceiling 90651
 allow_expect 9
-crates/core/src/thread/acp/client.rs 883
-crates/core/src/thread/acp/mod.rs 626
 crates/core/src/thread/agent/files.rs 754
 crates/plugins/src/runtime/ui_host.rs 630
 crates/ui/src/kagan/chat.rs 780

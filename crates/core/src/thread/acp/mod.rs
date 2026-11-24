@@ -1,35 +1,30 @@
-use std::ffi::OsStr;
-use std::path::Path;
-
-use agent_client_protocol::v1::schema::{EnvVariable, McpServer, McpServerStdio};
 use gpui_kit::{AppContext as _, AsyncApp, Entity, Task, WeakEntity};
 use kg_domain::{
     Conversation, EventKind, Link, NoticeSeverity, OpError, OpResult, Role, ThreadId, ThreadStatus,
-    TurnOutcome, acp_command,
+    TurnOutcome,
 };
 
 use crate::Thread;
 use crate::host::database::Result;
-use crate::thread::terminal::{exit_end, utf8_locale, waiting};
+use crate::thread::agent::Start;
+use crate::thread::finish;
+use crate::thread::halt::status;
+use crate::thread::terminal::{exit_end, waiting};
+use crate::thread::turn_state::{Signal, Source};
 use crate::workspace::closed;
-use crate::{
-    Workspace,
-    thread::Raised,
-    thread::agent::{self, Start},
-    thread::halt::status,
-    thread::turn_state::{Signal, Source},
-    thread::{finish, resolve_acp},
-};
+use crate::{Workspace, thread::Raised};
 
 mod client;
+mod launch;
 mod map;
 mod permission;
+mod transport;
 
 #[cfg(test)]
 #[path = "acp_test.rs"]
 mod tests;
 
-use client::{AcpCommand, AcpEvent, Restored, Session};
+use client::{AcpCommand, AcpEvent, Restored};
 
 const NO_AGENT: &str = "the agent is not running; start the thread again";
 const NOT_A_TERMINAL: &str =
@@ -81,7 +76,8 @@ pub(super) async fn start(
     // Taken before the program starts, so what it begins in that moment counts as after the start.
     let at = crate::workspace::time(this, cx)?;
     let conversation = stored(this, &record.id, cx).await?;
-    let launch = match launch(this, &record, &folder, start, conversation.clone(), cx).await {
+    let launch = match launch::launch(this, &record, &folder, start, conversation.clone(), cx).await
+    {
         Ok(launch) => launch,
         Err(error) => return failed(this, thread, error, cx).await,
     };
@@ -135,67 +131,6 @@ async fn failed(
     Workspace::events(this, id, kinds, cx).await?;
     status(this, thread, ThreadStatus::Error, cx).await?;
     Err(error)
-}
-
-/// Builds the command that starts the agent's ACP server: the launch command's program and its
-/// arguments, in the thread's folder, with kagan's variables. The session's own part is the
-/// conversation it loads and the MCP server it is offered.
-async fn launch(
-    this: &WeakEntity<Workspace>,
-    record: &kg_domain::Thread,
-    folder: &Path,
-    start: Start,
-    resume: Option<Conversation>,
-    cx: &mut AsyncApp,
-) -> Result<client::Launch> {
-    let environment = crate::host::program::program_environment_of(this, cx);
-    let home = crate::host::program::program_home_of(this, cx);
-    let command = acp_command(&record.provider)
-        .ok_or_else(|| OpError::Invalid(format!("{} has no ACP command", record.provider)))?;
-    let program = resolve_acp(
-        &record.provider,
-        command,
-        environment.as_ref(),
-        home.as_deref(),
-    )
-    .map_err(|error| OpError::Invalid(error.to_string()))?;
-    let integration = agent::integrate(this, record, folder, start, cx).await?;
-    let (cli, socket) = this
-        .update(cx, |workspace, _| {
-            (workspace.cli.clone(), workspace.socket.clone())
-        })
-        .map_err(closed)?;
-    let mut env = integration.env;
-    if let Some(locale) = cx.background_spawn(async { utf8_locale() }).await {
-        env.push(("LANG".into(), locale.into()));
-    }
-    Ok(client::Launch {
-        program: program.path,
-        args: program.args,
-        cwd: folder.to_owned(),
-        env,
-        session: Session {
-            resume,
-            servers: mcp_servers(&record.id, &cli, socket.as_deref()),
-        },
-    })
-}
-
-/// The server every ACP session is offered: kagan's own, for this thread, the same one a terminal
-/// thread's config names.
-fn mcp_servers(id: &ThreadId, cli: &Path, socket: Option<&OsStr>) -> Vec<McpServer> {
-    let mut server = McpServerStdio::new("kagan", cli).args(vec![
-        "mcp".to_owned(),
-        "--thread".to_owned(),
-        id.0.clone(),
-    ]);
-    if let Some(socket) = socket {
-        server = server.env(vec![EnvVariable::new(
-            "KG_SOCKET",
-            socket.to_string_lossy(),
-        )]);
-    }
-    vec![McpServer::Stdio(server)]
 }
 
 /// Applies the connection's events in the order they happened.
