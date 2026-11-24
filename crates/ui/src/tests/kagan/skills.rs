@@ -2,8 +2,8 @@ use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, TestAppContext};
 
 use crate::kagan::Kagan;
 use crate::tests::kagan::{
-    chord, click, focused_of, grid_text, label, open, selected_of, shell, shows, wait_for_screen,
-    wait_until,
+    chord, click, focused_of, grid_text, label, open, scroll_form_to_end, selected_of, shell,
+    shows, wait_for_screen, wait_until,
 };
 
 fn show_skills(cx: &mut TestAppContext, kagan: &Entity<Kagan>, window: AnyWindowHandle) {
@@ -89,6 +89,9 @@ fn fork_opens_the_new_thread_screen_with_the_prompt_line(cx: &mut TestAppContext
     cx.run_until_parked();
     click(cx, window, "skills-fork");
     cx.run_until_parked();
+    // The note is the last child of a form that scrolls; a chat agent's Run as row puts it below
+    // the fold in this window.
+    scroll_form_to_end(cx, window);
     assert!(shows(cx, window, "start-fork-note"));
 }
 
