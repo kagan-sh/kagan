@@ -1048,6 +1048,19 @@ fn alive(pid: &str) -> bool {
         .is_ok_and(|status| status.success())
 }
 
+// A killed process answers `kill -0` until it is reaped, so a killed program is waited for.
+#[cfg(unix)]
+fn gone(pid: &str) -> bool {
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while alive(pid) {
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    true
+}
+
 #[cfg(unix)]
 fn start_tree(
     cx: &mut TestAppContext,
