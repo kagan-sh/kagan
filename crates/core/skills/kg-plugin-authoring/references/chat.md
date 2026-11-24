@@ -109,7 +109,9 @@ an approval, and it never answers one.
    `interactionId` and never draws the buttons.
 
    A `"prompt": true` command is a button beside Send, at most four a manifest, and `"header": true`
-   puts one on the thread's title. Drawing one kind of row and leaving the rest to kagan lands with
+   puts one on the thread's title. A command's `description` (one plain line of at most 200
+   characters) is the button's tooltip and falls back to the title, so a prompt button says what a
+   click does to the draft before it is clicked. Drawing one kind of row and leaving the rest to kagan lands with
    `chat.message`, `chat.thought`, `chat.work`, `chat.plan` and `chat.approval`. A new thread is
    `threads.spawn`, which needs `"areas": ["threads"]`.
 

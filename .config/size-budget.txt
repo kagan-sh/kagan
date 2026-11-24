@@ -50,7 +50,11 @@ target 35000
 # Start again, the context row, the shared column the transcript and the box draw, and the ended
 # line the chat no longer draws. Product Rust went from main's 84147 to 91184 (+7037). Decision
 # 282 records it.
-ceiling 91184
+# Cost: the SSR round 1 fixes add 108 product lines on top of the merged count (91184): the tool
+# row's stage and its waiting words with the tone's clock mark, the read-only prompt box and its
+# hint, and the optional command description with its check and tooltip. Product Rust went from
+# 91184 to 91292. Decision 283 records it.
+ceiling 91292
 allow_expect 9
 crates/core/src/thread/agent/files.rs 754
 crates/plugins/src/runtime/ui_host.rs 630
