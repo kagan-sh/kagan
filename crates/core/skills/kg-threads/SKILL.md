@@ -27,7 +27,14 @@ Report the new thread id. Do not build a URL for it.
 
 ## A chat thread
 
-A thread whose link is `acp` (started with `--link acp`, or by the window's own agent picker) draws a chat instead of a terminal: its transcript is its events, and the prompt box is the way in. `kg thread send <id> <text>` sends the prompt, and `kg thread cancel <id>` ends the reply and keeps the agent. `kg thread events <id>` reads what the agent said; a terminal thread has no chat and `screen`, `resize` and `paste` are refused for one. A plugin with the `chat` area reads the same transcript with `kagan/chat`, and the person may let a plugin draw it. Tell the person `kg thread run --link acp`, not `screen`.
+A thread whose link is `acp` (started with `--link acp`, or by the window's own agent picker) draws a chat instead of a terminal: its transcript is its events, and the prompt box is the way in. `--link acp` takes `claude`, `codex`, `gemini`, `kimi` or `opencode`, and kagan runs that agent's ACP command itself; any other program is refused. `kg thread events <id>` reads what the agent said; a terminal thread has no chat and `screen`, `resize` and `paste` are refused for one. A plugin with the `chat` area reads the same transcript with `kagan/chat`, and the person may let a plugin draw it. Tell the person `kg thread run --link acp`, not `screen`.
+
+| want | use |
+|---|---|
+| read the reply | `kg thread events <id>`, with `--after-seq` for what is new |
+| send a prompt | `kg thread send <id> <text>`, or `kg thread input <id> <text>` |
+| interrupt the reply, keep the agent | `kg thread cancel <id>` |
+| end the agent | `kg thread stop <id>` |
 
 ## Start one
 
@@ -77,7 +84,7 @@ Do not poll with sleeps or repeated status reads.
 - `kg thread ask <id> <title> --option <id=label> --option <id=label>` raises a question. Pass at least two options. The question shows in Questions, with approvals first. The answer arrives as an `answered` event.
 - `kg thread get <id>` is the row: status, parent, environment, title. `kg thread events <id> --json` is the log. `--after-seq` and `--limit` page it. `kg thread screen <id> --scrollback` is the kept terminal text.
 
-`kg thread start-again <id>` runs a stopped program again in the same folder. Only the person asking for that runs it. A `claude` thread, and a plain `codex` thread, resume their conversation when kagan can find it. When it cannot, the thread says the program started a new one.
+`kg thread start-again <id>` runs a stopped program again in the same folder. Only the person asking for that runs it. A `claude`, `cursor-agent`, `agent`, `opencode`, `pi` or `kimi` thread, and a plain `codex` thread, resumes its conversation when kagan can find it. A chat thread asks its agent to load the conversation it stored, when the agent says it can load one. When it cannot, the thread says the program started a new one.
 
 ## What the person approves
 
