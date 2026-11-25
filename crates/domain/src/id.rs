@@ -100,6 +100,10 @@ pub enum ConversationError {
     TooLong,
     #[error("a conversation id has a control character")]
     Control,
+    #[error("a conversation id starts with a flag")]
+    Flag,
+    #[error("a conversation id reads as a path")]
+    Path,
 }
 
 /// A conversation's id: the one kagan gives an agent at its first start, or the id an agent gives
@@ -132,6 +136,12 @@ impl FromStr for Conversation {
         }
         if s.chars().any(char::is_control) {
             return Err(ConversationError::Control);
+        }
+        if s.starts_with('-') {
+            return Err(ConversationError::Flag);
+        }
+        if s.contains(['/', '\\']) || s.contains("..") {
+            return Err(ConversationError::Path);
         }
         Ok(Self(s.to_owned()))
     }

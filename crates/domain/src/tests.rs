@@ -1924,7 +1924,7 @@ fn a_conversation_is_a_bounded_plain_string() {
         Ok(fresh.clone())
     );
     assert_eq!(fresh.as_str().len(), 36);
-    let agent = "ses_01J8Z8YQ4XN6R5T7VW3B2C1D";
+    let agent = "ses_df2cebee2fferjx3uhBjrWUUjk";
     assert_eq!(
         agent.parse::<crate::Conversation>().unwrap().as_str(),
         agent
@@ -1932,6 +1932,10 @@ fn a_conversation_is_a_bounded_plain_string() {
     for (text, error) in [
         ("", crate::ConversationError::Empty),
         ("a\tb", crate::ConversationError::Control),
+        ("-x", crate::ConversationError::Flag),
+        ("a/b", crate::ConversationError::Path),
+        (r"a\b", crate::ConversationError::Path),
+        ("../a", crate::ConversationError::Path),
     ] {
         assert_eq!(text.parse::<crate::Conversation>(), Err(error), "{text:?}");
     }
