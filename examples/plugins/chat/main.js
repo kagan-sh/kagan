@@ -59,7 +59,7 @@ export class Transcript extends View {
     let after = 0;
     while (this.thread === id) {
       const [page, asked] = await Promise.all([
-        items(id, { afterSeq: after, order: "asc" }),
+        items(id, { afterSeq: after }),
         approvals(id),
       ]);
       if (this.thread !== id) return;
@@ -75,11 +75,15 @@ export class Transcript extends View {
   }
 
   /** Events are deltas: a message's chunks share `messageId`, and one tool call is several `tool`
-   * events with one `id`, so fold them by that. */
+   * events with one `id`, so fold those. `tool.started`/`tool.ended` share that id but are rows of
+   * their own. */
   push(page, asked) {
     for (const event of page) {
       const data = event.data || {};
-      const key = data.messageId || data.id || (event.type === "plan" ? "plan" : `event-${event.seq}`);
+      const key =
+        event.type === "tool" && data.id
+          ? data.id
+          : data.messageId || (event.type === "plan" ? "plan" : `event-${event.seq}`);
       const row = this.rows.find((row) => row.key === key);
       if (!row) this.rows.push({ key, type: event.type, text: data.text || "", data });
       else if (event.type === "message" || event.type === "thought") row.text += data.text || "";

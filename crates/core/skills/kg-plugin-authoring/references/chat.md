@@ -24,11 +24,15 @@ an approval, and it never answers one.
 
    // One row per thing, yours to style; agent text goes through Markdown. The events are deltas:
    // a message's or a thought's chunks share `data.messageId`, and one tool call is several `tool`
-   // events with one `data.id`, so fold them, and keep the last 200 rows.
+   // events with one `data.id`, so fold those; `tool.started`/`tool.ended` share that id but are
+   // rows of their own. Keep the last 200 rows.
    function keep(view, page) {
      for (const event of page) {
        const data = event.data || {};
-       const key = data.messageId || data.id || (event.type === "plan" ? "plan" : `event-${event.seq}`);
+       const key =
+         event.type === "tool" && data.id
+           ? data.id
+           : data.messageId || (event.type === "plan" ? "plan" : `event-${event.seq}`);
        const row = view.rows.find((row) => row.key === key);
        if (!row) view.rows.push({ key, type: event.type, text: data.text || "", data });
        else if (event.type === "message" || event.type === "thought") row.text += data.text || "";
@@ -82,7 +86,7 @@ an approval, and it never answers one.
    async function follow(id, view) {
      let after = 0;
      while (shown() === id) {
-       const page = await items(id, { afterSeq: after, order: "asc" });
+       const page = await items(id, { afterSeq: after });
        if (shown() !== id) return;
        for (const event of page) after = Math.max(after, event.seq);
        keep(view, page);
