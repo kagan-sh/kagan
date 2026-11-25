@@ -20,7 +20,7 @@ pub(super) fn refreshes(event: &WorkspaceEvent) -> bool {
     )
 }
 
-pub(super) fn init(cx: &mut App) {
+pub(crate) fn init(cx: &mut App) {
     let workspace = Workspace::global(cx);
     let attention = cx.new(|cx: &mut Context<Attention>| {
         let watch = cx.subscribe(&workspace, |this, _, event, cx| {
@@ -86,7 +86,7 @@ impl Attention {
             });
         });
     }
-    pub(super) fn tone(&self, thread: &Thread, cx: &App) -> Tone {
+    pub(crate) fn tone(&self, thread: &Thread, cx: &App) -> Tone {
         let workspace = Workspace::global(cx);
         let workspace = workspace.read(cx);
         Tone::of(

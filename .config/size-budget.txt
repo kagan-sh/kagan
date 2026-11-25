@@ -13,7 +13,8 @@ target 35000
 # Cost: the compact ThreadStatus adds 24 product lines on top of main (84175, after #154), in crates/ui/src/components: the shared method helpers and the compact call. The ceiling is set to the branch count, and decision 276 records it.
 # Cost: ACP threads, one PR: product Rust went from main's 84147 to 91327 (+7180). Decision 279 records it.
 # Cost: the SSR round-2 fixes add 25 product lines on top of the ACP count: the tone order, a span that waits for the run, the prompt button's tooltip side, and the undoable draft. Decision 284 records it, and the ceiling is set to the count.
-ceiling 91352
+# Cost: the SSR round-3 fixes add 2 product lines on top of the round-2 count: the permission arm that is the only one read before busy, and a plugin's status chip reading the shared tone. Decision 284 records it, and the ceiling is set to the count.
+ceiling 91354
 allow_expect 9
 crates/plugins/src/runtime/ui_host.rs 630
 crates/ui/src/kagan/chat.rs 688

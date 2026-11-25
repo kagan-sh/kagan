@@ -116,6 +116,7 @@ fn mount_dir(
     cx.update(|cx| {
         gpui_kit::init(cx);
         gpui_shell::init(cx);
+        crate::kagan::attention::init(cx);
         crate::theme::init_in(directory.path().join("themes"), cx);
     });
     let projected = cx.update(|cx| {
