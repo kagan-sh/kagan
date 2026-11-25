@@ -1188,6 +1188,24 @@ fn a_stopped_chats_more_menu_opens_the_start_screen_and_saves_diagnostics(cx: &m
     });
 }
 
+/// A stopped chat with no folder to reuse and a clean stop to report nothing about has nothing to
+/// put in a menu, so it draws none.
+#[gpui_kit::test]
+fn a_stopped_chat_with_nothing_quiet_to_offer_draws_no_more_menu(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![
+            EventKind::Started,
+            EventKind::Exited {
+                code: Some(0),
+                signal: None,
+            },
+        ],
+    );
+    assert!(shows(cx, window, "chat-start-again"));
+    assert!(!shows(cx, window, "chat-more"));
+}
+
 /// A run that failed says the agent's own reason, not that nothing was running.
 #[gpui_kit::test]
 fn a_chat_that_failed_says_why(cx: &mut TestAppContext) {

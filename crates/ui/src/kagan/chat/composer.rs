@@ -3,7 +3,7 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::{Disableable as _, Icon, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Disableable as _, Icon, Placement, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Context, Focusable as _, Hsla, InteractiveElement as _, IntoElement,
     ParentElement as _, Role, SharedString, Styled as _, Window, div, px,
@@ -219,6 +219,7 @@ fn more(view: &ChatView, cx: &App) -> Option<AnyElement> {
                 .icon(IconName::Ellipsis)
                 .accessibility_label("More")
                 .tooltip("More")
+                .tooltip_placement(Placement::Right)
                 .dropdown_menu(move |menu, _, _| {
                     let menu = if reuse {
                         let thread = thread.clone();
