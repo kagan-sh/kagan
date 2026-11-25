@@ -11,11 +11,8 @@ target 35000
 # Cost: the plugin preview adds 828 product lines on top of main (83260, after #151), tests not counted: the Op shape and CLI text, the folder seed, the hidden app's start, shut down and sweep, the guard on questions, and the replace of a thread's preview. The ceiling is set to the count.
 # Cost: the plugin thread record's agent name and mark path add 87 product lines on top of main (84088, after #152): the shared agent list and its tests in kg-domain, and the two record fields with their leak test. The ceiling is set to the branch count.
 # Cost: the compact ThreadStatus adds 24 product lines on top of main (84175, after #154), in crates/ui/src/components: the shared method helpers and the compact call. The ceiling is set to the branch count, and decision 276 records it.
-# Cost: ACP threads, one PR: product Rust went from main's 84147 to 91327 (+7180). Decision 279 records it.
-# Cost: the SSR round-2 fixes add 25 product lines on top of the ACP count: the tone order, a span that waits for the run, the prompt button's tooltip side, and the undoable draft. Decision 284 records it, and the ceiling is set to the count.
-# Cost: the SSR round-3 fixes add 4 product lines on top of the round-2 count: the permission arm that is the only one read before busy, and a plugin's status chip reading the shared tone. Decision 284 records it, and the ceiling is set to the count.
-# Cost: the bar menu adds 20 product lines on top of the round-3 count: the More menu replacing the two quiet buttons, its tooltip side, and the wrapper that lets a squeezed prompt button ellipsize. Decision 284 records it, and the ceiling is set to the count.
-ceiling 91376
+# Cost: ACP threads, one PR: product Rust went from main's 84147 to 90572 (+6425). Decision 279 records it.
+ceiling 90572
 allow_expect 9
 crates/plugins/src/runtime/ui_host.rs 630
 crates/ui/src/kagan/chat.rs 688
