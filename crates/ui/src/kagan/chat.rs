@@ -467,7 +467,6 @@ fn row_at(
         }
         part::RowKind::Work(tool) => work::work_row(&row, tool, false, open, weak, window, cx),
         part::RowKind::Bundle(members) => work::bundle_row(&row, members, open, weak, window, cx),
-        part::RowKind::Plan(entries) => work::plan_row(&row, entries, open, weak, window, cx),
         part::RowKind::Approval(id) => {
             let (title, worktree) = weak
                 .read_with(cx, |this, cx| this.approval_detail(index, cx))

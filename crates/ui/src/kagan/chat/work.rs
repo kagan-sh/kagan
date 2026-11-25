@@ -8,7 +8,7 @@ use gpui_kit::{
     ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, WeakEntity,
     Window, div, px,
 };
-use kg_domain::{PlanStatus, Timestamp, WorkKind};
+use kg_domain::{Timestamp, WorkKind};
 use std::rc::Rc;
 
 use crate::kagan::chat::ChatView;
@@ -249,45 +249,6 @@ pub(super) fn bundle_row(
             tone: Tone::Done,
             indent: px(4.),
             body: inner,
-        },
-        weak,
-        window,
-        cx,
-    )
-}
-
-pub(super) fn plan_row(
-    row: &Row,
-    entries: &[kg_domain::PlanEntry],
-    open: bool,
-    weak: &WeakEntity<ChatView>,
-    window: &mut Window,
-    cx: &mut App,
-) -> AnyElement {
-    let done = entries
-        .iter()
-        .filter(|entry| entry.status == PlanStatus::Completed)
-        .count();
-    let body = open
-        .then(|| body::plan_body(row.id, entries, cx))
-        .map(IntoElement::into_any_element);
-    face(
-        Face {
-            id: named("plan", row.id),
-            key: row.key(),
-            icon: IconName::ListTodo,
-            label: "Plan".into(),
-            title: None,
-            title_mono: false,
-            badge: None,
-            meta: Some(format!("{done} of {} done", entries.len())),
-            icons: Vec::new(),
-            word: "plan",
-            open,
-            has_body: !entries.is_empty(),
-            tone: Tone::Done,
-            indent: px(4.),
-            body,
         },
         weak,
         window,

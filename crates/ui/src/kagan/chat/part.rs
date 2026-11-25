@@ -43,7 +43,6 @@ pub(super) enum RowKind {
     Thought(Box<ThoughtRow>),
     Work(Box<ToolRow>),
     Bundle(Vec<Row>),
-    Plan(Vec<PlanEntry>),
     Approval(PendingInteractionId),
     Notice(String),
     Divider {
@@ -129,7 +128,8 @@ pub(super) struct Transcript {
     open: BTreeMap<RowKey, bool>,
     last_seq: Option<u64>,
     turn: Option<Timestamp>,
-    plan: Option<usize>,
+    // The plan card over the box reads the turn's latest plan; the transcript draws no row for it.
+    plan: Option<(u64, Vec<PlanEntry>)>,
 }
 
 impl Transcript {
@@ -165,16 +165,9 @@ impl Transcript {
                 fold
             }
             EventKind::Plan { entries } => {
-                if let Some(index) = self.plan.filter(|index| *index < self.rows.len()) {
-                    Rc::make_mut(&mut self.rows[index]).kind = RowKind::Plan(entries.clone());
-                    Fold::Dirty(index)
-                } else {
-                    self.plan = Some(self.rows.len());
-                    self.push(Row {
-                        id: event.seq,
-                        kind: RowKind::Plan(entries.clone()),
-                    })
-                }
+                let id = self.plan.as_ref().map_or(event.seq, |(id, _)| *id);
+                self.plan = Some((id, entries.clone()));
+                Fold::Ignored
             }
             EventKind::Usage { used, size } => {
                 self.usage = Some((*used, *size));
@@ -215,11 +208,8 @@ impl Transcript {
     }
 
     pub(super) fn plan(&self) -> Option<(u64, &[PlanEntry])> {
-        let row = self.rows.get(self.plan?)?;
-        match &row.kind {
-            RowKind::Plan(entries) => Some((row.id, entries)),
-            _ => None,
-        }
+        let (id, entries) = self.plan.as_ref()?;
+        Some((*id, entries))
     }
 
     fn find_tool(&self, id: &str) -> Option<(usize, Option<usize>)> {

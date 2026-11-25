@@ -462,31 +462,6 @@ fn a_bundle_closes_when_the_turn_ends(cx: &mut TestAppContext) {
     );
 }
 
-#[gpui_kit::test]
-fn a_plan_row_is_collapsed_once_the_turn_ends(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = show_chat_with(
-        cx,
-        vec![
-            EventKind::TurnStarted,
-            EventKind::Plan {
-                entries: vec![kg_domain::PlanEntry {
-                    text: "read the tests".into(),
-                    status: kg_domain::PlanStatus::Pending,
-                }],
-            },
-            EventKind::TurnEnded {
-                outcome: kg_domain::TurnOutcome::Completed,
-                error: None,
-            },
-        ],
-    );
-    wait_until(cx, |cx| shows(cx, window, "chat-plan-2"));
-    assert_eq!(
-        value_of(cx, window, "chat-plan-2").as_deref(),
-        Some("collapsed · done")
-    );
-}
-
 fn show_approval(
     cx: &mut TestAppContext,
     kind: ToolKind,
@@ -1037,6 +1012,10 @@ fn the_plan_card_is_one_line_until_it_is_opened(cx: &mut TestAppContext) {
         }],
     );
     wait_until(cx, |cx| shows(cx, window, "chat-card-plan"));
+    assert!(
+        !shows(cx, window, "chat-plan-1"),
+        "the plan is the card over the box, not a transcript row"
+    );
     assert_eq!(
         value_of(cx, window, "chat-card-plan").as_deref(),
         Some("collapsed, 1 of 2 done")

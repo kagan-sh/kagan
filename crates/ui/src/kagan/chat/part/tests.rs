@@ -331,7 +331,7 @@ fn a_person_collapsing_an_open_row_keeps_it_closed() {
 }
 
 #[test]
-fn a_plan_replaces_the_turns_plan_row() {
+fn a_plan_is_the_card_over_the_box_and_never_a_transcript_row() {
     let mut transcript = Transcript::default();
     transcript.absorb(&event(1, EventKind::TurnStarted));
     transcript.absorb(&event(
@@ -358,21 +358,13 @@ fn a_plan_replaces_the_turns_plan_row() {
             ],
         },
     ));
-    let plans: Vec<_> = transcript
-        .rows
-        .iter()
-        .filter(|row| matches!(row.kind, RowKind::Plan(_)))
-        .collect();
-    assert_eq!(plans.len(), 1);
-    assert_eq!(plans[0].id, 2);
-    let RowKind::Plan(entries) = &plans[0].kind else {
-        unreachable!()
-    };
-    assert_eq!(entries.len(), 2);
     assert!(
-        !transcript.is_open(0, true),
-        "a plan has nothing live to show, so work stays collapsed"
+        transcript.rows.is_empty(),
+        "the plan draws as the card over the box, never as a row"
     );
+    let (id, entries) = transcript.plan().expect("the card's plan");
+    assert_eq!(id, 2, "the first plan event keeps the card's id");
+    assert_eq!(entries.len(), 2);
 }
 
 #[test]
