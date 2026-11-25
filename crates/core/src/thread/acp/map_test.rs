@@ -60,8 +60,6 @@ fn a_long_output_is_cut_at_a_character() {
     assert_eq!(cap("short".into()), "short");
 }
 
-/// Both sides of a diff are capped, at a character boundary: a whole file's rewrite must not
-/// travel in the log either.
 #[test]
 fn a_diff_too_long_is_cut_at_a_character_on_both_sides() {
     let long = "é".repeat(TOOL_TEXT_MAX);

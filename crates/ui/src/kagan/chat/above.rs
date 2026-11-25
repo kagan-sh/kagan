@@ -16,15 +16,11 @@ use crate::theme::{Tone, TypeScale as _, control_height};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-/// The cards above the prompt box that the person has opened, by their ids. All start closed, one
-/// line each, so the box keeps the room.
 #[derive(Default)]
 pub(super) struct Cards {
     pub(super) open: BTreeSet<&'static str>,
 }
 
-/// What kagan stacks over the prompt box: the child threads that are working, and the agent's plan
-/// while it has one. Each is one line with a count until the person opens it.
 pub(super) fn stack(
     view: &ChatView,
     window: &mut Window,
@@ -85,7 +81,6 @@ pub(super) fn stack(
     cards
 }
 
-/// The running child threads, each with its spinner and its title.
 fn children_body(view: &ChatView, cx: &App) -> AnyElement {
     let rows: Vec<AnyElement> = view
         .children
@@ -112,7 +107,6 @@ fn children_body(view: &ChatView, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-/// What a card's one line reads, before its body.
 struct Head {
     id: &'static str,
     icon: IconName,
@@ -121,7 +115,6 @@ struct Head {
     open: bool,
 }
 
-/// A card is one line — chevron, icon, name, count — and, when open, its body under a hairline.
 fn card(
     head: Head,
     body: Option<AnyElement>,
@@ -192,7 +185,6 @@ fn card(
         }))
 }
 
-/// Opens or closes one card. Enter and Space do what a click does.
 fn flip(view: &WeakEntity<ChatView>, id: &'static str, cx: &mut App) {
     _ = view.update(cx, |view, cx| {
         if !view.cards.open.remove(id) {

@@ -2,8 +2,6 @@
 
 use super::{AcpEvent, joined};
 
-/// A burst of one message's chunks is written once, in order, so the log holds one row and a
-/// transcript reads as one message.
 #[test]
 fn a_burst_of_one_message_becomes_one_write() {
     let (events, received) = async_channel::unbounded();

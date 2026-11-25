@@ -9,7 +9,6 @@ use kg_domain::{
 
 use super::kind;
 
-/// The parts a transcript can hold, each drawn by its own function and named in its element id.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Part {
     Message,
@@ -35,16 +34,13 @@ impl Part {
     }
 }
 
-/// One row of the transcript. `id` is the `seq` of the first event the row came from, so it is
-/// stable across appends and survives a page of older events.
+// id is the seq of the first event the row came from, so it is stable across appends.
 #[derive(Clone, Debug)]
 pub(super) struct Row {
     pub(super) id: u64,
     pub(super) kind: RowKind,
 }
 
-/// What the person's choice is kept under: a bundle's id is its first member's, so the two rows
-/// need a key apart.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum RowKey {
     Row(u64),
@@ -90,7 +86,6 @@ pub(super) struct ThoughtRow {
     pub(super) to: Timestamp,
 }
 
-/// The fold of every event with one tool id.
 #[derive(Clone, Debug)]
 pub(super) struct ToolRow {
     pub(super) id: String,
@@ -101,7 +96,6 @@ pub(super) struct ToolRow {
     pub(super) input: Option<serde_json::Value>,
     pub(super) output: Option<String>,
     pub(super) diff: Vec<ToolDiff>,
-    /// The lines the diff adds and removes, counted once as the diff arrives, never while drawing.
     pub(super) counts: (usize, usize),
     pub(super) locations: Vec<ToolLocation>,
     pub(super) approval: Option<PendingInteractionId>,
@@ -109,7 +103,6 @@ pub(super) struct ToolRow {
     pub(super) to: Timestamp,
 }
 
-/// How far a tool call has got. A call the agent named but has not started is waiting, not running.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ToolStage {
     Waiting,
@@ -118,7 +111,6 @@ pub(super) enum ToolStage {
 }
 
 impl ToolRow {
-    /// The call's stage, which chooses its word, its mark and whether its body is live.
     pub(super) fn stage(&self) -> ToolStage {
         match self.status {
             Some(ToolStatus::Pending) => ToolStage::Waiting,
@@ -127,8 +119,6 @@ impl ToolRow {
         }
     }
 
-    /// A row that has not settled: its label shimmers and, once it starts, its meta is the live
-    /// span.
     pub(super) fn running(&self) -> bool {
         self.stage() != ToolStage::Settled
     }
@@ -137,13 +127,10 @@ impl ToolRow {
         self.status == Some(ToolStatus::Failed)
     }
 
-    /// Whether the fold carries something a person can see inside the row.
     pub(super) fn live_body(&self) -> bool {
         self.running() && self.output.is_some() && self.kind != Some(ToolKind::Execute)
     }
 
-    /// A finished look at the codebase, which folds into a bundle. An MCP call or a skill load
-    /// the agent reports as a read is still work, so what the row is decides, once.
     pub(super) fn folds(&self) -> bool {
         self.status == Some(ToolStatus::Completed)
             && matches!(
@@ -161,25 +148,18 @@ impl ToolRow {
     }
 }
 
-/// What changed when an event was folded, so the view can keep the list's item count and measured
-/// heights in step without rebuilding it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Fold {
     Ignored,
-    /// Every row from here on is new or changed, so the list measures from it to the end.
     Dirty(usize),
 }
 
-/// The transcript as rows: the fold of the thread's events. One function applies one event, so the
-/// view never rebuilds the whole list.
 #[derive(Default)]
 pub(super) struct Transcript {
-    /// Rows are shared with the renderer, which holds one for the frame, so a frame never copies
-    /// a body's output or a diff to draw it.
+    // Rows are shared with the renderer, so a frame never copies a body's output or a diff.
     pub(super) rows: Vec<Rc<Row>>,
     pub(super) usage: Option<(u64, u64)>,
     pub(super) last_outcome: Option<TurnOutcome>,
-    /// The person's own expand and collapse choices: they always win over the rules.
     open: BTreeMap<RowKey, bool>,
     last_seq: Option<u64>,
     turn: Option<Timestamp>,
@@ -288,8 +268,6 @@ impl Transcript {
         Fold::Dirty(self.rows.len() - 1)
     }
 
-    /// The agent's plan as it stands, with the id of the row it draws as, so the card above the
-    /// prompt box can show it without a second copy.
     pub(super) fn plan(&self) -> Option<(u64, &[PlanEntry])> {
         let row = self.rows.get(self.plan?)?;
         match &row.kind {
@@ -298,8 +276,6 @@ impl Transcript {
         }
     }
 
-    /// The row a tool id's events fold into: its place in the transcript, and its place among a
-    /// bundle's members when it has one.
     fn find_tool(&self, id: &str) -> Option<(usize, Option<usize>)> {
         self.rows
             .iter()
@@ -315,7 +291,6 @@ impl Transcript {
             })
     }
 
-    /// Appends a message or a thought chunk to the row it belongs to, or starts a row.
     fn chunk(
         &mut self,
         role: Role,
@@ -373,7 +348,6 @@ impl Transcript {
         })
     }
 
-    /// Folds one tool delta into the row with its id, wherever that row is, or starts a row.
     fn tool(&mut self, seq: u64, delta: ToolRow) -> Fold {
         if let Some((top, member)) = self.find_tool(&delta.id) {
             let row = Rc::make_mut(&mut self.rows[top]);
@@ -398,15 +372,11 @@ impl Transcript {
         Fold::Dirty(self.bundle(index))
     }
 
-    /// Folds the row at `index` with a finished neighbour on either side, so a row that finishes
-    /// last still finds its pair, and names the row the list has to measure: the bundle's place, or
-    /// the row's own.
     fn bundle(&mut self, index: usize) -> usize {
         let index = self.join_before(index);
         self.join_after(index)
     }
 
-    /// Folds the row at `index` with the row before it when the two are one bundle.
     fn join_before(&mut self, index: usize) -> usize {
         if index == 0 || !self.bundles(index) || !self.bundles(index - 1) {
             return index;
@@ -414,8 +384,6 @@ impl Transcript {
         self.join(index - 1)
     }
 
-    /// Folds the row after `index` into it when the two are one bundle: two reads that finish out
-    /// of order join at the second one's finish, not before it.
     fn join_after(&mut self, index: usize) -> usize {
         if !self.bundles(index) || !self.bundles(index + 1) {
             return index;
@@ -423,7 +391,6 @@ impl Transcript {
         self.join(index)
     }
 
-    /// Whether the row at `index` is a bundle, or finished looking work that folds into one.
     fn bundles(&self, index: usize) -> bool {
         match self.rows.get(index).map(|row| &row.kind) {
             Some(RowKind::Work(tool)) => tool.folds(),
@@ -432,7 +399,6 @@ impl Transcript {
         }
     }
 
-    /// Puts the rows at `first` and `first + 1` into one bundle at `first`.
     fn join(&mut self, first: usize) -> usize {
         let second = self.rows.remove(first + 1);
         let second = Rc::try_unwrap(second).unwrap_or_else(|row| (*row).clone());
@@ -457,8 +423,6 @@ impl Transcript {
         first
     }
 
-    /// The last row has something streaming into it, so it is the live frontier and no "Working…"
-    /// row is needed under it.
     pub(super) fn live_last(&self) -> bool {
         match self.rows.last().map(|row| &row.kind) {
             Some(RowKind::Thought(thought)) => !thought.text.is_empty(),
@@ -467,8 +431,6 @@ impl Transcript {
         }
     }
 
-    /// Whether the rules open the row: the live frontier of a running turn, and a failure that
-    /// ended the turn.
     pub(super) fn auto_open(&self, index: usize, answering: bool) -> bool {
         let Some(row) = self.rows.get(index) else {
             return false;
@@ -485,15 +447,12 @@ impl Transcript {
         }
     }
 
-    /// The last row a reader reads as content: the divider under a turn is a quiet line, and so is
-    /// a notice, so a failure that ended the turn stays the last row it reads.
     fn frontier(&self) -> Option<usize> {
         self.rows
             .iter()
             .rposition(|row| !matches!(row.kind, RowKind::Divider { .. } | RowKind::Notice(_)))
     }
 
-    /// Whether the row is open: the person's choice, else the rules.
     pub(super) fn is_open(&self, index: usize, answering: bool) -> bool {
         let Some(row) = self.rows.get(index) else {
             return false;
@@ -504,13 +463,10 @@ impl Transcript {
             .unwrap_or_else(|| self.auto_open(index, answering))
     }
 
-    /// Whether a row inside a bundle is open: only a person opens one.
     pub(super) fn member_open(&self, key: RowKey) -> bool {
         self.open.get(&key).copied().unwrap_or(false)
     }
 
-    /// Flips the row's own choice and names the row the list must measure, or nothing when no row
-    /// has that key.
     pub(super) fn toggle(&mut self, key: RowKey, answering: bool) -> Option<usize> {
         let (top, member) = self.place(key)?;
         let open = match member {
@@ -521,8 +477,6 @@ impl Transcript {
         Some(top)
     }
 
-    /// Where the row with this key is: its place in the transcript, and its place among a bundle's
-    /// members when it is one.
     fn place(&self, key: RowKey) -> Option<(usize, Option<usize>)> {
         self.rows
             .iter()
@@ -542,7 +496,6 @@ impl Transcript {
     }
 }
 
-/// The lines a diff adds and removes, counted once as the diff arrives.
 fn diff_counts(diffs: &[ToolDiff]) -> (usize, usize) {
     diffs.iter().fold((0, 0), |(more, less), diff| {
         let old = diff.old.as_deref().unwrap_or_default();
@@ -556,7 +509,6 @@ fn diff_counts(diffs: &[ToolDiff]) -> (usize, usize) {
     })
 }
 
-/// Keeps every field the update names and leaves the rest as they were.
 fn merge(seen: &mut ToolRow, delta: ToolRow) {
     if delta.name.is_some() {
         seen.name = delta.name;

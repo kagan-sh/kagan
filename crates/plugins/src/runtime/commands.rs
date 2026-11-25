@@ -34,7 +34,6 @@ impl RunCommand {
 
 pub(crate) const BINDINGS: &str = "$hotkeys";
 
-/// How long a command's description may be, one plain line, as a tooltip.
 pub(crate) const DESCRIPTION_CAP: usize = 200;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,7 +50,6 @@ pub enum CommandWhen {
 pub(crate) struct Command {
     pub(crate) id: String,
     pub(crate) title: String,
-    /// What a click does to the draft, shown as the command's tooltip.
     #[serde(default)]
     pub(crate) description: Option<String>,
     #[serde(default)]

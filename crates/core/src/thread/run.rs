@@ -53,10 +53,6 @@ pub(crate) fn resolve_program(
     })
 }
 
-/// The program and arguments that start the agent `line` runs over ACP, from the one per-agent
-/// table. When the command names the person's own program, the person's line is resolved instead
-/// and its arguments follow the ACP ones; a command that names another program, such as the
-/// adapter's `npx`, is resolved on its own.
 pub(crate) fn resolve_acp(
     line: &str,
     environment: Option<&crate::host::program::ProgramEnvironment>,

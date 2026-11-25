@@ -12,27 +12,17 @@ use kg_process::Process;
 
 use super::client::{AcpError, Launch};
 
-/// How long the agent is given to exit on its own once its output has ended.
 pub(super) const EXIT_GRACE: Duration = Duration::from_secs(2);
-/// The last lines the agent wrote to stderr, kept for a failure's worth of explanation.
 const TAIL_LINES: usize = 20;
-/// The most of one line kagan keeps, the same cap a prompt has. An agent that sends more is cut.
 const LINE_MAX: usize = TEXT_MAX;
-/// How often the connection looks at what the agent's reader thread has while it is answering.
 const TICK: Duration = Duration::from_millis(20);
-/// How often it looks once the agent has said nothing for a while. Idle threads cost 4 wakes a
-/// second, not 50; the cost is written in decision 279.
+// Idle threads cost 4 wakes a second, not 50, so the first chunk after an idle prompt can wait 250 ms (decision 279).
 const IDLE_TICK: Duration = Duration::from_millis(250);
-/// How long after the last line the connection keeps the short tick.
 const BUSY: Duration = Duration::from_secs(1);
-/// How many lines the reader thread may queue before it waits for the connection to take them.
 const READ_BACKLOG: usize = 64;
 
-/// What the agent's pipes are read and written through, and the channel the connection takes.
 pub(super) struct Transport {
-    /// The lines the agent's reader thread has read, in order.
     pub(super) lines: std::sync::mpsc::Receiver<String>,
-    /// Where the pump turns a line into a frame for the connection.
     pub(super) frames: futures::channel::mpsc::UnboundedSender<TransportFrame>,
     pub(super) channel: Channel,
 }
@@ -74,15 +64,11 @@ pub(super) fn tail_text(tail: &Arc<Mutex<VecDeque<String>>>) -> Option<String> {
     })
 }
 
-/// A pipe the agent writes on, read from one thread on either platform.
 pub(super) trait Output: Send {
-    /// Fills `into` with the next bytes, up to its length. None when the agent's output ended.
     fn fill(&mut self, into: &mut [u8]) -> Option<usize>;
 }
 
-/// A pipe the agent's connection writes on.
 trait Input: Send {
-    /// Writes one frame's line. False when the agent's input is gone.
     fn write_line(&mut self, line: &[u8]) -> bool;
 }
 
@@ -135,10 +121,6 @@ where
     }
 }
 
-/// Carries the connection's frames through three std threads: one writes lines to the agent, one
-/// reads its lines, one keeps its stderr. The reader thread cannot wake the connection itself
-/// (GPUI's test scheduler refuses a wake from another thread), so the pump hands its lines over
-/// on the executor's timer.
 pub(super) fn carry(
     process: &mut Process,
     tail: &Arc<Mutex<VecDeque<String>>>,
@@ -165,7 +147,6 @@ pub(super) fn carry(
     })
 }
 
-/// One of the three threads that carry the pipes, or why it could not start.
 fn worker(name: &str, body: impl FnOnce() + Send + 'static) -> Result<(), AcpError> {
     std::thread::Builder::new()
         .name(name.into())
@@ -174,8 +155,6 @@ fn worker(name: &str, body: impl FnOnce() + Send + 'static) -> Result<(), AcpErr
         .map_err(AcpError::Pipes)
 }
 
-/// The reader body both platforms share. A line is capped, and its bytes that are not UTF-8 are
-/// replaced, so an agent's output is never dropped without a trace.
 fn read_lines(output: impl Output, mut on_line: impl FnMut(String)) {
     let mut lines = Lines::new(output);
     while let Some(line) = lines.next() {
@@ -183,12 +162,9 @@ fn read_lines(output: impl Output, mut on_line: impl FnMut(String)) {
     }
 }
 
-/// The agent's output as lines, from a read in chunks: the bytes past the last line are kept for
-/// the next one.
 pub(super) struct Lines<O> {
     output: O,
     ahead: Vec<u8>,
-    /// Whether the person was told about a cut line. One note per connection, not per line.
     noted: bool,
 }
 
@@ -201,8 +177,7 @@ impl<O: Output> Lines<O> {
         }
     }
 
-    /// One line, at most `LINE_MAX` bytes. What is left of a longer line is read and dropped, so
-    /// an agent that never sends a newline cannot grow kagan's memory.
+    // The rest of a too-long line is read and dropped, so a sender that never ends a line cannot grow kagan's memory.
     fn next(&mut self) -> Option<String> {
         let mut line = Vec::new();
         loop {
@@ -233,7 +208,6 @@ impl<O: Output> Lines<O> {
     }
 }
 
-/// The line as kagan keeps it: its bytes that are not UTF-8 replaced, its own end removed.
 fn text(line: &[u8]) -> String {
     String::from_utf8_lossy(line)
         .trim_end_matches(['\n', '\r'])
@@ -256,7 +230,6 @@ fn write_frames(
     }
 }
 
-/// The agent's pipes: two it writes on, one it reads, blocking on the calling thread.
 #[cfg(unix)]
 fn pipes(
     process: &mut Process,
@@ -281,7 +254,6 @@ fn pipes(
     ))
 }
 
-/// A pipe the agent's own process gave kagan, as a file this thread blocks on.
 #[cfg(unix)]
 fn pipe<P>(from: P) -> Result<File, AcpError>
 where
@@ -294,8 +266,6 @@ where
     blocking(fd)
 }
 
-/// A pipe the agent's own process gave kagan. async-process makes it non-blocking for its own
-/// reactor; these threads read and write it like any other file.
 #[cfg(unix)]
 fn blocking(fd: std::os::fd::OwnedFd) -> Result<File, AcpError> {
     use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
@@ -304,8 +274,6 @@ fn blocking(fd: std::os::fd::OwnedFd) -> Result<File, AcpError> {
     Ok(File::from(fd))
 }
 
-/// Windows pipes answer through async-process's blocking thread pool, so the same three threads
-/// wait on them through it, and one reader body still serves both platforms.
 #[cfg(windows)]
 fn pipes(
     process: &mut Process,
@@ -330,8 +298,6 @@ fn pipes(
     ))
 }
 
-/// Hands the reader thread's lines to the connection every tick, and lets the connection run in
-/// between. Nothing here wakes a task from another thread.
 pub(super) async fn pump(
     lines: std::sync::mpsc::Receiver<String>,
     frames: futures::channel::mpsc::UnboundedSender<TransportFrame>,

@@ -25,7 +25,6 @@ pub(super) struct Question {
     title: String,
     options: Vec<InteractionOption>,
     asked: Option<PendingInteraction>,
-    /// What the card's element and focus ids start with: one question can be drawn in two places.
     region: &'static str,
 }
 
@@ -52,7 +51,6 @@ impl Question {
         }
     }
 
-    /// The same card in the transcript, which keeps its own ids apart from the Questions tab.
     fn in_the_transcript(asked: &PendingInteraction) -> Self {
         Self {
             region: "chat-",
@@ -87,8 +85,6 @@ pub(super) fn card(
     )
 }
 
-/// The same card in the transcript: the agent's question with the one line that says what it
-/// wants, and nowhere to put the error but the transcript's own line.
 pub(super) fn permission_card(
     asked: &PendingInteraction,
     detail: Option<AnyElement>,
@@ -131,7 +127,6 @@ pub(super) fn form_card(
     )
 }
 
-/// Where an answer's failure goes: the window's note, or the transcript's line.
 pub(super) type Failed = Rc<dyn Fn(&mut App, String)>;
 
 fn failed(kagan: &WeakEntity<Kagan>) -> Failed {
@@ -157,8 +152,6 @@ impl Question {
         format!("{kind}-{}{}-{option}", self.region, self.id.0)
     }
 
-    /// Whether the card asks for permission rather than asks a question: an approval, or a question
-    /// with no ask fields. `threads.ask` always sets its fields, even when empty.
     fn asks_permission(&self) -> bool {
         self.asked
             .as_ref()
@@ -257,9 +250,6 @@ fn body(
         .child(h_flex().gap(px(space(SpaceStep::Sm, cx))).children(buttons))
 }
 
-/// The options in the order a permission card reads: the reject that grants nothing, then the rest,
-/// then the filled one, which is the step the card offers. The agent's order stays within a rank,
-/// and a question that is not a permission request keeps its asker's order as it is.
 fn ordered(options: &[InteractionOption], permission: bool) -> Vec<InteractionOption> {
     if !permission {
         return options.to_vec();

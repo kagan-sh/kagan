@@ -18,12 +18,10 @@ use crate::theme::{Tone, TypeScale as _, row_height};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-/// The element id a part's row is found by: `chat-<part>-<id>`, stable across appends.
 pub(super) fn named(part: Part, id: impl std::fmt::Display) -> gpui_kit::ElementId {
     gpui_kit::ElementId::Name(format!("chat-{}-{id}", part.name()).into())
 }
 
-/// One work row: `[chevron] [icon] label · title ……… meta`.
 pub(super) fn work_row(
     row: &Row,
     tool: &ToolRow,
@@ -71,7 +69,6 @@ pub(super) fn work_row(
     }
 }
 
-/// A running command's last lines, under the row, so its noise never needs the row opened.
 fn live_preview(row: u64, tool: &ToolRow, cx: &mut App) -> Option<AnyElement> {
     if !tool.running() || kind::of(tool) != WorkKind::Execute {
         return None;
@@ -106,7 +103,6 @@ fn live_preview(row: u64, tool: &ToolRow, cx: &mut App) -> Option<AnyElement> {
     )
 }
 
-/// A thought row: the reasoning, one row, streamed into its body.
 pub(super) fn thought_row(
     row: &Row,
     thought: &ThoughtRow,
@@ -151,7 +147,6 @@ pub(super) fn thought_row(
     )
 }
 
-/// The bundle of finished looking work: the kinds' icons, a sentence, and the rows inside.
 pub(super) fn bundle_row(
     row: &Row,
     members: &[Row],
@@ -260,7 +255,6 @@ pub(super) fn bundle_row(
     )
 }
 
-/// The plan: its steps and how far along they are.
 pub(super) fn plan_row(
     row: &Row,
     entries: &[kg_domain::PlanEntry],
@@ -318,8 +312,6 @@ struct Face {
     body: Option<AnyElement>,
 }
 
-/// The one line every expandable row shares: chevron, icon, label, title, badge, meta, and the
-/// body under it when it is open.
 fn face(
     mut face: Face,
     weak: &WeakEntity<ChatView>,
@@ -353,7 +345,6 @@ fn face(
         .into_any_element()
 }
 
-/// The row's one line: what a reader sees before expanding it.
 fn line(
     face: Face,
     focus: &gpui_kit::FocusHandle,
@@ -419,7 +410,6 @@ fn line(
         })
 }
 
-/// The line's children: chevron, icon, label, title, badge, icons and meta.
 fn content(face: Face, cx: &mut App) -> gpui_kit::Div {
     let muted = cx.theme().muted_foreground;
     let foreground = cx.theme().foreground;

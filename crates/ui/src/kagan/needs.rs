@@ -13,9 +13,6 @@ use super::changes::line;
 use super::screen::{Activation, Side};
 use super::{Kagan, question};
 
-/// The option a card opens on. A permission card opens on the one that grants nothing: the safe way
-/// out, then the option that refuses, and never the filled grant, so Enter never approves by itself.
-/// A question the asker shaped opens on its filled option, else on its first, as it always has.
 fn opening_option(options: &[InteractionOption], permission: bool) -> Option<&InteractionOption> {
     if permission {
         return options
@@ -174,8 +171,6 @@ impl Kagan {
             })
     }
 
-    /// The questions that wait for an answer, and whether each asks for permission: an approval,
-    /// or a question with no ask fields. `threads.ask` always sets its fields, even when empty.
     fn waiting<'a>(
         &'a self,
         cx: &'a App,

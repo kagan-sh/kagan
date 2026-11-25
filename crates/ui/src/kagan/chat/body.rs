@@ -14,16 +14,11 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 use kg_domain::WorkKind;
 
-/// The most lines of output a body shows before it stops.
 const OUTPUT_LINES: usize = 40;
-/// The most argument lines a body shows before "Show more".
 const ARG_LINES: usize = 3;
-/// The most diff lines a body shows.
 const DIFF_LINES: usize = 120;
-/// The most height a streaming body takes before it scrolls.
 const BODY_MAX: f32 = 240.;
 
-/// What to show when a row is expanded.
 pub(super) fn work_body(
     row: u64,
     tool: &ToolRow,
@@ -75,8 +70,6 @@ pub(super) fn work_body(
         .ui_container()
 }
 
-/// A tool's own way on: the file in the review, or the skill in its window. It is idle while the
-/// row still runs.
 fn review_link(
     row: u64,
     tool: &ToolRow,
@@ -101,7 +94,6 @@ fn skill_link(row: u64) -> AnyElement {
     })
 }
 
-/// One idle button under a body, so a row leads to the place the body talks about.
 fn link(
     row: u64,
     name: &'static str,
@@ -122,7 +114,6 @@ fn link(
         .into_any_element()
 }
 
-/// An MCP call's answer: how many things it carries, then the text the server sent.
 fn mcp_out(row: u64, tool: &ToolRow, cx: &mut App) -> Option<AnyElement> {
     let output = tool.output.as_deref()?;
     let items = serde_json::from_str::<serde_json::Value>(output)
@@ -168,7 +159,6 @@ fn mcp_out(row: u64, tool: &ToolRow, cx: &mut App) -> Option<AnyElement> {
     }
 }
 
-/// The reasoning, muted, markdown, capped and scrollable.
 pub(super) fn thought_body(row: u64, text: &str, cx: &mut App) -> impl IntoElement {
     div()
         .id(gpui_kit::ElementId::Name(
@@ -185,7 +175,6 @@ pub(super) fn thought_body(row: u64, text: &str, cx: &mut App) -> impl IntoEleme
         .ui_container()
 }
 
-/// The plan's steps, one row each, with a mark and the status in words.
 pub(super) fn plan_body(row: u64, entries: &[PlanEntry], cx: &mut App) -> impl IntoElement {
     let mut steps: Vec<AnyElement> = Vec::new();
     for (index, entry) in entries.iter().enumerate() {
@@ -243,7 +232,6 @@ pub(super) fn plan_body(row: u64, entries: &[PlanEntry], cx: &mut App) -> impl I
         .ui_container()
 }
 
-/// `key: value` lines for the raw input, three of them until the person asks for more.
 fn args(
     tool: &ToolRow,
     more: bool,
@@ -336,7 +324,6 @@ fn value_text(value: &serde_json::Value) -> String {
     }
 }
 
-/// What `kg ui` reads of a body's output: the lines the block shows.
 fn output_fact(lines: &[&str]) -> Facts {
     Facts {
         role: gpui_kit::Role::Label,
@@ -345,8 +332,6 @@ fn output_fact(lines: &[&str]) -> Facts {
     }
 }
 
-/// The block every body's output sits in: capped, scrollable, mono, and the lines `kg ui` reads.
-/// A command and a diff sit on the terminal colours; other output on the surface, inside a border.
 fn output_block(
     name: String,
     lines: Vec<AnyElement>,
@@ -381,14 +366,12 @@ fn output_block(
     }
 }
 
-/// One line of an output block, never wrapped.
 fn output_line(line: &str) -> gpui_kit::Div {
     div()
         .whitespace_nowrap()
         .child(SharedString::from(line.to_owned()))
 }
 
-/// Plain output in a surface block, the first lines only.
 fn plain_out(row: u64, output: Option<&str>, cx: &mut App) -> Option<AnyElement> {
     let output = output?;
     let lines: Vec<&str> = output.lines().take(OUTPUT_LINES).collect();
@@ -406,7 +389,6 @@ fn plain_out(row: u64, output: Option<&str>, cx: &mut App) -> Option<AnyElement>
     Some(block)
 }
 
-/// A command's output in the terminal colours, capped and scrollable.
 fn terminal_out(row: u64, output: Option<&str>, live: bool, cx: &mut App) -> Option<AnyElement> {
     let output = output?;
     // A running command shows its newest lines, so the body stays at the bottom as it streams.
@@ -432,12 +414,10 @@ fn terminal_out(row: u64, output: Option<&str>, live: bool, cx: &mut App) -> Opt
     Some(block)
 }
 
-/// The reasoning a tool named, muted, in the same markdown block a thought streams into.
 fn thought_text(row: u64, text: &str, cx: &mut App) -> Option<AnyElement> {
     (!text.trim().is_empty()).then(|| thought_body(row, text, cx).into_any_element())
 }
 
-/// The diff, hunked, with `+` in the added colour and `−` in the failed one.
 fn diff_out(
     row: u64,
     diffs: &[ToolDiff],

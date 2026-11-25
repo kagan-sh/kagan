@@ -17,8 +17,6 @@ use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-/// The approval card: what the agent wants to do, in one plain sentence, the command or file in
-/// mono, and the agent's own options.
 pub(super) fn approval_card(
     id: &kg_domain::PendingInteractionId,
     tool_title: Option<&str>,
@@ -56,7 +54,6 @@ pub(super) fn approval_card(
         .into_any_element()
 }
 
-/// Whether the card says where the tool runs: only a command or an edit works in a folder.
 pub(super) fn runs_in_worktree(kind: Option<kg_domain::ToolKind>, environment: bool) -> bool {
     environment
         && matches!(

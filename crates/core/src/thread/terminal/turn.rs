@@ -157,8 +157,6 @@ pub(crate) fn busy(title: &str) -> bool {
         .is_some_and(|first| matches!(first, '\u{2800}'..='\u{28FF}' | '\u{25D0}'..='\u{25D3}'))
 }
 
-/// The turn an ended program leaves behind. Quitting leaves the turn to the quit path, which
-/// records the stop itself.
 pub(super) fn ended_turn(
     workspace: &Workspace,
     id: &ThreadId,

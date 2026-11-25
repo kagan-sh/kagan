@@ -61,7 +61,6 @@ fn a_single_finished_read_stays_a_row() {
     assert!(matches!(transcript.rows[0].kind, RowKind::Work(_)));
 }
 
-/// The approval card sits between a call and its update, so the update must find the row by id.
 #[test]
 fn a_delta_after_the_approval_card_folds_into_its_row() {
     let mut transcript = Transcript::default();
@@ -101,8 +100,6 @@ fn parallel_calls_keep_a_row_each_until_both_finish() {
     assert_eq!(second.status, Some(ToolStatus::InProgress));
 }
 
-/// ACP sends a call in progress, then the update that completes it: the row is created
-/// unfinished, so it only becomes foldable at the update.
 #[test]
 fn reads_that_finish_after_they_start_fold_into_one_bundle() {
     let mut transcript = Transcript::default();
@@ -122,7 +119,6 @@ fn reads_that_finish_after_they_start_fold_into_one_bundle() {
     assert_eq!(members.len(), 3);
 }
 
-/// An MCP call the agent reports as a read is doing work, so it never folds into a look.
 #[test]
 fn an_mcp_call_reported_as_a_read_stays_a_row() {
     let mut transcript = Transcript::default();
@@ -167,8 +163,6 @@ fn a_running_read_never_folds() {
     assert_eq!(transcript.rows.len(), 2, "the running row is a row");
 }
 
-/// Two reads run at once and finish out of order: the second one's finish cannot join the first,
-/// which is still running, so the first one's finish has to join the row after it.
 #[test]
 fn reads_that_finish_out_of_order_still_fold_into_one_bundle() {
     let mut transcript = Transcript::default();
@@ -238,8 +232,6 @@ fn a_diff_is_counted_once_as_it_arrives() {
     assert_eq!(tool.counts, (1, 1), "a later delta keeps the count it has");
 }
 
-/// A failure that ends the turn stays open: neither the divider nor a notice after it is the last
-/// row a reader reads.
 #[test]
 fn a_failure_that_ends_the_turn_stays_open() {
     let mut transcript = Transcript::default();
@@ -264,7 +256,6 @@ fn a_failure_that_ends_the_turn_stays_open() {
     assert!(transcript.auto_open(0, false));
 }
 
-/// The failure belongs to the turn that ended; a new turn starts from no outcome.
 #[test]
 fn a_new_turn_clears_the_outcome_the_last_one_ended_with() {
     let mut transcript = Transcript::default();
@@ -281,8 +272,6 @@ fn a_new_turn_clears_the_outcome_the_last_one_ended_with() {
     assert!(!transcript.auto_open(0, false));
 }
 
-/// The bundle that is still growing is the live frontier: open while the turn runs, closed
-/// once it ends.
 #[test]
 fn the_live_bundle_opens_while_the_turn_runs_and_closes_after_it() {
     let mut transcript = Transcript::default();
@@ -315,7 +304,6 @@ fn a_live_thought_opens_only_while_the_turn_runs() {
     assert!(!transcript.is_open(0, false));
 }
 
-/// A person's click wins, and the next event does not reopen the row the rules would open.
 #[test]
 fn a_person_collapsing_an_open_row_keeps_it_closed() {
     let mut transcript = Transcript::default();

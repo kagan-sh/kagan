@@ -10,7 +10,6 @@ use kg_plugins::{CommandContribution, CommandWhen, PluginHost, RunCommand};
 use super::controls::{control, dispatch};
 use crate::ui_registry::Facts;
 
-/// The prompt row draws this many buttons, however many the plugins declare.
 const MOST_PROMPT: usize = 4;
 
 pub(super) fn buttons(cx: &App) -> Vec<AnyElement> {
@@ -23,7 +22,6 @@ pub(super) fn buttons(cx: &App) -> Vec<AnyElement> {
         .collect()
 }
 
-/// The plugin commands that sit beside Send, before it.
 pub(super) fn prompt(cx: &App) -> Vec<AnyElement> {
     placed(cx, |command| command.prompt)
         .into_iter()

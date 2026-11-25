@@ -15,7 +15,6 @@ pub(crate) enum Source {
     Hook,
     Title,
     Quiet,
-    /// An agent that answers over its own pipes: a prompt opens the turn, its response ends it.
     Acp,
 }
 
@@ -23,9 +22,7 @@ pub(crate) enum Source {
 pub(crate) enum Signal {
     HookStart,
     HookEnd,
-    /// A prompt went to an agent that answers over its own pipes.
     Prompt,
-    /// That prompt's response came back.
     PromptDone,
     /// The window title shows a spinner (`busy`) or it does not.
     Title {

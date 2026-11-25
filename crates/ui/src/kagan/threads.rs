@@ -257,8 +257,6 @@ impl Kagan {
         }
     }
 
-    /// Asks an ACP thread's agent to end its reply. The agent stays, so the thread can be
-    /// prompted again. With nothing to cancel, Escape goes on to whatever else handles it.
     pub(super) fn cancel_turn(&mut self, _: &CancelTurn, _: &mut Window, cx: &mut Context<Self>) {
         let Some(id) = self.shown_thread(cx) else {
             cx.propagate();

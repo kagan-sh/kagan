@@ -29,30 +29,21 @@ mod kind;
 mod part;
 mod work;
 
-/// The keys the chat adds: Escape cancels the agent's reply.
 pub(crate) const CONTEXT: &str = "Chat";
 
-/// An ACP thread's transcript and prompt box: what the agent said, in order, and the one box that
-/// answers it. The thread's events are the transcript, so nothing is kept here that the log lacks.
 pub(crate) struct ChatView {
     thread: ThreadId,
-    /// The window's own view, so a row's link can open the review or the skills it names.
     kagan: gpui_kit::WeakEntity<Kagan>,
     transcript: part::Transcript,
-    /// Whether the load has finished. Live events wait in `pending` until it has.
     loaded: bool,
     pending: Vec<Event>,
     prompt: gpui_kit::Entity<TextareaState>,
     scroller: gpui_kit::Entity<MessageScrollerState>,
-    /// The rows whose arguments show every line.
     more: BTreeSet<u64>,
-    /// Whether the trailing "Working…" row is drawn.
     working: bool,
     notice: Option<SharedString>,
     sending: bool,
-    /// The cards above the prompt box, as the person left them.
     cards: above::Cards,
-    /// The child threads that run now, read when the workspace says it changed.
     children: Vec<(ThreadId, SharedString)>,
     _events: Subscription,
     _prompt: Subscription,
@@ -125,7 +116,6 @@ impl ChatView {
         &self.thread
     }
 
-    /// The prompt box's text, as the person left it.
     pub(crate) fn draft(&self, cx: &App) -> String {
         self.prompt.read(cx).value().to_string()
     }
@@ -136,8 +126,6 @@ impl ChatView {
         cx.notify();
     }
 
-    /// Reads what the thread has said so far. The log is the transcript, so the view holds no
-    /// second copy of it across a restart.
     fn load(&mut self, cx: &mut Context<Self>) {
         let read = Workspace::dispatch(
             Op::Thread(ThreadOp::Events {
@@ -185,8 +173,6 @@ impl ChatView {
         cx.notify();
     }
 
-    /// Keeps the virtual list's row count in step with the fold, and its measured heights with the
-    /// row that changed.
     fn sync(&mut self, cx: &mut Context<Self>) {
         self.working = self.answering(cx) && !self.transcript.live_last();
         let desired = self.transcript.rows.len() + usize::from(self.working);
@@ -208,8 +194,6 @@ impl ChatView {
             .update(cx, |state, cx| state.remeasure_items(index..index + 1, cx))
     }
 
-    /// The child threads that are running now, which the card over the box counts and lists. The
-    /// parent is the thread itself, so a thread an agent started is already one of these.
     fn read_children(&mut self, cx: &App) {
         let workspace = Workspace::global(cx);
         let workspace = workspace.read(cx);
@@ -333,7 +317,6 @@ impl ChatView {
             .is_some_and(|(status, _)| status.running())
     }
 
-    /// Whether the thread is archived, so no action in the box could run.
     fn archived(&self, cx: &App) -> bool {
         Workspace::global(cx)
             .read(cx)
@@ -348,7 +331,6 @@ impl ChatView {
             .map(|thread| (thread.read(cx).record().status, thread.read(cx).busy()))
     }
 
-    /// Who the agent's blocks belong to: the program the thread runs, by its short name.
     fn who(&self, cx: &App) -> SharedString {
         Workspace::global(cx)
             .read(cx)
@@ -373,7 +355,6 @@ impl Render for ChatView {
 }
 
 impl ChatView {
-    /// The whole chat: the body, which a plugin may draw, and the prompt box, which it may not.
     pub(crate) fn render_with(
         &mut self,
         transcript: Option<AnyElement>,
@@ -397,8 +378,6 @@ impl ChatView {
 }
 
 impl ChatView {
-    /// Everything the thread has said, in the one column the prompt box shares with it. An empty
-    /// transcript centers its one quiet line in that column instead of hanging off the left.
     fn transcript(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let weak = cx.weak_entity();
         let scroller = self.scroller.clone();
@@ -452,7 +431,6 @@ impl ChatView {
             )
     }
 
-    /// Thousands as "12K", so the context line never eats the width.
     fn compact(tokens: u64) -> String {
         if tokens >= 1_000_000 {
             format!("{}M", tokens / 1_000_000)
@@ -464,7 +442,6 @@ impl ChatView {
     }
 }
 
-/// Draws one row, at the index the virtual list asks for.
 fn row_at(
     weak: &gpui_kit::WeakEntity<ChatView>,
     index: usize,
@@ -520,8 +497,6 @@ fn row_at(
 }
 
 impl ChatView {
-    /// What an approval card says about the tool row it follows: its title, and whether the tool
-    /// works in the thread's own folder.
     fn approval_detail(&self, index: usize, cx: &App) -> (Option<String>, bool) {
         let tool = index.checked_sub(1).and_then(|previous| {
             match &self.transcript.rows.get(previous)?.kind {
@@ -543,7 +518,6 @@ impl ChatView {
     }
 }
 
-/// The trailing row that says the agent is working and nothing else is live.
 fn working_row(cx: &mut App) -> AnyElement {
     let muted = cx.theme().muted_foreground;
     div()
@@ -560,8 +534,6 @@ fn working_row(cx: &mut App) -> AnyElement {
         .into_any_element()
 }
 
-/// A person's message is a raised block with an accent spine; the agent's is its name, the time and
-/// the words, with Copy on hover.
 fn message_view(
     id: u64,
     role: Speaker,
@@ -649,7 +621,6 @@ fn notice_view(id: u64, text: &str, cx: &mut App) -> AnyElement {
         .into_any_element()
 }
 
-/// The quiet line between turns: how long the agent worked.
 fn divider_view(
     id: u64,
     from: Timestamp,
@@ -673,7 +644,6 @@ fn divider_view(
         .into_any_element()
 }
 
-/// The wall clock time of an event, in the person's own zone.
 fn clock(at: Timestamp) -> SharedString {
     jiff::Timestamp::from_millisecond(at.0).map_or_else(
         |_| SharedString::default(),

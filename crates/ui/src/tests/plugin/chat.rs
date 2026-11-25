@@ -463,8 +463,6 @@ fn the_window_draws_four_prompt_buttons_at_most(cx: &mut TestAppContext) {
     assert!(!shows(cx, window, "prompt/dev.test.b/improve0"));
 }
 
-/// The four prompt buttons, the More menu and Start again all fit inside the box's bar, so no
-/// control is clipped, at the composer's own width.
 #[gpui_kit::test]
 fn the_stopped_bar_keeps_every_control_inside_the_box(cx: &mut TestAppContext) {
     let (_kagan, window, _data) =

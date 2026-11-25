@@ -35,8 +35,6 @@ fn a_question_keeps_the_order_it_was_asked_in() {
     assert_eq!(ids, ["allow-once", "reject-once"]);
 }
 
-/// A question the agent asked through `threads.ask` carries its fields, even when empty; a
-/// permission request does not, and an approval is one.
 #[test]
 fn only_an_approval_or_a_question_without_fields_asks_permission() {
     let asked = |fields| PendingInteraction {

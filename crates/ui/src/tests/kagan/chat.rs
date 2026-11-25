@@ -11,13 +11,10 @@ use super::{
 };
 use crate::tests::sidebar::layout::span;
 
-/// A thread the store already holds: an ACP one has no program in this process, so the center
-/// shows its transcript and prompt box.
 fn seed_thread(data: &std::path::Path, events: Vec<EventKind>) -> ThreadId {
     seed_thread_in(data, None, events)
 }
 
-/// The same, in a folder of the thread's own.
 fn seed_thread_in(
     data: &std::path::Path,
     environment: Option<kg_domain::EnvironmentId>,
@@ -69,12 +66,10 @@ fn seed_thread_in(
     id
 }
 
-/// A seeded ACP thread with nothing logged, for a test whose load never reads an event.
 fn seed_acp_thread(data: &std::path::Path) -> ThreadId {
     seed_thread(data, Vec::new())
 }
 
-/// Opens a window on a seeded ACP thread and shows its chat.
 fn show_chat_with(
     cx: &mut TestAppContext,
     events: Vec<EventKind>,
@@ -89,7 +84,6 @@ fn show_chat_with(
     (kagan, window, data)
 }
 
-/// Shows a thread written behind the window's back: a refresh, then the row, then its chat.
 fn reveal(cx: &mut TestAppContext, window: AnyWindowHandle, id: &ThreadId) {
     // A thread written behind the window's back arrives with the next refresh, which marking it
     // read asks for.
@@ -105,7 +99,6 @@ fn reveal(cx: &mut TestAppContext, window: AnyWindowHandle, id: &ThreadId) {
     wait_until(cx, |cx| shows(cx, window, "chat-transcript"));
 }
 
-/// A thread an agent started under the shown one.
 fn seed_child(
     data: &std::path::Path,
     parent: &ThreadId,
@@ -169,7 +162,6 @@ fn show_chat(
     )
 }
 
-/// One ACP tool delta, as the agent's update becomes it.
 fn tool(
     id: &str,
     kind: ToolKind,
@@ -267,7 +259,6 @@ fn a_work_row_expands_and_collapses(cx: &mut TestAppContext) {
     wait_until(cx, |cx| shows(cx, window, "chat-work-body-1"));
 }
 
-/// Two open rows draw two bodies, each with an id of its own, so neither hides the other.
 #[gpui_kit::test]
 fn two_open_rows_keep_their_own_bodies(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(
@@ -327,8 +318,6 @@ fn a_failed_command_row_reads_failed(cx: &mut TestAppContext) {
     );
 }
 
-/// A running command shows its newest lines under the row, without opening it, and its body keeps
-/// the newest lines too.
 #[gpui_kit::test]
 fn a_running_command_previews_its_output(cx: &mut TestAppContext) {
     let lines: Vec<String> = (1..=60).map(|n| format!("line {n}")).collect();
@@ -357,7 +346,6 @@ fn a_running_command_previews_its_output(cx: &mut TestAppContext) {
     assert!(!body.contains("line 1\n"), "the first lines scrolled away");
 }
 
-/// A failure that ends the turn stays open, past the divider the turn ends with.
 #[gpui_kit::test]
 fn a_failure_that_ends_the_turn_reads_expanded(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(
@@ -473,7 +461,6 @@ fn a_bundle_closes_when_the_turn_ends(cx: &mut TestAppContext) {
     );
 }
 
-/// Work is collapsed by default: a plan row opens only while it is a live turn's frontier.
 #[gpui_kit::test]
 fn a_plan_row_is_collapsed_once_the_turn_ends(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(
@@ -499,7 +486,6 @@ fn a_plan_row_is_collapsed_once_the_turn_ends(cx: &mut TestAppContext) {
     );
 }
 
-/// A thread whose running command asks the person, and the card it draws.
 fn show_approval(
     cx: &mut TestAppContext,
     kind: ToolKind,
@@ -594,7 +580,6 @@ fn tool_with(
     }
 }
 
-/// A body leads to the place it talks about, and an MCP answer says how much it carries.
 #[gpui_kit::test]
 fn a_body_leads_to_where_it_points(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(
@@ -648,8 +633,6 @@ fn a_body_leads_to_where_it_points(cx: &mut TestAppContext) {
     wait_until(cx, |cx| shows(cx, window, "chat-link-review-3"));
 }
 
-/// An MCP row names the server and the tool once, in the label, and the agent's own title beside
-/// it rather than the tool id a second time.
 #[gpui_kit::test]
 fn an_mcp_row_names_its_tool_once(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(
@@ -693,8 +676,6 @@ fn the_approval_card_answers_through_the_question(cx: &mut TestAppContext) {
     );
 }
 
-/// The agent sends its options in its own order; the card reads Deny, then Always allow, then the
-/// filled Allow once.
 #[gpui_kit::test]
 fn the_approval_card_lists_the_reject_first_and_the_filled_option_last(cx: &mut TestAppContext) {
     let mut options = permission_options();
@@ -787,7 +768,6 @@ fn the_transcript_follows_the_tail_and_offers_jump_to_latest(cx: &mut TestAppCon
     wait_until(cx, |cx| shows(cx, window, "chat-message-60"));
 }
 
-/// Escape with no reply open is left for whatever else handles it: a stopped thread says nothing.
 #[gpui_kit::test]
 fn escape_with_no_reply_open_says_nothing(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat(cx);
@@ -796,7 +776,6 @@ fn escape_with_no_reply_open_says_nothing(cx: &mut TestAppContext) {
     assert!(!shows(cx, window, "note"));
 }
 
-/// A message is named by who spoke and when, and its words are the value, so a reader hears both.
 #[gpui_kit::test]
 fn a_message_is_named_by_who_spoke_and_when(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat(cx);
@@ -813,7 +792,6 @@ fn a_message_is_named_by_who_spoke_and_when(cx: &mut TestAppContext) {
     assert!(user.starts_with("You, "), "{user}");
 }
 
-/// What the workspace emits for an event, which is what the view's subscription hears.
 fn emit(cx: &mut TestAppContext, event: Event) {
     cx.update(|cx| {
         kg_core::Workspace::global(cx).update(cx, |_, cx| {
@@ -839,7 +817,6 @@ fn agent_said(id: &ThreadId, seq: u64, text: &str) -> Event {
     }
 }
 
-/// An event the load has already read is drawn once, not twice and out of order.
 #[gpui_kit::test]
 fn an_event_the_load_already_read_is_drawn_once(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat(cx);
@@ -870,7 +847,6 @@ fn an_event_the_load_already_read_is_drawn_once(cx: &mut TestAppContext) {
     });
 }
 
-/// A load that fails still ends the wait, so the live events behind it are drawn.
 #[gpui_kit::test]
 fn a_load_that_fails_still_draws_the_events_after_it(cx: &mut TestAppContext) {
     let (kagan, _window, data) = open(cx);
@@ -888,7 +864,6 @@ fn a_load_that_fails_still_draws_the_events_after_it(cx: &mut TestAppContext) {
     });
 }
 
-/// A plugin's rewrite of the draft is one edit in the box's history, so Command Z takes it back.
 #[gpui_kit::test]
 fn a_rewritten_draft_undoes_with_the_normal_key(cx: &mut TestAppContext) {
     let (kagan, _window, _data) = open(cx);
@@ -918,7 +893,6 @@ fn a_rewritten_draft_undoes_with_the_normal_key(cx: &mut TestAppContext) {
     });
 }
 
-/// The composer is one box in the transcript's column, with the text area and the action inside it.
 #[gpui_kit::test]
 fn the_prompt_box_is_one_box_in_the_transcripts_column(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat(cx);
@@ -945,7 +919,6 @@ fn the_prompt_box_is_one_box_in_the_transcripts_column(cx: &mut TestAppContext) 
     );
 }
 
-/// An empty transcript says so once, centered in the column the box uses.
 #[gpui_kit::test]
 fn an_empty_transcript_centers_one_quiet_line_in_the_column(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(cx, Vec::new());
@@ -959,7 +932,6 @@ fn an_empty_transcript_centers_one_quiet_line_in_the_column(cx: &mut TestAppCont
     );
 }
 
-/// A run that exited says how, once, and Start again takes Send's place.
 #[gpui_kit::test]
 fn a_chat_that_exited_says_it_once_and_offers_start_again(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(
@@ -983,7 +955,6 @@ fn a_chat_that_exited_says_it_once_and_offers_start_again(cx: &mut TestAppContex
     );
 }
 
-/// A stopped run says how it ended, and its box takes no typing: nothing looks ready to send.
 #[gpui_kit::test]
 fn a_stopped_chat_takes_no_typing_in_its_prompt(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(
@@ -1015,7 +986,6 @@ fn a_stopped_chat_takes_no_typing_in_its_prompt(cx: &mut TestAppContext) {
     );
 }
 
-/// The context row names the project and the folder the run writes to.
 #[gpui_kit::test]
 fn the_context_row_names_the_project_and_the_folder(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat(cx);
@@ -1033,7 +1003,6 @@ fn the_context_row_names_the_project_and_the_folder(cx: &mut TestAppContext) {
     );
 }
 
-/// A thread in a worktree names its folder instead of the project's.
 #[gpui_kit::test]
 fn a_worktree_thread_names_its_own_folder(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
@@ -1049,7 +1018,6 @@ fn a_worktree_thread_names_its_own_folder(cx: &mut TestAppContext) {
     );
 }
 
-/// The agent's plan stacks over the box as one line, and opens on a click.
 #[gpui_kit::test]
 fn the_plan_card_is_one_line_until_it_is_opened(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(
@@ -1081,7 +1049,6 @@ fn the_plan_card_is_one_line_until_it_is_opened(cx: &mut TestAppContext) {
     );
 }
 
-/// The child threads that run are counted in one line over the box, and listed once opened.
 #[gpui_kit::test]
 fn the_child_threads_card_counts_the_ones_that_run(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
@@ -1112,7 +1079,6 @@ fn the_child_threads_card_counts_the_ones_that_run(cx: &mut TestAppContext) {
     assert!(shows(cx, window, &format!("chat-card-child-{}", child.0)));
 }
 
-/// An archived chat offers no way on: no Start again, no New thread here…, and one line says why.
 #[gpui_kit::test]
 fn an_archived_chat_offers_no_way_on(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
@@ -1150,8 +1116,6 @@ fn an_archived_chat_offers_no_way_on(cx: &mut TestAppContext) {
     );
 }
 
-/// The box's More menu holds the quiet ways on: a new thread in this folder, and the report of a
-/// run that failed. Each does what its own button did.
 #[gpui_kit::test]
 fn a_stopped_chats_more_menu_opens_the_start_screen_and_saves_diagnostics(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
@@ -1188,8 +1152,6 @@ fn a_stopped_chats_more_menu_opens_the_start_screen_and_saves_diagnostics(cx: &m
     });
 }
 
-/// A stopped chat with no folder to reuse and a clean stop to report nothing about has nothing to
-/// put in a menu, so it draws none.
 #[gpui_kit::test]
 fn a_stopped_chat_with_nothing_quiet_to_offer_draws_no_more_menu(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(
@@ -1206,7 +1168,6 @@ fn a_stopped_chat_with_nothing_quiet_to_offer_draws_no_more_menu(cx: &mut TestAp
     assert!(!shows(cx, window, "chat-more"));
 }
 
-/// A run that failed says the agent's own reason, not that nothing was running.
 #[gpui_kit::test]
 fn a_chat_that_failed_says_why(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(
@@ -1223,7 +1184,6 @@ fn a_chat_that_failed_says_why(cx: &mut TestAppContext) {
     });
 }
 
-/// A card opens and closes from the keyboard, with Enter and with Space.
 #[gpui_kit::test]
 fn a_card_opens_and_closes_from_the_keyboard(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(

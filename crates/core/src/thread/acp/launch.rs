@@ -14,9 +14,6 @@ use crate::workspace::closed;
 
 use super::client::{Launch, Session};
 
-/// Builds the command that starts the agent's ACP server: the launch command's program and its
-/// arguments, in the thread's folder, with kagan's variables. The session's own part is the
-/// conversation it loads and the MCP server it is offered.
 pub(super) async fn launch(
     this: &WeakEntity<Workspace>,
     record: &kg_domain::Thread,
@@ -51,8 +48,6 @@ pub(super) async fn launch(
     })
 }
 
-/// The server every ACP session is offered: kagan's own, for this thread, the same one a terminal
-/// thread's config names.
 fn mcp_servers(id: &ThreadId, cli: &Path, socket: Option<&OsStr>) -> Vec<McpServer> {
     let mut server = McpServerStdio::new("kagan", cli).args(vec![
         "mcp".to_owned(),

@@ -32,11 +32,8 @@ const NOT_A_TERMINAL: &str =
 const NOT_RESTORED: &str =
     "This is a new chat with the agent; the earlier conversation is not restored.";
 
-/// A live ACP connection. Dropping it cancels the connection, and the process tree with it.
 pub(crate) struct Acp {
     commands: async_channel::Sender<AcpCommand>,
-    /// The questions this connection asked the person, so Cancel and the end of a turn can take
-    /// back the ones it raised and leave the thread's others alone.
     pub(super) raised: Vec<Raised>,
     _connection: Task<()>,
 }
@@ -46,15 +43,12 @@ impl Acp {
         self.commands.try_send(command).is_ok()
     }
 
-    /// Closes the commands, for a test that needs a prompt refused while the run still holds the
-    /// connection.
     #[cfg(test)]
     pub(crate) fn close(&self) {
         self.commands.close();
     }
 }
 
-/// Starts the agent as its own ACP connection, then lets it name the session.
 pub(super) async fn start(
     this: &WeakEntity<Workspace>,
     thread: &Entity<Thread>,
@@ -107,7 +101,6 @@ pub(super) async fn start(
     Ok(())
 }
 
-/// The session the thread's earlier start stored, which a start now loads when the agent can.
 async fn stored(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
@@ -133,7 +126,6 @@ async fn failed(
     Err(error)
 }
 
-/// Applies the connection's events in the order they happened.
 async fn consume(
     this: &WeakEntity<Workspace>,
     id: ThreadId,
@@ -218,8 +210,7 @@ async fn consume(
     }
 }
 
-/// Joins the chunks the agent already said for the same message behind this one, so a burst is one
-/// write and one event row. Anything else stays queued for the next step.
+// A burst for one message is one write and one event row; anything else stays queued.
 fn joined(
     thought: bool,
     mut text: String,
@@ -254,8 +245,6 @@ fn joined(
     text
 }
 
-/// One tool delta as the log keeps it, with the approval that links it to a question when there is
-/// one.
 async fn tool_event(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
@@ -278,9 +267,6 @@ async fn tool_event(
     Workspace::events(this, id.clone(), kinds, cx).await
 }
 
-/// The agent wants permission: raise the one question the card and the Questions tab share, then
-/// record the tool row it links to. A question that cannot be raised is not the agent's problem:
-/// the row still draws, and the dropped answer channel answers the agent `cancelled`.
 async fn permission(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
@@ -328,8 +314,6 @@ async fn permission(
     tool_event(this, id, pending, approval, cx).await
 }
 
-/// The agent named its session: that id is the thread's conversation, and the thread is running. A
-/// start that asked for the earlier conversation and got a new one says so.
 async fn named(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
@@ -400,7 +384,6 @@ async fn notice(
     Workspace::events(this, id.clone(), kinds, cx).await
 }
 
-/// The agent answered the prompt, so its turn is over.
 async fn turn_done(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
@@ -425,7 +408,6 @@ async fn turn_done(
     waiting(this, id.clone(), Some((outcome, error)), cx).await
 }
 
-/// The agent's connection ended. The process is gone, whatever it said.
 async fn ended(
     this: &WeakEntity<Workspace>,
     id: ThreadId,
@@ -438,8 +420,6 @@ async fn ended(
     Ok(())
 }
 
-/// Sends text as the thread's next prompt. One prompt at a time: the turn it opens ends with the
-/// agent's answer.
 pub(super) async fn prompt(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
@@ -476,7 +456,6 @@ pub(super) async fn prompt(
     Ok(OpResult::Done)
 }
 
-/// Asks the agent to end its reply; the agent itself keeps running.
 pub(super) async fn cancel(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
@@ -499,8 +478,6 @@ pub(super) async fn cancel(
     Ok(OpResult::Done)
 }
 
-/// Withdraws the questions this connection raised that the person has not answered: the card goes,
-/// the attention it raised goes, and an answered question is left alone.
 async fn withdraw_questions(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
@@ -555,7 +532,6 @@ fn send(
     }
 }
 
-/// The refusal every terminal operation gets on an ACP thread that names no extra terminal.
 pub(crate) fn not_a_terminal() -> OpError {
     OpError::Invalid(NOT_A_TERMINAL.into())
 }

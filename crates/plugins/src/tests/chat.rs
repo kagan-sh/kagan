@@ -173,8 +173,6 @@ fn a_tool_delta_carries_its_kind_title_status_and_fields() {
     assert_eq!(failed["status"], "error");
 }
 
-/// The classification the host's rows use, on the events a delta sends: the name that arrives in
-/// one event names the call, and a kind that arrives in another is read the same way.
 #[test]
 fn a_work_item_is_classified_as_the_host_draws_it() {
     let named = |name: &str, input: Option<Value>| {
@@ -258,7 +256,6 @@ fn a_plan_maps_its_steps_and_their_state() {
     );
 }
 
-/// Kagan's own MCP call is drawn once, from the agent's `tool` delta; the host folds the same way.
 #[test]
 fn a_call_kagans_own_mcp_made_is_not_a_second_work_item() {
     let started = EventKind::ToolStarted {
@@ -330,13 +327,10 @@ fn chat_plugin() -> (tempfile::TempDir, Plugin) {
     (plugin, installed)
 }
 
-/// A window whose data folder already holds a chat thread with a message, a notice and a turn,
-/// and a hidden chat thread.
 fn open_chat(cx: &mut TestAppContext, plugin: Plugin) {
     open_chat_with(cx, plugin, 0);
 }
 
-/// `notices` more items after the seeded three, to page past the 100 a call returns by default.
 fn open_chat_with(cx: &mut TestAppContext, plugin: Plugin, notices: usize) {
     open_seeded(cx, plugin, |store| {
         store

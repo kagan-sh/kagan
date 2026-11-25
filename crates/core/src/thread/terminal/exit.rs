@@ -28,8 +28,6 @@ pub(crate) fn request_stop(workspace: &mut Workspace, id: &ThreadId) -> bool {
     true
 }
 
-/// Ends what a run owns: the agent's connection and the task that reads it, or its terminal.
-/// Returns whether there was a program to end.
 fn release(run: &mut Run) -> bool {
     if run.acp.take().is_some() {
         run.acp_task = None;
@@ -106,9 +104,6 @@ pub(crate) async fn exited(
     ended(this, id, end, cx).await
 }
 
-/// What a program's exit leaves behind. `exit` is None when kagan could not read one at all, and
-/// `reason` is what it knows beyond the exit, such as an agent's own last words. A clean exit
-/// ignores the reason.
 pub(crate) fn exit_end(exit: Option<Exit>, reason: Option<String>) -> End {
     let Some(exit) = exit else {
         let error = reason.unwrap_or_else(|| "the program ended without an exit code".into());

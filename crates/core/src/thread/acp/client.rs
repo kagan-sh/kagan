@@ -21,12 +21,9 @@ use super::map;
 use super::permission::Asking;
 use super::transport::{EXIT_GRACE, Transport, carry, pump, spawn, tail_text};
 
-/// How long the agent is given to answer `initialize` and `session/new`.
 const STARTUP: Duration = Duration::from_secs(30);
-/// How long to wait between two looks at the agent's exit.
 const EXIT_POLL: Duration = Duration::from_millis(20);
 
-/// What stopped an ACP connection: starting the agent, its pipes, the handshake, or the protocol.
 #[derive(Debug, thiserror::Error)]
 pub(super) enum AcpError {
     #[error("could not start {program} in {cwd}: {source}")]
@@ -57,63 +54,51 @@ impl From<AcpError> for agent_client_protocol::Error {
     }
 }
 
-/// What the connection reports to the thread, in the order it happened.
 #[derive(Debug)]
 pub(super) enum AcpEvent {
-    /// The agent named its session. It is the thread's conversation, and `restored` says whether
-    /// it is the one the start asked for.
-    Session { id: String, restored: Restored },
-    /// One chunk of the agent's reply or its reasoning.
+    Session {
+        id: String,
+        restored: Restored,
+    },
     Chunk {
         thought: bool,
         text: String,
         message_id: Option<String>,
     },
-    /// One tool call, or an update to one with the same id.
     Tool(map::ToolUpdate),
-    /// The agent's whole plan.
     Plan(Vec<kg_domain::PlanEntry>),
-    /// Tokens in context.
-    Usage { used: u64, size: u64 },
-    /// The agent wants permission; `answer` carries the person's chosen option id.
+    Usage {
+        used: u64,
+        size: u64,
+    },
     Permission {
         tool: map::ToolUpdate,
         options: Vec<kg_domain::InteractionOption>,
         answer: async_channel::Sender<String>,
     },
-    /// The agent answered the prompt: its turn is over.
     TurnDone {
         outcome: TurnOutcome,
         error: Option<String>,
     },
-    /// The agent's connection is over. `exit` is how its process ended when kagan saw it, and
-    /// `error` is what failed when it did not.
     Ended {
         exit: Option<Exit>,
         error: Option<String>,
     },
 }
 
-/// What the thread asks the connection to do.
 #[derive(Debug)]
 pub(super) enum AcpCommand {
     Prompt(String),
     Cancel,
 }
 
-/// What Start again did with the conversation the thread stored, so the thread can say it.
 #[derive(Debug)]
 pub(super) enum Restored {
-    /// The agent loaded the earlier conversation: the thread is the same session as before.
     Loaded,
-    /// A new session, because there was nothing to load or the agent cannot load.
     New,
-    /// The agent was asked for the earlier conversation and refused: its own words.
     Refused(String),
 }
 
-/// What the thread asks the agent for besides running it: the conversation to continue, and the
-/// MCP server kagan offers it.
 #[derive(Debug)]
 pub(super) struct Session {
     pub(super) resume: Option<kg_domain::Conversation>,
@@ -128,7 +113,6 @@ pub(super) struct Launch {
     pub(super) session: Session,
 }
 
-/// Runs one agent for the life of its thread: spawn it, talk ACP, and report how it ended.
 pub(super) async fn run(
     launch: Launch,
     executor: BackgroundExecutor,
@@ -198,7 +182,6 @@ async fn send(events: &async_channel::Sender<AcpEvent>, event: AcpEvent) {
     let _ = events.send(event).await;
 }
 
-/// What kagan knows about the end in words: why the connection failed, then the agent's own words.
 fn join(failure: Option<String>, tail: Option<String>) -> Option<String> {
     match (failure, tail) {
         (Some(failure), Some(tail)) => Some(format!("{failure}\n{tail}")),
@@ -206,8 +189,6 @@ fn join(failure: Option<String>, tail: Option<String>) -> Option<String> {
     }
 }
 
-/// Talks ACP until the agent's output ends or the connection fails. `initialize` and the session
-/// share one limit: an agent that never answers is reported, not waited on.
 async fn connect(
     transport: Channel,
     folder: PathBuf,
@@ -296,16 +277,13 @@ async fn talk(
     serve(&mut session, &commands, events).await
 }
 
-/// Drops the updates a load replays before the thread reads the session again. The replay is the
-/// conversation kagan already stores, so writing it would double the transcript.
+// The replay is the conversation kagan already stores; writing it would double the transcript.
 fn forget(session: &mut ActiveSession<'_, Agent>) {
     use futures::FutureExt as _;
     // The SDK queues every replay update before it resolves the load response, so this sees them all.
     while matches!(session.read_update().now_or_never(), Some(Ok(_))) {}
 }
 
-/// What the agent sent that slice 1 does not read, so each kind is logged once per connection
-/// rather than once per chunk.
 #[derive(Default)]
 struct Unread(HashSet<String>);
 
@@ -323,7 +301,6 @@ impl Unread {
         }
     }
 
-    /// A message kind this build's protocol version cannot name.
     fn other(&mut self) {
         if self.0.insert("another kind of message".to_owned()) {
             eprintln!("kg: the agent sent something kagan does not read yet");
@@ -331,9 +308,7 @@ impl Unread {
     }
 }
 
-/// The output each tool call last reported. ACP re-sends the whole output on every update, so an
-/// update that says nothing but one the log already holds is not written again. A call's entry goes
-/// when the call completes or fails, so a long session holds only the calls still running.
+// ACP re-sends the whole output on every update; one the log already holds is not written again.
 #[derive(Default)]
 struct Repeats(HashMap<String, String>);
 
@@ -361,8 +336,6 @@ impl Repeats {
     }
 }
 
-/// Serves the thread's commands, the agent's messages, and any permission answer until one side is
-/// gone: an update becomes an event, and the prompt's response ends its turn.
 async fn serve(
     session: &mut agent_client_protocol::v1::ActiveSession<'_, Agent>,
     commands: &async_channel::Receiver<AcpCommand>,
@@ -424,7 +397,6 @@ enum Step {
     Closed,
 }
 
-/// One thing the agent said: an update, its turn's end, or a permission request.
 async fn heard(
     message: SessionMessage,
     events: &async_channel::Sender<AcpEvent>,
@@ -448,7 +420,6 @@ async fn heard(
     }
 }
 
-/// One message from the agent for this session: an update to draw, or a permission request.
 async fn answer(
     dispatch: Dispatch,
     events: &async_channel::Sender<AcpEvent>,
@@ -511,7 +482,6 @@ async fn answer(
     }
 }
 
-/// Waits a moment for the agent to exit on its own, then ends its tree and reports how it ended.
 async fn exit_status(process: &mut Process, executor: &BackgroundExecutor) -> Option<Exit> {
     let started = Instant::now();
     loop {
@@ -527,8 +497,6 @@ async fn exit_status(process: &mut Process, executor: &BackgroundExecutor) -> Op
     }
 }
 
-/// The status kagan's own kill leaves. It arrives at once on both platforms, so a moment is
-/// enough to read it.
 async fn killed(process: &mut Process, executor: &BackgroundExecutor) -> Option<Exit> {
     for _ in 0..10 {
         if let Ok(Some(status)) = process.child().try_status() {
@@ -539,7 +507,6 @@ async fn killed(process: &mut Process, executor: &BackgroundExecutor) -> Option<
     None
 }
 
-/// How the process ended: its code, or the signal that ended it.
 fn exit_of(status: ExitStatus) -> Option<Exit> {
     #[cfg(unix)]
     if let Some(signal) = std::os::unix::process::ExitStatusExt::signal(&status) {
@@ -548,8 +515,7 @@ fn exit_of(status: ExitStatus) -> Option<Exit> {
     status.code().map(exit_code)
 }
 
-/// How Windows reports a code above `i32::MAX`: as a negative number. The sign is cast away, not
-/// refused, so a thread says the same code a terminal does.
+// Windows reports a code above `i32::MAX` as a negative number, so the sign is cast away, not refused.
 fn exit_code(code: i32) -> Exit {
     Exit::Code(code.cast_unsigned())
 }

@@ -14,8 +14,6 @@ use serde_json::Value;
 use crate::area::{argument, awaited, dispatch, error, from_host, to_host, with_app};
 use crate::threads::shown_thread;
 
-/// A call's default and most items, the page's byte ceiling, the longest a wait runs, and the two
-/// fields a tool call may carry too much of. All six are in the d.ts.
 const DEFAULT: u32 = 100;
 const MOST: u32 = 200;
 const PAGE: usize = 256 * 1024;
@@ -35,7 +33,6 @@ pub(crate) fn module() -> HostModule {
         .async_function("setDraft", crate::ui_host::set_draft)
 }
 
-/// One item of a transcript, as a plugin reads it.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Item {
@@ -125,7 +122,6 @@ struct OptionShown {
     role: Option<OptionRole>,
 }
 
-/// One logged event as a transcript item, or nothing when the transcript does not draw it.
 pub(crate) fn item(event: &Event) -> Option<Item> {
     let body = match &event.kind {
         EventKind::Message {
@@ -218,8 +214,6 @@ fn step_status(status: PlanStatus) -> &'static str {
     }
 }
 
-/// The field cut to its cap, and whether anything was cut. The cut lands on a character boundary,
-/// so a letter outside ASCII is never split in two.
 fn capped(text: &str, cap: usize) -> (String, bool) {
     let mut end = text.len().min(cap);
     while !text.is_char_boundary(end) {
@@ -228,8 +222,6 @@ fn capped(text: &str, cap: usize) -> (String, bool) {
     (text[..end].to_owned(), end < text.len())
 }
 
-/// The raw input as the agent sent it, or its own text cut to `ARGS` when that is longer. A cut
-/// `args` is a string holding the start of the JSON, which `argsTruncated` flags.
 fn capped_args(input: Option<&Value>) -> (Option<Value>, Option<bool>) {
     let Some(input) = input else {
         return (None, None);
@@ -250,8 +242,6 @@ fn capped_output(output: Option<&str>) -> (Option<String>, Option<bool>) {
     (Some(text), over.then_some(true))
 }
 
-/// A page is a prefix of the asked order, and holds one item even when that item alone is over the
-/// ceiling: a message can be a whole MiB, and a page that skipped it would never return it.
 pub(crate) fn page(items: Vec<Item>) -> serde_json::Result<Value> {
     let mut kept = Vec::new();
     let mut bytes = 0;
@@ -282,7 +272,6 @@ struct WaitOptions {
     timeout_ms: u64,
 }
 
-/// A thread a chat call may read or drive: one kagan lists, and one whose transcript is its events.
 pub(crate) fn chat(id: &ThreadId, cx: &gpui_kit::App) -> Result<(), HostError> {
     shown_thread(id, cx)?;
     let acp = Workspace::global(cx)
@@ -335,7 +324,6 @@ fn items(
     })
 }
 
-/// The open approvals and questions of a chat, oldest first, over the same read the host draws from.
 fn approvals(
     arguments: &HostArguments,
 ) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {

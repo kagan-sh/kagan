@@ -996,8 +996,6 @@ fn a_tool_delta_plan_and_usage_read_from_the_wire() {
     );
 }
 
-/// A delta carries only what the agent said this time: a field it left out is not written as a
-/// null, so the log and `kg thread events` stay small.
 #[test]
 fn a_tool_delta_writes_only_the_field_it_names() {
     let wire = serde_json::to_value(EventKind::Tool {

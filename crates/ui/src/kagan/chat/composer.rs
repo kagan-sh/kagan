@@ -18,15 +18,12 @@ use crate::theme::{Tone, TypeScale as _, control_height, radius_xs};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-/// The one column the transcript, the cards and the prompt box share.
 pub(super) const COLUMN: f32 = 760.;
 
-/// What an empty prompt box says: how to send, or how to get back to sending.
 const ASK: &str = "Ask the agent… Enter sends, Shift+Enter adds a line";
 const STOPPED: &str = "Start the agent again to send";
 const ARCHIVED: &str = "This thread is archived";
 
-/// What the box draws this frame, read once so every part of it agrees.
 struct Shown {
     turn: Turn,
     ready: bool,
@@ -34,7 +31,6 @@ struct Shown {
     archived: bool,
 }
 
-/// Where the shown run is: waiting for a prompt, answering one, or stopped.
 #[derive(Clone, Copy)]
 enum Turn {
     Waiting,
@@ -58,8 +54,6 @@ impl Turn {
     }
 }
 
-/// The prompt box: the cards over it, the box itself, and one quiet row under it that says where
-/// this runs and what the agent is doing.
 pub(super) fn composer(
     view: &mut ChatView,
     answering: bool,
@@ -105,7 +99,6 @@ pub(super) fn composer(
         .into_any_element()
 }
 
-/// The one rounded box: the text area, what happened when it stopped, and the bar under it.
 fn boxed(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyElement {
     let border = if shown.focused {
         cx.theme().accent
@@ -152,7 +145,6 @@ fn boxed(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyE
         .into_any_element()
 }
 
-/// The text area. What to do sits in its own placeholder, so the box draws one thing.
 fn area(view: &ChatView, stopped: bool, cx: &App) -> impl IntoElement {
     let value = view.prompt.read(cx).value().to_string();
     div().relative().child(
@@ -178,8 +170,6 @@ fn area(view: &ChatView, stopped: bool, cx: &App) -> impl IntoElement {
     )
 }
 
-/// The bar inside the box: what a plugin adds, the quiet ways on behind one menu, and the one
-/// action this state offers.
 fn toolbar(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyElement {
     let menu = if shown.turn.running() || shown.archived {
         None
@@ -199,8 +189,6 @@ fn toolbar(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> An
         .into_any_element()
 }
 
-/// The ways on that stay available but quiet, in one menu the size of its neighbours, so Start
-/// again and the plugin buttons keep their place. Nothing to offer, no menu.
 fn more(view: &ChatView, cx: &App) -> Option<AnyElement> {
     let thread = view.thread.clone();
     let reuse = crate::kagan::start::Reuse::of(&thread, cx).is_some();
@@ -254,8 +242,6 @@ fn more(view: &ChatView, cx: &App) -> Option<AnyElement> {
     )
 }
 
-/// The one action, where Send sits: Send while the agent waits, a round stop button while it
-/// answers, Start again after it stops, so the hand learns one place.
 fn action(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> Option<AnyElement> {
     if shown.archived {
         return None;
@@ -318,7 +304,6 @@ fn action(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> Opt
     )
 }
 
-/// Under the box, like bb's footer: where this runs and what the agent is doing, in one quiet row.
 fn context_row(view: &ChatView, answering: bool, cx: &App) -> impl IntoElement {
     let (project, folder) = context(&view.thread, cx);
     let (state, tone) = state_word(view, answering, cx);
@@ -352,7 +337,6 @@ fn context_row(view: &ChatView, answering: bool, cx: &App) -> impl IntoElement {
         )
 }
 
-/// One quiet chip. It states a fact, so it takes no focus.
 fn chip(id: &'static str, name: &str, icon: IconName, text: SharedString, cx: &App) -> AnyElement {
     h_flex()
         .id(id)
@@ -370,7 +354,6 @@ fn chip(id: &'static str, name: &str, icon: IconName, text: SharedString, cx: &A
         .into_any_element()
 }
 
-/// The project's name, and the folder the run writes to: a worktree's branch, or the project's own.
 fn context(
     thread: &ThreadId,
     cx: &App,
@@ -403,7 +386,6 @@ fn context(
     (project, folder)
 }
 
-/// What the agent is doing, in the words the thread row uses, with the tone that says it.
 fn state_word(view: &ChatView, answering: bool, cx: &App) -> (SharedString, Hsla) {
     let muted = cx.theme().muted_foreground;
     if view.sending {

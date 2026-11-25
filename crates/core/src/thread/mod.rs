@@ -236,7 +236,6 @@ async fn rename(
     ))
 }
 
-/// A thread's link, which decides where its typing and its terminal operations go.
 pub(crate) fn link(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
@@ -245,7 +244,6 @@ pub(crate) fn link(
     Ok(thread(this, id, cx)?.read_with(cx, |thread, _| thread.record.link))
 }
 
-/// Types text into a thread: a prompt on an ACP thread, a line in a terminal otherwise.
 pub(crate) async fn type_text(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
@@ -268,8 +266,6 @@ pub(crate) async fn type_text(
     terminal::send(this, id.clone(), text, cx).await
 }
 
-/// A prompt and the terminal operations share one entry: an ACP thread's own terminal is the agent,
-/// and every other terminal operation needs one of its extra terminals.
 async fn terminal_op(
     this: &WeakEntity<Workspace>,
     op: ThreadOp,
@@ -295,8 +291,6 @@ async fn terminal_op(
     terminal::run(this, &id, terminal, op, cx)
 }
 
-/// Starts a thread's program the way its link says: in a pty, or as the agent's own ACP
-/// connection.
 pub(crate) async fn start_program(
     this: &WeakEntity<Workspace>,
     thread: &Entity<Thread>,

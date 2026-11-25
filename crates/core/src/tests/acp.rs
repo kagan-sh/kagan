@@ -15,18 +15,14 @@ use super::{
 use crate::Workspace;
 use crate::workspace::recovery::resume_threads;
 
-/// One recorded turn: the chunks the agent says, and why it stopped. `hold` keeps the prompt
-/// open until a cancel; `sleep` spawns a child that must die with the agent.
 fn turn(chunks: &[&str], stop: &str) -> Value {
     json!({ "chunks": chunks, "stopReason": stop })
 }
 
-/// A turn recorded as raw ACP updates, then the stop reason.
 fn transcript(updates: &Value, stop: &str) -> Value {
     json!({ "updates": updates, "stopReason": stop })
 }
 
-/// A turn that asks for permission before it finishes. `options` are the agent's own.
 fn asking(tool: &Value, options: &Value, stop: &str) -> Value {
     json!({
         "updates": [tool],
@@ -54,14 +50,10 @@ struct Agent {
 }
 
 impl Agent {
-    /// Records `sessions` and `turns`, and puts a program named `opencode` on the thread's line
-    /// that re-runs this test binary as the agent.
     fn new(sessions: &[&str], turns: &[Value]) -> Self {
         Self::named("opencode", sessions, turns, None)
     }
 
-    /// One agent's conversation recorded against that agent's own ACP server: the session it named
-    /// and the turns it answered, or the error it refused the session with.
     fn recorded(agent: &str, recording: &str) -> Self {
         let record: Value = serde_json::from_str(recording).unwrap();
         if let Some(error) = record.get("error") {
@@ -132,7 +124,6 @@ impl Agent {
         }
     }
 
-    /// The thread's line: this test binary, run again as the fake agent.
     fn program(&self) -> String {
         format!(
             "\"{}\" -q --exact tests::acp::fake_agent --nocapture",
@@ -140,7 +131,6 @@ impl Agent {
         )
     }
 
-    /// The folder the test gives the workspace as its `PATH`, so `npx` is the recorded one.
     fn bin(&self) -> &Path {
         self.dir.path()
     }
@@ -219,7 +209,6 @@ fn ended(kinds: &[EventKind], outcome: TurnOutcome) -> bool {
         .any(|kind| matches!(kind, EventKind::TurnEnded { outcome: got, .. } if *got == outcome))
 }
 
-/// What kagan said went wrong, if it recorded a failure.
 fn failed(kinds: &[EventKind]) -> Option<String> {
     kinds.iter().find_map(|kind| match kind {
         EventKind::Failed { error } => error.clone(),
@@ -482,8 +471,6 @@ async fn a_refused_load_starts_a_new_session_and_says_why(cx: &mut TestAppContex
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 
-/// One agent's recorded conversation, then a start that loads it: the replay comes from the same
-/// agent's own `session/load`, and the transcript stays the one kagan already stores.
 #[gpui_kit::test]
 async fn a_recorded_load_replays_without_doubling_the_transcript(cx: &mut TestAppContext) {
     let recording = include_str!("acp/opencode-load.json");
@@ -557,7 +544,6 @@ async fn a_recorded_load_replays_without_doubling_the_transcript(cx: &mut TestAp
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 
-/// The MCP server kagan offers every ACP session, and the files the agent's own integration writes.
 #[cfg(unix)]
 #[gpui_kit::test]
 async fn an_acp_session_gets_kagan_mcp_and_the_agents_files(cx: &mut TestAppContext) {
@@ -606,8 +592,6 @@ fn assert_mcp_server(params: &Value, id: &ThreadId) {
     );
 }
 
-/// An adapter agent whose own program is there and whose `npx` is not: the run is refused before
-/// the thread exists, rather than starting a chat that can never reach its agent.
 #[gpui_kit::test]
 async fn acp_claude_without_npx_is_refused_before_the_thread_starts(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -825,7 +809,6 @@ fn calling() -> Value {
     })
 }
 
-/// Waits for the thread's first pending question.
 async fn asked(id: &ThreadId, cx: &mut TestAppContext) -> PendingInteraction {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     loop {
@@ -843,7 +826,6 @@ async fn asked(id: &ThreadId, cx: &mut TestAppContext) -> PendingInteraction {
     }
 }
 
-/// Waits for the file the fake agent writes with what it heard.
 fn heard_in(path: &Path, cx: &mut TestAppContext) -> String {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
@@ -862,7 +844,6 @@ fn heard_in(path: &Path, cx: &mut TestAppContext) -> String {
     }
 }
 
-/// The two thought chunks of the recording arrive as one stream, in order.
 fn one_thought(kinds: &[EventKind]) {
     let thoughts: Vec<_> = kinds
         .iter()
@@ -874,7 +855,6 @@ fn one_thought(kinds: &[EventKind]) {
     assert_eq!(thoughts.concat(), "look first before", "{kinds:?}");
 }
 
-/// A read call opens the row; its update completes it and repeats neither title nor input.
 fn a_read_call_and_its_update(kinds: &[EventKind]) {
     let tools: Vec<_> = kinds
         .iter()
@@ -1261,7 +1241,6 @@ async fn acp_cancel_withdraws_the_agent_approval_and_leaves_the_threads_question
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 
-/// An agent that exits while its request is open leaves no card and no waiter behind.
 #[gpui_kit::test]
 async fn acp_an_agent_that_hangs_up_with_a_question_open_leaves_nothing_waiting(
     cx: &mut TestAppContext,
@@ -1299,7 +1278,6 @@ async fn acp_an_agent_that_hangs_up_with_a_question_open_leaves_nothing_waiting(
     );
 }
 
-/// Stop while the agent waits for an answer ends the wait with the agent.
 #[gpui_kit::test]
 async fn acp_stop_with_a_question_open_leaves_nothing_waiting(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -1321,7 +1299,6 @@ async fn acp_stop_with_a_question_open_leaves_nothing_waiting(cx: &mut TestAppCo
     assert!(!agent.path("answer").exists(), "nobody answered it");
 }
 
-/// A question the agent left open when its turn ended is about a turn that is over.
 #[gpui_kit::test]
 async fn acp_a_question_left_open_when_the_turn_ends_goes_with_it(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -1486,7 +1463,6 @@ async fn acp_stop_during_an_open_turn_asks_for_nothing(cx: &mut TestAppContext) 
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Idle);
 }
 
-/// Quit follows the one stop rule: the open turn stays for the next open, which loads it again.
 #[gpui_kit::test]
 async fn acp_quit_leaves_the_turn_to_resume(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -1582,8 +1558,6 @@ async fn acp_a_prompt_that_cannot_be_sent_writes_nothing(cx: &mut TestAppContext
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 
-/// One agent's real conversation recorded against its own ACP server, replayed through the fake
-/// agent on the thread's line, with the recorded `npx` on the `PATH`.
 async fn replay(
     agent: &str,
     recording: &str,
@@ -1600,7 +1574,6 @@ async fn replay(
     (fixture, agent, id, kinds)
 }
 
-/// The session id the recording named, so a test reads it rather than repeating it.
 fn recorded_session(recording: &str) -> String {
     serde_json::from_str::<Value>(recording).unwrap()["session"]
         .as_str()
@@ -1658,9 +1631,6 @@ async fn a_recorded_kimi_conversation_replays(cx: &mut TestAppContext) {
     op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
 }
 
-/// Gemini's own refusal, replayed through the fake agent. The launch command is opencode's: a
-/// copy of this test binary cannot take `--acp`, which its own launch command passes first, so the
-/// per-agent table's arguments are pinned in kg-domain instead.
 #[gpui_kit::test]
 async fn a_recorded_session_refusal_fails_the_thread(cx: &mut TestAppContext) {
     let recording = include_str!("acp/gemini.json");
@@ -1725,7 +1695,6 @@ fn permission_request(session: &str, permission: &Value) -> Value {
     })
 }
 
-/// The id kagan sees on every permission request this agent makes.
 const PERMISSION_ID: i64 = 7;
 
 fn sleep_child(dir: &Path) {
@@ -1738,8 +1707,6 @@ fn sleep_child(dir: &Path) {
     std::mem::forget(child);
 }
 
-/// The agent, when this test binary is run again with `KG_FAKE_ACP_DIR` set: it answers the
-/// agent protocol on stdin and stdout from the recording, and returns at once otherwise.
 #[test]
 fn fake_agent() {
     let Ok(dir) = std::env::var("KG_FAKE_ACP_DIR") else {
@@ -1841,8 +1808,6 @@ fn fake_agent() {
     }
 }
 
-/// The ways a recording ends the agent after a prompt: its stderr, its exit code, or a signal.
-/// Returns whether the agent stops listening.
 fn ends(record: &Value) -> bool {
     for line in record["stderr"].as_array().cloned().unwrap_or_default() {
         eprintln!("{}", line.as_str().unwrap_or_default());
@@ -1858,7 +1823,6 @@ fn ends(record: &Value) -> bool {
     false
 }
 
-/// Writes one recorded turn's chunks, with the prompt echo and the message id the modes ask for.
 fn turn_chunks(out: &mut std::io::Stdout, session: &str, record: &Value, modes: &str) {
     let mode = |name: &str| modes.lines().any(|line| line == name);
     if mode("echo") {
@@ -1874,13 +1838,11 @@ fn turn_chunks(out: &mut std::io::Stdout, session: &str, record: &Value, modes: 
     }
 }
 
-/// What one prompt leaves the fake agent doing: holding the request open, or stopping.
 struct After {
     hold: Option<(Value, Value)>,
     quit: bool,
 }
 
-/// One recorded turn: its updates, its permission request, and its stop reason.
 fn prompted(
     dir: &Path,
     out: &mut std::io::Stdout,
@@ -1916,7 +1878,6 @@ fn prompted(
     }
 }
 
-/// The capabilities the agent advertises: the recording's own answer, or a synthetic agent's.
 fn capabilities(dir: &Path, modes: &str) -> Value {
     std::fs::read_to_string(dir.join("initialize.json"))
         .ok()
@@ -1926,7 +1887,6 @@ fn capabilities(dir: &Path, modes: &str) -> Value {
         )
 }
 
-/// A load: the session the request names and its replay, or the refusal. `None` when it refused.
 fn loaded(
     dir: &Path,
     out: &mut std::io::Stdout,
@@ -1958,7 +1918,6 @@ fn loaded(
     Some(session)
 }
 
-/// The updates a recorded load replays, in the order the agent sent them.
 fn replay_updates(dir: &Path) -> Vec<Value> {
     std::fs::read_to_string(dir.join("replay.ndjson"))
         .unwrap_or_default()
@@ -1967,7 +1926,6 @@ fn replay_updates(dir: &Path) -> Vec<Value> {
         .collect()
 }
 
-/// One raw ACP update on the session, as the recording holds it.
 fn notice(session: &str, update: &Value) -> Value {
     json!({
         "jsonrpc": "2.0",
@@ -1976,8 +1934,6 @@ fn notice(session: &str, update: &Value) -> Value {
     })
 }
 
-/// Asks the person and waits for kagan's answer. Returns whether the prompt is already answered,
-/// which a cancel does. A selected option is written to `answer`; a cancelled one to `refused`.
 fn permission_step(
     dir: &Path,
     lines: &mut impl Iterator<Item = String>,
@@ -2028,7 +1984,6 @@ fn permission_step(
     answered
 }
 
-/// The session the agent names, or the refusal a recording holds instead. `None` when it refused.
 fn new_session(dir: &Path, out: &mut std::io::Stdout, id: &Value) -> Option<String> {
     if let Ok(refused) = std::fs::read_to_string(dir.join("refuse")) {
         let error = serde_json::from_str::<Value>(&refused)
@@ -2041,8 +1996,6 @@ fn new_session(dir: &Path, out: &mut std::io::Stdout, id: &Value) -> Option<Stri
     Some(session)
 }
 
-/// The next session id the recording holds, taken off the file so the next agent kagan starts
-/// answers with the one after it.
 fn take_session(dir: &Path) -> String {
     let text = std::fs::read_to_string(dir.join("sessions")).unwrap_or_default();
     let mut lines = text.lines();

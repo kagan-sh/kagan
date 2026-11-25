@@ -26,8 +26,6 @@ use crate::ui_registry::Facts;
 
 const WELCOME_MARK_FADE: f32 = 0.3;
 
-/// What the ended line says: core's own words for the run, the note about a screen that was not
-/// kept in full, and why nothing ran.
 pub(in crate::kagan) fn ended_text(id: &ThreadId, cx: &gpui_kit::App) -> String {
     let workspace = Workspace::global(cx);
     let workspace = workspace.read(cx);

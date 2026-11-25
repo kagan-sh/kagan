@@ -239,8 +239,6 @@ fn spawn_thread(args: &HostArguments, plugin: &PluginId) -> Result<Op, HostError
 }
 
 // A plugin reads the changes of a thread kagan lists, never of a hidden or archived one.
-/// A thread kagan lists: visible and unarchived. A plugin reads the changes and the transcript of
-/// these, never of a hidden or archived one.
 pub(crate) fn shown_thread(id: &ThreadId, cx: &gpui_kit::App) -> Result<(), HostError> {
     let listed = Workspace::global(cx)
         .read(cx)

@@ -41,7 +41,6 @@ pub enum HostUiEvent {
         id: ThreadId,
         reply: Sender<Result<(), String>>,
     },
-    /// A plugin reads the prompt box of the chat on screen (`text` is `None`) or writes it.
     ChatDraft {
         thread: ThreadId,
         text: Option<String>,

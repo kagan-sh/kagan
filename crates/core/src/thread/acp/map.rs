@@ -8,23 +8,17 @@ use kg_domain::{
     ToolStatus, TurnOutcome,
 };
 
-/// The most of one side of a diff or one tool output kagan keeps, so one event stays small enough
-/// to read and to keep in the log.
 const TOOL_TEXT_MAX: usize = 64 * 1024;
-/// The most of one tool call's input kagan keeps, written out as JSON: a write tool's input is the
-/// whole file, and the log, `kg thread events` and every chat open would carry it.
+// A write tool's input is the whole file, and the log, `kg thread events` and every chat read it.
 const TOOL_INPUT_MAX: usize = 8 * 1024;
 const CUT: &str = "\n… (truncated)";
 
-/// One chunk of the agent's reply, and the message the agent says it belongs to.
 #[derive(Debug)]
 pub(super) struct Chunk {
     pub(super) text: String,
     pub(super) message_id: Option<String>,
 }
 
-/// The fields of one tool call that this update carries. A later update with the same `id`
-/// replaces only the fields it names.
 #[derive(Debug)]
 pub(super) struct ToolUpdate {
     pub(super) id: String,
@@ -38,7 +32,6 @@ pub(super) struct ToolUpdate {
     pub(super) locations: Vec<ToolLocation>,
 }
 
-/// What one ACP update means, before it becomes a log event.
 #[derive(Debug)]
 pub(super) enum Update {
     Message(Chunk),
@@ -48,7 +41,6 @@ pub(super) enum Update {
     Usage { used: u64, size: u64 },
 }
 
-/// Reads the updates a transcript draws. Everything else is not requested or not drawn yet.
 pub(super) fn read(update: &SessionUpdate) -> Option<Update> {
     match update {
         SessionUpdate::AgentMessageChunk(content) => Some(Update::Message(chunk(content)?)),
@@ -104,7 +96,6 @@ fn tool_call(call: &ToolCall) -> ToolUpdate {
     }
 }
 
-/// The same, only for the fields a `tool_call_update` names, and none for the ones it leaves out.
 pub(super) fn tool_delta(id: String, fields: &ToolCallUpdateFields) -> ToolUpdate {
     ToolUpdate {
         id,
@@ -127,9 +118,6 @@ pub(super) fn tool_delta(id: String, fields: &ToolCallUpdateFields) -> ToolUpdat
     }
 }
 
-/// The text of every text content block, joined by a blank line, or the raw output when the
-/// content carries no text: an agent that sends both repeats itself, and the body would say it
-/// twice.
 fn output(content: &[ToolCallContent], raw: Option<&serde_json::Value>) -> Option<String> {
     let parts: Vec<String> = content
         .iter()
@@ -152,8 +140,6 @@ fn output(content: &[ToolCallContent], raw: Option<&serde_json::Value>) -> Optio
     (!text.trim().is_empty()).then(|| cap(text))
 }
 
-/// The input as the log keeps it: the value itself, or a small marker where a value too large to
-/// carry every time it is read would sit.
 fn input(value: &serde_json::Value) -> serde_json::Value {
     let text = value.to_string();
     if text.len() <= TOOL_INPUT_MAX {
@@ -224,7 +210,6 @@ fn status(status: ToolCallStatus) -> ToolStatus {
     }
 }
 
-/// The agent's options, with kagan's role for each kind. Labels and order stay the agent's.
 pub(super) fn options(options: &[PermissionOption]) -> Vec<InteractionOption> {
     options
         .iter()
@@ -241,7 +226,6 @@ pub(super) fn options(options: &[PermissionOption]) -> Vec<InteractionOption> {
         .collect()
 }
 
-/// What the question says the agent wants to do, from the tool's kind.
 pub(super) fn phrase(kind: Option<ToolKind>) -> &'static str {
     match kind {
         Some(ToolKind::Read) => "read a file",
@@ -255,7 +239,6 @@ pub(super) fn phrase(kind: Option<ToolKind>) -> &'static str {
     }
 }
 
-/// What an update calls itself on the wire, for the one log line an unread kind gets.
 pub(super) fn name(update: &SessionUpdate) -> String {
     serde_json::to_value(update)
         .ok()
@@ -268,7 +251,6 @@ pub(super) fn name(update: &SessionUpdate) -> String {
         .unwrap_or_else(|| "an update with no name".into())
 }
 
-/// What the turn's stop reason means, and the words shown when the agent stopped short.
 pub(super) fn outcome(reason: StopReason) -> (TurnOutcome, Option<String>) {
     match reason {
         StopReason::EndTurn => (TurnOutcome::Completed, None),

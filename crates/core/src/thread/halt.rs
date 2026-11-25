@@ -42,7 +42,6 @@ pub(super) async fn settle(
     crate::workspace::changed(this, cx)
 }
 
-/// Drops every question the thread has open, in memory and in the store: the card goes with them.
 async fn drop_questions(
     this: &WeakEntity<Workspace>,
     thread: &Entity<Thread>,

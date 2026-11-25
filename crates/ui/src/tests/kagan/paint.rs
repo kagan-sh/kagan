@@ -85,7 +85,6 @@ pub(in crate::tests) fn shows(
     .unwrap()
 }
 
-/// Whether `kg ui` reports an element inside `within` as visible.
 pub(in crate::tests) fn shows_within(
     cx: &mut TestAppContext,
     window: AnyWindowHandle,

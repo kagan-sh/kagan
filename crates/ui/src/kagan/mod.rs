@@ -148,7 +148,6 @@ enum Shown {
     Nothing,
     Start(ProjectId),
     Thread(Entity<TerminalView>),
-    /// An ACP thread, whose agent answers in the transcript.
     Chat(Entity<ChatView>),
 }
 

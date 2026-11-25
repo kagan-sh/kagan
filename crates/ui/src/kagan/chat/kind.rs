@@ -6,8 +6,6 @@ use kg_domain::{Timestamp, WorkKind};
 
 use crate::kagan::chat::part::{ToolRow, ToolStage};
 
-/// How a work row draws its kind: the icon, the words the window uses, and the row's own title and
-/// meta. A plugin's page reads the same kind, which is why the kind lives in `kg_domain`.
 pub(super) fn icon(kind: &WorkKind) -> IconName {
     match kind {
         WorkKind::Read => IconName::FileText,
@@ -115,7 +113,6 @@ pub(super) fn mono_title(kind: &WorkKind) -> bool {
     }
 }
 
-/// The most useful short thing about the row: a file name, a command, a query, a URL.
 pub(super) fn title(kind: &WorkKind, tool: &ToolRow) -> Option<String> {
     let probe = |keys: &[&str]| {
         keys.iter().find_map(|key| {
@@ -145,7 +142,6 @@ pub(super) fn title(kind: &WorkKind, tool: &ToolRow) -> Option<String> {
         .map(|title| cut(&title, 120))
 }
 
-/// The outcome, or the time it took, right-aligned and muted.
 pub(super) fn meta(kind: &WorkKind, tool: &ToolRow) -> Option<String> {
     let span = tool.span().map(span_text);
     let outcome = match kind {
@@ -171,7 +167,6 @@ pub(super) fn meta(kind: &WorkKind, tool: &ToolRow) -> Option<String> {
     }
 }
 
-/// Whether the row has a body, and so a chevron.
 pub(super) fn has_body(kind: &WorkKind, tool: &ToolRow) -> bool {
     match kind {
         WorkKind::Edit | WorkKind::Delete | WorkKind::Move => !tool.diff.is_empty(),
@@ -179,7 +174,6 @@ pub(super) fn has_body(kind: &WorkKind, tool: &ToolRow) -> bool {
     }
 }
 
-/// The kind of one row: the rule lives in `kg_domain`, and the row holds its four fields.
 pub(super) fn of(tool: &ToolRow) -> WorkKind {
     WorkKind::of(
         tool.name.as_deref(),
@@ -189,7 +183,6 @@ pub(super) fn of(tool: &ToolRow) -> WorkKind {
     )
 }
 
-/// What an approval card calls the tool it asks about.
 pub(super) fn title_of(tool: &ToolRow) -> Option<String> {
     title(&of(tool), tool)
 }
@@ -198,7 +191,6 @@ pub(super) fn pick(done: bool, done_word: &'static str, now_word: &'static str) 
     if done { done_word } else { now_word }
 }
 
-/// The word a row uses at its stage: before it starts, while it moves, and once it settles.
 pub(super) fn tell(
     stage: ToolStage,
     waiting: &'static str,
@@ -219,7 +211,6 @@ fn file_name(path: &str) -> &str {
         .unwrap_or(path)
 }
 
-/// Cuts text at a token boundary, so a title never ends mid-word.
 fn cut(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_owned();
@@ -239,7 +230,6 @@ fn cut(text: &str, max: usize) -> String {
     format!("{}…", text[..end].trim_end())
 }
 
-/// "6 s", or "1 min 12 s" once it is worth the word.
 pub(super) fn span_text(span: Duration) -> String {
     let secs = span.as_secs().max(1);
     if secs >= 60 {
@@ -249,7 +239,6 @@ pub(super) fn span_text(span: Duration) -> String {
     }
 }
 
-/// The exit code a command's output ends with, when its last line names one.
 fn exit_word(output: &str) -> Option<String> {
     let line = output.lines().rev().find(|line| !line.trim().is_empty())?;
     let mut words = line.split_whitespace();
@@ -272,7 +261,6 @@ pub(super) fn plural(count: usize, one: &'static str, many: &'static str) -> &'s
     if count == 1 { one } else { many }
 }
 
-/// How long a row took, from the two event times.
 pub(super) fn span_of(from: Timestamp, to: Timestamp) -> Duration {
     Duration::from_millis(u64::try_from(to.0.saturating_sub(from.0).max(0)).unwrap_or(0))
 }
