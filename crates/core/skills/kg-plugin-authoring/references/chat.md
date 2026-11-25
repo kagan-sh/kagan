@@ -22,28 +22,30 @@ an approval, and it never answers one.
    import { context, onContextChanged } from "kagan/host";
    import { cancel, draft, items, send, setDraft, waitItem } from "kagan/chat";
 
-   // One row per item, yours to style; agent text goes through Markdown. A tool call arrives as two
-   // `work` items with one `work.id`, so fold them by it, and keep the last 200 rows.
+   // One row per thing, yours to style; agent text goes through Markdown. The events are deltas:
+   // a message's or a thought's chunks share `data.messageId`, and one tool call is several `tool`
+   // events with one `data.id`, so fold them, and keep the last 200 rows.
    function keep(view, page) {
-     for (const item of page) {
-       const row = item.kind === "work"
-         ? view.rows.find((r) => r.kind === "work" && r.work.id === item.work.id)
-         : undefined;
-       if (row) row.work = { ...row.work, ...item.work, title: item.work.title || row.work.title };
-       else view.rows.push(item);
+     for (const event of page) {
+       const data = event.data || {};
+       const key = data.messageId || data.id || (event.type === "plan" ? "plan" : `event-${event.seq}`);
+       const row = view.rows.find((row) => row.key === key);
+       if (!row) view.rows.push({ key, type: event.type, text: data.text || "", data });
+       else if (event.type === "message" || event.type === "thought") row.text += data.text || "";
+       else row.data = { ...row.data, ...data, title: data.title || row.data.title };
      }
      view.rows = view.rows.slice(-200);
      view.cx.notify();
    }
 
-   const draw = (item) =>
-     item.kind === "message" ? new Markdown(`chat-${item.seq}`, item.text)
+   const draw = (row) =>
+     row.type === "message" ? new Markdown(`chat-${row.key}`, row.text)
      : div().child(
-         item.kind === "thought" ? item.text
-         : item.kind === "plan" ? item.plan.steps.map((step) => step.step).join(" · ")
-         : item.kind === "work" ? `${item.work.status}: ${item.work.title}`
-         : item.kind === "notice" ? `${item.severity}: ${item.text}`
-         : `The turn ${item.outcome}.`,
+         row.type === "thought" ? row.text
+         : row.type === "plan" ? (row.data.entries || []).map((entry) => entry.text).join(" · ")
+         : row.type === "tool" ? `${row.data.status || "running"}: ${row.data.title || row.data.name || ""}`
+         : row.type === "notice" ? `${row.data.severity}: ${row.data.text}`
+         : row.type,
        );
 
    const shown = () => (context().props || {}).threadId;
@@ -72,21 +74,21 @@ an approval, and it never answers one.
        this.rows = [];
        this.cx.notify();
        follow(id, this).catch((error) => {
-         keep(this, [{ kind: "notice", severity: "error", text: String(error) }]);
+         keep(this, [{ key: "error", type: "notice", text: String(error), data: { severity: "error", text: String(error) } }]);
        });
      }
    }
-   // Read the log forward, then wait for the next item, while that chat is the one on screen.
+   // Read the log forward, then wait for the next event, while that chat is the one on screen.
    async function follow(id, view) {
      let after = 0;
      while (shown() === id) {
        const page = await items(id, { afterSeq: after, order: "asc" });
        if (shown() !== id) return;
-       for (const item of page) after = Math.max(after, item.seq);
+       for (const event of page) after = Math.max(after, event.seq);
        keep(view, page);
-       const item = await waitItem(id, { afterSeq: after, timeoutMs: 30_000 });
+       const event = await waitItem(id, { afterSeq: after, timeoutMs: 30_000 });
        if (shown() !== id) return;
-       if (item) { after = Math.max(after, item.seq); keep(view, [item]); }
+       if (event) { after = Math.max(after, event.seq); keep(view, [event]); }
      }
    }
    ```
@@ -100,9 +102,10 @@ an approval, and it never answers one.
    await cancel(job.threadId); // ends the reply, keeps the agent; refused when no turn is open
    ```
 
-   Every item kind, its fields, the caps and the fold rules are typed in `chat.d.ts`, which
-   `kg plugin types` writes. Every call names a chat: a visible, unarchived `acp` thread. Any other
-   thread is refused with `thread <id> is not a chat; its transcript is its terminal`.
+   Every event type and its fields are the log's own, the ones `threads.events` returns and
+   `chat.d.ts` types, written by `kg plugin types`. Every call names a chat: a visible, unarchived
+   `acp` thread. Any other thread is refused with
+   `thread <id> is not a chat; its transcript is its terminal`.
 
    The open approvals and questions are `approvals(id)` —
    `{ interactionId, title, options: { id, label, role }[] }[]`, oldest first, never paged — where

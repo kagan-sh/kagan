@@ -150,12 +150,12 @@ struct ListOptions {
     before: Option<Timestamp>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct EventsOptions {
-    after_seq: Option<u64>,
-    limit: Option<u32>,
-    order: Option<Order>,
+pub(super) struct EventsOptions {
+    pub(super) after_seq: Option<u64>,
+    pub(super) limit: Option<u32>,
+    pub(super) order: Option<Order>,
 }
 
 #[derive(Deserialize)]
@@ -287,7 +287,7 @@ fn ask_person(args: &HostArguments) -> Result<Op, HostError> {
     }))
 }
 
-fn optional<T: serde::de::DeserializeOwned + Default>(
+pub(super) fn optional<T: serde::de::DeserializeOwned + Default>(
     args: &HostArguments,
     ix: usize,
 ) -> Result<T, HostError> {

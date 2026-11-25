@@ -1,35 +1,13 @@
-// `kagan/chat`: a chat thread's transcript, its open approvals, and the prompt box of the one on screen.
-// Every kind is typed here. An item is one event of the log, and `usage` is not an item.
+// `kagan/chat`: a chat thread's events, its open approvals, and the prompt box of the one on screen.
+// The events are the log's own, the same ones `threads.events` returns.
 
-export type ChatItem = { seq: number; threadId: string; at: number } & (
-  | { kind: "message"; role: "user" | "agent"; text: string; messageId: string | null }
-  /** One thought chunk; chunks that share a `messageId` are one thought. */
-  | { kind: "thought"; text: string; messageId: string | null }
-  | { kind: "work"; work: {
-        id: string;
-        /** The call's kind: an MCP call by its name, a skill load, then the agent's own kind. */
-        tool: "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "mcp" | "skill" | "other";
-        /** The named title: `<server>.<tool>` for an MCP call, the skill's name, else the event's
-         * title, else its name, else "". Keep the last non-empty one for this `id`. */
-        title: string;
-        /** The state this event leaves the call in. */
-        status: "running" | "ok" | "error";
-        /** The agent's raw input, or its JSON text cut at 4 KiB when `argsTruncated` is true. */
-        args?: unknown;
-        argsTruncated?: boolean;
-        /** The result text, cut at 8 KiB when `outputTruncated` is true. */
-        output?: string;
-        outputTruncated?: boolean;
-      } }
-  | { kind: "plan"; plan: { steps: { step: string; status: "pending" | "running" | "done" }[] } }
-  | { kind: "notice"; severity: "info" | "warning" | "error"; text: string }
-  | { kind: "turn"; outcome: "completed" | "interrupted" | "failed"; error?: string }
-);
+/** One event of the log, exactly as `threads.events` returns it. */
+export interface Event { threadId: string; seq: number; at: number; type: string; data?: unknown }
 
-/** Up to `limit` items after `afterSeq`, newest first unless `order` is "asc". 100 by default, 200 at most, 256 KiB a page or one item over it alone. An item is one event, and one tool call is two or more `work` items with one `work.id`: fold them by `id`, where the last non-empty title and the last status win. A later `plan` replaces the one before it. */
-export function items(threadId: string, options?: { afterSeq?: number; limit?: number; order?: "asc" | "desc" }): Promise<ChatItem[]>;
-/** The next item after `afterSeq`, or null when the wait ended. A null may also mean the open approvals changed: read `approvals()` again either way. At most 60 s. */
-export function waitItem(threadId: string, options: { afterSeq: number; timeoutMs: number }): Promise<ChatItem | null>;
+/** The thread's events after `afterSeq`, exactly `threads.events`: ascending by default, `limit` of them. A message or thought arrives in chunks that share `data.messageId`, and one tool call in several `tool` events that share `data.id`, so fold those. */
+export function items(threadId: string, options?: { afterSeq?: number; limit?: number; order?: "asc" | "desc" }): Promise<Event[]>;
+/** The next event after `afterSeq`, or null when the wait ended. A null may also mean the open approvals changed: read `approvals()` again either way. At most 60 s. */
+export function waitItem(threadId: string, options: { afterSeq: number; timeoutMs: number }): Promise<Event | null>;
 /** The open approvals and questions of this chat, oldest first. Never paged. The host draws them and answers them; a plugin reads them and never answers one. */
 export function approvals(threadId: string): Promise<{ interactionId: string; title: string; options: { id: string; label: string; role: "primary" | "safe" | "destructive" | null }[] }[]>;
 /** Sends the prompt, exactly `kg thread input`. Refused while a turn is open or the agent is not running. At most 1 MiB. */
