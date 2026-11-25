@@ -1129,7 +1129,10 @@ fn an_archived_chat_offers_no_way_on(cx: &mut TestAppContext) {
     );
     reveal(cx, window, &id);
     wait_until(cx, |cx| shows(cx, window, "chat-start-again"));
-    assert!(shows(cx, window, "chat-new-thread"));
+    assert!(
+        shows(cx, window, "chat-more"),
+        "a stopped chat keeps its quiet ways behind one menu"
+    );
     cx.dispatch_action(window, crate::kagan::ArchiveThread);
     wait_until(cx, |cx| thread_record(cx, &id).archived_at.is_some());
     // An archived row is only reachable from the archived list, and opening it shows the chat
@@ -1141,7 +1144,48 @@ fn an_archived_chat_offers_no_way_on(cx: &mut TestAppContext) {
         value_of(cx, window, "chat-stopped").as_deref() == Some("This thread is archived.")
     });
     assert!(!shows(cx, window, "chat-start-again"));
-    assert!(!shows(cx, window, "chat-new-thread"));
+    assert!(
+        !shows(cx, window, "chat-more"),
+        "an archived chat offers no way on"
+    );
+}
+
+/// The box's More menu holds the quiet ways on: a new thread in this folder, and the report of a
+/// run that failed. Each does what its own button did.
+#[gpui_kit::test]
+fn a_stopped_chats_more_menu_opens_the_start_screen_and_saves_diagnostics(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let id = seed_thread_in(
+        data.path(),
+        Some(kg_domain::EnvironmentId("env_kagan".into())),
+        vec![
+            EventKind::Started,
+            EventKind::Failed {
+                error: Some("no such file or directory".into()),
+            },
+        ],
+    );
+    reveal(cx, window, &id);
+    wait_until(cx, |cx| shows(cx, window, "chat-more"));
+    click(cx, window, "chat-more");
+    wait_until(cx, |cx| shows(cx, window, "chat-new-thread"));
+    assert!(shows(cx, window, "chat-save-diagnostics"));
+    click(cx, window, "chat-new-thread");
+    wait_until(cx, |cx| shows(cx, window, "reuse-hint"));
+    super::press_key(cx, window, "escape");
+    wait_until(cx, |cx| shows(cx, window, "chat-more"));
+
+    click(cx, window, "chat-more");
+    wait_until(cx, |cx| shows(cx, window, "chat-save-diagnostics"));
+    click(cx, window, "chat-save-diagnostics");
+    let folder = data.path().join("diagnostics");
+    wait_until(cx, |_cx| {
+        std::fs::read_dir(&folder).is_ok_and(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .any(|entry| entry.path().extension().is_some_and(|ext| ext == "txt"))
+        })
+    });
 }
 
 /// A run that failed says the agent's own reason, not that nothing was running.

@@ -1,7 +1,9 @@
 use gpui_kit::component::Placement;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::{AnyElement, App, ElementId, IntoElement, SharedString, Styled as _, px};
+use gpui_kit::{
+    AnyElement, App, ElementId, IntoElement, ParentElement as _, SharedString, Styled as _, div, px,
+};
 use kg_domain::PluginId;
 use kg_plugins::{CommandContribution, CommandWhen, PluginHost, RunCommand};
 
@@ -28,8 +30,9 @@ pub(super) fn prompt(cx: &App) -> Vec<AnyElement> {
         .take(MOST_PROMPT)
         .map(|command| {
             let id = prompt_id_for(&command.plugin, &command.id);
-            // The bar is under the draft, so its tooltip opens below it, never over the text.
-            row(&command, id, Some(Placement::Bottom), cx)
+            // Beside the button, never over the draft above it, and never past the chat into the
+            // sidebar: a centred popup under a button this near the pane's left edge cannot stay in.
+            row(&command, id, Some(Placement::Right), cx)
         })
         .collect()
 }
@@ -70,15 +73,19 @@ fn row(
         Some(side) => button.tooltip_placement(side),
         None => button,
     };
-    control(
-        id,
-        Facts {
-            hint: Some(SharedString::from(tooltip)),
-            ..Facts::button(command.title.clone())
-        },
-        button.on_click(dispatch(run)),
-    )
-    .into_any_element()
+    // A squeezed bar takes the label's width and ellipsizes it, rather than pushing the one action
+    // past the box's edge, so the cap of buttons and the action always fit.
+    div()
+        .min_w_0()
+        .child(control(
+            id,
+            Facts {
+                hint: Some(SharedString::from(tooltip)),
+                ..Facts::button(command.title.clone())
+            },
+            button.on_click(dispatch(run)),
+        ))
+        .into_any_element()
 }
 
 // Command ids can hold any byte; %-escaping keeps the "/" separator unambiguous.

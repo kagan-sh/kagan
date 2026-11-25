@@ -123,7 +123,24 @@ fn seed(path: &Path) {
         created_at: Timestamp(0),
         updated_at: Timestamp(0),
     };
-    store.put_thread(&record(CHAT, Link::Acp)).unwrap();
+    store
+        .put_environment(&kg_domain::Environment {
+            id: kg_domain::EnvironmentId("env_chat".into()),
+            project_id: kg_domain::ProjectId("prj_kagan".into()),
+            path: path.join("worktree"),
+            status: kg_domain::EnvironmentStatus::Ready,
+            provider: kg_domain::EnvironmentProvider::Worktree,
+            branch: None,
+            base_branch: None,
+            retire_at: None,
+            error: None,
+        })
+        .unwrap();
+    let chat = Thread {
+        environment_id: Some(kg_domain::EnvironmentId("env_chat".into())),
+        ..record(CHAT, Link::Acp)
+    };
+    store.put_thread(&chat).unwrap();
     store.put_thread(&record(SHELL, Link::Terminal)).unwrap();
     store.put_thread(&record(OTHER, Link::Acp)).unwrap();
     store
@@ -444,6 +461,32 @@ fn the_window_draws_four_prompt_buttons_at_most(cx: &mut TestAppContext) {
         assert!(shows(cx, window, &drawn), "{drawn} is not drawn");
     }
     assert!(!shows(cx, window, "prompt/dev.test.b/improve0"));
+}
+
+/// The four prompt buttons, the More menu and Start again all fit inside the box's bar, so no
+/// control is clipped, at the composer's own width.
+#[gpui_kit::test]
+fn the_stopped_bar_keeps_every_control_inside_the_box(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) =
+        open_with_plugins_then(cx, |data| install(data, "dev.test.a", 4, BODY));
+    // The app's opening window, where the bar used to clip Start again.
+    cx.simulate_window_resize(window, size(px(1120.), px(720.)));
+    cx.run_until_parked();
+    click(cx, window, &format!("thread-{CHAT}"));
+    wait_until(cx, |cx| shows(cx, window, "chat-start-again"));
+    assert!(shows(cx, window, "chat-more"));
+    let (left, right) = {
+        let row = bounds(cx, window, "chat-box");
+        (row.origin.x, row.origin.x + row.size.width)
+    };
+    let prompts = (0..4).map(|ix| format!("prompt/dev.test.a/improve{ix}"));
+    for id in prompts.chain(["chat-more".to_owned(), "chat-start-again".to_owned()]) {
+        let control = bounds(cx, window, &id);
+        assert!(
+            control.origin.x >= left && control.origin.x + control.size.width <= right,
+            "{id} sticks out of the box: {control:?} outside {left}..{right}"
+        );
+    }
 }
 
 #[gpui_kit::test]

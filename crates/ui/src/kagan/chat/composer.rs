@@ -2,6 +2,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::{Disableable as _, Icon, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Context, Focusable as _, Hsla, InteractiveElement as _, IntoElement,
@@ -11,7 +12,7 @@ use kg_core::Workspace;
 use kg_domain::{ThreadId, ThreadStatus};
 
 use super::ChatView;
-use crate::kagan::controls::{control, dispatch};
+use crate::kagan::controls::{control, dispatch, menu_item};
 use crate::kagan::{SaveDiagnostics, StartAgain};
 use crate::theme::{Tone, TypeScale as _, control_height, radius_xs};
 use crate::ui_observe::UiObserveExt as _;
@@ -177,13 +178,13 @@ fn area(view: &ChatView, stopped: bool, cx: &App) -> impl IntoElement {
     )
 }
 
-/// The bar inside the box: what a plugin adds, the way on that stays quiet, and the one action
-/// this state offers.
+/// The bar inside the box: what a plugin adds, the quiet ways on behind one menu, and the one
+/// action this state offers.
 fn toolbar(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyElement {
-    let quiet = if shown.turn.running() || shown.archived {
-        Vec::new()
+    let menu = if shown.turn.running() || shown.archived {
+        None
     } else {
-        stopped_actions(view, cx)
+        more(view, cx)
     };
     let action = action(view, shown, cx);
     h_flex()
@@ -192,53 +193,64 @@ fn toolbar(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> An
         .px_2()
         .pb_2()
         .children(crate::kagan::header::prompt(cx))
-        .children(quiet)
+        .children(menu)
         .child(div().flex_1())
         .children(action)
         .into_any_element()
 }
 
-/// Ways on that stay available but quiet, beside the one obvious action.
-fn stopped_actions(view: &ChatView, cx: &App) -> Vec<AnyElement> {
-    let mut actions = Vec::new();
+/// The ways on that stay available but quiet, in one menu the size of its neighbours, so Start
+/// again and the plugin buttons keep their place. Nothing to offer, no menu.
+fn more(view: &ChatView, cx: &App) -> Option<AnyElement> {
     let thread = view.thread.clone();
-    if crate::kagan::start::Reuse::of(&thread, cx).is_some() {
-        let kagan = view.kagan.clone();
-        actions.push(
-            control(
-                "chat-new-thread",
-                Facts::button("New thread here…"),
-                Button::new("chat-new-thread-button")
-                    .small()
-                    .ghost()
-                    .label("New thread here…")
-                    .tooltip("Start a new thread in this folder")
-                    .on_click(move |_, window, cx| {
+    let reuse = crate::kagan::start::Reuse::of(&thread, cx).is_some();
+    let recovery = Workspace::global(cx).read(cx).recovery(&thread);
+    if !reuse && !recovery {
+        return None;
+    }
+    let kagan = view.kagan.clone();
+    Some(
+        control(
+            "chat-more",
+            Facts::button("More"),
+            Button::new("chat-more-button")
+                .small()
+                .ghost()
+                .icon(IconName::Ellipsis)
+                .accessibility_label("More")
+                .tooltip("More")
+                .dropdown_menu(move |menu, _, _| {
+                    let menu = if reuse {
                         let thread = thread.clone();
-                        _ = kagan.update(cx, |kagan, cx| {
-                            kagan.new_thread_here(&thread, window, cx);
-                        });
-                    }),
-            )
-            .into_any_element(),
-        );
-    }
-    if Workspace::global(cx).read(cx).recovery(&view.thread) {
-        actions.push(
-            control(
-                "chat-save-diagnostics",
-                Facts::button("Save diagnostics"),
-                Button::new("chat-save-diagnostics-button")
-                    .small()
-                    .ghost()
-                    .label("Save diagnostics")
-                    .tooltip("Save what this run printed, for a bug report")
-                    .on_click(dispatch(SaveDiagnostics)),
-            )
-            .into_any_element(),
-        );
-    }
-    actions
+                        let kagan = kagan.clone();
+                        menu.item(
+                            PopupMenuItem::element(|_, _| {
+                                menu_item("chat-new-thread", "New thread here…")
+                            })
+                            .on_click(move |_, window, cx| {
+                                let thread = thread.clone();
+                                _ = kagan.update(cx, |kagan, cx| {
+                                    kagan.new_thread_here(&thread, window, cx);
+                                });
+                            }),
+                        )
+                    } else {
+                        menu
+                    };
+                    if recovery {
+                        menu.item(
+                            PopupMenuItem::element(|_, _| {
+                                menu_item("chat-save-diagnostics", "Save diagnostics")
+                            })
+                            .on_click(dispatch(SaveDiagnostics)),
+                        )
+                    } else {
+                        menu
+                    }
+                }),
+        )
+        .into_any_element(),
+    )
 }
 
 /// The one action, where Send sits: Send while the agent waits, a round stop button while it
