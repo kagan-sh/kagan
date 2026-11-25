@@ -213,6 +213,34 @@ fn items_pages_the_events_after_seq_as_threads_events_does(cx: &mut TestAppConte
 }
 
 #[gpui_kit::test]
+fn items_reads_a_hundred_a_call_by_default(cx: &mut TestAppContext) {
+    let (_dir, plugin) = chat_plugin();
+    open_seeded(cx, plugin, |store| {
+        let more: Vec<EventKind> = (0..150).map(|_| message("more")).collect();
+        store
+            .append_events(&ThreadId(CHAT.into()), Timestamp(2), more)
+            .unwrap();
+    });
+
+    let page = forward(cx, "chat", "items", &json!([CHAT])).unwrap();
+    let page = page.as_array().unwrap();
+    assert_eq!(page.len(), 100, "{page:?}");
+    assert_eq!(page[0]["seq"], 1);
+    assert_eq!(page[99]["seq"], 100);
+}
+
+#[gpui_kit::test]
+fn items_refuses_more_than_two_hundred_a_call(cx: &mut TestAppContext) {
+    let (_dir, plugin) = chat_plugin();
+    open_chat(cx, plugin);
+
+    let refused = forward(cx, "chat", "items", &json!([CHAT, { "limit": 201 }])).unwrap_err();
+    assert!(refused.contains("at most 200 items a call"), "{refused}");
+    let most = forward(cx, "chat", "items", &json!([CHAT, { "limit": 200 }])).unwrap();
+    assert_eq!(most.as_array().unwrap().len(), 4, "{most}");
+}
+
+#[gpui_kit::test]
 fn a_chat_call_refuses_a_thread_that_is_not_a_chat(cx: &mut TestAppContext) {
     let (_dir, plugin) = chat_plugin();
     open_chat(cx, plugin);

@@ -12,6 +12,9 @@ use serde::Deserialize;
 use crate::area::{argument, awaited, dispatch, error, to_host, with_app};
 use crate::threads::{EventsOptions, optional, shown_thread};
 
+// `items` reads 100 a call when the caller names no limit, and refuses more than 200.
+const ITEMS: u32 = 100;
+const ITEMS_MOST: u32 = 200;
 const WAIT: u64 = 60_000;
 
 pub(crate) fn module() -> HostModule {
@@ -50,11 +53,14 @@ fn items(
         limit,
         order,
     } = optional(arguments, 1)?;
+    if limit.is_some_and(|limit| limit > ITEMS_MOST) {
+        return Err(HostError::new(format!("at most {ITEMS_MOST} items a call")));
+    }
     with_app(|cx| chat(&id, cx))??;
     dispatch(Op::Thread(ThreadOp::Events {
         id,
         after_seq,
-        limit,
+        limit: Some(limit.unwrap_or(ITEMS)),
         order,
     }))
 }

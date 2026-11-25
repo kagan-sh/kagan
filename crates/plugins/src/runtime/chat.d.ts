@@ -4,7 +4,7 @@
 /** One event of the log, exactly as `threads.events` returns it. */
 export interface Event { threadId: string; seq: number; at: number; type: string; data?: unknown }
 
-/** The thread's events after `afterSeq`, exactly `threads.events`: ascending by default, `limit` of them. A message or thought arrives in chunks that share `data.messageId`, and one tool call in several `tool` events that share `data.id`, so fold those. */
+/** The thread's events after `afterSeq`, exactly `threads.events`: ascending by default; 100 by default, 200 at most. A message or thought arrives in chunks that share `data.messageId`, and one tool call in several `tool` events that share `data.id`, so fold those; `tool.started` and `tool.ended` share that id but are not deltas of the row. */
 export function items(threadId: string, options?: { afterSeq?: number; limit?: number; order?: "asc" | "desc" }): Promise<Event[]>;
 /** The next event after `afterSeq`, or null when the wait ended. A null may also mean the open approvals changed: read `approvals()` again either way. At most 60 s. */
 export function waitItem(threadId: string, options: { afterSeq: number; timeoutMs: number }): Promise<Event | null>;
