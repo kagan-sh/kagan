@@ -215,10 +215,7 @@ fn step_status(status: PlanStatus) -> &'static str {
 }
 
 fn capped(text: &str, cap: usize) -> (String, bool) {
-    let mut end = text.len().min(cap);
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
+    let end = text.floor_char_boundary(cap);
     (text[..end].to_owned(), end < text.len())
 }
 

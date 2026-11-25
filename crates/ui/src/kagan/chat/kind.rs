@@ -22,22 +22,6 @@ pub(super) fn icon(kind: &WorkKind) -> IconName {
     }
 }
 
-pub(super) fn hint(kind: &WorkKind) -> &'static str {
-    match kind {
-        WorkKind::Read => "read",
-        WorkKind::Search => "search",
-        WorkKind::Execute => "command",
-        WorkKind::Edit => "edit",
-        WorkKind::Delete => "delete",
-        WorkKind::Move => "move",
-        WorkKind::Fetch => "fetch",
-        WorkKind::Think => "think",
-        WorkKind::Mcp { .. } => "mcp",
-        WorkKind::Skill { .. } => "skill",
-        WorkKind::Other => "tool",
-    }
-}
-
 pub(super) fn label(kind: &WorkKind, stage: ToolStage) -> String {
     let word = match kind {
         WorkKind::Read => tell(stage, "Waiting to read file", "Reading file", "Read file"),

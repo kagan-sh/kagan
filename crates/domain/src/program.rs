@@ -61,12 +61,21 @@ pub const ACP_COMMANDS: &[(&str, &str, &[&str])] = &[
     ("opencode", "opencode", &["acp"]),
 ];
 
+fn stem(line: &str) -> Option<String> {
+    let (command, _) = split_program(line).ok()?;
+    Some(
+        Path::new(&command)
+            .file_stem()?
+            .to_string_lossy()
+            .into_owned(),
+    )
+}
+
 /// The ACP command of the agent `line` runs: the program to run and its arguments. A path or a
 /// file extension on the command is dropped; the arguments are never read.
 #[must_use]
 pub fn acp_command(line: &str) -> Option<(&'static str, &'static [&'static str])> {
-    let (command, _) = split_program(line).ok()?;
-    let stem = Path::new(&command).file_stem()?.to_str()?;
+    let stem = stem(line)?;
     ACP_COMMANDS
         .iter()
         .find(|(known, _, _)| *known == stem)
@@ -77,8 +86,7 @@ pub fn acp_command(line: &str) -> Option<(&'static str, &'static [&'static str])
 /// file extension on the command is dropped; the arguments are never read.
 #[must_use]
 pub fn agent_mark(line: &str) -> Option<(&'static str, &'static str)> {
-    let (command, _) = split_program(line).ok()?;
-    let stem = Path::new(&command).file_stem()?.to_str()?;
+    let stem = stem(line)?;
     AGENT_MARKS
         .iter()
         .copied()
@@ -89,12 +97,10 @@ pub fn agent_mark(line: &str) -> Option<(&'static str, &'static str)> {
 /// the arguments on the line are dropped; the arguments are never read.
 #[must_use]
 pub fn program_label(line: &str) -> String {
-    let Ok((command, _)) = split_program(line) else {
+    let Some(stem) = stem(line).or_else(|| split_program(line).ok().map(|(command, _)| command))
+    else {
         return line.to_owned();
     };
-    let stem = Path::new(&command)
-        .file_stem()
-        .map_or(command.clone(), |file| file.to_string_lossy().into_owned());
     KNOWN_PROGRAMS
         .iter()
         .find(|(known, _)| *known == stem)

@@ -219,18 +219,6 @@ impl ChatView {
         self.transcript.is_open(index, self.answering(cx))
     }
 
-    fn member_open(&self, key: part::RowKey) -> bool {
-        self.transcript.member_open(key)
-    }
-
-    pub(super) fn kagan(&self) -> gpui_kit::WeakEntity<Kagan> {
-        self.kagan.clone()
-    }
-
-    fn more_open(&self, row: u64) -> bool {
-        self.more.contains(&row)
-    }
-
     fn toggle_more(&mut self, row: u64, cx: &mut Context<Self>) {
         if !self.more.remove(&row) {
             self.more.insert(row);
@@ -543,7 +531,7 @@ fn message_view(
     cx: &mut App,
 ) -> AnyElement {
     let user = role == Speaker::User;
-    let element = work::named(part::Part::Message, id);
+    let element = work::named("message", id);
     let label = who.to_owned();
     let copy = text.to_owned();
     let row = h_flex()
@@ -613,7 +601,7 @@ fn message_view(
 
 fn notice_view(id: u64, text: &str, cx: &mut App) -> AnyElement {
     div()
-        .id(work::named(part::Part::Notice, id))
+        .id(work::named("notice", id))
         .ui_observe_as(Facts::label(text.to_owned(), text.to_owned()))
         .type_small(cx)
         .text_color(cx.theme().muted_foreground)

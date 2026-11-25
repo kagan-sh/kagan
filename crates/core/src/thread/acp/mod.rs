@@ -200,7 +200,9 @@ async fn consume(
                 let cleared = this
                     .update(cx, |workspace, _| workspace.run_mut(&id).acp = None)
                     .map_err(|error| OpError::Invalid(error.to_string()));
-                let recorded = ended(this, id.clone(), exit, error, cx).await;
+                let recorded = finish::ended(this, id.clone(), exit_end(exit, error), cx)
+                    .await
+                    .map(|_| ());
                 cleared.and(recorded)
             }
         };
@@ -406,18 +408,6 @@ async fn turn_done(
     // A question the agent asked and left behind is about a turn that is over: the card goes.
     withdraw_questions(this, id, cx).await?;
     waiting(this, id.clone(), Some((outcome, error)), cx).await
-}
-
-async fn ended(
-    this: &WeakEntity<Workspace>,
-    id: ThreadId,
-    exit: Option<kg_terminal::Exit>,
-    error: Option<String>,
-    cx: &mut AsyncApp,
-) -> Result<()> {
-    let end = exit_end(exit, error);
-    finish::ended(this, id, end, cx).await?;
-    Ok(())
 }
 
 pub(super) async fn prompt(

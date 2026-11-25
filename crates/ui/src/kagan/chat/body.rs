@@ -27,7 +27,7 @@ pub(super) fn work_body(
     cx: &mut App,
 ) -> impl IntoElement {
     let more = weak
-        .read_with(cx, |this, _| this.more_open(row))
+        .read_with(cx, |this, _| this.more.contains(&row))
         .unwrap_or(false);
     let output = match kind {
         WorkKind::Execute => terminal_out(row, tool.output.as_deref(), tool.running(), cx),
@@ -80,7 +80,7 @@ fn review_link(
         return None;
     }
     let path = tool.diff.first()?.path.clone();
-    let kagan = weak.read_with(cx, |this, _| this.kagan()).ok()?;
+    let kagan = weak.read_with(cx, |this, _| this.kagan.clone()).ok()?;
     Some(link(row, "review", "Open in review", move |window, cx| {
         _ = kagan.update(cx, |kagan, cx| {
             kagan.open_review(path.clone(), window, cx);

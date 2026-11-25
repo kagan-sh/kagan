@@ -12,6 +12,7 @@ use kg_domain::PlanStatus;
 
 use super::ChatView;
 use super::body;
+use super::kind;
 use crate::theme::{Tone, TypeScale as _, control_height};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -123,7 +124,11 @@ fn card(
 ) -> gpui_kit::Div {
     let focus = crate::kagan::tab_stop(window, cx, ElementId::Name(head.id.into()));
     let muted = cx.theme().muted_foreground;
-    let value = format!("{}, {}", pick(head.open), head.detail);
+    let value = format!(
+        "{}, {}",
+        kind::pick(head.open, "expanded", "collapsed"),
+        head.detail
+    );
     let view = cx.weak_entity();
     let key = view.clone();
     v_flex()
@@ -192,8 +197,4 @@ fn flip(view: &WeakEntity<ChatView>, id: &'static str, cx: &mut App) {
         }
         cx.notify();
     });
-}
-
-fn pick(open: bool) -> &'static str {
-    if open { "expanded" } else { "collapsed" }
 }

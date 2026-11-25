@@ -10,7 +10,6 @@ use gpui_kit::{
 
 use crate::kagan::attention;
 use crate::kagan::chat::ChatView;
-use crate::kagan::chat::part::Part;
 use crate::kagan::chat::work;
 use crate::kagan::question;
 use crate::theme::TypeScale as _;
@@ -42,7 +41,7 @@ pub(super) fn approval_card(
         })
     };
     div()
-        .id(work::named(Part::Approval, &id.0))
+        .id(work::named("approval", &id.0))
         .child(question::permission_card(
             &asked,
             Some(detail),

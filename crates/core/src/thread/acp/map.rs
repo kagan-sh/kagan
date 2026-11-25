@@ -177,11 +177,7 @@ fn cap(text: String) -> String {
 }
 
 fn cut(text: &str, max: usize) -> String {
-    let mut end = max;
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    text[..end].to_owned() + CUT
+    text[..text.floor_char_boundary(max)].to_owned() + CUT
 }
 
 fn kind(kind: AcpToolKind) -> ToolKind {

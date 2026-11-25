@@ -9,31 +9,6 @@ use kg_domain::{
 
 use super::kind;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Part {
-    Message,
-    Thought,
-    Work,
-    Bundle,
-    Plan,
-    Approval,
-    Notice,
-}
-
-impl Part {
-    pub(super) fn name(self) -> &'static str {
-        match self {
-            Self::Message => "message",
-            Self::Thought => "thought",
-            Self::Work => "work",
-            Self::Bundle => "bundle",
-            Self::Plan => "plan",
-            Self::Approval => "approval",
-            Self::Notice => "notice",
-        }
-    }
-}
-
 // id is the seq of the first event the row came from, so it is stable across appends.
 #[derive(Clone, Debug)]
 pub(super) struct Row {

@@ -288,22 +288,9 @@ fn forget(session: &mut ActiveSession<'_, Agent>) {
 struct Unread(HashSet<String>);
 
 impl Unread {
-    fn update(&mut self, update: &agent_client_protocol::v1::schema::SessionUpdate) {
-        let name = map::name(update);
-        if self.0.insert(name.clone()) {
-            eprintln!("kg: the agent sent {name}, which kagan does not draw yet");
-        }
-    }
-
-    fn request(&mut self, method: &str) {
-        if self.0.insert(method.to_owned()) {
-            eprintln!("kg: the agent asked for {method}, which kagan does not serve yet");
-        }
-    }
-
-    fn other(&mut self) {
-        if self.0.insert("another kind of message".to_owned()) {
-            eprintln!("kg: the agent sent something kagan does not read yet");
+    fn once(&mut self, key: &str, line: impl FnOnce() -> String) {
+        if self.0.insert(key.to_owned()) {
+            eprintln!("kg: {}", line());
         }
     }
 }
@@ -416,7 +403,9 @@ async fn heard(
             answer(dispatch.into_raw(), events, unread, repeats, asking).await;
         }
         // A kind this build does not name, logged once rather than on every chunk.
-        _ => unread.other(),
+        _ => unread.once("another kind of message", || {
+            "the agent sent something kagan does not read yet".to_owned()
+        }),
     }
 }
 
@@ -461,7 +450,12 @@ async fn answer(
                 Some(map::Update::Usage { used, size }) => {
                     send(events, AcpEvent::Usage { used, size }).await;
                 }
-                None => unread.update(&notification.update),
+                None => {
+                    let name = map::name(&notification.update);
+                    unread.once(&name, || {
+                        format!("the agent sent {name}, which kagan does not draw yet")
+                    });
+                }
             }
             return;
         }
@@ -477,7 +471,12 @@ async fn answer(
         }
         // The protocol answers a request kagan drops with an error, so its caller never waits; the
         // log says which one, once, so a dialect kagan does not know is visible.
-        Ok(Err(dropped)) => unread.request(dropped.method()),
+        Ok(Err(dropped)) => {
+            let method = dropped.method();
+            unread.once(method, || {
+                format!("the agent asked for {method}, which kagan does not serve yet")
+            });
+        }
         Err(_) => eprintln!("kg: the agent sent a request kagan could not read"),
     }
 }

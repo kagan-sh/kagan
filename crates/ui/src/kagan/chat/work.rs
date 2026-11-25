@@ -13,13 +13,13 @@ use std::rc::Rc;
 use crate::kagan::chat::ChatView;
 use crate::kagan::chat::body;
 use crate::kagan::chat::kind::{self, pick, plural, span_text};
-use crate::kagan::chat::part::{Part, Row, RowKey, RowKind, ThoughtRow, ToolRow, ToolStage};
+use crate::kagan::chat::part::{Row, RowKey, RowKind, ThoughtRow, ToolRow, ToolStage};
 use crate::theme::{Tone, TypeScale as _, row_height};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-pub(super) fn named(part: Part, id: impl std::fmt::Display) -> gpui_kit::ElementId {
-    gpui_kit::ElementId::Name(format!("chat-{}-{id}", part.name()).into())
+pub(super) fn named(part: &'static str, id: impl std::fmt::Display) -> gpui_kit::ElementId {
+    gpui_kit::ElementId::Name(format!("chat-{part}-{id}").into())
 }
 
 pub(super) fn work_row(
@@ -38,7 +38,7 @@ pub(super) fn work_row(
         .map(IntoElement::into_any_element);
     let face = face(
         Face {
-            id: named(Part::Work, row.id),
+            id: named("work", row.id),
             key: row.key(),
             icon: kind::icon(&kind),
             label: kind::label(&kind, stage),
@@ -47,7 +47,7 @@ pub(super) fn work_row(
             badge: kind::badge(&kind),
             meta: kind::meta(&kind, tool),
             icons: Vec::new(),
-            word: kind::hint(&kind),
+            word: kind.word(),
             open,
             has_body: kind::has_body(&kind, tool),
             tone: match (tool.failed(), stage) {
@@ -125,7 +125,7 @@ pub(super) fn thought_row(
         .map(IntoElement::into_any_element);
     face(
         Face {
-            id: named(Part::Thought, row.id),
+            id: named("thought", row.id),
             key: row.key(),
             icon: IconName::Brain,
             label,
@@ -216,7 +216,7 @@ pub(super) fn bundle_row(
             .filter_map(|member| match &member.kind {
                 RowKind::Work(tool) => {
                     let open = weak
-                        .read_with(cx, |this, _| this.member_open(member.key()))
+                        .read_with(cx, |this, _| this.transcript.member_open(member.key()))
                         .unwrap_or(false);
                     Some(work_row(member, tool, true, open, weak, window, cx))
                 }
@@ -233,7 +233,7 @@ pub(super) fn bundle_row(
     });
     face(
         Face {
-            id: named(Part::Bundle, row.id),
+            id: named("bundle", row.id),
             key: row.key(),
             icon: IconName::Layers,
             label: words.join(", "),
@@ -272,7 +272,7 @@ pub(super) fn plan_row(
         .map(IntoElement::into_any_element);
     face(
         Face {
-            id: named(Part::Plan, row.id),
+            id: named("plan", row.id),
             key: row.key(),
             icon: IconName::ListTodo,
             label: "Plan".into(),
