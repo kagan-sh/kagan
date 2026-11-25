@@ -45,7 +45,7 @@ pub(crate) struct ChatView {
     sending: Option<gpui_kit::Task<()>>,
     cards: above::Cards,
     children: Vec<(ThreadId, SharedString)>,
-    _load: Option<gpui_kit::Task<()>>,
+    load_task: Option<gpui_kit::Task<()>>,
     _events: Subscription,
     _prompt: Subscription,
     _scroller: Subscription,
@@ -105,7 +105,7 @@ impl ChatView {
             sending: None,
             cards: above::Cards::default(),
             children: Vec::new(),
-            _load: None,
+            load_task: None,
             _events: events,
             _prompt: prompt_watch,
             _scroller: scroller_watch,
@@ -138,7 +138,7 @@ impl ChatView {
             }),
             cx,
         );
-        self._load = Some(cx.spawn(async move |this, cx| {
+        self.load_task = Some(cx.spawn(async move |this, cx| {
             let read = read.await;
             _ = this.update(cx, |this, cx| {
                 // A load that fails still ends the wait: the live events behind it are drawn.
