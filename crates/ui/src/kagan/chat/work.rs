@@ -4,8 +4,9 @@ use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, WeakEntity, Window, div, px,
+    AnyElement, App, ElementId, FocusHandle, InteractiveElement as _, IntoElement, KeyDownEvent,
+    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, WeakEntity,
+    Window, div, px,
 };
 use kg_domain::{PlanStatus, Timestamp, WorkKind};
 use std::rc::Rc;
@@ -319,7 +320,6 @@ fn face(
     cx: &mut App,
 ) -> AnyElement {
     let focus = crate::kagan::tab_stop(window, cx, face.id.clone());
-    let focused = focus.is_focused(window);
     let toggle: Rc<dyn Fn(&mut App)> = {
         let weak = weak.clone();
         let key = face.key;
@@ -327,9 +327,8 @@ fn face(
             _ = weak.update(cx, |this, cx| this.toggle(key, cx));
         })
     };
-    let (on_key, on_click) = (toggle.clone(), toggle);
     let body = face.body.take();
-    let line = line(face, &focus, focused, on_key, on_click, cx);
+    let line = line(face, &focus, toggle, cx);
     div()
         .child(line)
         .when_some(body, |row, body| {
@@ -348,9 +347,7 @@ fn face(
 fn line(
     face: Face,
     focus: &gpui_kit::FocusHandle,
-    focused: bool,
-    on_key: Rc<dyn Fn(&mut App)>,
-    on_click: Rc<dyn Fn(&mut App)>,
+    toggle: Rc<dyn Fn(&mut App)>,
     cx: &mut App,
 ) -> impl IntoElement {
     // Nothing depends on colour: a running or failed row carries its status as a word too.
@@ -372,9 +369,10 @@ fn line(
     let id = face.id.clone();
     let indent = face.indent;
     let expandable = face.has_body;
+    let toggle: Rc<dyn Fn(&mut App)> = if expandable { toggle } else { Rc::new(|_| {}) };
     let hint = SharedString::from(face.word);
-    content(face, cx)
-        .id(id)
+    let row = disclosure(id, focus, face.open, expandable, toggle, cx);
+    content(row, face, cx)
         .ui_observe_as(Facts {
             role: gpui_kit::Role::Button,
             name: name.into(),
@@ -384,7 +382,6 @@ fn line(
             focus: Some(focus.clone()),
             hint: Some(hint),
         })
-        .track_focus(focus)
         .tab_stop(expandable)
         .h(px(row_height(cx)))
         .flex()
@@ -393,24 +390,52 @@ fn line(
         .pr(px(8.))
         .pl(indent)
         .rounded(cx.theme().radius)
-        .hover(|line| line.bg(cx.theme().list_hover))
-        .when(focused, |line| {
-            line.border_1().border_color(cx.theme().ring)
-        })
         .when_some(tooltip, |line, tip| {
             line.tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
         })
-        .when(expandable, |line| {
-            line.on_click(move |_, _, cx| on_click(cx))
-                .on_key_down(move |event, _, cx| {
-                    if matches!(event.keystroke.key.as_str(), "enter" | "space") {
-                        on_key(cx);
-                    }
-                })
-        })
 }
 
-fn content(face: Face, cx: &mut App) -> gpui_kit::Div {
+pub(super) fn disclosure(
+    id: ElementId,
+    focus: &FocusHandle,
+    open: bool,
+    has_body: bool,
+    toggle: Rc<dyn Fn(&mut App)>,
+    cx: &App,
+) -> gpui_kit::Stateful<gpui_kit::Div> {
+    let muted = cx.theme().muted_foreground;
+    let chevron = if has_body {
+        Icon::new(if open {
+            IconName::ChevronDown
+        } else {
+            IconName::ChevronRight
+        })
+        .xsmall()
+        .text_color(muted)
+        .into_any_element()
+    } else {
+        div().w(px(12.)).flex_none().into_any_element()
+    };
+    let on_key = toggle.clone();
+    div()
+        .id(id)
+        .track_focus(focus)
+        .hover(|row| row.bg(cx.theme().list_hover))
+        .focus_visible(|row| row.border_1().border_color(cx.theme().ring))
+        .on_click(move |_, _, cx| toggle(cx))
+        .on_key_down(move |event: &KeyDownEvent, _, cx| {
+            if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                on_key(cx);
+            }
+        })
+        .child(chevron)
+}
+
+fn content(
+    row: gpui_kit::Stateful<gpui_kit::Div>,
+    face: Face,
+    cx: &mut App,
+) -> gpui_kit::Stateful<gpui_kit::Div> {
     let muted = cx.theme().muted_foreground;
     let foreground = cx.theme().foreground;
     let label_color = match (face.tone, face.open) {
@@ -419,20 +444,7 @@ fn content(face: Face, cx: &mut App) -> gpui_kit::Div {
         (_, true) => foreground,
         _ => muted,
     };
-    let chevron = if face.has_body {
-        let icon = if face.open {
-            IconName::ChevronDown
-        } else {
-            IconName::ChevronRight
-        };
-        Icon::new(icon)
-            .xsmall()
-            .text_color(muted)
-            .into_any_element()
-    } else {
-        div().w(px(12.)).flex_none().into_any_element()
-    };
-    let mut line = div().child(chevron).child(
+    let mut line = row.child(
         div()
             .w(px(16.))
             .flex()

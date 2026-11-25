@@ -1,18 +1,19 @@
 use std::collections::BTreeSet;
+use std::rc::Rc;
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::{Icon, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, KeyDownEvent,
-    ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _,
-    WeakEntity, Window, div, px,
+    AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
+    Role, SharedString, Styled as _, WeakEntity, Window, div, px,
 };
 use kg_domain::PlanStatus;
 
 use super::ChatView;
 use super::body;
 use super::kind;
+use super::work;
 use crate::theme::{Tone, TypeScale as _, control_height};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -122,6 +123,7 @@ fn card(
     window: &mut Window,
     cx: &mut Context<ChatView>,
 ) -> gpui_kit::Div {
+    let id = ElementId::Name(head.id.into());
     let focus = crate::kagan::tab_stop(window, cx, ElementId::Name(head.id.into()));
     let muted = cx.theme().muted_foreground;
     let value = format!(
@@ -130,15 +132,17 @@ fn card(
         head.detail
     );
     let view = cx.weak_entity();
-    let key = view.clone();
+    let toggle: Rc<dyn Fn(&mut App)> = {
+        let view = view.clone();
+        Rc::new(move |cx| flip(&view, head.id, cx))
+    };
     v_flex()
         .border_1()
         .border_color(cx.theme().border)
         .rounded(cx.theme().radius)
         .bg(cx.theme().secondary)
         .child(
-            h_flex()
-                .id(head.id)
+            work::disclosure(id, &focus, head.open, true, toggle, cx)
                 .ui_observe_as(Facts {
                     role: Role::Button,
                     name: head.name.into(),
@@ -148,7 +152,6 @@ fn card(
                     focus: Some(focus.clone()),
                     hint: None,
                 })
-                .track_focus(&focus)
                 .h(px(control_height(cx)))
                 .gap_2()
                 .px_2()
@@ -160,27 +163,10 @@ fn card(
                 } else {
                     muted
                 })
-                .hover(|row| row.bg(cx.theme().list_hover))
-                .child(
-                    Icon::new(if head.open {
-                        IconName::ChevronDown
-                    } else {
-                        IconName::ChevronRight
-                    })
-                    .xsmall()
-                    .text_color(muted),
-                )
                 .child(Icon::new(head.icon).xsmall().text_color(muted))
                 .child(div().type_small(cx).child(head.name))
                 .child(div().flex_1())
-                .child(div().type_caption(cx).text_color(muted).child(head.detail))
-                .focus_visible(|row| row.border_color(cx.theme().ring))
-                .on_click(move |_, _, cx| flip(&view, head.id, cx))
-                .on_key_down(move |event: &KeyDownEvent, _, cx| {
-                    if matches!(event.keystroke.key.as_str(), "enter" | "space") {
-                        flip(&key, head.id, cx);
-                    }
-                }),
+                .child(div().type_caption(cx).text_color(muted).child(head.detail)),
         )
         .children(body.map(|body| {
             div()
