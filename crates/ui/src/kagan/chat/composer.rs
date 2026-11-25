@@ -65,7 +65,7 @@ pub(super) fn composer(
     let empty = prompt.trim().is_empty();
     let shown = Shown {
         turn: Turn::of(answering, running),
-        ready: running && !empty && !view.sending,
+        ready: running && !empty && view.sending.is_none(),
         focused: view.prompt.read(cx).focus_handle(cx).is_focused(window),
         archived: view.archived(cx),
     };
@@ -388,7 +388,7 @@ fn context(
 
 fn state_word(view: &ChatView, answering: bool, cx: &App) -> (SharedString, Hsla) {
     let muted = cx.theme().muted_foreground;
-    if view.sending {
+    if view.sending.is_some() {
         return ("Sending…".into(), muted);
     }
     if answering {

@@ -42,9 +42,10 @@ pub(crate) struct ChatView {
     more: BTreeSet<u64>,
     working: bool,
     notice: Option<SharedString>,
-    sending: bool,
+    sending: Option<gpui_kit::Task<()>>,
     cards: above::Cards,
     children: Vec<(ThreadId, SharedString)>,
+    _load: Option<gpui_kit::Task<()>>,
     _events: Subscription,
     _prompt: Subscription,
     _scroller: Subscription,
@@ -101,9 +102,10 @@ impl ChatView {
             more: BTreeSet::new(),
             working: false,
             notice: None,
-            sending: false,
+            sending: None,
             cards: above::Cards::default(),
             children: Vec::new(),
+            _load: None,
             _events: events,
             _prompt: prompt_watch,
             _scroller: scroller_watch,
@@ -136,7 +138,7 @@ impl ChatView {
             }),
             cx,
         );
-        cx.spawn(async move |this, cx| {
+        self._load = Some(cx.spawn(async move |this, cx| {
             let read = read.await;
             _ = this.update(cx, |this, cx| {
                 // A load that fails still ends the wait: the live events behind it are drawn.
@@ -154,8 +156,7 @@ impl ChatView {
                 this.sync(cx);
                 cx.notify();
             });
-        })
-        .detach();
+        }));
     }
 
     fn absorb(&mut self, event: &Event, cx: &mut Context<Self>) {
@@ -235,7 +236,7 @@ impl ChatView {
     }
 
     fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.sending {
+        if self.sending.is_some() {
             return;
         }
         let text = self.prompt.read(cx).value().trim().to_owned();
@@ -244,7 +245,6 @@ impl ChatView {
             cx.notify();
             return;
         }
-        self.sending = true;
         let send = Workspace::dispatch(
             Op::Thread(ThreadOp::Input {
                 id: self.thread.clone(),
@@ -253,10 +253,10 @@ impl ChatView {
             }),
             cx,
         );
-        cx.spawn_in(window, async move |this, cx| {
+        self.sending = Some(cx.spawn_in(window, async move |this, cx| {
             let result = send.await;
             _ = this.update_in(cx, |this, window, cx| {
-                this.sending = false;
+                this.sending = None;
                 match result {
                     Ok(_) => {
                         this.notice = None;
@@ -267,32 +267,29 @@ impl ChatView {
                 }
                 cx.notify();
             });
-        })
-        .detach();
+        }));
     }
 
     fn cancel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.sending {
+        if self.sending.is_some() {
             return;
         }
-        self.sending = true;
         let cancel = Workspace::dispatch(
             Op::Thread(ThreadOp::Cancel {
                 id: self.thread.clone(),
             }),
             cx,
         );
-        cx.spawn_in(window, async move |this, cx| {
+        self.sending = Some(cx.spawn_in(window, async move |this, cx| {
             let result = cancel.await;
             _ = this.update_in(cx, |this, _window, cx| {
-                this.sending = false;
+                this.sending = None;
                 if let Err(error) = result {
                     this.notice = Some(format!("{error}").into());
                 }
                 cx.notify();
             });
-        })
-        .detach();
+        }));
     }
 
     fn answering(&self, cx: &App) -> bool {
