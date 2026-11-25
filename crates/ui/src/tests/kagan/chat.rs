@@ -1030,6 +1030,31 @@ fn the_plan_card_is_one_line_until_it_is_opened(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn the_plan_card_goes_when_the_turn_ends(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![
+            EventKind::TurnStarted,
+            EventKind::Plan {
+                entries: vec![kg_domain::PlanEntry {
+                    text: "Fix it".into(),
+                    status: kg_domain::PlanStatus::Pending,
+                }],
+            },
+            EventKind::TurnEnded {
+                outcome: kg_domain::TurnOutcome::Completed,
+                error: None,
+            },
+        ],
+    );
+    wait_until(cx, |cx| shows(cx, window, "chat-divider-3"));
+    assert!(
+        !shows(cx, window, "chat-card-plan"),
+        "the plan belongs to the turn that drew it"
+    );
+}
+
+#[gpui_kit::test]
 fn the_child_threads_card_counts_the_ones_that_run(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
     let parent = seed_thread(data.path(), Vec::new());
