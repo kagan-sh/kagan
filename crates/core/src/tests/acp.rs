@@ -858,10 +858,10 @@ fn one_thought(kinds: &[EventKind]) {
 fn a_read_call_and_its_update(kinds: &[EventKind]) {
     let tools: Vec<_> = kinds
         .iter()
-        .filter(|kind| matches!(kind, EventKind::Tool { .. }))
+        .filter(|kind| matches!(kind, EventKind::Tool(ToolCall { .. })))
         .collect();
     assert_eq!(tools.len(), 2, "{kinds:?}");
-    let EventKind::Tool {
+    let EventKind::Tool(ToolCall {
         id: call,
         name,
         kind,
@@ -870,7 +870,7 @@ fn a_read_call_and_its_update(kinds: &[EventKind]) {
         input,
         locations,
         ..
-    } = tools[0]
+    }) = tools[0]
     else {
         unreachable!()
     };
@@ -891,7 +891,7 @@ fn a_read_call_and_its_update(kinds: &[EventKind]) {
             line: Some(41),
         }]
     );
-    let EventKind::Tool {
+    let EventKind::Tool(ToolCall {
         id: call,
         title,
         status,
@@ -899,7 +899,7 @@ fn a_read_call_and_its_update(kinds: &[EventKind]) {
         diff,
         input,
         ..
-    } = tools[1]
+    }) = tools[1]
     else {
         unreachable!()
     };
@@ -998,7 +998,7 @@ async fn acp_mcp_and_skill_calls_are_plain_tool_events(cx: &mut TestAppContext) 
     let calls: Vec<_> = kinds
         .iter()
         .filter_map(|kind| match kind {
-            EventKind::Tool { name, input, .. } => Some((name.clone(), input.clone())),
+            EventKind::Tool(ToolCall { name, input, .. }) => Some((name.clone(), input.clone())),
             _ => None,
         })
         .collect();
@@ -1114,11 +1114,11 @@ async fn acp_approval_allow_once_answers_the_agent(cx: &mut TestAppContext) {
     assert!(
         kinds.iter().any(|kind| matches!(
             kind,
-            EventKind::Tool {
+            EventKind::Tool(ToolCall {
                 approval: Some(approval),
                 status: Some(ToolStatus::Pending),
                 ..
-            } if approval == &interaction.id
+            }) if approval == &interaction.id
         )),
         "the tool row links to its question: {kinds:?}"
     );

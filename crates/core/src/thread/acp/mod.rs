@@ -181,7 +181,7 @@ async fn consume(
                 let kinds = vec![EventKind::Thought { text, message_id }];
                 Workspace::events(this, id.clone(), kinds, cx).await
             }
-            AcpEvent::Tool(tool) => tool_event(this, &id, tool, None, cx).await,
+            AcpEvent::Tool(call) => tool_event(this, &id, call, cx).await,
             AcpEvent::Plan(entries) => {
                 Workspace::events(this, id.clone(), vec![EventKind::Plan { entries }], cx).await
             }
@@ -250,29 +250,16 @@ fn joined(
 async fn tool_event(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
-    tool: map::ToolUpdate,
-    approval: Option<kg_domain::PendingInteractionId>,
+    call: kg_domain::ToolCall,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    let kinds = vec![EventKind::Tool {
-        id: tool.id,
-        name: tool.name,
-        kind: tool.kind,
-        title: tool.title,
-        status: tool.status,
-        input: tool.input,
-        output: tool.output,
-        diff: tool.diff,
-        locations: tool.locations,
-        approval,
-    }];
-    Workspace::events(this, id.clone(), kinds, cx).await
+    Workspace::events(this, id.clone(), vec![EventKind::Tool(call)], cx).await
 }
 
 async fn permission(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
-    tool: map::ToolUpdate,
+    mut call: kg_domain::ToolCall,
     options: Vec<kg_domain::InteractionOption>,
     answer: async_channel::Sender<String>,
     cx: &mut AsyncApp,
@@ -281,7 +268,7 @@ async fn permission(
     let provider = thread.read_with(cx, |thread, _| {
         kg_domain::program_label(&thread.record.provider).clone()
     });
-    let title = format!("{provider} wants to {}", map::phrase(tool.kind));
+    let title = format!("{provider} wants to {}", map::phrase(call.kind));
     let waiting = crate::workspace::Waiting {
         thread: None,
         answer,
@@ -309,11 +296,9 @@ async fn permission(
             None
         }
     };
-    let pending = map::ToolUpdate {
-        status: Some(kg_domain::ToolStatus::Pending),
-        ..tool
-    };
-    tool_event(this, id, pending, approval, cx).await
+    call.status = Some(kg_domain::ToolStatus::Pending);
+    call.approval = approval;
+    tool_event(this, id, call, cx).await
 }
 
 async fn named(

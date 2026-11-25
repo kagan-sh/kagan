@@ -30,13 +30,13 @@ pub(super) fn work_body(
         .read_with(cx, |this, _| this.more.contains(&row))
         .unwrap_or(false);
     let output = match kind {
-        WorkKind::Execute => terminal_out(row, tool.output.as_deref(), tool.running(), cx),
+        WorkKind::Execute => terminal_out(row, tool.call.output.as_deref(), tool.running(), cx),
         WorkKind::Edit | WorkKind::Delete | WorkKind::Move => {
-            diff_out(row, &tool.diff, tool.output.as_deref(), cx)
+            diff_out(row, &tool.call.diff, tool.call.output.as_deref(), cx)
         }
-        WorkKind::Think => thought_text(row, tool.output.as_deref().unwrap_or_default(), cx),
+        WorkKind::Think => thought_text(row, tool.call.output.as_deref().unwrap_or_default(), cx),
         WorkKind::Mcp { .. } => mcp_out(row, tool, cx),
-        _ => plain_out(row, tool.output.as_deref(), cx),
+        _ => plain_out(row, tool.call.output.as_deref(), cx),
     };
     let link = match kind {
         WorkKind::Edit | WorkKind::Delete | WorkKind::Move => review_link(row, tool, weak, cx),
@@ -76,10 +76,10 @@ fn review_link(
     weak: &WeakEntity<ChatView>,
     cx: &mut App,
 ) -> Option<AnyElement> {
-    if !tool.diff.is_empty() && tool.running() {
+    if !tool.call.diff.is_empty() && tool.running() {
         return None;
     }
-    let path = tool.diff.first()?.path.clone();
+    let path = tool.call.diff.first()?.path.clone();
     let kagan = weak.read_with(cx, |this, _| this.kagan.clone()).ok()?;
     Some(link(row, "review", "Open in review", move |window, cx| {
         _ = kagan.update(cx, |kagan, cx| {
@@ -115,7 +115,7 @@ fn link(
 }
 
 fn mcp_out(row: u64, tool: &ToolRow, cx: &mut App) -> Option<AnyElement> {
-    let output = tool.output.as_deref()?;
+    let output = tool.call.output.as_deref()?;
     let items = serde_json::from_str::<serde_json::Value>(output)
         .ok()
         .and_then(|value| {
@@ -239,7 +239,7 @@ fn args(
     weak: &WeakEntity<ChatView>,
     cx: &mut App,
 ) -> Option<AnyElement> {
-    let entries: Vec<(String, String)> = match tool.input.as_ref()? {
+    let entries: Vec<(String, String)> = match tool.call.input.as_ref()? {
         serde_json::Value::Object(map) => map
             .iter()
             .map(|(key, value)| (key.clone(), value_text(value)))

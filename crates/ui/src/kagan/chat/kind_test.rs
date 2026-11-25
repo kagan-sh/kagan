@@ -1,19 +1,21 @@
 use super::*;
-use kg_domain::{Timestamp, ToolKind, ToolStatus};
+use kg_domain::{Timestamp, ToolCall, ToolKind, ToolStatus};
 
 fn tool(name: Option<&str>, kind: ToolKind, title: &str, input: serde_json::Value) -> ToolRow {
     ToolRow {
-        id: "t1".into(),
-        name: name.map(str::to_owned),
-        kind: Some(kind),
-        title: Some(title.into()),
-        status: Some(ToolStatus::Completed),
-        input: Some(input),
-        output: None,
-        diff: Vec::new(),
+        call: ToolCall {
+            id: "t1".into(),
+            name: name.map(str::to_owned),
+            kind: Some(kind),
+            title: Some(title.into()),
+            status: Some(ToolStatus::Completed),
+            input: Some(input),
+            output: None,
+            diff: Vec::new(),
+            locations: Vec::new(),
+            approval: None,
+        },
         counts: (0, 0),
-        locations: Vec::new(),
-        approval: None,
         from: Timestamp(0),
         to: Timestamp(1000),
     }
@@ -105,9 +107,9 @@ fn an_unknown_agent_tool_keeps_its_kind_and_title() {
 #[test]
 fn a_row_shows_a_span_only_once_it_has_run() {
     let mut row = tool(None, ToolKind::Execute, "cargo t", serde_json::json!({}));
-    row.status = Some(ToolStatus::Pending);
+    row.call.status = Some(ToolStatus::Pending);
     assert_eq!(meta(&WorkKind::Execute, &row), None);
-    row.status = Some(ToolStatus::InProgress);
+    row.call.status = Some(ToolStatus::InProgress);
     assert_eq!(meta(&WorkKind::Execute, &row).as_deref(), Some("1 s"));
 }
 

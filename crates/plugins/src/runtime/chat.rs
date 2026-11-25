@@ -149,29 +149,25 @@ pub(crate) fn item(event: &Event) -> Option<Item> {
                     .collect(),
             },
         },
-        EventKind::Tool {
-            id,
-            name,
-            kind,
-            title,
-            status,
-            input,
-            output,
-            ..
-        } => {
-            let (args, args_truncated) = capped_args(input.as_ref());
-            let (output, output_truncated) = capped_output(output.as_deref());
-            let work = WorkKind::of(name.as_deref(), title.as_deref(), *kind, input.as_ref());
+        EventKind::Tool(call) => {
+            let (args, args_truncated) = capped_args(call.input.as_ref());
+            let (output, output_truncated) = capped_output(call.output.as_deref());
+            let work = WorkKind::of(
+                call.name.as_deref(),
+                call.title.as_deref(),
+                call.kind,
+                call.input.as_ref(),
+            );
             Body::Work {
                 work: Work {
-                    id: id.clone(),
+                    id: call.id.clone(),
                     tool: work.word(),
                     title: work
                         .named()
-                        .or_else(|| title.clone())
-                        .or_else(|| name.clone())
+                        .or_else(|| call.title.clone())
+                        .or_else(|| call.name.clone())
                         .unwrap_or_default(),
-                    status: tool_status(*status),
+                    status: tool_status(call.status),
                     args,
                     args_truncated,
                     output,

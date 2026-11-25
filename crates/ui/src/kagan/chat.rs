@@ -498,7 +498,7 @@ impl ChatView {
             .is_some_and(|thread| thread.read(cx).record().environment_id.is_some());
         (
             kind::title_of(tool),
-            card::runs_in_worktree(tool.kind, environment),
+            card::runs_in_worktree(tool.call.kind, environment),
         )
     }
 }

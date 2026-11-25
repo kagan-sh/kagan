@@ -8,8 +8,8 @@ fn a_status_above_i32_max_keeps_its_number() {
     assert_eq!(exit_code(-1_073_741_819), Exit::Code(0xC000_0005));
 }
 
-fn update(output: Option<&str>, status: Option<kg_domain::ToolStatus>) -> super::map::ToolUpdate {
-    super::map::ToolUpdate {
+fn update(output: Option<&str>, status: Option<kg_domain::ToolStatus>) -> kg_domain::ToolCall {
+    kg_domain::ToolCall {
         id: "t1".into(),
         name: None,
         kind: None,
@@ -19,6 +19,7 @@ fn update(output: Option<&str>, status: Option<kg_domain::ToolStatus>) -> super:
         output: output.map(str::to_owned),
         diff: Vec::new(),
         locations: Vec::new(),
+        approval: None,
     }
 }
 

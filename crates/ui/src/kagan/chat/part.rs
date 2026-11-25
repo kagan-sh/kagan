@@ -3,8 +3,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use kg_domain::{
-    Event, EventKind, PendingInteractionId, PlanEntry, Role, Timestamp, ToolDiff, ToolKind,
-    ToolLocation, ToolStatus, TurnOutcome, WorkKind,
+    Event, EventKind, PendingInteractionId, PlanEntry, Role, Timestamp, ToolCall, ToolDiff,
+    ToolKind, ToolStatus, TurnOutcome, WorkKind,
 };
 
 use super::kind;
@@ -63,17 +63,8 @@ pub(super) struct ThoughtRow {
 
 #[derive(Clone, Debug)]
 pub(super) struct ToolRow {
-    pub(super) id: String,
-    pub(super) name: Option<String>,
-    pub(super) kind: Option<ToolKind>,
-    pub(super) title: Option<String>,
-    pub(super) status: Option<ToolStatus>,
-    pub(super) input: Option<serde_json::Value>,
-    pub(super) output: Option<String>,
-    pub(super) diff: Vec<ToolDiff>,
+    pub(super) call: ToolCall,
     pub(super) counts: (usize, usize),
-    pub(super) locations: Vec<ToolLocation>,
-    pub(super) approval: Option<PendingInteractionId>,
     pub(super) from: Timestamp,
     pub(super) to: Timestamp,
 }
@@ -87,7 +78,7 @@ pub(super) enum ToolStage {
 
 impl ToolRow {
     pub(super) fn stage(&self) -> ToolStage {
-        match self.status {
+        match self.call.status {
             Some(ToolStatus::Pending) => ToolStage::Waiting,
             Some(ToolStatus::InProgress) => ToolStage::Running,
             _ => ToolStage::Settled,
@@ -99,15 +90,15 @@ impl ToolRow {
     }
 
     pub(super) fn failed(&self) -> bool {
-        self.status == Some(ToolStatus::Failed)
+        self.call.status == Some(ToolStatus::Failed)
     }
 
     pub(super) fn live_body(&self) -> bool {
-        self.running() && self.output.is_some() && self.kind != Some(ToolKind::Execute)
+        self.running() && self.call.output.is_some() && self.call.kind != Some(ToolKind::Execute)
     }
 
     pub(super) fn folds(&self) -> bool {
-        self.status == Some(ToolStatus::Completed)
+        self.call.status == Some(ToolStatus::Completed)
             && matches!(
                 kind::of(self),
                 WorkKind::Read | WorkKind::Search | WorkKind::Fetch
@@ -157,35 +148,15 @@ impl Transcript {
             EventKind::Thought { text, message_id } => {
                 self.chunk(Role::Agent, text, message_id.clone(), event, true)
             }
-            EventKind::Tool {
-                id,
-                name,
-                kind,
-                title,
-                status,
-                input,
-                output,
-                diff,
-                locations,
-                approval,
-            } => {
+            EventKind::Tool(call) => {
                 let delta = ToolRow {
-                    id: id.clone(),
-                    name: name.clone(),
-                    kind: *kind,
-                    title: title.clone(),
-                    status: *status,
-                    input: input.clone(),
-                    output: output.clone(),
-                    diff: diff.clone(),
-                    counts: diff_counts(diff),
-                    locations: locations.clone(),
-                    approval: approval.clone(),
+                    call: call.clone(),
+                    counts: diff_counts(&call.diff),
                     from: event.at,
                     to: event.at,
                 };
                 let fold = self.tool(event.seq, delta);
-                if let Some(approval) = approval {
+                if let Some(approval) = &call.approval {
                     self.push(Row {
                         id: event.seq,
                         kind: RowKind::Approval(approval.clone()),
@@ -257,10 +228,12 @@ impl Transcript {
             .enumerate()
             .rev()
             .find_map(|(top, row)| match &row.kind {
-                RowKind::Work(tool) if tool.id == id => Some((top, None)),
+                RowKind::Work(tool) if tool.call.id == id => Some((top, None)),
                 RowKind::Bundle(members) => members
                     .iter()
-                    .position(|member| matches!(&member.kind, RowKind::Work(tool) if tool.id == id))
+                    .position(
+                        |member| matches!(&member.kind, RowKind::Work(tool) if tool.call.id == id),
+                    )
                     .map(|member| (top, Some(member))),
                 _ => None,
             })
@@ -324,7 +297,7 @@ impl Transcript {
     }
 
     fn tool(&mut self, seq: u64, delta: ToolRow) -> Fold {
-        if let Some((top, member)) = self.find_tool(&delta.id) {
+        if let Some((top, member)) = self.find_tool(&delta.call.id) {
             let row = Rc::make_mut(&mut self.rows[top]);
             let seen = match (&mut row.kind, member) {
                 (RowKind::Work(tool), None) => Some(tool.as_mut()),
@@ -485,34 +458,10 @@ fn diff_counts(diffs: &[ToolDiff]) -> (usize, usize) {
 }
 
 fn merge(seen: &mut ToolRow, delta: ToolRow) {
-    if delta.name.is_some() {
-        seen.name = delta.name;
+    if !delta.call.diff.is_empty() {
+        seen.counts = diff_counts(&delta.call.diff);
     }
-    if delta.kind.is_some() {
-        seen.kind = delta.kind;
-    }
-    if delta.title.is_some() {
-        seen.title = delta.title;
-    }
-    if delta.status.is_some() {
-        seen.status = delta.status;
-    }
-    if delta.input.is_some() {
-        seen.input = delta.input;
-    }
-    if delta.output.is_some() {
-        seen.output = delta.output;
-    }
-    if !delta.diff.is_empty() {
-        seen.counts = diff_counts(&delta.diff);
-        seen.diff = delta.diff;
-    }
-    if !delta.locations.is_empty() {
-        seen.locations = delta.locations;
-    }
-    if delta.approval.is_some() {
-        seen.approval = delta.approval;
-    }
+    seen.call.merge(delta.call);
     seen.to = delta.to;
 }
 

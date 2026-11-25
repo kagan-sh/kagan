@@ -65,14 +65,14 @@ pub(super) enum AcpEvent {
         text: String,
         message_id: Option<String>,
     },
-    Tool(map::ToolUpdate),
+    Tool(kg_domain::ToolCall),
     Plan(Vec<kg_domain::PlanEntry>),
     Usage {
         used: u64,
         size: u64,
     },
     Permission {
-        tool: map::ToolUpdate,
+        tool: kg_domain::ToolCall,
         options: Vec<kg_domain::InteractionOption>,
         answer: async_channel::Sender<String>,
     },
@@ -300,7 +300,7 @@ impl Unread {
 struct Repeats(HashMap<String, String>);
 
 impl Repeats {
-    fn repeats(&mut self, tool: &map::ToolUpdate) -> bool {
+    fn repeats(&mut self, tool: &kg_domain::ToolCall) -> bool {
         let last = self.0.remove(&tool.id);
         let Some(output) = &tool.output else {
             return false;

@@ -647,12 +647,9 @@ async fn a_saved_thread_opens_after_a_restart(cx: &mut TestAppContext) {
     assert!(events(&child.id, cx).await.iter().any(|event| {
         matches!(&event.kind, EventKind::Message { text, .. } if text == "still here")
     }));
-    assert!(
-        events(&child.id, cx)
-            .await
-            .iter()
-            .any(|event| { matches!(&event.kind, EventKind::Tool { id, .. } if id == "tool-1") })
-    );
+    assert!(events(&child.id, cx).await.iter().any(|event| {
+        matches!(&event.kind, EventKind::Tool(ToolCall { id, .. }) if id == "tool-1")
+    }));
     assert!(
         events(&child.id, cx)
             .await

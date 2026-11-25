@@ -73,7 +73,7 @@ fn live_preview(row: u64, tool: &ToolRow, cx: &mut App) -> Option<AnyElement> {
     if !tool.running() || kind::of(tool) != WorkKind::Execute {
         return None;
     }
-    let lines: Vec<&str> = tool.output.as_deref()?.lines().rev().take(3).collect();
+    let lines: Vec<&str> = tool.call.output.as_deref()?.lines().rev().take(3).collect();
     if lines.is_empty() {
         return None;
     }

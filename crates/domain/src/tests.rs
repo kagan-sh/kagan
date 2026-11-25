@@ -2,8 +2,8 @@ use crate::{
     AgentTool, Attachment, ConfigOp, DiffNote, DiffScope, DiffSide, EnvironmentSpec, Event,
     EventKind, InstructionsOp, InteractionOption, Op, OpError, OpResult, PendingInteraction,
     PendingInteractionId, PluginId, PluginOp, ProjectBranch, Thread, ThreadId, ThreadOp,
-    ThreadStatus, Timestamp, TurnOutcome, UpdateState, Visibility, WaitOutcome, branch_slug,
-    format_notes, invalid_json,
+    ThreadStatus, Timestamp, ToolCall, TurnOutcome, UpdateState, Visibility, WaitOutcome,
+    branch_slug, format_notes, invalid_json,
 };
 use serde_json::{Value, json};
 
@@ -857,7 +857,7 @@ fn event_type_names_match_the_wire_tag() {
             entries: Vec::new(),
         },
         EventKind::Usage { used: 1, size: 2 },
-        EventKind::Tool {
+        EventKind::Tool(ToolCall {
             id: String::new(),
             name: None,
             kind: None,
@@ -868,7 +868,7 @@ fn event_type_names_match_the_wire_tag() {
             diff: Vec::new(),
             locations: Vec::new(),
             approval: None,
-        },
+        }),
         EventKind::ToolStarted {
             id: String::new(),
             name: String::new(),
@@ -926,7 +926,7 @@ fn live_event_types_are_all_known_types() {
 #[test]
 fn a_tool_delta_plan_and_usage_read_from_the_wire() {
     round_trip(
-        &EventKind::Tool {
+        &EventKind::Tool(ToolCall {
             id: "call-1".into(),
             name: Some("read_file".into()),
             kind: Some(crate::ToolKind::Read),
@@ -944,7 +944,7 @@ fn a_tool_delta_plan_and_usage_read_from_the_wire() {
                 line: Some(41),
             }],
             approval: None,
-        },
+        }),
         &json!({"type": "tool", "data": {
             "id": "call-1",
             "name": "read_file",
@@ -998,7 +998,7 @@ fn a_tool_delta_plan_and_usage_read_from_the_wire() {
 
 #[test]
 fn a_tool_delta_writes_only_the_field_it_names() {
-    let wire = serde_json::to_value(EventKind::Tool {
+    let wire = serde_json::to_value(EventKind::Tool(ToolCall {
         id: "call-1".into(),
         name: None,
         kind: None,
@@ -1009,7 +1009,7 @@ fn a_tool_delta_writes_only_the_field_it_names() {
         diff: Vec::new(),
         locations: Vec::new(),
         approval: None,
-    })
+    }))
     .unwrap();
     assert_eq!(
         wire,
@@ -1029,7 +1029,7 @@ fn tool_events_are_live_and_an_old_tool_row_still_reads() {
     .unwrap();
     assert_eq!(
         old,
-        EventKind::Tool {
+        EventKind::Tool(ToolCall {
             id: "tool_1".into(),
             name: None,
             kind: None,
@@ -1040,7 +1040,7 @@ fn tool_events_are_live_and_an_old_tool_row_still_reads() {
             diff: Vec::new(),
             locations: Vec::new(),
             approval: None,
-        }
+        })
     );
     let started: EventKind = serde_json::from_value(json!({
         "type": "tool.started",

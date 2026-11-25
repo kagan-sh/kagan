@@ -71,31 +71,7 @@ pub enum EventKind {
     },
     /// One tool call; later events with the same `id` update it. Each event carries only what the
     /// agent said this time, so a reader folds the events for one id into one row.
-    Tool {
-        #[serde(default)]
-        id: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        name: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        kind: Option<ToolKind>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        title: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        status: Option<ToolStatus>,
-        /// ACP raw input.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        input: Option<serde_json::Value>,
-        /// ACP content text and raw output, flattened.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        output: Option<String>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        diff: Vec<ToolDiff>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        locations: Vec<ToolLocation>,
-        /// Set only by a permission request, which links the row to its question.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        approval: Option<PendingInteractionId>,
-    },
+    Tool(ToolCall),
     /// kagan handed this tool call to a plugin, or served `skill_load` itself.
     #[serde(rename = "tool.started")]
     ToolStarted {
@@ -158,6 +134,66 @@ pub enum EventKind {
     Rewound {
         before_seq: u64,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCall {
+    #[serde(default)]
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<ToolKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<ToolStatus>,
+    /// ACP raw input.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<serde_json::Value>,
+    /// ACP content text and raw output, flattened.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diff: Vec<ToolDiff>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub locations: Vec<ToolLocation>,
+    /// Set only by a permission request, which links the row to its question.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval: Option<PendingInteractionId>,
+}
+
+impl ToolCall {
+    pub fn merge(&mut self, delta: Self) {
+        if delta.name.is_some() {
+            self.name = delta.name;
+        }
+        if delta.kind.is_some() {
+            self.kind = delta.kind;
+        }
+        if delta.title.is_some() {
+            self.title = delta.title;
+        }
+        if delta.status.is_some() {
+            self.status = delta.status;
+        }
+        if delta.input.is_some() {
+            self.input = delta.input;
+        }
+        if delta.output.is_some() {
+            self.output = delta.output;
+        }
+        if !delta.diff.is_empty() {
+            self.diff = delta.diff;
+        }
+        if !delta.locations.is_empty() {
+            self.locations = delta.locations;
+        }
+        if delta.approval.is_some() {
+            self.approval = delta.approval;
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

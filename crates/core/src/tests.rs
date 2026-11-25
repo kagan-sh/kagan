@@ -324,7 +324,7 @@ fn plant_old_turn(db: &Path, id: &ThreadId) {
                     message_id: None,
                     attachments: Vec::new(),
                 },
-                EventKind::Tool {
+                EventKind::Tool(ToolCall {
                     id: "tool-1".into(),
                     name: Some("read".into()),
                     kind: None,
@@ -335,7 +335,7 @@ fn plant_old_turn(db: &Path, id: &ThreadId) {
                     diff: Vec::new(),
                     locations: Vec::new(),
                     approval: None,
-                },
+                }),
             ],
         )
         .unwrap();

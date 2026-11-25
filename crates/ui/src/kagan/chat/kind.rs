@@ -100,7 +100,8 @@ pub(super) fn mono_title(kind: &WorkKind) -> bool {
 pub(super) fn title(kind: &WorkKind, tool: &ToolRow) -> Option<String> {
     let probe = |keys: &[&str]| {
         keys.iter().find_map(|key| {
-            tool.input
+            tool.call
+                .input
                 .as_ref()
                 .and_then(|input| input.get(*key))
                 .and_then(serde_json::Value::as_str)
@@ -113,7 +114,8 @@ pub(super) fn title(kind: &WorkKind, tool: &ToolRow) -> Option<String> {
         WorkKind::Execute => probe(&["command", "cmd"]),
         WorkKind::Edit | WorkKind::Delete | WorkKind::Move => probe(&["file_path", "path"])
             .or_else(|| {
-                tool.diff
+                tool.call
+                    .diff
                     .first()
                     .map(|diff| file_name(&diff.path).to_owned())
             }),
@@ -122,18 +124,18 @@ pub(super) fn title(kind: &WorkKind, tool: &ToolRow) -> Option<String> {
         WorkKind::Mcp { .. } | WorkKind::Think | WorkKind::Other => None,
     };
     named
-        .or_else(|| tool.title.clone())
+        .or_else(|| tool.call.title.clone())
         .map(|title| cut(&title, 120))
 }
 
 pub(super) fn meta(kind: &WorkKind, tool: &ToolRow) -> Option<String> {
     let span = tool.span().map(span_text);
     let outcome = match kind {
-        WorkKind::Read => tool.output.as_ref().map(|output| {
+        WorkKind::Read => tool.call.output.as_ref().map(|output| {
             let lines = output.lines().count();
             format!("{lines} {}", plural(lines, "line", "lines"))
         }),
-        WorkKind::Execute => tool.output.as_deref().and_then(exit_word),
+        WorkKind::Execute => tool.call.output.as_deref().and_then(exit_word),
         WorkKind::Edit | WorkKind::Delete | WorkKind::Move => {
             let (more, less) = tool.counts;
             (more > 0 || less > 0).then(|| format!("+{more} −{less}"))
@@ -153,17 +155,17 @@ pub(super) fn meta(kind: &WorkKind, tool: &ToolRow) -> Option<String> {
 
 pub(super) fn has_body(kind: &WorkKind, tool: &ToolRow) -> bool {
     match kind {
-        WorkKind::Edit | WorkKind::Delete | WorkKind::Move => !tool.diff.is_empty(),
-        _ => tool.input.is_some() || tool.output.is_some(),
+        WorkKind::Edit | WorkKind::Delete | WorkKind::Move => !tool.call.diff.is_empty(),
+        _ => tool.call.input.is_some() || tool.call.output.is_some(),
     }
 }
 
 pub(super) fn of(tool: &ToolRow) -> WorkKind {
     WorkKind::of(
-        tool.name.as_deref(),
-        tool.title.as_deref(),
-        tool.kind,
-        tool.input.as_ref(),
+        tool.call.name.as_deref(),
+        tool.call.title.as_deref(),
+        tool.call.kind,
+        tool.call.input.as_ref(),
     )
 }
 

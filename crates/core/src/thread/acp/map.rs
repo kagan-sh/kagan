@@ -1,11 +1,12 @@
 use agent_client_protocol::v1::schema::{
     Content, ContentBlock, ContentChunk, PermissionOption, PermissionOptionKind,
-    PlanEntry as AcpPlanEntry, SessionUpdate, StopReason, TextContent, ToolCall, ToolCallContent,
-    ToolCallLocation, ToolCallStatus, ToolCallUpdateFields, ToolKind as AcpToolKind,
+    PlanEntry as AcpPlanEntry, SessionUpdate, StopReason, TextContent, ToolCall as AcpToolCall,
+    ToolCallContent, ToolCallLocation, ToolCallStatus, ToolCallUpdateFields,
+    ToolKind as AcpToolKind,
 };
 use kg_domain::{
-    InteractionOption, OptionRole, PlanEntry, PlanStatus, ToolDiff, ToolKind, ToolLocation,
-    ToolStatus, TurnOutcome,
+    InteractionOption, OptionRole, PlanEntry, PlanStatus, ToolCall, ToolDiff, ToolKind,
+    ToolLocation, ToolStatus, TurnOutcome,
 };
 
 const TOOL_TEXT_MAX: usize = 64 * 1024;
@@ -20,23 +21,10 @@ pub(super) struct Chunk {
 }
 
 #[derive(Debug)]
-pub(super) struct ToolUpdate {
-    pub(super) id: String,
-    pub(super) name: Option<String>,
-    pub(super) kind: Option<ToolKind>,
-    pub(super) title: Option<String>,
-    pub(super) status: Option<ToolStatus>,
-    pub(super) input: Option<serde_json::Value>,
-    pub(super) output: Option<String>,
-    pub(super) diff: Vec<ToolDiff>,
-    pub(super) locations: Vec<ToolLocation>,
-}
-
-#[derive(Debug)]
 pub(super) enum Update {
     Message(Chunk),
     Thought(Chunk),
-    Tool(ToolUpdate),
+    Tool(ToolCall),
     Plan(Vec<PlanEntry>),
     Usage { used: u64, size: u64 },
 }
@@ -82,8 +70,8 @@ fn entry(entry: &AcpPlanEntry) -> PlanEntry {
     }
 }
 
-fn tool_call(call: &ToolCall) -> ToolUpdate {
-    ToolUpdate {
+fn tool_call(call: &AcpToolCall) -> ToolCall {
+    ToolCall {
         id: call.tool_call_id.to_string(),
         name: call.name.clone(),
         kind: Some(kind(call.kind)),
@@ -93,11 +81,12 @@ fn tool_call(call: &ToolCall) -> ToolUpdate {
         output: output(&call.content, call.raw_output.as_ref()),
         diff: diffs(&call.content),
         locations: call.locations.iter().map(location).collect(),
+        approval: None,
     }
 }
 
-pub(super) fn tool_delta(id: String, fields: &ToolCallUpdateFields) -> ToolUpdate {
-    ToolUpdate {
+pub(super) fn tool_delta(id: String, fields: &ToolCallUpdateFields) -> ToolCall {
+    ToolCall {
         id,
         name: fields.name.clone(),
         kind: fields.kind.map(kind),
@@ -115,6 +104,7 @@ pub(super) fn tool_delta(id: String, fields: &ToolCallUpdateFields) -> ToolUpdat
             .map_or_else(Vec::new, |locations| {
                 locations.iter().map(location).collect()
             }),
+        approval: None,
     }
 }
 

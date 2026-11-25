@@ -2,7 +2,8 @@ use gpui_kit::component::input::Undo;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, TestAppContext};
 use kg_domain::{
     Event, EventKind, InteractionOption, Link, OptionRole, PendingInteraction,
-    PendingInteractionId, Role, Thread, ThreadId, ThreadStatus, Timestamp, ToolKind, ToolStatus,
+    PendingInteractionId, Role, Thread, ThreadId, ThreadStatus, Timestamp, ToolCall, ToolKind,
+    ToolStatus,
 };
 
 use super::{
@@ -170,7 +171,7 @@ fn tool(
     input: Option<serde_json::Value>,
     output: Option<&str>,
 ) -> EventKind {
-    EventKind::Tool {
+    EventKind::Tool(ToolCall {
         id: id.into(),
         name: None,
         kind: Some(kind),
@@ -181,7 +182,7 @@ fn tool(
         diff: Vec::new(),
         locations: Vec::new(),
         approval: None,
-    }
+    })
 }
 
 fn message(message_id: &str, text: &str) -> EventKind {
@@ -513,7 +514,7 @@ fn show_approval(
                 Some(serde_json::json!({"command": "cargo t"})),
                 None,
             ),
-            EventKind::Tool {
+            EventKind::Tool(ToolCall {
                 id: "t1".into(),
                 name: None,
                 kind: Some(kind),
@@ -524,7 +525,7 @@ fn show_approval(
                 diff: Vec::new(),
                 locations: Vec::new(),
                 approval: Some(asked.id.clone()),
-            },
+            }),
         ],
     );
     let store = kg_store::Store::open(data.path().join("kagan.sqlite3")).unwrap();
@@ -566,7 +567,7 @@ fn tool_with(
     title: &str,
     input: serde_json::Value,
 ) -> EventKind {
-    EventKind::Tool {
+    EventKind::Tool(ToolCall {
         id: id.into(),
         name: Some(name.into()),
         kind: Some(kind),
@@ -577,7 +578,7 @@ fn tool_with(
         diff: Vec::new(),
         locations: Vec::new(),
         approval: None,
-    }
+    })
 }
 
 #[gpui_kit::test]
@@ -585,7 +586,7 @@ fn a_body_leads_to_where_it_points(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(
         cx,
         vec![
-            EventKind::Tool {
+            EventKind::Tool(ToolCall {
                 id: "t1".into(),
                 name: Some("mcp__github__list_issues".into()),
                 kind: Some(ToolKind::Other),
@@ -596,7 +597,7 @@ fn a_body_leads_to_where_it_points(cx: &mut TestAppContext) {
                 diff: Vec::new(),
                 locations: Vec::new(),
                 approval: None,
-            },
+            }),
             tool_with(
                 "t2",
                 "skill_load",
@@ -604,7 +605,7 @@ fn a_body_leads_to_where_it_points(cx: &mut TestAppContext) {
                 "Load a skill",
                 serde_json::json!({"name": "rust-review"}),
             ),
-            EventKind::Tool {
+            EventKind::Tool(ToolCall {
                 id: "t3".into(),
                 name: None,
                 kind: Some(ToolKind::Edit),
@@ -619,7 +620,7 @@ fn a_body_leads_to_where_it_points(cx: &mut TestAppContext) {
                 }],
                 locations: Vec::new(),
                 approval: None,
-            },
+            }),
         ],
     );
     wait_until(cx, |cx| shows(cx, window, "chat-work-1"));
@@ -637,7 +638,7 @@ fn a_body_leads_to_where_it_points(cx: &mut TestAppContext) {
 fn an_mcp_row_names_its_tool_once(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat_with(
         cx,
-        vec![EventKind::Tool {
+        vec![EventKind::Tool(ToolCall {
             id: "t1".into(),
             name: Some("mcp__github__list_issues".into()),
             kind: Some(ToolKind::Other),
@@ -648,7 +649,7 @@ fn an_mcp_row_names_its_tool_once(cx: &mut TestAppContext) {
             diff: Vec::new(),
             locations: Vec::new(),
             approval: None,
-        }],
+        })],
     );
     wait_until(cx, |cx| shows(cx, window, "chat-work-1"));
     assert_eq!(

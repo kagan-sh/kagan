@@ -23,7 +23,7 @@ fn call(
 ) -> Event {
     event(
         seq,
-        EventKind::Tool {
+        EventKind::Tool(ToolCall {
             id: id.into(),
             name: None,
             kind: Some(kind),
@@ -34,7 +34,7 @@ fn call(
             diff: Vec::new(),
             locations: Vec::new(),
             approval,
-        },
+        }),
     )
 }
 
@@ -78,8 +78,8 @@ fn a_delta_after_the_approval_card_folds_into_its_row() {
     let RowKind::Work(tool) = &transcript.rows[0].kind else {
         panic!("the call stays one work row");
     };
-    assert_eq!(tool.title.as_deref(), Some("Read file"));
-    assert_eq!(tool.status, Some(ToolStatus::Completed));
+    assert_eq!(tool.call.title.as_deref(), Some("Read file"));
+    assert_eq!(tool.call.status, Some(ToolStatus::Completed));
     assert!(matches!(transcript.rows[1].kind, RowKind::Approval(_)));
 }
 
@@ -93,11 +93,11 @@ fn parallel_calls_keep_a_row_each_until_both_finish() {
     let RowKind::Work(first) = &transcript.rows[0].kind else {
         panic!("the first call");
     };
-    assert_eq!(first.status, Some(ToolStatus::Completed));
+    assert_eq!(first.call.status, Some(ToolStatus::Completed));
     let RowKind::Work(second) = &transcript.rows[1].kind else {
         panic!("the second call");
     };
-    assert_eq!(second.status, Some(ToolStatus::InProgress));
+    assert_eq!(second.call.status, Some(ToolStatus::InProgress));
 }
 
 #[test]
@@ -131,7 +131,7 @@ fn an_mcp_call_reported_as_a_read_stays_a_row() {
         ] {
             transcript.absorb(&event(
                 seq,
-                EventKind::Tool {
+                EventKind::Tool(ToolCall {
                     id: id.clone(),
                     name: Some("mcp__github__create_issue".into()),
                     kind: Some(ToolKind::Read),
@@ -142,7 +142,7 @@ fn an_mcp_call_reported_as_a_read_stays_a_row() {
                     diff: Vec::new(),
                     locations: Vec::new(),
                     approval: None,
-                },
+                }),
             ));
         }
     }
@@ -194,7 +194,7 @@ fn a_diff_is_counted_once_as_it_arrives() {
     }];
     transcript.absorb(&event(
         1,
-        EventKind::Tool {
+        EventKind::Tool(ToolCall {
             id: "t1".into(),
             name: None,
             kind: Some(ToolKind::Edit),
@@ -205,7 +205,7 @@ fn a_diff_is_counted_once_as_it_arrives() {
             diff: diff.clone(),
             locations: Vec::new(),
             approval: None,
-        },
+        }),
     ));
     let RowKind::Work(tool) = &transcript.rows[0].kind else {
         panic!("the edit");
@@ -213,7 +213,7 @@ fn a_diff_is_counted_once_as_it_arrives() {
     assert_eq!(tool.counts, (1, 1));
     transcript.absorb(&event(
         2,
-        EventKind::Tool {
+        EventKind::Tool(ToolCall {
             id: "t1".into(),
             name: None,
             kind: None,
@@ -224,7 +224,7 @@ fn a_diff_is_counted_once_as_it_arrives() {
             diff: Vec::new(),
             locations: Vec::new(),
             approval: None,
-        },
+        }),
     ));
     let RowKind::Work(tool) = &transcript.rows[0].kind else {
         panic!("the edit");

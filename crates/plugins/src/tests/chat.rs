@@ -3,7 +3,8 @@ use std::time::Duration;
 use gpui_kit::TestAppContext;
 use kg_domain::{
     Event, EventKind, Link, NoticeSeverity, Op, PlanEntry, PlanStatus, Plugin, Thread, ThreadId,
-    ThreadOp, ThreadStatus, Timestamp, ToolKind, ToolOutcome, ToolStatus, TurnOutcome, Visibility,
+    ThreadOp, ThreadStatus, Timestamp, ToolCall, ToolKind, ToolOutcome, ToolStatus, TurnOutcome,
+    Visibility,
 };
 use serde_json::{Value, json};
 
@@ -119,7 +120,7 @@ fn delta(
     input: Option<Value>,
     output: Option<String>,
 ) -> EventKind {
-    EventKind::Tool {
+    EventKind::Tool(ToolCall {
         id: "t1".into(),
         name: Some("read_file".into()),
         kind,
@@ -130,7 +131,7 @@ fn delta(
         diff: Vec::new(),
         locations: Vec::new(),
         approval: None,
-    }
+    })
 }
 
 fn work_of(kind: EventKind) -> Value {
@@ -176,7 +177,7 @@ fn a_tool_delta_carries_its_kind_title_status_and_fields() {
 #[test]
 fn a_work_item_is_classified_as_the_host_draws_it() {
     let named = |name: &str, input: Option<Value>| {
-        work_of(EventKind::Tool {
+        work_of(EventKind::Tool(ToolCall {
             id: "t1".into(),
             name: Some(name.into()),
             kind: None,
@@ -187,7 +188,7 @@ fn a_work_item_is_classified_as_the_host_draws_it() {
             diff: Vec::new(),
             locations: Vec::new(),
             approval: None,
-        })
+        }))
     };
     let called = named("mcp__github__create_issue", None);
     assert_eq!(called["tool"], "mcp");
