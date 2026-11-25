@@ -226,11 +226,11 @@ fn thread(status: ThreadStatus, read: bool) -> Thread {
 }
 
 #[test]
-fn a_thread_waiting_on_the_person_is_needs_you_while_its_turn_is_busy() {
+fn a_turn_held_on_a_permission_request_is_needs_you_while_its_turn_is_busy() {
     assert_eq!(
         Tone::of(&thread(ThreadStatus::Active, false), true, false, false),
-        Tone::Needs,
-        "an unread turn that is busy still needs the person"
+        Tone::Busy,
+        "an unread busy turn nobody is waiting on is working"
     );
     assert_eq!(
         Tone::of(&thread(ThreadStatus::Active, true), true, false, true),
