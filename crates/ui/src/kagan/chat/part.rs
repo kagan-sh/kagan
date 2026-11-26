@@ -43,7 +43,6 @@ pub(super) enum RowKind {
     Thought(Box<ThoughtRow>),
     Work(Box<ToolRow>),
     Bundle(Vec<Row>),
-    Approval(PendingInteractionId),
     Notice(String),
     Divider {
         from: Timestamp,
@@ -155,14 +154,7 @@ impl Transcript {
                     from: event.at,
                     to: event.at,
                 };
-                let fold = self.tool(event.seq, delta);
-                if let Some(approval) = &call.approval {
-                    self.push(Row {
-                        id: event.seq,
-                        kind: RowKind::Approval(approval.clone()),
-                    });
-                }
-                fold
+                self.tool(event.seq, delta)
             }
             EventKind::Plan { entries } => {
                 let id = self.plan.as_ref().map_or(event.seq, |(id, _)| *id);
@@ -210,6 +202,14 @@ impl Transcript {
     pub(super) fn plan(&self) -> Option<(u64, &[PlanEntry])> {
         let (id, entries) = self.plan.as_ref()?;
         Some((*id, entries))
+    }
+
+    // The call a permission request waits on. It stays a work row, so the row says what waits.
+    pub(super) fn approval(&self, id: &PendingInteractionId) -> Option<&ToolRow> {
+        self.rows.iter().find_map(|row| match &row.kind {
+            RowKind::Work(tool) if tool.call.approval.as_ref() == Some(id) => Some(tool.as_ref()),
+            _ => None,
+        })
     }
 
     fn find_tool(&self, id: &str) -> Option<(usize, Option<usize>)> {

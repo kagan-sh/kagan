@@ -7,33 +7,11 @@ use gpui_kit::{
     AnyElement, App, Context, IntoElement, ParentElement as _, Styled as _, Window, div,
 };
 use kg_core::{Approval, Workspace};
-use kg_domain::{InteractionOption, OptionRole, PendingInteractionId};
+use kg_domain::{InteractionOption, PendingInteractionId};
 
 use super::changes::line;
 use super::screen::{Activation, Side};
 use super::{Kagan, question};
-
-fn opening_option(options: &[InteractionOption], permission: bool) -> Option<&InteractionOption> {
-    if permission {
-        return options
-            .iter()
-            .find(|option| option.role == Some(OptionRole::Safe))
-            .or_else(|| {
-                options
-                    .iter()
-                    .find(|option| option.role == Some(OptionRole::Destructive))
-            });
-    }
-    options
-        .iter()
-        .find(|option| option.role == Some(OptionRole::Primary))
-        .or_else(|| {
-            options
-                .iter()
-                .find(|option| option.role == Some(OptionRole::Safe))
-        })
-        .or_else(|| options.first())
-}
 
 impl Kagan {
     pub(super) fn render_needs(
@@ -159,7 +137,7 @@ impl Kagan {
         self.waiting(cx)
             .filter(|(id, _, _)| !self.holds(id))
             .find_map(|(id, options, permission)| {
-                opening_option(options, permission)
+                question::opening_option(options, permission)
                     .map(|option| question::answer_focus(&id.0, &option.id))
             })
             .unwrap_or_else(|| {
@@ -209,7 +187,3 @@ impl Kagan {
         cx.notify();
     }
 }
-
-#[cfg(test)]
-#[path = "needs_test.rs"]
-mod tests;

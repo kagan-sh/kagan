@@ -7,7 +7,7 @@ use kg_domain::{
 };
 
 use super::{
-    click, disabled, focused_of, label, open, row_top, run_shell, shows, shows_within,
+    click, disabled, focused_of, label, open, pending, row_top, run_shell, shows, shows_within,
     thread_record, value_of, wait_until,
 };
 use crate::tests::sidebar::layout::span;
@@ -638,6 +638,19 @@ fn the_approval_card_answers_through_the_question(cx: &mut TestAppContext) {
     let (window, _data) = show_approval(cx, ToolKind::Execute, permission_options(), None);
     wait_until(cx, |cx| shows(cx, window, "answer-chat-pn_1-allow-once"));
     wait_until(cx, |cx| shows(cx, window, "answer-chat-pn_1-reject-once"));
+    // The card takes the box's place: one thing to do, in one place.
+    assert!(!shows(cx, window, "chat-prompt"), "the box steps aside");
+    assert!(!shows(cx, window, "chat-box"), "the card replaces the box");
+    let (card_x, card_w) = span(cx, window, "chat-approval-pn_1").expect("the card");
+    let (column_x, column_w) = span(cx, window, "chat-column").expect("the column");
+    assert!(
+        (card_x - column_x).abs() <= 0.5,
+        "{card_x} against {column_x}"
+    );
+    assert!(
+        (card_w - column_w).abs() <= 0.5,
+        "the card is as wide as the box it took: {card_w} against {column_w}"
+    );
     // A command that is waiting for permission has not started: it says so, with its own mark.
     assert_eq!(
         value_of(cx, window, "chat-work-1").as_deref(),
@@ -691,6 +704,126 @@ fn the_approval_card_lists_the_reject_first_and_the_filled_option_last(cx: &mut 
     assert!(
         deny < always && always < once,
         "{deny:?} {always:?} {once:?}"
+    );
+}
+
+#[gpui_kit::test]
+fn two_permissions_name_how_many_wait(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let id = seed_thread(data.path(), Vec::new());
+    reveal(cx, window, &id);
+    wait_until(cx, |cx| shows(cx, window, "chat-prompt"));
+
+    let _first = cx.update(|cx| {
+        kg_core::Workspace::ask_for_person(
+            Some(&id),
+            None,
+            "The first one".into(),
+            permission_options(),
+            cx,
+        )
+    });
+    let _second = cx.update(|cx| {
+        kg_core::Workspace::ask_for_person(
+            Some(&id),
+            None,
+            "The second one".into(),
+            permission_options(),
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    let first = super::pending(cx, &id)
+        .first()
+        .expect("the questions wait")
+        .id
+        .clone();
+    let title = format!("question-title-chat-{}", first.0);
+    wait_until(cx, |cx| {
+        value_of(cx, window, &title).is_some_and(|text| text.ends_with("· 1 of 2"))
+    });
+}
+
+#[gpui_kit::test]
+fn a_pending_permission_takes_the_boxs_place_and_gives_it_back(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let id = seed_thread(
+        data.path(),
+        vec![tool(
+            "t1",
+            ToolKind::Execute,
+            ToolStatus::Pending,
+            "Run the tests",
+            Some(serde_json::json!({"command": "cargo t"})),
+            None,
+        )],
+    );
+    reveal(cx, window, &id);
+    // A draft the person typed before the agent asked.
+    let chat = cx
+        .update(|cx| kagan.read(cx).chat_view())
+        .expect("the chat on screen");
+    cx.update_window(window, |_, window, cx| {
+        chat.update(cx, |chat, cx| chat.set_draft("hi".into(), window, cx));
+    })
+    .unwrap();
+    wait_until(cx, |cx| shows(cx, window, "chat-prompt"));
+
+    let asked = cx.update(|cx| {
+        kg_core::Workspace::dispatch(
+            kg_domain::Op::Thread(kg_domain::ThreadOp::Ask {
+                id: id.clone(),
+                title: "OpenCode wants to run a command".into(),
+                options: permission_options(),
+                fields: None,
+            }),
+            cx,
+        )
+    });
+    let kg_domain::OpResult::Text(asked) = cx.foreground_executor().block_test(asked).unwrap()
+    else {
+        panic!("ask");
+    };
+    let card = format!("chat-approval-{asked}");
+    wait_until(cx, |cx| shows(cx, window, &card));
+    assert!(!shows(cx, window, "chat-prompt"), "the box steps aside");
+    assert!(
+        !shows(cx, window, "chat-send"),
+        "one thing to do, in one place"
+    );
+    let name = label(cx, window, "chat-work-1");
+    assert!(name.contains("Waiting to run command"), "{name}");
+    // The card's own answers are there, in the order the card states: the one that grants
+    // nothing first, the grant last.
+    let deny = format!("answer-chat-{asked}-reject-once");
+    let allow = format!("answer-chat-{asked}-allow-once");
+    assert!(shows(cx, window, &deny));
+    assert!(shows(cx, window, &allow));
+    let left = |cx: &mut TestAppContext, id: &str| {
+        cx.update_window(window, |_, window, _| {
+            crate::ui_registry::find(window, &ElementId::Name(id.into()))
+                .map(|element| element.bounds.left())
+        })
+        .unwrap()
+    };
+    assert!(
+        left(cx, &deny) < left(cx, &allow),
+        "the option that grants nothing comes first"
+    );
+
+    // A new question opens the Questions pane over the chat, so the person answers there.
+    click(cx, window, &format!("answer-{asked}-allow-once"));
+    wait_until(cx, |cx| pending(cx, &id).is_empty());
+    wait_until(cx, |cx| shows(cx, window, "chat-prompt"));
+    assert_eq!(
+        value_of(cx, window, "chat-prompt").as_deref(),
+        Some("hi"),
+        "the draft stayed through the card"
+    );
+    assert_eq!(
+        focused_of(cx, window, "chat-prompt"),
+        Some(true),
+        "the box takes the focus back"
     );
 }
 

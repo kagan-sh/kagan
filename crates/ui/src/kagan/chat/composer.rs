@@ -9,9 +9,10 @@ use gpui_kit::{
     ParentElement as _, Role, SharedString, Styled as _, Window, div, px,
 };
 use kg_core::Workspace;
-use kg_domain::{ThreadId, ThreadStatus};
+use kg_domain::{PendingInteraction, ThreadId, ThreadStatus};
 
 use super::ChatView;
+use super::card;
 use crate::kagan::controls::{control, dispatch, menu_item};
 use crate::kagan::{SaveDiagnostics, StartAgain};
 use crate::theme::{Tone, TypeScale as _, control_height, radius_xs};
@@ -82,6 +83,13 @@ pub(super) fn composer(
             .update(cx, |prompt, cx| prompt.set_placeholder(hint, window, cx));
     }
     let cards = super::above::stack(view, window, cx);
+    let place = match view.asked(cx) {
+        Some((asked, total)) => {
+            view.card_shown(&asked, window, cx);
+            asked_card(view, asked, total, window, cx)
+        }
+        None => boxed(view, &shown, cx),
+    };
     v_flex()
         .flex_none()
         .px_4()
@@ -93,10 +101,32 @@ pub(super) fn composer(
                 .w_full()
                 .gap_2()
                 .children(cards)
-                .child(boxed(view, &shown, cx))
+                .child(place)
                 .child(context_row(view, answering, cx)),
         )
         .into_any_element()
+}
+
+// A permission takes the box's place: one thing to do, in one place, and the draft stays kept.
+fn asked_card(
+    view: &ChatView,
+    mut asked: PendingInteraction,
+    total: usize,
+    window: &mut Window,
+    cx: &mut Context<ChatView>,
+) -> AnyElement {
+    if total > 1 {
+        asked.title = format!("{} · 1 of {total}", asked.title);
+    }
+    let (title, worktree) = view.approval_detail(&asked.id, cx);
+    card::approval_card(
+        &asked,
+        title.as_deref(),
+        worktree,
+        &cx.weak_entity(),
+        window,
+        cx,
+    )
 }
 
 fn boxed(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyElement {

@@ -4,11 +4,10 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    App, InteractiveElement as _, IntoElement, ParentElement as _, StatefulInteractiveElement as _,
-    Styled as _, WeakEntity, Window, div, px,
+    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _,
+    StatefulInteractiveElement as _, Styled as _, WeakEntity, Window, div, px,
 };
 
-use crate::kagan::attention;
 use crate::kagan::chat::ChatView;
 use crate::kagan::chat::work;
 use crate::kagan::question;
@@ -17,23 +16,14 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 pub(super) fn approval_card(
-    id: &kg_domain::PendingInteractionId,
+    asked: &kg_domain::PendingInteraction,
     tool_title: Option<&str>,
     worktree: bool,
     weak: &WeakEntity<ChatView>,
     window: &mut Window,
     cx: &mut App,
-) -> gpui_kit::AnyElement {
-    let asked = attention::global(cx)
-        .read(cx)
-        .questions
-        .iter()
-        .find(|asked| &asked.id == id)
-        .cloned();
-    let Some(asked) = asked else {
-        return div().into_any_element();
-    };
-    let detail = detail(id, tool_title, worktree, cx);
+) -> AnyElement {
+    let detail = detail(&asked.id, tool_title, worktree, cx);
     let failed: question::Failed = {
         let weak = weak.clone();
         Rc::new(move |cx, text| {
@@ -41,9 +31,9 @@ pub(super) fn approval_card(
         })
     };
     div()
-        .id(work::named("approval", &id.0))
+        .id(work::named("approval", &asked.id.0))
         .child(question::permission_card(
-            &asked,
+            asked,
             Some(detail),
             &failed,
             window,

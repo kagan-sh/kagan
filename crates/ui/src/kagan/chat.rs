@@ -14,10 +14,15 @@ use gpui_kit::{
     Subscription, Window, div, px,
 };
 use kg_core::{Workspace, WorkspaceEvent};
-use kg_domain::{Event, Op, Role as Speaker, ThreadId, ThreadOp, Timestamp, program_label};
+use kg_domain::{
+    Event, Op, PendingInteraction, PendingInteractionId, Role as Speaker, ThreadId, ThreadOp,
+    Timestamp, program_label,
+};
 
 use crate::kagan::Kagan;
+use crate::kagan::attention;
 use crate::kagan::controls::control;
+use crate::kagan::question;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -45,10 +50,12 @@ pub(crate) struct ChatView {
     sending: Option<gpui_kit::Task<()>>,
     cards: above::Cards,
     children: Vec<(ThreadId, SharedString)>,
+    asking: Option<PendingInteractionId>,
     load_task: Option<gpui_kit::Task<()>>,
     _events: Subscription,
     _prompt: Subscription,
     _scroller: Subscription,
+    _questions: Subscription,
 }
 
 impl ChatView {
@@ -72,6 +79,13 @@ impl ChatView {
         // The list lives inside this view's element tree, so a scroll that changes what the
         // scroller draws (the jump button, the bottom fade) has to bring the view back.
         let scroller_watch = cx.observe(&scroller, |_, _, cx| cx.notify());
+        // A permission this thread waits on takes the box's place, so the card comes and goes
+        // with the questions, not with the transcript.
+        let attention = attention::global(cx);
+        let questions = cx.observe_in(&attention, window, |this, _, window, cx| {
+            this.question_left(window, cx);
+            cx.notify();
+        });
         let events = cx.subscribe(&Workspace::global(cx), |this, _, event, cx| {
             // Another thread's events are not this transcript's work: the fold meets the log
             // once per event that is this thread's, and the state's own changes.
@@ -105,10 +119,12 @@ impl ChatView {
             sending: None,
             cards: above::Cards::default(),
             children: Vec::new(),
+            asking: None,
             load_task: None,
             _events: events,
             _prompt: prompt_watch,
             _scroller: scroller_watch,
+            _questions: questions,
         };
         this.load(cx);
         this
@@ -325,6 +341,44 @@ impl ChatView {
                 |thread| program_label(&thread.read(cx).record().provider).into(),
             )
     }
+
+    // The permission this thread waits on, and how many wait behind it, oldest first.
+    fn asked(&self, cx: &App) -> Option<(PendingInteraction, usize)> {
+        let attention = attention::global(cx);
+        let mut waiting = attention.read(cx).questions.iter().filter(|asked| {
+            asked.thread_id == self.thread && asked.fields.as_ref().is_none_or(Vec::is_empty)
+        });
+        let first = waiting.next()?.clone();
+        Some((first, 1 + waiting.count()))
+    }
+
+    // A card never takes the keyboard while the person types; it gives the box back its focus
+    // when it goes, because the box is where the next thing happens.
+    // The card opens on the option that grants nothing, so Enter never approves.
+    fn card_shown(
+        &mut self,
+        asked: &PendingInteraction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.asking.as_ref() == Some(&asked.id) {
+            return;
+        }
+        self.asking = Some(asked.id.clone());
+        let Some(option) = question::opening_option(&asked.options, true) else {
+            return;
+        };
+        let key = question::answer_focus(&format!("chat-{}", asked.id.0), &option.id);
+        let focus = crate::kagan::tab_stop(window, cx, ElementId::Name(key.into()));
+        window.focus(&focus, cx);
+    }
+
+    fn question_left(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.asked(cx).is_none() && self.asking.take().is_some() {
+            let focus = self.prompt.read(cx).focus_handle(cx);
+            cx.defer_in(window, move |_, window, cx| window.focus(&focus, cx));
+        }
+    }
 }
 
 impl Focusable for ChatView {
@@ -467,12 +521,6 @@ fn row_at(
         }
         part::RowKind::Work(tool) => work::work_row(&row, tool, false, open, weak, window, cx),
         part::RowKind::Bundle(members) => work::bundle_row(&row, members, open, weak, window, cx),
-        part::RowKind::Approval(id) => {
-            let (title, worktree) = weak
-                .read_with(cx, |this, cx| this.approval_detail(index, cx))
-                .unwrap_or_default();
-            card::approval_card(id, title.as_deref(), worktree, weak, window, cx)
-        }
         part::RowKind::Notice(text) => notice_view(row.id, text, cx),
         part::RowKind::Divider { from, to, outcome } => {
             divider_view(row.id, *from, *to, *outcome, cx)
@@ -481,14 +529,12 @@ fn row_at(
 }
 
 impl ChatView {
-    fn approval_detail(&self, index: usize, cx: &App) -> (Option<String>, bool) {
-        let tool = index.checked_sub(1).and_then(|previous| {
-            match &self.transcript.rows.get(previous)?.kind {
-                part::RowKind::Work(tool) => Some(tool.as_ref()),
-                _ => None,
-            }
-        });
-        let Some(tool) = tool else {
+    fn approval_detail(
+        &self,
+        id: &kg_domain::PendingInteractionId,
+        cx: &App,
+    ) -> (Option<String>, bool) {
+        let Some(tool) = self.transcript.approval(id) else {
             return (None, false);
         };
         let environment = Workspace::global(cx)

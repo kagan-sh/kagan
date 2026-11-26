@@ -62,7 +62,7 @@ fn a_single_finished_read_stays_a_row() {
 }
 
 #[test]
-fn a_delta_after_the_approval_card_folds_into_its_row() {
+fn a_delta_after_the_permission_request_folds_into_its_row() {
     let mut transcript = Transcript::default();
     let approval = PendingInteractionId("pn_1".into());
     transcript.absorb(&call(1, "t1", ToolKind::Read, ToolStatus::InProgress, None));
@@ -71,16 +71,22 @@ fn a_delta_after_the_approval_card_folds_into_its_row() {
         "t1",
         ToolKind::Read,
         ToolStatus::Pending,
-        Some(approval),
+        Some(approval.clone()),
     ));
     transcript.absorb(&call(3, "t1", ToolKind::Read, ToolStatus::Completed, None));
-    assert_eq!(transcript.rows.len(), 2);
+    assert_eq!(transcript.rows.len(), 1, "the card is not a transcript row");
     let RowKind::Work(tool) = &transcript.rows[0].kind else {
         panic!("the call stays one work row");
     };
     assert_eq!(tool.call.title.as_deref(), Some("Read file"));
     assert_eq!(tool.call.status, Some(ToolStatus::Completed));
-    assert!(matches!(transcript.rows[1].kind, RowKind::Approval(_)));
+    assert_eq!(
+        transcript
+            .approval(&approval)
+            .map(|tool| tool.call.id.as_str()),
+        Some("t1"),
+        "the card finds its call through the approval id"
+    );
 }
 
 #[test]
