@@ -3,26 +3,25 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Disableable as _, Icon, Placement, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, Context, Focusable as _, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, Role, SharedString, Styled as _, Window, div, px,
+    AnyElement, App, Context, Focusable as _, InteractiveElement as _, IntoElement,
+    ParentElement as _, Role, StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
 use kg_core::Workspace;
-use kg_domain::{PendingInteraction, ThreadId, ThreadStatus};
+use kg_domain::{PendingInteraction, ThreadStatus};
 
 use super::ChatView;
 use super::card;
 use crate::kagan::controls::{control, dispatch, menu_item};
 use crate::kagan::{SaveDiagnostics, StartAgain};
-use crate::theme::{Tone, TypeScale as _, control_height, radius_xs};
+use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 pub(super) const COLUMN: f32 = 760.;
 
-const ASK: &str = "Ask the agent… Enter sends, Shift+Enter adds a line";
-const STOPPED: &str = "Start the agent again to send";
 const ARCHIVED: &str = "This thread is archived";
 
 struct Shown {
@@ -30,6 +29,7 @@ struct Shown {
     ready: bool,
     focused: bool,
     archived: bool,
+    empty: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -69,18 +69,23 @@ pub(super) fn composer(
         ready: running && !empty && view.sending.is_none(),
         focused: view.prompt.read(cx).focus_handle(cx).is_focused(window),
         archived: view.archived(cx),
+        empty,
     };
     // The box's hint says what it takes, or how to get the agent back, so a stopped box never
     // looks like it can send. Read-only, the area keeps the draft and takes no typing.
-    let hint = match (shown.turn.running(), shown.archived) {
-        (true, _) => ASK,
-        (false, true) => ARCHIVED,
-        (false, false) => STOPPED,
+    let hint = match (shown.archived, shown.turn.running()) {
+        (true, _) => ARCHIVED.to_owned(),
+        (false, true) => format!("Ask {}…", view.who(cx)),
+        (false, false) => format!(
+            "{} Start it again to send.",
+            crate::kagan::shown::ended_text(&view.thread, cx)
+        ),
     };
-    let stale = view.prompt.read(cx).presentation().placeholder().as_ref() != hint;
+    let stale = view.prompt.read(cx).presentation().placeholder().as_ref() != hint.as_str();
     if stale {
-        view.prompt
-            .update(cx, |prompt, cx| prompt.set_placeholder(hint, window, cx));
+        view.prompt.update(cx, |prompt, cx| {
+            prompt.set_placeholder(hint.clone(), window, cx);
+        });
     }
     let cards = super::above::stack(view, window, cx);
     let place = match view.asked(cx) {
@@ -88,7 +93,7 @@ pub(super) fn composer(
             view.card_shown(&asked, window, cx);
             asked_card(view, asked, total, window, cx)
         }
-        None => boxed(view, &shown, cx),
+        None => boxed(view, &shown, &hint, cx),
     };
     v_flex()
         .flex_none()
@@ -102,7 +107,7 @@ pub(super) fn composer(
                 .gap_2()
                 .children(cards)
                 .child(place)
-                .child(context_row(view, answering, cx)),
+                .children(context_row(view, cx)),
         )
         .into_any_element()
 }
@@ -129,13 +134,15 @@ fn asked_card(
     )
 }
 
-fn boxed(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyElement {
+fn boxed(view: &mut ChatView, shown: &Shown, hint: &str, cx: &mut Context<ChatView>) -> AnyElement {
     let border = if shown.focused {
         cx.theme().accent
     } else {
         cx.theme().input
     };
-    let stopped = (!shown.turn.running()).then(|| {
+    // An empty stopped box says how it ended in its placeholder, under its own words. The line
+    // shows only when a draft hides that placeholder; an archived box keeps its line as it was.
+    let stopped = (!shown.turn.running() && (shown.archived || !shown.empty)).then(|| {
         if shown.archived {
             "This thread is archived.".to_owned()
         } else {
@@ -151,7 +158,7 @@ fn boxed(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyE
         .border_color(border)
         .rounded(cx.theme().radius)
         .bg(cx.theme().secondary)
-        .child(area(view, !shown.turn.running(), cx))
+        .child(area(view, !shown.turn.running(), hint, cx))
         .children(stopped.map(|line| {
             div()
                 .id("chat-stopped")
@@ -175,7 +182,7 @@ fn boxed(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyE
         .into_any_element()
 }
 
-fn area(view: &ChatView, stopped: bool, cx: &App) -> impl IntoElement {
+fn area(view: &ChatView, stopped: bool, hint: &str, cx: &App) -> impl IntoElement {
     let value = view.prompt.read(cx).value().to_string();
     div().relative().child(
         div()
@@ -187,7 +194,7 @@ fn area(view: &ChatView, stopped: bool, cx: &App) -> impl IntoElement {
                 disabled: stopped,
                 selected: None,
                 focus: Some(view.prompt.read(cx).focus_handle(cx)),
-                hint: None,
+                hint: Some(hint.into()),
             })
             .child(
                 Textarea::new(&view.prompt)
@@ -276,6 +283,23 @@ fn action(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> Opt
     if shown.archived {
         return None;
     }
+    // A stop is on its way; the action place says so rather than repeating the state word.
+    if matches!(view.thread_state(cx), Some((ThreadStatus::Stopping, _))) {
+        return Some(
+            control(
+                "chat-stopping",
+                Facts {
+                    disabled: true,
+                    ..Facts::button("Stopping…")
+                },
+                Button::new("chat-stopping-button")
+                    .small()
+                    .label("Stopping…")
+                    .disabled(true),
+            )
+            .into_any_element(),
+        );
+    }
     if matches!(shown.turn, Turn::Answering) {
         return Some(
             control(
@@ -326,7 +350,8 @@ fn action(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> Opt
                 .icon(IconName::ArrowUp)
                 .rounded(px(999.))
                 .accessibility_label("Send")
-                .tooltip("Send this prompt (Enter)")
+                .tooltip("Send (Enter). Shift+Enter adds a line.")
+                .loading(view.sending.is_some())
                 .disabled(!shown.ready)
                 .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
         )
@@ -334,99 +359,51 @@ fn action(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> Opt
     )
 }
 
-fn context_row(view: &ChatView, answering: bool, cx: &App) -> impl IntoElement {
-    let (project, folder) = context(&view.thread, cx);
-    let (state, tone) = state_word(view, answering, cx);
-    h_flex()
-        .id("chat-context")
-        .ui_container()
-        .items_center()
-        .gap_2()
-        .px_1()
-        .type_caption(cx)
-        .text_color(cx.theme().muted_foreground)
-        .children(project.map(|project| {
-            chip(
-                "chat-context-project",
-                "Project",
-                IconName::Folder,
-                project,
-                cx,
-            )
-        }))
-        .children(
-            folder.map(|(icon, folder)| chip("chat-context-folder", "Folder", icon, folder, cx)),
-        )
-        .child(div().flex_1())
-        .child(
-            div()
-                .id("chat-state")
-                .ui_observe_as(Facts::label("State", state.clone()))
-                .text_color(tone)
-                .child(state),
-        )
+// The facts under the box: where the agent writes, and what its context costs. Nothing here
+// repeats the header, the box's own action, or each other, so no bar ever draws empty.
+fn context_row(view: &ChatView, cx: &App) -> Option<AnyElement> {
+    let branch = view.branch(cx);
+    let usage = view.transcript.usage;
+    if branch.is_none() && usage.is_none() {
+        return None;
+    }
+    Some(
+        h_flex()
+            .id("chat-context")
+            .ui_container()
+            .items_center()
+            .gap_2()
+            .px_1()
+            .type_caption(cx)
+            .text_color(cx.theme().muted_foreground)
+            .children(branch.map(|branch| {
+                h_flex()
+                    .id("chat-branch")
+                    .ui_observe_as(Facts::label("Branch", branch.clone()))
+                    .items_center()
+                    .gap_1()
+                    .child(Icon::new(IconName::GitBranch).xsmall())
+                    .child(div().max_w(px(240.)).text_ellipsis().child(branch))
+                    .into_any_element()
+            }))
+            .child(div().flex_1())
+            .children(usage.map(|(used, size)| usage_gauge(used, size)))
+            .into_any_element(),
+    )
 }
 
-fn chip(id: &'static str, name: &str, icon: IconName, text: SharedString, cx: &App) -> AnyElement {
-    h_flex()
-        .id(id)
-        .h(px(control_height(cx)))
-        .px_2()
-        .gap_1()
-        .items_center()
-        .rounded(px(radius_xs(cx)))
-        .border_1()
-        .border_color(cx.theme().border)
-        .text_color(cx.theme().muted_foreground)
-        .ui_observe_as(Facts::label(name, text.clone()))
-        .child(Icon::new(icon).xsmall())
-        .child(div().max_w(px(240.)).text_ellipsis().child(text))
+fn usage_gauge(used: u64, size: u64) -> AnyElement {
+    let text = format!("{} / {}", ChatView::compact(used), ChatView::compact(size));
+    let sentence = format!(
+        "{} of {} tokens in context",
+        ChatView::compact(used),
+        ChatView::compact(size)
+    );
+    let tip = sentence.clone();
+    div()
+        .id("chat-usage")
+        .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+        .ui_observe_as(Facts::label(sentence, text.clone()))
+        .child(text)
         .into_any_element()
-}
-
-fn context(
-    thread: &ThreadId,
-    cx: &App,
-) -> (Option<SharedString>, Option<(IconName, SharedString)>) {
-    let workspace = Workspace::global(cx);
-    let workspace = workspace.read(cx);
-    let Some(record) = workspace
-        .thread(thread)
-        .map(|thread| thread.read(cx).record())
-    else {
-        return (None, None);
-    };
-    let project = workspace
-        .project(&record.project_id)
-        .map(|project| SharedString::from(project.read(cx).record().name.clone()));
-    let folder = match record.environment_id.as_ref() {
-        Some(id) => workspace.environment(id).map(|environment| {
-            let environment = environment.read(cx).record();
-            let name = environment.branch.clone().unwrap_or_else(|| {
-                environment
-                    .path
-                    .file_name()
-                    .map(|name| name.to_string_lossy().into_owned())
-                    .unwrap_or_default()
-            });
-            (IconName::GitBranch, SharedString::from(name))
-        }),
-        None => Some((IconName::HardDrive, SharedString::from("Project folder"))),
-    };
-    (project, folder)
-}
-
-fn state_word(view: &ChatView, answering: bool, cx: &App) -> (SharedString, Hsla) {
-    let muted = cx.theme().muted_foreground;
-    if view.sending.is_some() {
-        return ("Sending…".into(), muted);
-    }
-    if answering {
-        return ("Working".into(), Tone::Busy.color(cx));
-    }
-    match view.thread_state(cx) {
-        Some((ThreadStatus::Stopping, _)) => ("Stopping".into(), Tone::Busy.color(cx)),
-        Some((status, _)) if status.running() => ("Waiting for you".into(), muted),
-        _ => ("Not running".into(), muted),
-    }
 }

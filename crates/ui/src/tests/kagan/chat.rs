@@ -7,8 +7,8 @@ use kg_domain::{
 };
 
 use super::{
-    click, disabled, focused_of, label, open, pending, row_top, run_shell, shows, shows_within,
-    thread_record, value_of, wait_until,
+    click, disabled, focused_of, hint_of, label, open, pending, row_top, run_shell, shows,
+    shows_within, thread_record, value_of, wait_until,
 };
 use crate::tests::sidebar::layout::span;
 
@@ -211,8 +211,13 @@ fn an_acp_thread_shows_its_transcript_and_prompt_box(cx: &mut TestAppContext) {
     assert!(shows(cx, window, "chat-start-again"));
     assert!(!shows(cx, window, "chat-send"));
     assert_eq!(
-        value_of(cx, window, "chat-stopped").as_deref(),
-        Some("The program is not running.")
+        hint_of(cx, window, "chat-prompt").as_deref(),
+        Some("The program is not running. Start it again to send."),
+        "an empty stopped box says how it ended where the draft would be"
+    );
+    assert!(
+        !shows(cx, window, "chat-stopped"),
+        "the line shows only when a draft hides the hint"
     );
     assert!(!shows(cx, window, "ended"), "no second bar under the box");
 }
@@ -1004,7 +1009,13 @@ fn a_rewritten_draft_undoes_with_the_normal_key(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn the_prompt_box_is_one_box_in_the_transcripts_column(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = show_chat(cx);
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![EventKind::Usage {
+            used: 42_000,
+            size: 200_000,
+        }],
+    );
     let (column_x, column_w) = span(cx, window, "chat-column").expect("the transcript column");
     let (box_x, box_w) = span(cx, window, "chat-box").expect("the box");
     assert!(
@@ -1023,8 +1034,8 @@ fn the_prompt_box_is_one_box_in_the_transcripts_column(cx: &mut TestAppContext) 
         "Send, Cancel and Start again sit inside the box"
     );
     assert!(
-        row_top(cx, window, "chat-context") > row_top(cx, window, "chat-start-again"),
-        "the context row sits under the box"
+        row_top(cx, window, "chat-usage") > row_top(cx, window, "chat-start-again"),
+        "the facts under the box sit under the box"
     );
 }
 
@@ -1054,7 +1065,8 @@ fn a_chat_that_exited_says_it_once_and_offers_start_again(cx: &mut TestAppContex
         ],
     );
     wait_until(cx, |cx| {
-        value_of(cx, window, "chat-stopped").as_deref() == Some("Exited with code 0.")
+        hint_of(cx, window, "chat-prompt").as_deref()
+            == Some("Exited with code 0. Start it again to send.")
     });
     assert!(shows(cx, window, "chat-start-again"));
     assert!(!shows(cx, window, "chat-send"), "one action, not two");
@@ -1077,7 +1089,8 @@ fn a_stopped_chat_takes_no_typing_in_its_prompt(cx: &mut TestAppContext) {
         ],
     );
     wait_until(cx, |cx| {
-        value_of(cx, window, "chat-stopped").as_deref() == Some("Exited with code 0.")
+        hint_of(cx, window, "chat-prompt")
+            .is_some_and(|hint| hint.starts_with("Exited with code 0."))
     });
     assert_eq!(disabled(cx, window, "chat-prompt"), Some(true));
     click(cx, window, "chat-prompt");
@@ -1096,24 +1109,40 @@ fn a_stopped_chat_takes_no_typing_in_its_prompt(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn the_context_row_names_the_project_and_the_folder(cx: &mut TestAppContext) {
+fn a_personal_thread_draws_no_row_under_the_box(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = show_chat(cx);
-    assert_eq!(
-        value_of(cx, window, "chat-context-project").as_deref(),
-        Some("Kagan project")
+    assert!(!shows(cx, window, "chat-context"), "no empty bar");
+    assert!(!shows(cx, window, "chat-state"), "no state word");
+    assert!(
+        !shows(cx, window, "chat-context-project"),
+        "the header names it"
     );
-    assert_eq!(
-        value_of(cx, window, "chat-context-folder").as_deref(),
-        Some("Project folder")
+    // The gauge arrives with the agent's own reading, and the row comes with it.
+    emit(
+        cx,
+        Event {
+            thread_id: ThreadId("thr_chat".into()),
+            seq: 3,
+            at: Timestamp(3),
+            kind: EventKind::Usage {
+                used: 42_000,
+                size: 200_000,
+            },
+        },
     );
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-usage").as_deref() == Some("42K / 200K")
+    });
+    assert!(shows(cx, window, "chat-context"));
     assert_eq!(
-        value_of(cx, window, "chat-state").as_deref(),
-        Some("Not running")
+        label(cx, window, "chat-usage"),
+        "42K of 200K tokens in context",
+        "the sentence is the gauge's name"
     );
 }
 
 #[gpui_kit::test]
-fn a_worktree_thread_names_its_own_folder(cx: &mut TestAppContext) {
+fn a_worktree_thread_names_the_branch_it_writes_on(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
     let id = seed_thread_in(
         data.path(),
@@ -1122,9 +1151,71 @@ fn a_worktree_thread_names_its_own_folder(cx: &mut TestAppContext) {
     );
     reveal(cx, window, &id);
     assert_eq!(
-        value_of(cx, window, "chat-context-folder").as_deref(),
-        Some("worktree")
+        value_of(cx, window, "chat-branch").as_deref(),
+        Some("worktree"),
+        "a worktree with no branch name is named by its folder"
     );
+    assert!(!shows(cx, window, "chat-context-project"));
+}
+
+#[gpui_kit::test]
+fn a_running_box_asks_the_agent_by_name(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let id = seed_thread(data.path(), Vec::new());
+    set_status(data.path(), &id, ThreadStatus::Active);
+    reveal(cx, window, &id);
+    wait_until(cx, |cx| {
+        hint_of(cx, window, "chat-prompt").as_deref() == Some("Ask OpenCode…")
+    });
+}
+
+#[gpui_kit::test]
+fn a_stopping_thread_says_so_where_its_action_sits(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let id = seed_thread(data.path(), Vec::new());
+    set_status(data.path(), &id, ThreadStatus::Stopping);
+    reveal(cx, window, &id);
+    wait_until(cx, |cx| shows(cx, window, "chat-stopping"));
+    assert_eq!(label(cx, window, "chat-stopping"), "Stopping…");
+    assert_eq!(disabled(cx, window, "chat-stopping"), Some(true));
+    assert!(
+        !shows(cx, window, "chat-start-again"),
+        "a stop on its way is not a stop that happened"
+    );
+}
+
+#[gpui_kit::test]
+fn a_stopped_box_with_a_draft_shows_how_it_ended_under_it(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let id = seed_thread(
+        data.path(),
+        vec![
+            EventKind::Started,
+            EventKind::Exited {
+                code: Some(1),
+                signal: None,
+            },
+        ],
+    );
+    reveal(cx, window, &id);
+    let chat = cx
+        .update(|cx| kagan.read(cx).chat_view())
+        .expect("the chat on screen");
+    cx.update_window(window, |_, window, cx| {
+        chat.update(cx, |chat, cx| chat.set_draft("one more".into(), window, cx));
+    })
+    .unwrap();
+    wait_until(cx, |cx| shows(cx, window, "chat-stopped"));
+    assert_eq!(
+        value_of(cx, window, "chat-stopped").as_deref(),
+        Some("Exited with code 1."),
+        "the draft hides the hint, so the line keeps the news"
+    );
+}
+
+fn set_status(data: &std::path::Path, id: &ThreadId, status: ThreadStatus) {
+    let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+    store.set_thread_status(id, status, Timestamp(1)).unwrap();
 }
 
 #[gpui_kit::test]
@@ -1318,7 +1409,8 @@ fn a_chat_that_failed_says_why(cx: &mut TestAppContext) {
         ],
     );
     wait_until(cx, |cx| {
-        value_of(cx, window, "chat-stopped").as_deref() == Some("no such file or directory")
+        hint_of(cx, window, "chat-prompt").as_deref()
+            == Some("no such file or directory Start it again to send.")
     });
 }
 
