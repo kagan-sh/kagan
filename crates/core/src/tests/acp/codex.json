@@ -20,5 +20,394 @@
    ],
    "stopReason": "end_turn"
   }
- ]
+ ],
+ "answer": {
+  "new": {
+   "sessionId": "01a216bd-c170-7d82-a56a-32a4f2348b49",
+   "models": {
+    "availableModels": [
+     {
+      "modelId": "gpt-6-luna[low]",
+      "name": "6 Luna (low)",
+      "description": "Fast and affordable model for easier tasks. Fast responses with lighter reasoning"
+     },
+     {
+      "modelId": "gpt-6-luna[medium]",
+      "name": "6 Luna (medium)",
+      "description": "Fast and affordable model for easier tasks. Balances speed and reasoning depth for everyday tasks"
+     },
+     {
+      "modelId": "gpt-6-luna[high]",
+      "name": "6 Luna (high)",
+      "description": "Fast and affordable model for easier tasks. Greater reasoning depth for complex problems"
+     },
+     {
+      "modelId": "gpt-6-luna[xhigh]",
+      "name": "6 Luna (xhigh)",
+      "description": "Fast and affordable model for easier tasks. Extra high reasoning depth for complex problems"
+     },
+     {
+      "modelId": "gpt-6-luna[max]",
+      "name": "6 Luna (max)",
+      "description": "Fast and affordable model for easier tasks. Maximum reasoning depth for the hardest problems"
+     },
+     {
+      "modelId": "gpt-5.6-terra[low]",
+      "name": "5.6 Terra (low)",
+      "description": "Legacy balanced model for agentic coding. Fast responses with lighter reasoning"
+     },
+     {
+      "modelId": "gpt-5.6-terra[medium]",
+      "name": "5.6 Terra (medium)",
+      "description": "Legacy balanced model for agentic coding. Balances speed and reasoning depth for everyday tasks"
+     },
+     {
+      "modelId": "gpt-5.6-terra[high]",
+      "name": "5.6 Terra (high)",
+      "description": "Legacy balanced model for agentic coding. Greater reasoning depth for complex problems"
+     },
+     {
+      "modelId": "gpt-5.6-terra[xhigh]",
+      "name": "5.6 Terra (xhigh)",
+      "description": "Legacy balanced model for agentic coding. Extra high reasoning depth for complex problems"
+     },
+     {
+      "modelId": "gpt-5.6-terra[max]",
+      "name": "5.6 Terra (max)",
+      "description": "Legacy balanced model for agentic coding. Maximum reasoning depth for the hardest problems"
+     },
+     {
+      "modelId": "gpt-5.6-terra[ultra]",
+      "name": "5.6 Terra (ultra)",
+      "description": "Legacy balanced model for agentic coding. Maximum reasoning with automatic task delegation"
+     },
+     {
+      "modelId": "gpt-5.6-luna[low]",
+      "name": "5.6 Luna (low)",
+      "description": "Legacy fast model for simpler tasks. Fast responses with lighter reasoning"
+     },
+     {
+      "modelId": "gpt-5.6-luna[medium]",
+      "name": "5.6 Luna (medium)",
+      "description": "Legacy fast model for simpler tasks. Balances speed and reasoning depth for everyday tasks"
+     },
+     {
+      "modelId": "gpt-5.6-luna[high]",
+      "name": "5.6 Luna (high)",
+      "description": "Legacy fast model for simpler tasks. Greater reasoning depth for complex problems"
+     },
+     {
+      "modelId": "gpt-5.6-luna[xhigh]",
+      "name": "5.6 Luna (xhigh)",
+      "description": "Legacy fast model for simpler tasks. Extra high reasoning depth for complex problems"
+     },
+     {
+      "modelId": "gpt-5.6-luna[max]",
+      "name": "5.6 Luna (max)",
+      "description": "Legacy fast model for simpler tasks. Maximum reasoning depth for the hardest problems"
+     }
+    ],
+    "currentModelId": "gpt-6.1-sol[high]"
+   },
+   "modes": {
+    "availableModes": [
+     {
+      "id": "read-only",
+      "name": "Read-only",
+      "description": "Requires approval to edit files and access the internet."
+     },
+     {
+      "id": "workspace-write",
+      "name": "Workspace access",
+      "description": "Edit workspace files; ask before writing outside the workspace or accessing the network."
+     },
+     {
+      "id": "agent",
+      "name": "Auto review",
+      "description": "Only ask for actions detected as potentially unsafe"
+     },
+     {
+      "id": "agent-full-access",
+      "name": "Full access",
+      "description": "Unrestricted access to the internet and any file on your computer"
+     }
+    ],
+    "currentModeId": "agent"
+   },
+   "configOptions": [
+    {
+     "id": "model",
+     "name": "Model",
+     "description": "Model Codex uses for the session",
+     "category": "model",
+     "type": "select",
+     "currentValue": "gpt-6.1-sol",
+     "options": [
+      {
+       "value": "gpt-6.1-sol",
+       "name": "6.1 Sol",
+       "description": null
+      },
+      {
+       "value": "gpt-6-luna",
+       "name": "6 Luna",
+       "description": "Fast and affordable model for easier tasks."
+      },
+      {
+       "value": "gpt-5.6-terra",
+       "name": "5.6 Terra",
+       "description": "Legacy balanced model for agentic coding."
+      },
+      {
+       "value": "gpt-5.6-luna",
+       "name": "5.6 Luna",
+       "description": "Legacy fast model for simpler tasks."
+      }
+     ]
+    },
+    {
+     "id": "mode",
+     "name": "Mode",
+     "description": "Approval and sandboxing preset for the session",
+     "category": "mode",
+     "type": "select",
+     "currentValue": "agent",
+     "options": [
+      {
+       "value": "read-only",
+       "name": "Read-only",
+       "description": "Requires approval to edit files and access the internet."
+      },
+      {
+       "value": "workspace-write",
+       "name": "Workspace access",
+       "description": "Edit workspace files; ask before writing outside the workspace or accessing the network."
+      },
+      {
+       "value": "agent",
+       "name": "Auto review",
+       "description": "Only ask for actions detected as potentially unsafe"
+      },
+      {
+       "value": "agent-full-access",
+       "name": "Full access",
+       "description": "Unrestricted access to the internet and any file on your computer"
+      }
+     ]
+    },
+    {
+     "id": "collaboration_mode",
+     "name": "Collaboration mode",
+     "description": "How Codex collaborates for subsequent turns",
+     "category": "collaboration_mode",
+     "type": "select",
+     "currentValue": "default",
+     "options": [
+      {
+       "value": "default",
+       "name": "Default"
+      },
+      {
+       "value": "plan",
+       "name": "Plan",
+       "description": "Plan before making changes"
+      }
+     ]
+    }
+   ]
+  },
+  "load": {
+   "models": {
+    "availableModels": [
+     {
+      "modelId": "gpt-6-luna[low]",
+      "name": "6 Luna (low)",
+      "description": "Fast and affordable model for easier tasks. Fast responses with lighter reasoning"
+     },
+     {
+      "modelId": "gpt-6-luna[medium]",
+      "name": "6 Luna (medium)",
+      "description": "Fast and affordable model for easier tasks. Balances speed and reasoning depth for everyday tasks"
+     },
+     {
+      "modelId": "gpt-6-luna[high]",
+      "name": "6 Luna (high)",
+      "description": "Fast and affordable model for easier tasks. Greater reasoning depth for complex problems"
+     },
+     {
+      "modelId": "gpt-6-luna[xhigh]",
+      "name": "6 Luna (xhigh)",
+      "description": "Fast and affordable model for easier tasks. Extra high reasoning depth for complex problems"
+     },
+     {
+      "modelId": "gpt-6-luna[max]",
+      "name": "6 Luna (max)",
+      "description": "Fast and affordable model for easier tasks. Maximum reasoning depth for the hardest problems"
+     },
+     {
+      "modelId": "gpt-5.6-terra[low]",
+      "name": "5.6 Terra (low)",
+      "description": "Legacy balanced model for agentic coding. Fast responses with lighter reasoning"
+     },
+     {
+      "modelId": "gpt-5.6-terra[medium]",
+      "name": "5.6 Terra (medium)",
+      "description": "Legacy balanced model for agentic coding. Balances speed and reasoning depth for everyday tasks"
+     },
+     {
+      "modelId": "gpt-5.6-terra[high]",
+      "name": "5.6 Terra (high)",
+      "description": "Legacy balanced model for agentic coding. Greater reasoning depth for complex problems"
+     },
+     {
+      "modelId": "gpt-5.6-terra[xhigh]",
+      "name": "5.6 Terra (xhigh)",
+      "description": "Legacy balanced model for agentic coding. Extra high reasoning depth for complex problems"
+     },
+     {
+      "modelId": "gpt-5.6-terra[max]",
+      "name": "5.6 Terra (max)",
+      "description": "Legacy balanced model for agentic coding. Maximum reasoning depth for the hardest problems"
+     },
+     {
+      "modelId": "gpt-5.6-terra[ultra]",
+      "name": "5.6 Terra (ultra)",
+      "description": "Legacy balanced model for agentic coding. Maximum reasoning with automatic task delegation"
+     },
+     {
+      "modelId": "gpt-5.6-luna[low]",
+      "name": "5.6 Luna (low)",
+      "description": "Legacy fast model for simpler tasks. Fast responses with lighter reasoning"
+     },
+     {
+      "modelId": "gpt-5.6-luna[medium]",
+      "name": "5.6 Luna (medium)",
+      "description": "Legacy fast model for simpler tasks. Balances speed and reasoning depth for everyday tasks"
+     },
+     {
+      "modelId": "gpt-5.6-luna[high]",
+      "name": "5.6 Luna (high)",
+      "description": "Legacy fast model for simpler tasks. Greater reasoning depth for complex problems"
+     },
+     {
+      "modelId": "gpt-5.6-luna[xhigh]",
+      "name": "5.6 Luna (xhigh)",
+      "description": "Legacy fast model for simpler tasks. Extra high reasoning depth for complex problems"
+     },
+     {
+      "modelId": "gpt-5.6-luna[max]",
+      "name": "5.6 Luna (max)",
+      "description": "Legacy fast model for simpler tasks. Maximum reasoning depth for the hardest problems"
+     }
+    ],
+    "currentModelId": "gpt-6.1-sol[high]"
+   },
+   "modes": {
+    "availableModes": [
+     {
+      "id": "read-only",
+      "name": "Read-only",
+      "description": "Requires approval to edit files and access the internet."
+     },
+     {
+      "id": "workspace-write",
+      "name": "Workspace access",
+      "description": "Edit workspace files; ask before writing outside the workspace or accessing the network."
+     },
+     {
+      "id": "agent",
+      "name": "Auto review",
+      "description": "Only ask for actions detected as potentially unsafe"
+     },
+     {
+      "id": "agent-full-access",
+      "name": "Full access",
+      "description": "Unrestricted access to the internet and any file on your computer"
+     }
+    ],
+    "currentModeId": "agent"
+   },
+   "configOptions": [
+    {
+     "id": "model",
+     "name": "Model",
+     "description": "Model Codex uses for the session",
+     "category": "model",
+     "type": "select",
+     "currentValue": "gpt-6.1-sol",
+     "options": [
+      {
+       "value": "gpt-6.1-sol",
+       "name": "6.1 Sol",
+       "description": null
+      },
+      {
+       "value": "gpt-6-luna",
+       "name": "6 Luna",
+       "description": "Fast and affordable model for easier tasks."
+      },
+      {
+       "value": "gpt-5.6-terra",
+       "name": "5.6 Terra",
+       "description": "Legacy balanced model for agentic coding."
+      },
+      {
+       "value": "gpt-5.6-luna",
+       "name": "5.6 Luna",
+       "description": "Legacy fast model for simpler tasks."
+      }
+     ]
+    },
+    {
+     "id": "mode",
+     "name": "Mode",
+     "description": "Approval and sandboxing preset for the session",
+     "category": "mode",
+     "type": "select",
+     "currentValue": "agent",
+     "options": [
+      {
+       "value": "read-only",
+       "name": "Read-only",
+       "description": "Requires approval to edit files and access the internet."
+      },
+      {
+       "value": "workspace-write",
+       "name": "Workspace access",
+       "description": "Edit workspace files; ask before writing outside the workspace or accessing the network."
+      },
+      {
+       "value": "agent",
+       "name": "Auto review",
+       "description": "Only ask for actions detected as potentially unsafe"
+      },
+      {
+       "value": "agent-full-access",
+       "name": "Full access",
+       "description": "Unrestricted access to the internet and any file on your computer"
+      }
+     ]
+    },
+    {
+     "id": "collaboration_mode",
+     "name": "Collaboration mode",
+     "description": "How Codex collaborates for subsequent turns",
+     "category": "collaboration_mode",
+     "type": "select",
+     "currentValue": "default",
+     "options": [
+      {
+       "value": "default",
+       "name": "Default"
+      },
+      {
+       "value": "plan",
+       "name": "Plan",
+       "description": "Plan before making changes"
+      }
+     ]
+    }
+   ]
+  }
+ }
 }
