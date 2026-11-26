@@ -12,9 +12,10 @@ target 35000
 # Cost: the plugin thread record's agent name and mark path add 87 product lines on top of main (84088, after #152): the shared agent list and its tests in kg-domain, and the two record fields with their leak test. The ceiling is set to the branch count.
 # Cost: the compact ThreadStatus adds 24 product lines on top of main (84175, after #154), in crates/ui/src/components: the shared method helpers and the compact call. The ceiling is set to the branch count, and decision 276 records it.
 # Cost: ACP threads, one PR: product Rust went from main's 84147 to 90274 (+6127). Decision 279 records it.
-# Cost: the agent's modes and options add 685 product lines on feat/acp-threads (90274): the option types and ModeRisk, the session answer and updates, the set calls, the op and its CLI, the store read, and the chip with its menu. Decision 285 records it.
-ceiling 90959
+# Cost: the chat refinements add 231 product lines on the branch (90505): the fold row and its members, the composer's facts row, and the approval's move into the box's place. Decisions 285 and 286 record it, and the ceiling is set to the branch count.
+# Cost: the agent's modes and options add 691 product lines on feat/acp-threads (90505): the option types and ModeRisk, the session answer and updates, the set calls, the op and its CLI, the store read, and the chip with its menu. Decision 287 records it. The ceiling is set to the merged count.
+ceiling 91196
 allow_expect 9
 crates/plugins/src/runtime/ui_host.rs 630
-crates/ui/src/kagan/chat.rs 688
+crates/ui/src/kagan/chat.rs 690
 crates/ui/src/theme/catalog.rs 642

@@ -28,6 +28,14 @@ impl Kagan {
             .collect()
     }
 
+    /// The chat on screen, for a test that types into its box or reads its draft.
+    pub(crate) fn chat_view(&self) -> Option<Entity<super::chat::ChatView>> {
+        match self.screen.current() {
+            super::screen::Center::Work(super::Shown::Chat(view)) => Some(view.clone()),
+            _ => None,
+        }
+    }
+
     pub(crate) fn right_open(&self) -> bool {
         self.layout.right_open
     }

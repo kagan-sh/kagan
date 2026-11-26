@@ -143,6 +143,32 @@ pub(super) fn answer_focus(question: &str, option: &str) -> String {
     format!("answer-focus-{question}-{option}")
 }
 
+// The option a card opens on: for a permission, the one that grants nothing.
+pub(super) fn opening_option(
+    options: &[InteractionOption],
+    permission: bool,
+) -> Option<&InteractionOption> {
+    if permission {
+        return options
+            .iter()
+            .find(|option| option.role == Some(OptionRole::Safe))
+            .or_else(|| {
+                options
+                    .iter()
+                    .find(|option| option.role == Some(OptionRole::Destructive))
+            });
+    }
+    options
+        .iter()
+        .find(|option| option.role == Some(OptionRole::Primary))
+        .or_else(|| {
+            options
+                .iter()
+                .find(|option| option.role == Some(OptionRole::Safe))
+        })
+        .or_else(|| options.first())
+}
+
 impl Question {
     fn focus_key(&self, option: &str) -> String {
         answer_focus(&format!("{}{}", self.region, self.id.0), option)
@@ -244,7 +270,15 @@ fn body(
         .border_1()
         .border_color(cx.theme().warning)
         .bg(cx.theme().muted)
-        .child(div().type_body(cx).child(question.title))
+        .child(
+            div()
+                .id(ElementId::Name(
+                    format!("question-title-{}{}", question.region, question.id.0).into(),
+                ))
+                .ui_observe_as(Facts::label("Question", question.title.clone()))
+                .type_body(cx)
+                .child(question.title),
+        )
         .children(detail)
         .children(form)
         .child(h_flex().gap(px(space(SpaceStep::Sm, cx))).children(buttons))

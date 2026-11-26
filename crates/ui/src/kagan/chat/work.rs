@@ -8,13 +8,13 @@ use gpui_kit::{
     ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, WeakEntity,
     Window, div, px,
 };
-use kg_domain::{Timestamp, WorkKind};
+use kg_domain::{Role, Timestamp, TurnOutcome, WorkKind};
 use std::rc::Rc;
 
 use crate::kagan::chat::ChatView;
 use crate::kagan::chat::body;
 use crate::kagan::chat::kind::{self, pick, plural, span_text};
-use crate::kagan::chat::part::{Row, RowKey, RowKind, ThoughtRow, ToolRow, ToolStage};
+use crate::kagan::chat::part::{Row, RowKey, RowKind, ThoughtRow, ToolRow, ToolStage, TurnRow};
 use crate::theme::{Tone, TypeScale as _, row_height};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -211,27 +211,7 @@ pub(super) fn bundle_row(
             _ => None,
         })
         .collect();
-    let inner = open.then(|| {
-        let children: Vec<AnyElement> = members
-            .iter()
-            .filter_map(|member| match &member.kind {
-                RowKind::Work(tool) => {
-                    let open = weak
-                        .read_with(cx, |this, _| this.transcript.member_open(member.key()))
-                        .unwrap_or(false);
-                    Some(work_row(member, tool, true, open, weak, window, cx))
-                }
-                _ => None,
-            })
-            .collect();
-        div()
-            .ml(px(22.))
-            .pl(px(10.))
-            .border_l_1()
-            .border_color(cx.theme().border)
-            .children(children)
-            .into_any_element()
-    });
+    let inner = open.then(|| members_under(members, false, weak, window, cx));
     face(
         Face {
             id: named("bundle", row.id),
@@ -254,6 +234,117 @@ pub(super) fn bundle_row(
         window,
         cx,
     )
+}
+
+pub(super) fn turn_row(
+    row: &Row,
+    turn: &TurnRow,
+    open: bool,
+    weak: &WeakEntity<ChatView>,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let TurnRow {
+        from,
+        to,
+        outcome,
+        members,
+    } = turn;
+    let span = span_text(kind::span_of(*from, *to));
+    // The failed word comes from the row's own tone, so the label stops at its separator.
+    let label = if *outcome == TurnOutcome::Failed {
+        format!("Worked for {span} ·")
+    } else {
+        let steps = members.len();
+        format!(
+            "Worked for {span} · {steps} {}",
+            plural(steps, "step", "steps")
+        )
+    };
+    // The failure that ended the turn keeps its body open inside the open fold.
+    let body =
+        open.then(|| members_under(members, *outcome == TurnOutcome::Failed, weak, window, cx));
+    face(
+        Face {
+            id: named("turn", row.id),
+            key: row.key(),
+            icon: IconName::Clock,
+            label,
+            title: None,
+            title_mono: false,
+            badge: None,
+            meta: None,
+            icons: Vec::new(),
+            word: "turn",
+            open,
+            has_body: !members.is_empty(),
+            tone: if *outcome == TurnOutcome::Failed {
+                Tone::Failed
+            } else {
+                Tone::Done
+            },
+            indent: px(4.),
+            body,
+        },
+        weak,
+        window,
+        cx,
+    )
+}
+
+fn members_under(
+    members: &[Row],
+    failed_turn: bool,
+    weak: &WeakEntity<ChatView>,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let children: Vec<AnyElement> = members
+        .iter()
+        .filter_map(|member| member_row(member, failed_turn, weak, window, cx))
+        .collect();
+    div()
+        .ml(px(22.))
+        .pl(px(10.))
+        .border_l_1()
+        .border_color(cx.theme().border)
+        .children(children)
+        .into_any_element()
+}
+
+fn member_row(
+    member: &Row,
+    failed_turn: bool,
+    weak: &WeakEntity<ChatView>,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<AnyElement> {
+    let chosen = weak
+        .read_with(cx, |this, _| this.transcript.member_choice(member.key()))
+        .ok()
+        .flatten();
+    let failed = matches!(&member.kind, RowKind::Work(tool) if tool.failed());
+    let open = chosen.unwrap_or(failed_turn && failed);
+    Some(match &member.kind {
+        RowKind::Work(tool) => work_row(member, tool, true, open, weak, window, cx),
+        RowKind::Bundle(members) => bundle_row(member, members, open, weak, window, cx),
+        RowKind::Thought(thought) => thought_row(member, thought, false, open, weak, window, cx),
+        RowKind::Notice(text) => super::notice_view(member.id, text, cx),
+        RowKind::Message { role, text, at, .. } => {
+            let who = weak
+                .read_with(cx, ChatView::who)
+                .unwrap_or_else(|_| "Agent".into());
+            super::message_view(
+                member.id,
+                *role,
+                text,
+                *at,
+                if *role == Role::User { "You" } else { &who },
+                cx,
+            )
+        }
+        RowKind::Turn(_) => return None,
+    })
 }
 
 struct Face {

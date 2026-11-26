@@ -115,6 +115,19 @@ pub(in crate::tests) fn value_of(
     .unwrap()
 }
 
+/// The hint `kg ui` reports for an element, if it has one.
+pub(in crate::tests) fn hint_of(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    name: &str,
+) -> Option<String> {
+    cx.update_window(window, |_, window, _| {
+        crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
+            .and_then(|element| element.hint.as_deref().map(str::to_owned))
+    })
+    .unwrap()
+}
+
 /// Whether `kg ui` reports an element as focused, if it reports focus at all.
 pub(in crate::tests) fn focused_of(
     cx: &mut TestAppContext,
