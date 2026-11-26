@@ -3,8 +3,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use kg_domain::{
-    Event, EventKind, PendingInteractionId, PlanEntry, Role, Timestamp, ToolCall, ToolDiff,
-    ToolKind, ToolStatus, TurnOutcome, WorkKind,
+    Event, EventKind, PendingInteractionId, PlanEntry, Role, ThreadOption, Timestamp, ToolCall,
+    ToolDiff, ToolKind, ToolStatus, TurnOutcome, WorkKind,
 };
 
 use super::kind;
@@ -124,6 +124,8 @@ pub(super) struct Transcript {
     // Rows are shared with the renderer, so a frame never copies a body's output or a diff.
     pub(super) rows: Vec<Rc<Row>>,
     pub(super) usage: Option<(u64, u64)>,
+    // The modes and options the agent offers, whole; the box's chip and its menu read this.
+    pub(super) options: Vec<ThreadOption>,
     pub(super) last_outcome: Option<TurnOutcome>,
     open: BTreeMap<RowKey, bool>,
     last_seq: Option<u64>,
@@ -171,6 +173,10 @@ impl Transcript {
             }
             EventKind::Usage { used, size } => {
                 self.usage = Some((*used, *size));
+                Fold::Ignored
+            }
+            EventKind::Options { options } => {
+                self.options.clone_from(options);
                 Fold::Ignored
             }
             EventKind::TurnStarted => {

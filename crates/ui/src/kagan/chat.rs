@@ -270,6 +270,28 @@ impl ChatView {
         }));
     }
 
+    // One of the agent's modes or options, from the chip's menu. A refusal stays with the box.
+    fn choose(&mut self, option: String, value: String, cx: &mut Context<Self>) {
+        let choose = Workspace::dispatch(
+            Op::Thread(ThreadOp::Option {
+                id: self.thread.clone(),
+                option,
+                value,
+            }),
+            cx,
+        );
+        cx.spawn(async move |this, cx| {
+            let Err(error) = choose.await else {
+                return;
+            };
+            _ = this.update(cx, |this, cx| {
+                this.notice = Some(format!("Could not change the mode: {error}").into());
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     fn cancel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.sending.is_some() {
             return;

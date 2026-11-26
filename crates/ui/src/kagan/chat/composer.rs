@@ -1,15 +1,16 @@
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{Disableable as _, Icon, Placement, Sizable as _, h_flex, v_flex};
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, Focusable as _, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, Role, SharedString, Styled as _, Window, div, px,
+    AnyElement, App, Context, ElementId, Focusable as _, FontWeight, Hsla, InteractiveElement as _,
+    IntoElement, ParentElement as _, Role, SharedString, Styled as _, WeakEntity, Window, div, px,
 };
 use kg_core::Workspace;
-use kg_domain::{ThreadId, ThreadStatus};
+use kg_domain::{ModeRisk, ThreadId, ThreadOption, ThreadOptionValue, ThreadStatus};
 
 use super::ChatView;
 use crate::kagan::controls::{control, dispatch, menu_item};
@@ -135,6 +136,7 @@ fn boxed(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> AnyE
         .children(notice.map(|notice| {
             div()
                 .id("chat-notice")
+                .ui_observe_as(Facts::label("Notice", notice.clone()))
                 .px_3()
                 .pb_1()
                 .type_small(cx)
@@ -182,6 +184,7 @@ fn toolbar(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> An
         .gap_2()
         .px_2()
         .pb_2()
+        .children(mode_chip(view, shown, cx))
         .children(crate::kagan::header::prompt(cx))
         .children(menu)
         .child(div().flex_1())
@@ -302,6 +305,161 @@ fn action(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> Opt
         )
         .into_any_element(),
     )
+}
+
+// A question the agent waits on holds the chip: the mode it runs in is the one it asked under.
+fn asking(cx: &App, thread: &ThreadId) -> bool {
+    crate::kagan::attention::global(cx)
+        .read(cx)
+        .questions
+        .iter()
+        .any(|asked| &asked.thread_id == thread)
+}
+
+// The agent's own word for the mode it runs in, first in the bar. The menu holds every option the
+// agent offered, each value with the agent's description and a check on the one in force.
+fn mode_chip(view: &ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> Option<AnyElement> {
+    if !shown.turn.running() || shown.archived {
+        return None;
+    }
+    let asking = asking(cx, &view.thread);
+    let mode = view
+        .transcript
+        .options
+        .iter()
+        .find(|option| option.is_mode())?;
+    let current = mode.current()?;
+    let risky = ModeRisk::of(&current.value, &current.name);
+    let label = SharedString::from(current.name.clone());
+    let mut tooltip = match &current.description {
+        Some(description) => format!("Mode: {}. {description}", current.name),
+        None => format!("Mode: {}", current.name),
+    };
+    if asking {
+        tooltip.push_str(" Answer the agent's question first.");
+    }
+    let mut button = Button::new("chat-mode-button")
+        .small()
+        .label(label.clone())
+        .accessibility_label(tooltip.clone())
+        .tooltip(tooltip)
+        .disabled(asking)
+        .when(risky, |button| button.icon(IconName::TriangleAlert));
+    button = if risky {
+        button.custom(ButtonCustomVariant::new(cx).foreground(cx.theme().warning))
+    } else {
+        button.ghost()
+    };
+    let options = view.transcript.options.clone();
+    let weak = cx.weak_entity();
+    Some(
+        control(
+            "chat-mode",
+            Facts {
+                value: Some(label.clone()),
+                disabled: asking,
+                ..Facts::button(label)
+            },
+            button.dropdown_menu(move |menu, _, cx| options_menu(menu, &options, &weak, cx)),
+        )
+        .into_any_element(),
+    )
+}
+
+fn options_menu(
+    menu: PopupMenu,
+    options: &[ThreadOption],
+    weak: &WeakEntity<ChatView>,
+    cx: &App,
+) -> PopupMenu {
+    let mut menu = menu;
+    for (index, option) in options.iter().enumerate() {
+        if index > 0 {
+            menu = menu.separator();
+        }
+        menu = menu.item(group_title(&option.name));
+        for value in &option.values {
+            let chosen = value.value == option.value;
+            let id = format!("chat-mode-{}-{}", option.id, value.value);
+            let weak = weak.clone();
+            let chosen_option = option.id.clone();
+            let chosen_value = value.value.clone();
+            menu = menu.item(
+                value_item(&id, value, chosen, cx).on_click(move |_, _, cx| {
+                    weak.update(cx, |this, cx| {
+                        this.choose(chosen_option.clone(), chosen_value.clone(), cx);
+                    })
+                    .ok();
+                }),
+            );
+        }
+    }
+    menu
+}
+
+// What a group is called: the agent's own name for the option, as a line above its values.
+fn group_title(name: &str) -> PopupMenuItem {
+    let name = name.to_owned();
+    let id = format!("chat-mode-{name}");
+    PopupMenuItem::element(move |_, cx| {
+        div()
+            .id(ElementId::Name(id.clone().into()))
+            .ui_observe_as(Facts::label(name.clone(), name.clone()))
+            .type_caption(cx)
+            .text_color(cx.theme().muted_foreground)
+            .child(name.clone())
+    })
+    .disabled(true)
+}
+
+fn value_item(id: &str, value: &ThreadOptionValue, chosen: bool, cx: &App) -> PopupMenuItem {
+    let name = value.name.clone();
+    let risky = ModeRisk::of(&value.value, &value.name);
+    let color = if risky {
+        cx.theme().warning
+    } else {
+        cx.theme().foreground
+    };
+    let description = value.description.clone();
+    let id = id.to_owned();
+    PopupMenuItem::element(move |_, cx| {
+        let muted = cx.theme().muted_foreground;
+        let description = description.clone();
+        div()
+            .id(ElementId::Name(id.clone().into()))
+            .ui_observe_as(Facts {
+                role: Role::MenuItem,
+                selected: Some(chosen),
+                ..Facts::button(name.clone())
+            })
+            .child(
+                h_flex()
+                    .items_center()
+                    .gap_1()
+                    .when(risky, |row| {
+                        row.child(
+                            div()
+                                .id(ElementId::Name(format!("{id}-risk").into()))
+                                .ui_observe_as(Facts::label("Risk", "asks nothing"))
+                                .child(
+                                    Icon::new(IconName::TriangleAlert)
+                                        .xsmall()
+                                        .text_color(color),
+                                ),
+                        )
+                    })
+                    .child(
+                        div()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(color)
+                            .child(name.clone()),
+                    ),
+            )
+            .when_some(description, |row, description| {
+                row.child(div().type_caption(cx).text_color(muted).child(description))
+            })
+    })
+    .checked(chosen)
 }
 
 fn context_row(view: &ChatView, answering: bool, cx: &App) -> impl IntoElement {
