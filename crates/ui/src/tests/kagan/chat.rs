@@ -1414,8 +1414,12 @@ fn an_archived_chat_offers_no_way_on(cx: &mut TestAppContext) {
     wait_until(cx, |cx| shows(cx, window, &format!("thread-{}", id.0)));
     click(cx, window, &format!("thread-{}", id.0));
     wait_until(cx, |cx| {
-        value_of(cx, window, "chat-stopped").as_deref() == Some("This thread is archived.")
+        hint_of(cx, window, "chat-prompt").as_deref() == Some("This thread is archived")
     });
+    assert!(
+        !shows(cx, window, "chat-stopped"),
+        "the archived box says it once, in its hint"
+    );
     assert!(!shows(cx, window, "chat-start-again"));
     assert!(
         !shows(cx, window, "chat-more"),

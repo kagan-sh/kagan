@@ -139,9 +139,9 @@ fn boxed(view: &mut ChatView, shown: &Shown, hint: &str, cx: &mut Context<ChatVi
         cx.theme().input
     };
     // An empty stopped box says how it ended in its placeholder, under its own words. The line
-    // shows only when a draft hides that placeholder; an archived box keeps its line as it was.
+    // shows only when a draft hides that placeholder.
     let empty = view.prompt.read(cx).value().trim().is_empty();
-    let stopped = (!shown.turn.running() && (shown.archived || !empty)).then(|| {
+    let stopped = (!shown.turn.running() && !empty).then(|| {
         if shown.archived {
             "This thread is archived.".to_owned()
         } else {
