@@ -49,7 +49,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Option`
 
 - **Allowed when**: the thread's link is `acp` and the agent is running [decision 279].
-- **Changes**: chooses one of the agent's own modes or options, such as `mode`, `model` or `thought_level`, from the values it offered, and asks the agent with `session/set_mode` for a mode and `session/set_config_option` for every other option. The agent's answer is waited for, so a refusal is the person's to see; the recorded `options` event then holds the choice, and the agent's own `current_mode_update` or `config_option_update` is a new `options` event with the full set. It does not touch the transcript [decision 285].
+- **Changes**: chooses one of the agent's own modes or options, such as `mode`, `model` or `thought_level`, from the values it offered, and asks the agent with `session/set_mode` for a mode and `session/set_config_option` for every other option. The agent's answer is waited for, so a refusal is the person's to see; the recorded `options` event then holds the choice, and the agent's own `current_mode_update` or `config_option_update` is a new `options` event with the full set. It does not touch the transcript [decision 287].
 - **Shows**: done.
 - **Refused when**: the agent is not running — `the agent is not running` — `failed`. An option the agent did not offer, or a value it did not offer for that option — `invalid`. A missing thread — `not-found` [op/].
 
