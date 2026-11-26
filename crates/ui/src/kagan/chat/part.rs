@@ -44,10 +44,11 @@ pub(super) enum RowKind {
     Work(Box<ToolRow>),
     Bundle(Vec<Row>),
     Notice(String),
-    Divider {
+    Turn {
         from: Timestamp,
         to: Timestamp,
         outcome: TurnOutcome,
+        members: Vec<Row>,
     },
 }
 
@@ -126,7 +127,7 @@ pub(super) struct Transcript {
     pub(super) last_outcome: Option<TurnOutcome>,
     open: BTreeMap<RowKey, bool>,
     last_seq: Option<u64>,
-    turn: Option<Timestamp>,
+    turn: Option<(u64, Timestamp)>,
     // The plan card over the box reads the turn's latest plan; the transcript draws no row for it.
     plan: Option<(u64, Vec<PlanEntry>)>,
 }
@@ -166,7 +167,7 @@ impl Transcript {
                 Fold::Ignored
             }
             EventKind::TurnStarted => {
-                self.turn = Some(event.at);
+                self.turn = Some((event.seq, event.at));
                 self.plan = None;
                 self.last_outcome = None;
                 Fold::Ignored
@@ -174,17 +175,10 @@ impl Transcript {
             EventKind::TurnEnded { outcome, .. } => {
                 self.last_outcome = Some(*outcome);
                 self.plan = None;
-                let Some(from) = self.turn.take() else {
+                let Some((seq, from)) = self.turn.take() else {
                     return Fold::Ignored;
                 };
-                self.push(Row {
-                    id: event.seq,
-                    kind: RowKind::Divider {
-                        from,
-                        to: event.at,
-                        outcome: *outcome,
-                    },
-                })
+                self.turn_ended(seq, from, event, *outcome)
             }
             EventKind::Notice { text, .. } => self.push(Row {
                 id: event.seq,
@@ -206,10 +200,85 @@ impl Transcript {
 
     // The call a permission request waits on. It stays a work row, so the row says what waits.
     pub(super) fn approval(&self, id: &PendingInteractionId) -> Option<&ToolRow> {
-        self.rows.iter().find_map(|row| match &row.kind {
-            RowKind::Work(tool) if tool.call.approval.as_ref() == Some(id) => Some(tool.as_ref()),
-            _ => None,
-        })
+        fn find<'a>(row: &'a Row, id: &PendingInteractionId) -> Option<&'a ToolRow> {
+            match &row.kind {
+                RowKind::Work(tool) if tool.call.approval.as_ref() == Some(id) => {
+                    Some(tool.as_ref())
+                }
+                RowKind::Bundle(members) | RowKind::Turn { members, .. } => {
+                    members.iter().find_map(|member| find(member, id))
+                }
+                _ => None,
+            }
+        }
+        self.rows.iter().find_map(|row| find(row, id))
+    }
+
+    // A finished turn folds the rows before its answer into one row, so the answer stays in view.
+    // A failed turn folds the same rows but stays open; a turn with no work draws no row.
+    fn turn_ended(
+        &mut self,
+        started: u64,
+        from: Timestamp,
+        event: &Event,
+        outcome: TurnOutcome,
+    ) -> Fold {
+        // The turn's prompt comes before its start, so its rows are the ones after that start.
+        let start = self
+            .rows
+            .iter()
+            .position(|row| row.id > started)
+            .unwrap_or(self.rows.len());
+        let work = self.rows[start..]
+            .iter()
+            .rposition(|row| {
+                matches!(
+                    &row.kind,
+                    RowKind::Thought(_) | RowKind::Work(_) | RowKind::Bundle(_)
+                )
+            })
+            .map(|index| start + index);
+        let Some(work) = work else {
+            return Fold::Ignored;
+        };
+        let end = if outcome == TurnOutcome::Failed {
+            self.rows.len()
+        } else {
+            let answer = self.rows.iter().rposition(|row| {
+                matches!(
+                    &row.kind,
+                    RowKind::Message {
+                        role: Role::Agent,
+                        ..
+                    }
+                )
+            });
+            match answer {
+                Some(answer) if answer > work => answer,
+                _ => return Fold::Ignored,
+            }
+        };
+        if end <= start {
+            return Fold::Ignored;
+        }
+        let members: Vec<Row> = self
+            .rows
+            .drain(start..end)
+            .map(|row| Rc::try_unwrap(row).unwrap_or_else(|row| (*row).clone()))
+            .collect();
+        self.rows.insert(
+            start,
+            Rc::new(Row {
+                id: event.seq,
+                kind: RowKind::Turn {
+                    from,
+                    to: event.at,
+                    outcome,
+                    members,
+                },
+            }),
+        );
+        Fold::Dirty(start)
     }
 
     fn find_tool(&self, id: &str) -> Option<(usize, Option<usize>)> {
@@ -219,7 +288,7 @@ impl Transcript {
             .rev()
             .find_map(|(top, row)| match &row.kind {
                 RowKind::Work(tool) if tool.call.id == id => Some((top, None)),
-                RowKind::Bundle(members) => members
+                RowKind::Bundle(members) | RowKind::Turn { members, .. } => members
                     .iter()
                     .position(
                         |member| matches!(&member.kind, RowKind::Work(tool) if tool.call.id == id),
@@ -291,10 +360,12 @@ impl Transcript {
             let row = Rc::make_mut(&mut self.rows[top]);
             let seen = match (&mut row.kind, member) {
                 (RowKind::Work(tool), None) => Some(tool.as_mut()),
-                (RowKind::Bundle(members), Some(member)) => match &mut members[member].kind {
-                    RowKind::Work(tool) => Some(tool.as_mut()),
-                    _ => None,
-                },
+                (RowKind::Bundle(members) | RowKind::Turn { members, .. }, Some(member)) => {
+                    match &mut members[member].kind {
+                        RowKind::Work(tool) => Some(tool.as_mut()),
+                        _ => None,
+                    }
+                }
                 _ => None,
             };
             if let Some(seen) = seen {
@@ -381,6 +452,7 @@ impl Transcript {
             RowKind::Work(tool) => {
                 last && ((answering && tool.live_body()) || (failed && tool.failed()))
             }
+            RowKind::Turn { outcome, .. } => *outcome == TurnOutcome::Failed,
             _ => false,
         }
     }
@@ -388,7 +460,7 @@ impl Transcript {
     fn frontier(&self) -> Option<usize> {
         self.rows
             .iter()
-            .rposition(|row| !matches!(row.kind, RowKind::Divider { .. } | RowKind::Notice(_)))
+            .rposition(|row| !matches!(row.kind, RowKind::Notice(_)))
     }
 
     pub(super) fn is_open(&self, index: usize, answering: bool) -> bool {
@@ -401,8 +473,8 @@ impl Transcript {
             .unwrap_or_else(|| self.auto_open(index, answering))
     }
 
-    pub(super) fn member_open(&self, key: RowKey) -> bool {
-        self.open.get(&key).copied().unwrap_or(false)
+    pub(super) fn member_choice(&self, key: RowKey) -> Option<bool> {
+        self.open.get(&key).copied()
     }
 
     pub(super) fn toggle(&mut self, key: RowKey, answering: bool) -> Option<usize> {
@@ -416,21 +488,28 @@ impl Transcript {
     }
 
     fn place(&self, key: RowKey) -> Option<(usize, Option<usize>)> {
-        self.rows
-            .iter()
-            .enumerate()
-            .find_map(|(top, row)| match &row.kind {
-                RowKind::Bundle(members) => {
-                    if row.key() == key {
-                        return Some((top, None));
+        fn holds(rows: &[Row], key: RowKey) -> bool {
+            rows.iter().any(|row| {
+                row.key() == key
+                    || match &row.kind {
+                        RowKind::Bundle(members) | RowKind::Turn { members, .. } => {
+                            holds(members, key)
+                        }
+                        _ => false,
                     }
-                    members
-                        .iter()
-                        .position(|member| member.key() == key)
-                        .map(|member| (top, Some(member)))
-                }
-                _ => (row.key() == key).then_some((top, None)),
             })
+        }
+        self.rows.iter().enumerate().find_map(|(top, row)| {
+            if row.key() == key {
+                return Some((top, None));
+            }
+            match &row.kind {
+                RowKind::Bundle(members) | RowKind::Turn { members, .. } => {
+                    holds(members, key).then_some((top, Some(0)))
+                }
+                _ => None,
+            }
+        })
     }
 }
 

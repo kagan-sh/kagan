@@ -372,7 +372,17 @@ fn a_failure_that_ends_the_turn_reads_expanded(cx: &mut TestAppContext) {
             },
         ],
     );
-    wait_until(cx, |cx| shows(cx, window, "chat-divider-3"));
+    wait_until(cx, |cx| shows(cx, window, "chat-turn-3"));
+    assert_eq!(
+        label(cx, window, "chat-turn-3"),
+        "Worked for 1 s · failed",
+        "the failed turn says why it stays open"
+    );
+    assert_eq!(
+        value_of(cx, window, "chat-turn-3").as_deref(),
+        Some("expanded · failed"),
+        "the fold row says the failed word once"
+    );
     wait_until(cx, |cx| {
         value_of(cx, window, "chat-work-2").as_deref() == Some("expanded · failed")
     });
@@ -460,11 +470,57 @@ fn a_bundle_closes_when_the_turn_ends(cx: &mut TestAppContext) {
         value_of(cx, window, "chat-bundle-2").as_deref(),
         Some("collapsed · done")
     );
-    assert!(shows(cx, window, "chat-divider-4"));
-    assert_eq!(
-        value_of(cx, window, "chat-divider-4").as_deref(),
-        Some("Worked for 1 s")
+    assert!(
+        !shows(cx, window, "chat-turn-4"),
+        "a turn with no answer has no fold row"
     );
+}
+
+#[gpui_kit::test]
+fn a_finished_turn_folds_its_work_and_keeps_the_answer(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![
+            EventKind::Message {
+                role: Role::User,
+                text: "find the flaky test".into(),
+                message_id: None,
+                attachments: Vec::new(),
+            },
+            EventKind::TurnStarted,
+            tool(
+                "t1",
+                ToolKind::Read,
+                ToolStatus::Completed,
+                "Read file",
+                Some(serde_json::json!({"file_path": "auth.spec.ts"})),
+                Some("one line"),
+            ),
+            EventKind::Message {
+                role: Role::Agent,
+                text: "Found it.".into(),
+                message_id: None,
+                attachments: Vec::new(),
+            },
+            EventKind::TurnEnded {
+                outcome: kg_domain::TurnOutcome::Completed,
+                error: None,
+            },
+        ],
+    );
+    wait_until(cx, |cx| shows(cx, window, "chat-turn-5"));
+    assert_eq!(label(cx, window, "chat-turn-5"), "Worked for 1 s · 1 step");
+    assert_eq!(
+        value_of(cx, window, "chat-turn-5").as_deref(),
+        Some("collapsed · done")
+    );
+    assert!(!shows(cx, window, "chat-work-3"), "the work folds away");
+    assert!(
+        value_of(cx, window, "chat-message-4").is_some_and(|text| text.contains("Found it.")),
+        "the answer stays in view"
+    );
+    click(cx, window, "chat-turn-5");
+    wait_until(cx, |cx| shows(cx, window, "chat-work-3"));
 }
 
 #[gpui_kit::test]
@@ -693,6 +749,43 @@ fn the_approval_card_answers_through_the_question(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn two_permissions_name_how_many_wait(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let id = seed_thread(data.path(), Vec::new());
+    reveal(cx, window, &id);
+    wait_until(cx, |cx| shows(cx, window, "chat-prompt"));
+
+    let _first = cx.update(|cx| {
+        kg_core::Workspace::ask_for_person(
+            Some(&id),
+            None,
+            "The first one".into(),
+            permission_options(),
+            cx,
+        )
+    });
+    let _second = cx.update(|cx| {
+        kg_core::Workspace::ask_for_person(
+            Some(&id),
+            None,
+            "The second one".into(),
+            permission_options(),
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    let first = super::pending(cx, &id)
+        .first()
+        .expect("the questions wait")
+        .id
+        .clone();
+    let title = format!("question-title-chat-{}", first.0);
+    wait_until(cx, |cx| {
+        value_of(cx, window, &title).is_some_and(|text| text.ends_with("· 1 of 2"))
+    });
+}
+
+#[gpui_kit::test]
 fn the_approval_card_lists_the_reject_first_and_the_filled_option_last(cx: &mut TestAppContext) {
     let mut options = permission_options();
     options.pop();
@@ -732,43 +825,6 @@ fn the_approval_card_lists_the_reject_first_and_the_filled_option_last(cx: &mut 
         deny < always && always < once,
         "{deny:?} {always:?} {once:?}"
     );
-}
-
-#[gpui_kit::test]
-fn two_permissions_name_how_many_wait(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open(cx);
-    let id = seed_thread(data.path(), Vec::new());
-    reveal(cx, window, &id);
-    wait_until(cx, |cx| shows(cx, window, "chat-prompt"));
-
-    let _first = cx.update(|cx| {
-        kg_core::Workspace::ask_for_person(
-            Some(&id),
-            None,
-            "The first one".into(),
-            permission_options(),
-            cx,
-        )
-    });
-    let _second = cx.update(|cx| {
-        kg_core::Workspace::ask_for_person(
-            Some(&id),
-            None,
-            "The second one".into(),
-            permission_options(),
-            cx,
-        )
-    });
-    cx.run_until_parked();
-    let first = super::pending(cx, &id)
-        .first()
-        .expect("the questions wait")
-        .id
-        .clone();
-    let title = format!("question-title-chat-{}", first.0);
-    wait_until(cx, |cx| {
-        value_of(cx, window, &title).is_some_and(|text| text.ends_with("· 1 of 2"))
-    });
 }
 
 #[gpui_kit::test]
@@ -1293,10 +1349,10 @@ fn the_plan_card_goes_when_the_turn_ends(cx: &mut TestAppContext) {
             },
         ],
     );
-    wait_until(cx, |cx| shows(cx, window, "chat-divider-3"));
+    wait_until(cx, |cx| !shows(cx, window, "chat-card-plan"));
     assert!(
-        !shows(cx, window, "chat-card-plan"),
-        "the plan belongs to the turn that drew it"
+        !shows(cx, window, "chat-turn-3"),
+        "the plan belongs to the turn that drew it, and it draws no row"
     );
 }
 

@@ -257,13 +257,13 @@ fn a_failure_that_ends_the_turn_stays_open() {
             text: "Start again".into(),
         },
     ));
-    assert!(matches!(transcript.rows[1].kind, RowKind::Divider { .. }));
-    assert!(matches!(transcript.rows[2].kind, RowKind::Notice(_)));
+    assert!(matches!(transcript.rows[0].kind, RowKind::Turn { .. }));
+    assert!(matches!(transcript.rows[1].kind, RowKind::Notice(_)));
     assert!(transcript.auto_open(0, false));
 }
 
 #[test]
-fn a_new_turn_clears_the_outcome_the_last_one_ended_with() {
+fn a_failed_turn_stays_open_until_the_person_closes_it() {
     let mut transcript = Transcript::default();
     transcript.absorb(&event(1, EventKind::TurnStarted));
     transcript.absorb(&call(2, "t1", ToolKind::Execute, ToolStatus::Failed, None));
@@ -275,7 +275,10 @@ fn a_new_turn_clears_the_outcome_the_last_one_ended_with() {
         },
     ));
     transcript.absorb(&event(4, EventKind::TurnStarted));
-    assert!(!transcript.auto_open(0, false));
+    assert!(transcript.auto_open(0, false), "the failure stays in view");
+    let key = transcript.rows[0].key();
+    assert_eq!(transcript.toggle(key, false), Some(0));
+    assert!(!transcript.is_open(0, false), "the person's choice wins");
 }
 
 #[test]
@@ -371,6 +374,127 @@ fn a_plan_is_the_card_over_the_box_and_never_a_transcript_row() {
     let (id, entries) = transcript.plan().expect("the card's plan");
     assert_eq!(id, 2, "the first plan event keeps the card's id");
     assert_eq!(entries.len(), 2);
+}
+
+fn said(seq: u64, role: Role, text: &str) -> Event {
+    event(
+        seq,
+        EventKind::Message {
+            role,
+            text: text.into(),
+            message_id: None,
+            attachments: Vec::new(),
+        },
+    )
+}
+
+#[test]
+fn a_finished_turn_folds_before_its_answer() {
+    let mut transcript = Transcript::default();
+    transcript.absorb(&said(1, Role::User, "find the flaky test"));
+    transcript.absorb(&event(2, EventKind::TurnStarted));
+    transcript.absorb(&event(
+        3,
+        EventKind::Thought {
+            text: "look".into(),
+            message_id: None,
+        },
+    ));
+    transcript.absorb(&tool(4, ToolKind::Read, ToolStatus::Completed));
+    transcript.absorb(&tool(5, ToolKind::Read, ToolStatus::Completed));
+    transcript.absorb(&said(6, Role::Agent, "found it"));
+    transcript.absorb(&event(
+        7,
+        EventKind::TurnEnded {
+            outcome: TurnOutcome::Completed,
+            error: None,
+        },
+    ));
+    assert_eq!(transcript.rows.len(), 3, "person, fold, answer");
+    assert!(matches!(
+        transcript.rows[0].kind,
+        RowKind::Message {
+            role: Role::User,
+            ..
+        }
+    ));
+    let RowKind::Turn {
+        outcome, members, ..
+    } = &transcript.rows[1].kind
+    else {
+        panic!("the work folds into one row");
+    };
+    assert_eq!(*outcome, TurnOutcome::Completed);
+    assert_eq!(members.len(), 2, "the thought and the bundle");
+    assert!(
+        matches!(
+            transcript.rows[2].kind,
+            RowKind::Message {
+                role: Role::Agent,
+                ..
+            }
+        ),
+        "the answer stays out of the fold"
+    );
+    assert!(
+        !transcript.is_open(1, false),
+        "a finished turn starts closed"
+    );
+}
+
+#[test]
+fn a_live_turn_is_not_folded() {
+    let mut transcript = Transcript::default();
+    transcript.absorb(&event(1, EventKind::TurnStarted));
+    transcript.absorb(&tool(2, ToolKind::Read, ToolStatus::Completed));
+    assert!(
+        matches!(transcript.rows[0].kind, RowKind::Work(_)),
+        "nothing folds before the turn ends"
+    );
+}
+
+#[test]
+fn a_turn_with_only_messages_makes_no_fold_row() {
+    let mut transcript = Transcript::default();
+    transcript.absorb(&said(1, Role::User, "hi"));
+    transcript.absorb(&event(2, EventKind::TurnStarted));
+    transcript.absorb(&said(3, Role::Agent, "hello"));
+    transcript.absorb(&event(
+        4,
+        EventKind::TurnEnded {
+            outcome: TurnOutcome::Completed,
+            error: None,
+        },
+    ));
+    assert_eq!(transcript.rows.len(), 2, "no work, no fold row");
+    assert!(
+        transcript
+            .rows
+            .iter()
+            .all(|row| matches!(row.kind, RowKind::Message { .. }))
+    );
+}
+
+#[test]
+fn a_fold_row_opens_and_closes_as_one() {
+    let mut transcript = Transcript::default();
+    transcript.absorb(&said(1, Role::User, "look"));
+    transcript.absorb(&event(2, EventKind::TurnStarted));
+    transcript.absorb(&tool(3, ToolKind::Read, ToolStatus::Completed));
+    transcript.absorb(&said(4, Role::Agent, "one file"));
+    transcript.absorb(&event(
+        5,
+        EventKind::TurnEnded {
+            outcome: TurnOutcome::Completed,
+            error: None,
+        },
+    ));
+    let key = transcript.rows[1].key();
+    assert!(!transcript.is_open(1, false));
+    assert_eq!(transcript.toggle(key, false), Some(1));
+    assert!(transcript.is_open(1, false));
+    assert_eq!(transcript.toggle(key, false), Some(1));
+    assert!(!transcript.is_open(1, false));
 }
 
 #[test]

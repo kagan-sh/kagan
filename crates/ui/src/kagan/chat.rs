@@ -559,9 +559,12 @@ fn row_at(
         part::RowKind::Work(tool) => work::work_row(&row, tool, false, open, weak, window, cx),
         part::RowKind::Bundle(members) => work::bundle_row(&row, members, open, weak, window, cx),
         part::RowKind::Notice(text) => notice_view(row.id, text, cx),
-        part::RowKind::Divider { from, to, outcome } => {
-            divider_view(row.id, *from, *to, *outcome, cx)
-        }
+        part::RowKind::Turn {
+            from,
+            to,
+            outcome,
+            members,
+        } => work::turn_row(&row, *from, *to, *outcome, members, open, weak, window, cx),
     }
 }
 
@@ -675,29 +678,6 @@ fn notice_view(id: u64, text: &str, cx: &mut App) -> AnyElement {
         .type_small(cx)
         .text_color(cx.theme().muted_foreground)
         .child(text.to_owned())
-        .into_any_element()
-}
-
-fn divider_view(
-    id: u64,
-    from: Timestamp,
-    to: Timestamp,
-    outcome: kg_domain::TurnOutcome,
-    cx: &mut App,
-) -> AnyElement {
-    let span = kind::span_text(kind::span_of(from, to));
-    let text = if outcome == kg_domain::TurnOutcome::Failed {
-        format!("Worked for {span} · failed")
-    } else {
-        format!("Worked for {span}")
-    };
-    div()
-        .id(ElementId::Name(format!("chat-divider-{id}").into()))
-        .ui_observe_as(Facts::label(text.clone(), text.clone()))
-        .py_1()
-        .type_caption(cx)
-        .text_color(cx.theme().muted_foreground)
-        .child(text)
         .into_any_element()
 }
 
