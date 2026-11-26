@@ -17,6 +17,7 @@ use crate::{Workspace, thread::Raised};
 mod client;
 mod launch;
 mod map;
+mod option;
 mod permission;
 mod transport;
 
@@ -25,6 +26,7 @@ mod transport;
 mod tests;
 
 use client::{AcpCommand, AcpEvent, Restored};
+use option::{kept, last_options};
 
 const NO_AGENT: &str = "the agent is not running; start the thread again";
 const NOT_A_TERMINAL: &str =
@@ -109,35 +111,6 @@ async fn stored(
     let database = crate::workspace::database(this, cx)?;
     let id = id.clone();
     database.call(move |store| store.conversation(&id)).await
-}
-
-async fn last_options(
-    this: &WeakEntity<Workspace>,
-    id: &ThreadId,
-    cx: &mut AsyncApp,
-) -> Result<Vec<kg_domain::ThreadOption>> {
-    let database = crate::workspace::database(this, cx)?;
-    let id = id.clone();
-    Ok(database
-        .call(move |store| store.last_options(&id))
-        .await?
-        .unwrap_or_default())
-}
-
-// What a start asks for again: the recorded value of each option the agent still offers, when the
-// agent came back with another.
-fn kept(
-    remembered: &[kg_domain::ThreadOption],
-    offered: &[kg_domain::ThreadOption],
-) -> Vec<(String, String)> {
-    remembered
-        .iter()
-        .filter_map(|old| {
-            let now = offered.iter().find(|option| option.id == old.id)?;
-            (now.value != old.value && now.offers(&old.value))
-                .then(|| (old.id.clone(), old.value.clone()))
-        })
-        .collect()
 }
 
 pub(super) async fn option(

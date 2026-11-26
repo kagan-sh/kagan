@@ -8,17 +8,17 @@ use std::time::{Duration, Instant};
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::v1::schema::{
     CancelNotification, InitializeRequest, LoadSessionRequest, McpServer, NewSessionRequest,
-    RequestPermissionRequest, SessionConfigOptionValue, SessionNotification,
-    SetSessionConfigOptionRequest, SetSessionModeRequest,
+    RequestPermissionRequest, SessionNotification,
 };
 use agent_client_protocol::v1::{ActiveSession, SessionMessage, SessionSetup};
 use agent_client_protocol::{Agent, Channel, Client, Dispatch};
 use gpui_kit::BackgroundExecutor;
-use kg_domain::{MODE_CATEGORY, NoticeSeverity, ThreadOption, ToolStatus, TurnOutcome};
+use kg_domain::{NoticeSeverity, ThreadOption, ToolStatus, TurnOutcome};
 use kg_process::Process;
 use kg_terminal::Exit;
 
 use super::map;
+use super::option::{Options, choose};
 use super::permission::Asking;
 use super::transport::{EXIT_GRACE, Transport, carry, pump, spawn, tail_text};
 
@@ -351,40 +351,6 @@ impl Repeats {
     }
 }
 
-#[derive(Default)]
-struct Options(Vec<ThreadOption>);
-
-impl Options {
-    // Whether the snapshot changed; only a change is written again.
-    fn chosen(&mut self, id: &str, value: &str) -> bool {
-        let Some(option) = self.0.iter_mut().find(|option| option.id == id) else {
-            return false;
-        };
-        if option.value == value || !option.offers(value) {
-            return false;
-        }
-        value.clone_into(&mut option.value);
-        true
-    }
-
-    // A `current_mode_update` names the mode alone; the rest of the answer stands.
-    fn mode(&mut self, id: &str) -> bool {
-        self.chosen(MODE_CATEGORY, id)
-    }
-
-    // A `config_option_update` carries its own options whole, so each replaces the one it names.
-    fn config(&mut self, options: Vec<ThreadOption>) -> bool {
-        let before = self.0.clone();
-        for option in options {
-            match self.0.iter_mut().find(|known| known.id == option.id) {
-                Some(slot) => *slot = option,
-                None => self.0.push(option),
-            }
-        }
-        self.0 != before
-    }
-}
-
 async fn serve(
     session: &mut agent_client_protocol::v1::ActiveSession<'_, Agent>,
     commands: &async_channel::Receiver<AcpCommand>,
@@ -447,60 +413,6 @@ async fn serve(
             // thread does. Either way the connection is over, not failed: the exit and the tail
             // say how it ended.
             Step::Update(Err(_)) | Step::Closed => return Ok(()),
-        }
-    }
-}
-
-// A mode has its own call; every other option goes through the one set-config call. kagan sends
-// the call and waits for it, so a refusal reaches the person rather than leaving the chip wrong.
-async fn choose(
-    session: &mut ActiveSession<'_, Agent>,
-    events: &async_channel::Sender<AcpEvent>,
-    options: &mut Options,
-    option: String,
-    value: String,
-) {
-    let Some(known) = options.0.iter().find(|known| known.id == option) else {
-        return;
-    };
-    if !known.offers(&value) {
-        return;
-    }
-    let mode = known.is_mode();
-    let session_id = session.session_id().clone();
-    let sent = if mode {
-        session
-            .connection()
-            .send_request(SetSessionModeRequest::new(session_id, value.clone()))
-            .block_task()
-            .await
-            .map(|_| ())
-    } else {
-        session
-            .connection()
-            .send_request(SetSessionConfigOptionRequest::new(
-                session_id,
-                option.clone(),
-                SessionConfigOptionValue::value_id(value.clone()),
-            ))
-            .block_task()
-            .await
-            .map(|_| ())
-    };
-    match sent {
-        Ok(()) if options.chosen(&option, &value) => {
-            send(events, AcpEvent::Options(options.0.clone())).await;
-        }
-        Ok(()) => {}
-        Err(error) => {
-            send(
-                events,
-                AcpEvent::Notice {
-                    severity: NoticeSeverity::Warning,
-                    text: format!("the agent did not change {option}: {error}"),
-                },
-            )
-            .await;
         }
     }
 }
@@ -588,13 +500,8 @@ async fn answer(
                 Some(map::Update::Usage { used, size }) => {
                     send(events, AcpEvent::Usage { used, size }).await;
                 }
-                Some(map::Update::Mode(id)) => {
-                    if options.mode(&id) {
-                        send(events, AcpEvent::Options(options.0.clone())).await;
-                    }
-                }
-                Some(map::Update::Config(list)) => {
-                    if options.config(list) {
+                Some(update @ (map::Update::Mode(_) | map::Update::Config(_))) => {
+                    if options.changed(&update) {
                         send(events, AcpEvent::Options(options.0.clone())).await;
                     }
                 }

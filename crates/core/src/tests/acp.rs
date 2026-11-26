@@ -2081,11 +2081,7 @@ fn fake_agent() {
                 }
             }
             "session/set_mode" | "session/set_config_option" => {
-                let name = format!(
-                    "set-{}",
-                    method.trim_start_matches("session/set_").replace('_', "-")
-                );
-                let _ = std::fs::write(dir.join(name), &line);
+                set_call(&dir, method, &line);
                 write(&mut out, &reply(&id, &json!({})));
             }
             "session/cancel" => {
@@ -2295,6 +2291,12 @@ fn new_session(dir: &Path, out: &mut std::io::Stdout, id: &Value) -> Option<Stri
     let session = take_session(dir);
     write(out, &reply(id, &answered(dir, "new", &session)));
     Some(session)
+}
+
+// One call kagan sent to change a mode or an option, kept for the test to read.
+fn set_call(dir: &Path, method: &str, line: &str) {
+    let name = method.trim_start_matches("session/set_").replace('_', "-");
+    let _ = std::fs::write(dir.join(format!("set-{name}")), line);
 }
 
 // The answer's own body when the test wrote one, with the session id it just handed out.
