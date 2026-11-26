@@ -418,14 +418,11 @@ fn a_finished_turn_folds_before_its_answer() {
             ..
         }
     ));
-    let RowKind::Turn {
-        outcome, members, ..
-    } = &transcript.rows[1].kind
-    else {
+    let RowKind::Turn(turn) = &transcript.rows[1].kind else {
         panic!("the work folds into one row");
     };
-    assert_eq!(*outcome, TurnOutcome::Completed);
-    assert_eq!(members.len(), 2, "the thought and the bundle");
+    assert_eq!(turn.outcome, TurnOutcome::Completed);
+    assert_eq!(turn.members.len(), 2, "the thought and the bundle");
     assert!(
         matches!(
             transcript.rows[2].kind,

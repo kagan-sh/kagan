@@ -559,12 +559,7 @@ fn row_at(
         part::RowKind::Work(tool) => work::work_row(&row, tool, false, open, weak, window, cx),
         part::RowKind::Bundle(members) => work::bundle_row(&row, members, open, weak, window, cx),
         part::RowKind::Notice(text) => notice_view(row.id, text, cx),
-        part::RowKind::Turn {
-            from,
-            to,
-            outcome,
-            members,
-        } => work::turn_row(&row, *from, *to, *outcome, members, open, weak, window, cx),
+        part::RowKind::Turn(turn) => work::turn_row(&row, turn, open, weak, window, cx),
     }
 }
 

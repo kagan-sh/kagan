@@ -828,7 +828,7 @@ fn the_approval_card_lists_the_reject_first_and_the_filled_option_last(cx: &mut 
 }
 
 #[gpui_kit::test]
-fn a_pending_permission_takes_the_boxs_place_and_gives_it_back(cx: &mut TestAppContext) {
+fn a_pending_permission_takes_the_place_of_the_box_and_gives_it_back(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
     let id = seed_thread(
         data.path(),

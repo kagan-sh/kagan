@@ -14,7 +14,7 @@ use std::rc::Rc;
 use crate::kagan::chat::ChatView;
 use crate::kagan::chat::body;
 use crate::kagan::chat::kind::{self, pick, plural, span_text};
-use crate::kagan::chat::part::{Row, RowKey, RowKind, ThoughtRow, ToolRow, ToolStage};
+use crate::kagan::chat::part::{Row, RowKey, RowKind, ThoughtRow, ToolRow, ToolStage, TurnRow};
 use crate::theme::{Tone, TypeScale as _, row_height};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -238,18 +238,21 @@ pub(super) fn bundle_row(
 
 pub(super) fn turn_row(
     row: &Row,
-    from: Timestamp,
-    to: Timestamp,
-    outcome: TurnOutcome,
-    members: &[Row],
+    turn: &TurnRow,
     open: bool,
     weak: &WeakEntity<ChatView>,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let span = span_text(kind::span_of(from, to));
+    let TurnRow {
+        from,
+        to,
+        outcome,
+        members,
+    } = turn;
+    let span = span_text(kind::span_of(*from, *to));
     // The failed word comes from the row's own tone, so the label stops at its separator.
-    let label = if outcome == TurnOutcome::Failed {
+    let label = if *outcome == TurnOutcome::Failed {
         format!("Worked for {span} ·")
     } else {
         let steps = members.len();
@@ -260,7 +263,7 @@ pub(super) fn turn_row(
     };
     // The failure that ended the turn keeps its body open inside the open fold.
     let body =
-        open.then(|| members_under(members, outcome == TurnOutcome::Failed, weak, window, cx));
+        open.then(|| members_under(members, *outcome == TurnOutcome::Failed, weak, window, cx));
     face(
         Face {
             id: named("turn", row.id),
@@ -275,7 +278,7 @@ pub(super) fn turn_row(
             word: "turn",
             open,
             has_body: !members.is_empty(),
-            tone: if outcome == TurnOutcome::Failed {
+            tone: if *outcome == TurnOutcome::Failed {
                 Tone::Failed
             } else {
                 Tone::Done
@@ -340,7 +343,7 @@ fn member_row(
                 cx,
             )
         }
-        RowKind::Turn { .. } => return None,
+        RowKind::Turn(_) => return None,
     })
 }
 

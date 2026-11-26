@@ -29,7 +29,6 @@ struct Shown {
     ready: bool,
     focused: bool,
     archived: bool,
-    empty: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -69,7 +68,6 @@ pub(super) fn composer(
         ready: running && !empty && view.sending.is_none(),
         focused: view.prompt.read(cx).focus_handle(cx).is_focused(window),
         archived: view.archived(cx),
-        empty,
     };
     // The box's hint says what it takes, or how to get the agent back, so a stopped box never
     // looks like it can send. Read-only, the area keeps the draft and takes no typing.
@@ -142,7 +140,8 @@ fn boxed(view: &mut ChatView, shown: &Shown, hint: &str, cx: &mut Context<ChatVi
     };
     // An empty stopped box says how it ended in its placeholder, under its own words. The line
     // shows only when a draft hides that placeholder; an archived box keeps its line as it was.
-    let stopped = (!shown.turn.running() && (shown.archived || !shown.empty)).then(|| {
+    let empty = view.prompt.read(cx).value().trim().is_empty();
+    let stopped = (!shown.turn.running() && (shown.archived || !empty)).then(|| {
         if shown.archived {
             "This thread is archived.".to_owned()
         } else {

@@ -44,12 +44,15 @@ pub(super) enum RowKind {
     Work(Box<ToolRow>),
     Bundle(Vec<Row>),
     Notice(String),
-    Turn {
-        from: Timestamp,
-        to: Timestamp,
-        outcome: TurnOutcome,
-        members: Vec<Row>,
-    },
+    Turn(Box<TurnRow>),
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct TurnRow {
+    pub(super) from: Timestamp,
+    pub(super) to: Timestamp,
+    pub(super) outcome: TurnOutcome,
+    pub(super) members: Vec<Row>,
 }
 
 #[derive(Clone, Debug)]
@@ -205,9 +208,8 @@ impl Transcript {
                 RowKind::Work(tool) if tool.call.approval.as_ref() == Some(id) => {
                     Some(tool.as_ref())
                 }
-                RowKind::Bundle(members) | RowKind::Turn { members, .. } => {
-                    members.iter().find_map(|member| find(member, id))
-                }
+                RowKind::Bundle(members) => members.iter().find_map(|member| find(member, id)),
+                RowKind::Turn(turn) => turn.members.iter().find_map(|member| find(member, id)),
                 _ => None,
             }
         }
@@ -270,12 +272,12 @@ impl Transcript {
             start,
             Rc::new(Row {
                 id: event.seq,
-                kind: RowKind::Turn {
+                kind: RowKind::Turn(Box::new(TurnRow {
                     from,
                     to: event.at,
                     outcome,
                     members,
-                },
+                })),
             }),
         );
         Fold::Dirty(start)
@@ -288,7 +290,14 @@ impl Transcript {
             .rev()
             .find_map(|(top, row)| match &row.kind {
                 RowKind::Work(tool) if tool.call.id == id => Some((top, None)),
-                RowKind::Bundle(members) | RowKind::Turn { members, .. } => members
+                RowKind::Bundle(members) => members
+                    .iter()
+                    .position(
+                        |member| matches!(&member.kind, RowKind::Work(tool) if tool.call.id == id),
+                    )
+                    .map(|member| (top, Some(member))),
+                RowKind::Turn(turn) => turn
+                    .members
                     .iter()
                     .position(
                         |member| matches!(&member.kind, RowKind::Work(tool) if tool.call.id == id),
@@ -360,12 +369,14 @@ impl Transcript {
             let row = Rc::make_mut(&mut self.rows[top]);
             let seen = match (&mut row.kind, member) {
                 (RowKind::Work(tool), None) => Some(tool.as_mut()),
-                (RowKind::Bundle(members) | RowKind::Turn { members, .. }, Some(member)) => {
-                    match &mut members[member].kind {
-                        RowKind::Work(tool) => Some(tool.as_mut()),
-                        _ => None,
-                    }
-                }
+                (RowKind::Bundle(members), Some(member)) => match &mut members[member].kind {
+                    RowKind::Work(tool) => Some(tool.as_mut()),
+                    _ => None,
+                },
+                (RowKind::Turn(turn), Some(member)) => match &mut turn.members[member].kind {
+                    RowKind::Work(tool) => Some(tool.as_mut()),
+                    _ => None,
+                },
                 _ => None,
             };
             if let Some(seen) = seen {
@@ -452,7 +463,7 @@ impl Transcript {
             RowKind::Work(tool) => {
                 last && ((answering && tool.live_body()) || (failed && tool.failed()))
             }
-            RowKind::Turn { outcome, .. } => *outcome == TurnOutcome::Failed,
+            RowKind::Turn(turn) => turn.outcome == TurnOutcome::Failed,
             _ => false,
         }
     }
@@ -492,9 +503,8 @@ impl Transcript {
             rows.iter().any(|row| {
                 row.key() == key
                     || match &row.kind {
-                        RowKind::Bundle(members) | RowKind::Turn { members, .. } => {
-                            holds(members, key)
-                        }
+                        RowKind::Bundle(members) => holds(members, key),
+                        RowKind::Turn(turn) => holds(&turn.members, key),
                         _ => false,
                     }
             })
@@ -504,9 +514,8 @@ impl Transcript {
                 return Some((top, None));
             }
             match &row.kind {
-                RowKind::Bundle(members) | RowKind::Turn { members, .. } => {
-                    holds(members, key).then_some((top, Some(0)))
-                }
+                RowKind::Bundle(members) => holds(members, key).then_some((top, Some(0))),
+                RowKind::Turn(turn) => holds(&turn.members, key).then_some((top, Some(0))),
                 _ => None,
             }
         })
