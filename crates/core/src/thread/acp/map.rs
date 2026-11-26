@@ -1,12 +1,13 @@
 use agent_client_protocol::v1::schema::{
     Content, ContentBlock, ContentChunk, PermissionOption, PermissionOptionKind,
-    PlanEntry as AcpPlanEntry, SessionUpdate, StopReason, TextContent, ToolCall as AcpToolCall,
-    ToolCallContent, ToolCallLocation, ToolCallStatus, ToolCallUpdateFields,
-    ToolKind as AcpToolKind,
+    PlanEntry as AcpPlanEntry, SessionConfigKind, SessionConfigOption, SessionConfigOptionCategory,
+    SessionConfigSelectOptions, SessionModeState, SessionUpdate, StopReason, TextContent,
+    ToolCall as AcpToolCall, ToolCallContent, ToolCallLocation, ToolCallStatus,
+    ToolCallUpdateFields, ToolKind as AcpToolKind,
 };
 use kg_domain::{
-    InteractionOption, OptionRole, PlanEntry, PlanStatus, ToolCall, ToolDiff, ToolKind,
-    ToolLocation, ToolStatus, TurnOutcome,
+    InteractionOption, MODE_CATEGORY, OptionRole, PlanEntry, PlanStatus, ThreadOption,
+    ThreadOptionValue, ToolCall, ToolDiff, ToolKind, ToolLocation, ToolStatus, TurnOutcome,
 };
 
 const TOOL_TEXT_MAX: usize = 64 * 1024;
@@ -26,7 +27,14 @@ pub(super) enum Update {
     Thought(Chunk),
     Tool(ToolCall),
     Plan(Vec<PlanEntry>),
-    Usage { used: u64, size: u64 },
+    Usage {
+        used: u64,
+        size: u64,
+    },
+    /// The agent changed its mode.
+    Mode(String),
+    /// The agent's whole set of options and their values.
+    Config(Vec<ThreadOption>),
 }
 
 pub(super) fn read(update: &SessionUpdate) -> Option<Update> {
@@ -43,7 +51,94 @@ pub(super) fn read(update: &SessionUpdate) -> Option<Update> {
             used: usage.used,
             size: usage.size,
         }),
+        SessionUpdate::CurrentModeUpdate(update) => {
+            Some(Update::Mode(update.current_mode_id.to_string()))
+        }
+        SessionUpdate::ConfigOptionUpdate(update) => {
+            Some(Update::Config(config_options(&update.config_options)))
+        }
         _ => None,
+    }
+}
+
+// The session answer's `modes` and `configOptions`, as the chip and its menu draw them. `modes`
+// becomes the option `mode`, and a configuration option that names itself `mode` replaces it.
+pub(super) fn session_options(
+    modes: Option<&SessionModeState>,
+    config: Option<&[SessionConfigOption]>,
+) -> Vec<ThreadOption> {
+    let mut options: Vec<ThreadOption> = modes.map(mode_state).into_iter().collect();
+    for option in config_options(config.unwrap_or_default()) {
+        match options.iter_mut().find(|known| known.id == option.id) {
+            Some(slot) => *slot = option,
+            None => options.push(option),
+        }
+    }
+    options
+}
+
+/// The configuration options of one answer or update. Only a select is kept: its values have names
+/// the chip's menu shows, where a boolean has only on and off.
+pub(super) fn config_options(config: &[SessionConfigOption]) -> Vec<ThreadOption> {
+    config.iter().filter_map(option).collect()
+}
+
+fn mode_state(modes: &SessionModeState) -> ThreadOption {
+    ThreadOption {
+        id: MODE_CATEGORY.to_owned(),
+        name: "Mode".to_owned(),
+        category: Some(MODE_CATEGORY.to_owned()),
+        description: None,
+        value: modes.current_mode_id.to_string(),
+        values: modes
+            .available_modes
+            .iter()
+            .map(|mode| ThreadOptionValue {
+                value: mode.id.to_string(),
+                name: mode.name.clone(),
+                description: mode.description.clone(),
+            })
+            .collect(),
+    }
+}
+
+fn option(option: &SessionConfigOption) -> Option<ThreadOption> {
+    let SessionConfigKind::Select(select) = &option.kind else {
+        return None;
+    };
+    let values = match &select.options {
+        SessionConfigSelectOptions::Ungrouped(values) => values.iter().collect::<Vec<_>>(),
+        SessionConfigSelectOptions::Grouped(groups) => groups
+            .iter()
+            .flat_map(|group| &group.options)
+            .collect::<Vec<_>>(),
+        _ => Vec::new(),
+    };
+    Some(ThreadOption {
+        id: option.id.to_string(),
+        name: option.name.clone(),
+        category: option.category.as_ref().map(category),
+        description: option.description.clone(),
+        value: select.current_value.to_string(),
+        values: values
+            .into_iter()
+            .map(|value| ThreadOptionValue {
+                value: value.value.to_string(),
+                name: value.name.clone(),
+                description: value.description.clone(),
+            })
+            .collect(),
+    })
+}
+
+fn category(category: &SessionConfigOptionCategory) -> String {
+    match category {
+        SessionConfigOptionCategory::Mode => MODE_CATEGORY.to_owned(),
+        SessionConfigOptionCategory::Model => "model".to_owned(),
+        SessionConfigOptionCategory::ModelConfig => "model_config".to_owned(),
+        SessionConfigOptionCategory::ThoughtLevel => "thought_level".to_owned(),
+        SessionConfigOptionCategory::Other(other) => other.clone(),
+        _ => "other".to_owned(),
     }
 }
 

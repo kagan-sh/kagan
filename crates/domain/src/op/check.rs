@@ -34,6 +34,11 @@ pub fn check(op: &Op) -> Result<(), String> {
             .and_then(|()| search(op))
             .and_then(|()| match op {
                 ThreadOp::Run(run) if run.link == Link::Acp => acp_link(&run.program),
+                ThreadOp::Option { option, value, .. }
+                    if option.trim().is_empty() || value.trim().is_empty() =>
+                {
+                    Err("an option needs a name and a value".into())
+                }
                 ThreadOp::Paste { text, file, .. } => carried_text(text.as_ref(), file.as_ref()),
                 ThreadOp::Input { text, .. } if text.len() > TEXT_MAX => Err(over_cap()),
                 ThreadOp::Report { bytes, .. } if bytes.len() > TEXT_MAX => Err(over_cap()),
@@ -227,6 +232,7 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
         ThreadOp::Get { id, .. }
         | ThreadOp::Stop { id, .. }
         | ThreadOp::Cancel { id }
+        | ThreadOp::Option { id, .. }
         | ThreadOp::Input { id, .. }
         | ThreadOp::Resize { id, .. }
         | ThreadOp::Screen { id, .. }

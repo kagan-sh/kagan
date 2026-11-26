@@ -1,4 +1,4 @@
-use kg_domain::{Event, EventKind, Order, ProjectId, ThreadId, Timestamp};
+use kg_domain::{Event, EventKind, Order, ProjectId, ThreadId, ThreadOption, Timestamp};
 use rusqlite::{Connection, OptionalExtension as _, Transaction, params};
 
 use crate::Result;
@@ -17,6 +17,24 @@ impl super::Store {
                 |row| row.get(0).map(Timestamp),
             )
             .optional()?)
+    }
+
+    /// The last `options` event's list, which says what the agent offers and what the person chose.
+    pub fn last_options(&self, id: &ThreadId) -> Result<Option<Vec<ThreadOption>>> {
+        let kind: Option<Json<EventKind>> = self
+            .conn
+            .query_row(
+                "SELECT kind FROM current_events
+                 WHERE thread_id = ?1 AND json_extract(kind, '$.type') = 'options'
+                 ORDER BY seq DESC LIMIT 1",
+                [Text(id)],
+                |row| row.get("kind"),
+            )
+            .optional()?;
+        match kind.map(|Json(kind)| kind) {
+            Some(EventKind::Options { options }) => Ok(Some(options)),
+            _ => Ok(None),
+        }
     }
 
     /// Appends in order after the thread's last event, numbering from 1.

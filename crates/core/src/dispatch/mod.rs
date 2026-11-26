@@ -218,6 +218,52 @@ fn announce(
 ///
 /// A serialized handler must finish without waiting for a person or for another request:
 /// A saved program change is one database call, so it runs in turn with the other writes.
+/// A change to a thread that takes no waiting answer runs in turn with the other writes; reading a
+/// thread's log, screen or terminal does not.
+fn thread_serialized(op: &ThreadOp) -> bool {
+    match op {
+        ThreadOp::Stop { .. }
+        | ThreadOp::Cancel { .. }
+        | ThreadOp::Option { .. }
+        | ThreadOp::Archive { .. }
+        | ThreadOp::Unarchive { .. }
+        | ThreadOp::SetPinned { .. }
+        | ThreadOp::Notify { .. }
+        | ThreadOp::Rename { .. }
+        | ThreadOp::Ask { .. }
+        | ThreadOp::MarkRead { .. }
+        | ThreadOp::SetMetadata { .. }
+        | ThreadOp::StartAgain { .. }
+        | ThreadOp::Turn(_)
+        | ThreadOp::Terminal(TerminalOp::New { .. } | TerminalOp::Close { .. }) => true,
+        ThreadOp::Run(_)
+        | ThreadOp::Input { .. }
+        | ThreadOp::Resize { .. }
+        | ThreadOp::Screen { .. }
+        | ThreadOp::Scroll { .. }
+        | ThreadOp::Select { .. }
+        | ThreadOp::Copy { .. }
+        | ThreadOp::Paste { .. }
+        | ThreadOp::Send { .. }
+        | ThreadOp::Report { .. }
+        | ThreadOp::Delete { .. }
+        | ThreadOp::Get { .. }
+        | ThreadOp::List { .. }
+        | ThreadOp::Metadata { .. }
+        | ThreadOp::Events { .. }
+        | ThreadOp::Tools { .. }
+        | ThreadOp::CallTool { .. }
+        | ThreadOp::Interactions { .. }
+        | ThreadOp::WaitEvent { .. }
+        | ThreadOp::Wait { .. }
+        | ThreadOp::Search { .. }
+        | ThreadOp::Terminal(TerminalOp::List { .. })
+        | ThreadOp::Details { .. }
+        | ThreadOp::Links { .. } => false,
+    }
+}
+
+/// Whether a saved program change runs on the one-at-a-time request queue.
 fn saved_program_change(op: &ProgramOp) -> bool {
     matches!(
         op,
@@ -290,45 +336,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
             !matches!(op, AutomationOp::List { .. } | AutomationOp::Delete { .. })
         }
         Op::Surface(op) => !matches!(op, kg_domain::SurfaceOp::List),
-        Op::Thread(op) => match op {
-            ThreadOp::Stop { .. }
-            | ThreadOp::Cancel { .. }
-            | ThreadOp::Archive { .. }
-            | ThreadOp::Unarchive { .. }
-            | ThreadOp::SetPinned { .. }
-            | ThreadOp::Notify { .. }
-            | ThreadOp::Rename { .. }
-            | ThreadOp::Ask { .. }
-            | ThreadOp::MarkRead { .. }
-            | ThreadOp::SetMetadata { .. }
-            | ThreadOp::StartAgain { .. }
-            | ThreadOp::Turn(_)
-            | ThreadOp::Terminal(TerminalOp::New { .. } | TerminalOp::Close { .. }) => true,
-            ThreadOp::Run(_)
-            | ThreadOp::Input { .. }
-            | ThreadOp::Resize { .. }
-            | ThreadOp::Screen { .. }
-            | ThreadOp::Scroll { .. }
-            | ThreadOp::Select { .. }
-            | ThreadOp::Copy { .. }
-            | ThreadOp::Paste { .. }
-            | ThreadOp::Send { .. }
-            | ThreadOp::Report { .. }
-            | ThreadOp::Delete { .. }
-            | ThreadOp::Get { .. }
-            | ThreadOp::List { .. }
-            | ThreadOp::Metadata { .. }
-            | ThreadOp::Events { .. }
-            | ThreadOp::Tools { .. }
-            | ThreadOp::CallTool { .. }
-            | ThreadOp::Interactions { .. }
-            | ThreadOp::WaitEvent { .. }
-            | ThreadOp::Wait { .. }
-            | ThreadOp::Search { .. }
-            | ThreadOp::Terminal(TerminalOp::List { .. })
-            | ThreadOp::Details { .. }
-            | ThreadOp::Links { .. } => false,
-        },
+        Op::Thread(op) => thread_serialized(op),
     }
 }
 

@@ -139,6 +139,15 @@ impl Agent {
         self.dir.path().join(name)
     }
 
+    // What the agent answers `session/new` or `session/load` with, besides the session id.
+    fn answering(&self, which: &str, answer: &Value) {
+        std::fs::write(
+            self.path(&format!("answer-{which}.json")),
+            answer.to_string(),
+        )
+        .unwrap();
+    }
+
     fn pid(&self, name: &str, cx: &mut TestAppContext) -> u32 {
         let file = self.path(name);
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
@@ -1586,6 +1595,291 @@ fn conversation(fixture: &Fixture, id: &ThreadId) -> String {
     store.conversation(id).unwrap().unwrap().to_string()
 }
 
+fn options_of(kinds: &[EventKind]) -> Vec<ThreadOption> {
+    kinds
+        .iter()
+        .rev()
+        .find_map(|kind| match kind {
+            EventKind::Options { options } => Some(options.clone()),
+            _ => None,
+        })
+        .unwrap_or_default()
+}
+
+fn modes(current: &str, names: &[(&str, &str)]) -> Value {
+    json!({
+        "modes": {
+            "currentModeId": current,
+            "availableModes": names
+                .iter()
+                .map(|(id, name)| json!({"id": id, "name": name, "description": format!("{name} does things")}))
+                .collect::<Vec<_>>(),
+        }
+    })
+}
+
+fn choice(id: &ThreadId, option: &str, value: &str) -> Op {
+    Op::Thread(ThreadOp::Option {
+        id: id.clone(),
+        option: option.into(),
+        value: value.into(),
+    })
+}
+
+#[gpui_kit::test]
+async fn a_session_answer_with_modes_writes_one_options_event(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_modes"], &[]);
+    agent.answering(
+        "new",
+        &modes("default", &[("default", "Manual"), ("yolo", "YOLO")]),
+    );
+    let id = started(&fixture, &agent, cx).await;
+    let kinds = wait_for(&id, |kinds| !options_of(kinds).is_empty(), cx).await;
+    assert_eq!(
+        count(&kinds, |kind| matches!(kind, EventKind::Options { .. })),
+        1,
+        "{kinds:?}"
+    );
+    let options = options_of(&kinds);
+    assert_eq!(options.len(), 1, "{options:?}");
+    let mode = &options[0];
+    assert!(mode.is_mode());
+    assert_eq!(mode.value, "default");
+    assert_eq!(
+        mode.current().map(|value| value.name.as_str()),
+        Some("Manual")
+    );
+    assert!(mode.offers("yolo"));
+    assert!(
+        ModeRisk::of(&mode.values[1].value, &mode.values[1].name),
+        "a mode that asks nothing is risky: {mode:?}"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn a_session_answer_with_config_options_writes_them_as_options(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_config"], &[]);
+    agent.answering(
+        "new",
+        &json!({
+            "configOptions": [
+                {
+                    "id": "model",
+                    "name": "Model",
+                    "category": "model",
+                    "type": "select",
+                    "currentValue": "sonnet",
+                    "options": [
+                        {"value": "sonnet", "name": "Sonnet 5.5"},
+                        {"value": "opus", "name": "Opus 5.5"},
+                    ],
+                },
+                {
+                    "id": "mode",
+                    "name": "Mode",
+                    "category": "mode",
+                    "type": "select",
+                    "currentValue": "plan",
+                    "options": [
+                        {"value": "plan", "name": "Plan"},
+                        {"value": "build", "name": "Build"},
+                    ],
+                },
+            ],
+        }),
+    );
+    let id = started(&fixture, &agent, cx).await;
+    let kinds = wait_for(&id, |kinds| !options_of(kinds).is_empty(), cx).await;
+    assert_eq!(
+        count(&kinds, |kind| matches!(kind, EventKind::Options { .. })),
+        1,
+        "{kinds:?}"
+    );
+    let options = options_of(&kinds);
+    let ids: Vec<&str> = options.iter().map(|option| option.id.as_str()).collect();
+    assert_eq!(ids, ["model", "mode"], "{options:?}");
+    assert_eq!(options[0].category.as_deref(), Some("model"));
+    assert_eq!(options[0].value, "sonnet");
+    assert!(options[1].is_mode());
+    assert_eq!(options[1].value, "plan");
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn an_agents_updates_write_a_new_options_event(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_update"],
+        &[transcript(
+            &json!([
+                {"sessionUpdate": "current_mode_update", "currentModeId": "plan"},
+                {
+                    "sessionUpdate": "config_option_update",
+                    "configOptions": [{
+                        "id": "model",
+                        "name": "Model",
+                        "category": "model",
+                        "type": "select",
+                        "currentValue": "opus",
+                        "options": [
+                            {"value": "sonnet", "name": "Sonnet 5.5"},
+                            {"value": "opus", "name": "Opus 5.5"},
+                        ],
+                    }],
+                },
+            ]),
+            "end_turn",
+        )],
+    );
+    agent.answering(
+        "new",
+        &modes("default", &[("default", "Manual"), ("plan", "Plan")]),
+    );
+    let id = started(&fixture, &agent, cx).await;
+    wait_for(&id, |kinds| !options_of(kinds).is_empty(), cx).await;
+    send(&id, "hi", cx).await;
+    let kinds = wait_for(
+        &id,
+        |kinds| {
+            let options = options_of(kinds);
+            options.iter().any(|option| option.id == "model")
+                && options
+                    .iter()
+                    .any(|option| option.is_mode() && option.value == "plan")
+        },
+        cx,
+    )
+    .await;
+    assert_eq!(
+        count(&kinds, |kind| matches!(kind, EventKind::Options { .. })),
+        3,
+        "the answer and each update are their own snapshot: {kinds:?}"
+    );
+    let options = options_of(&kinds);
+    assert_eq!(options[0].id, "mode", "{options:?}");
+    assert_eq!(options[0].value, "plan", "{options:?}");
+    assert_eq!(options[1].id, "model", "{options:?}");
+    assert_eq!(options[1].value, "opus", "{options:?}");
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn choosing_a_mode_sends_it_and_refuses_what_the_agent_never_offered(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_choice"], &[]);
+    agent.answering(
+        "new",
+        &modes("default", &[("default", "Manual"), ("plan", "Plan")]),
+    );
+    let id = started(&fixture, &agent, cx).await;
+    wait_for(&id, |kinds| !options_of(kinds).is_empty(), cx).await;
+
+    op(choice(&id, "mode", "plan"), cx).await.unwrap();
+    wait_for(&id, |_| agent.path("set-mode").exists(), cx).await;
+    let sent: Value =
+        serde_json::from_str(&std::fs::read_to_string(agent.path("set-mode")).unwrap()).unwrap();
+    assert_eq!(sent["params"]["modeId"], "plan", "{sent}");
+    assert_eq!(sent["params"]["sessionId"], "ses_choice", "{sent}");
+    let kinds = wait_for(
+        &id,
+        |kinds| {
+            options_of(kinds)
+                .first()
+                .is_some_and(|mode| mode.value == "plan")
+        },
+        cx,
+    )
+    .await;
+    assert!(
+        options_of(&kinds)[0].offers("plan"),
+        "the chip follows the person's choice before the agent says it: {kinds:?}"
+    );
+
+    let refused = op(choice(&id, "mode", "yolo"), cx).await;
+    assert!(
+        matches!(refused, Err(OpError::Invalid(ref message)) if message.contains("yolo")),
+        "{refused:?}"
+    );
+    let refused = op(choice(&id, "model", "opus"), cx).await;
+    assert!(
+        matches!(refused, Err(OpError::Invalid(ref message)) if message.contains("model")),
+        "{refused:?}"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
+#[gpui_kit::test]
+async fn choosing_an_option_on_a_stopped_thread_fails(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(&["ses_stopped"], &[]);
+    agent.answering(
+        "new",
+        &modes("default", &[("default", "Manual"), ("plan", "Plan")]),
+    );
+    let id = started(&fixture, &agent, cx).await;
+    wait_for(&id, |kinds| !options_of(kinds).is_empty(), cx).await;
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Idle, cx).await;
+    let refused = op(choice(&id, "mode", "plan"), cx).await;
+    assert!(
+        matches!(refused, Err(OpError::Failed(ref message)) if message == "the agent is not running"),
+        "{refused:?}"
+    );
+}
+
+#[gpui_kit::test]
+async fn start_again_asks_for_the_recorded_mode_again(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let agent = Agent::new(
+        &["ses_before", "ses_after"],
+        &[transcript(
+            &json!([{"sessionUpdate": "current_mode_update", "currentModeId": "plan"}]),
+            "end_turn",
+        )],
+    );
+    agent.answering(
+        "new",
+        &modes("default", &[("default", "Manual"), ("plan", "Plan")]),
+    );
+    let id = started(&fixture, &agent, cx).await;
+    wait_for(&id, |kinds| !options_of(kinds).is_empty(), cx).await;
+    send(&id, "hi", cx).await;
+    wait_for(
+        &id,
+        |kinds| {
+            options_of(kinds)
+                .first()
+                .is_some_and(|mode| mode.value == "plan")
+        },
+        cx,
+    )
+    .await;
+
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Idle, cx).await;
+    op(Op::Thread(ThreadOp::StartAgain { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Active, cx).await;
+    wait_for(&id, |_| agent.path("set-mode").exists(), cx).await;
+    let sent: Value =
+        serde_json::from_str(&std::fs::read_to_string(agent.path("set-mode")).unwrap()).unwrap();
+    assert_eq!(
+        sent["params"]["modeId"], "plan",
+        "the answer came back in Manual, and the log's plan is asked for again: {sent}"
+    );
+    op(Op::Thread(ThreadOp::Stop { id }), cx).await.unwrap();
+}
+
 #[cfg(unix)]
 #[gpui_kit::test]
 async fn a_recorded_claude_conversation_replays(cx: &mut TestAppContext) {
@@ -1722,8 +2016,7 @@ fn fake_agent() {
     std::fs::write(dir.join("pid"), std::process::id().to_string()).unwrap();
     let modes = std::fs::read_to_string(dir.join("modes")).unwrap_or_default();
     let mode = |name: &str| modes.lines().any(|line| line == name);
-    let fail_init = mode("fail_init");
-    let hang_init = mode("hang_init");
+    let (fail_init, hang_init) = (mode("fail_init"), mode("hang_init"));
     let mut open: Option<(Value, Value)> = None;
     let mut session = String::new();
     let mut out = std::io::stdout();
@@ -1786,6 +2079,14 @@ fn fake_agent() {
                 if after.quit {
                     return;
                 }
+            }
+            "session/set_mode" | "session/set_config_option" => {
+                let name = format!(
+                    "set-{}",
+                    method.trim_start_matches("session/set_").replace('_', "-")
+                );
+                let _ = std::fs::write(dir.join(name), &line);
+                write(&mut out, &reply(&id, &json!({})));
             }
             "session/cancel" => {
                 std::fs::write(dir.join("cancelled"), "").unwrap();
@@ -1914,7 +2215,7 @@ fn loaded(
     for update in replay_updates(dir) {
         write(out, &notice(&session, &update));
     }
-    write(out, &reply(id, &json!({})));
+    write(out, &reply(id, &answered(dir, "load", &session)));
     Some(session)
 }
 
@@ -1992,8 +2293,21 @@ fn new_session(dir: &Path, out: &mut std::io::Stdout, id: &Value) -> Option<Stri
         return None;
     }
     let session = take_session(dir);
-    write(out, &reply(id, &json!({ "sessionId": session })));
+    write(out, &reply(id, &answered(dir, "new", &session)));
     Some(session)
+}
+
+// The answer's own body when the test wrote one, with the session id it just handed out.
+fn answered(dir: &Path, which: &str, session: &str) -> Value {
+    let mut answer: Value = std::fs::read_to_string(dir.join(format!("answer-{which}.json")))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default();
+    if !answer.is_object() {
+        answer = json!({});
+    }
+    answer["sessionId"] = json!(session);
+    answer
 }
 
 fn take_session(dir: &Path) -> String {

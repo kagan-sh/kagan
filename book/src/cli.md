@@ -369,6 +369,7 @@ Commands:
   terminal      Extra terminals: login shells in the thread's folder
   details       The thread's folder, program, branch, base branch and last commits, read from git without fetching
   links         http and https links printed in the thread's terminals: the program's, then each extra one. A link printed again moves to the end
+  option        Choose one of the agent's modes or options, as the thread lists them
   archive       Archive a thread
   unarchive     Bring back an archived thread
   delete        Delete a thread and its history for good
@@ -876,6 +877,28 @@ Usage: kg thread links <ID>
 Arguments:
   <ID>
           [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg thread option`
+
+```text
+Choose one of the agent's modes or options, as the thread lists them
+
+Usage: kg thread option <ID> <OPTION> <VALUE>
+
+Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
+  <OPTION>
+          The option to set, such as `mode` or `model`
+
+  <VALUE>
+          One of the values the agent offers for it
 
 Options:
   -h, --help
