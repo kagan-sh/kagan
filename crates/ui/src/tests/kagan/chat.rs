@@ -467,6 +467,28 @@ fn a_bundle_closes_when_the_turn_ends(cx: &mut TestAppContext) {
     );
 }
 
+#[gpui_kit::test]
+fn a_messages_time_and_copy_wait_for_the_pointer(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat(cx);
+    wait_until(cx, |cx| {
+        value_of(cx, window, "chat-message-2").is_some_and(|text| text.contains("hi there"))
+    });
+    assert!(
+        !shows(cx, window, "chat-copy-1"),
+        "a person's Copy waits for the pointer"
+    );
+    assert!(
+        !shows(cx, window, "chat-copy-2"),
+        "an agent's Copy waits for the pointer"
+    );
+    crate::tests::sidebar::layout::hover_row(cx, window, "chat-message-1");
+    wait_until(cx, |cx| shows(cx, window, "chat-copy-1"));
+    assert!(
+        !shows(cx, window, "chat-copy-2"),
+        "only the message under the pointer shows its actions"
+    );
+}
+
 fn show_approval(
     cx: &mut TestAppContext,
     kind: ToolKind,

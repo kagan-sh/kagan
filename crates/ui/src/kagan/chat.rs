@@ -613,60 +613,50 @@ fn message_view(
     let element = work::named("message", id);
     let label = who.to_owned();
     let copy = text.to_owned();
-    let row = h_flex()
+    let wording = div()
+        .type_body(cx)
+        .text_color(cx.theme().foreground)
+        .child(TextView::markdown(
+            SharedString::from(format!("chat-message-md-{id}")),
+            text.to_owned(),
+        ));
+    let hover = h_flex()
         .gap_2()
         .items_center()
-        .child(
-            div()
-                .type_caption(cx)
-                .font_weight(gpui_kit::FontWeight::MEDIUM)
-                .text_color(cx.theme().muted_foreground)
-                .child(label.clone()),
-        )
+        .invisible()
+        .group_hover("chat-message", gpui_kit::Styled::visible)
         .child(
             div()
                 .type_caption(cx)
                 .text_color(cx.theme().muted_foreground)
                 .child(clock(at)),
         )
-        .when(!user, |row| {
-            row.child(div().flex_1()).child(
-                div()
-                    .invisible()
-                    .group_hover("chat-message", gpui_kit::Styled::visible)
-                    .child(control(
-                        format!("chat-copy-{id}"),
-                        Facts::button("Copy"),
-                        Button::new(SharedString::from(format!("chat-copy-{id}-button")))
-                            .small()
-                            .ghost()
-                            .icon(gpui_kit::assets::IconName::Copy)
-                            .tooltip("Copy the message")
-                            .on_click(move |_, _, cx| {
-                                cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()));
-                            }),
-                    )),
-            )
-        });
-    let body =
-        v_flex()
-            .gap_1()
-            .when(user, |body| {
-                body.bg(cx.theme().secondary)
-                    .rounded(cx.theme().radius)
-                    .border_l_2()
-                    .border_color(cx.theme().accent)
-                    .px_3()
-                    .py_2()
-            })
-            .when(!user, gpui_kit::Styled::pl_2)
-            .child(row)
-            .child(div().type_body(cx).text_color(cx.theme().foreground).child(
-                TextView::markdown(
-                    SharedString::from(format!("chat-message-md-{id}")),
-                    text.to_owned(),
-                ),
-            ));
+        .child(control(
+            format!("chat-copy-{id}"),
+            Facts::button("Copy"),
+            Button::new(SharedString::from(format!("chat-copy-{id}-button")))
+                .small()
+                .ghost()
+                .icon(gpui_kit::assets::IconName::Copy)
+                .tooltip("Copy the message")
+                .on_click(move |_, _, cx| {
+                    cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()));
+                }),
+        ));
+    let body = if user {
+        v_flex().items_end().gap_1().child(
+            div()
+                .max_w(relative(0.8))
+                .bg(cx.theme().secondary)
+                .rounded(cx.theme().radius)
+                .px_3()
+                .py_2()
+                .child(wording),
+        )
+    } else {
+        v_flex().gap_1().child(wording)
+    }
+    .child(hover);
     div()
         .id(element)
         .group("chat-message")
