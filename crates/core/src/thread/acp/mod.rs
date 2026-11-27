@@ -17,6 +17,7 @@ use crate::{Workspace, thread::Raised};
 mod client;
 mod launch;
 mod map;
+mod option;
 mod permission;
 mod transport;
 
@@ -25,6 +26,7 @@ mod transport;
 mod tests;
 
 use client::{AcpCommand, AcpEvent, Restored};
+use option::{kept, last_options};
 
 const NO_AGENT: &str = "the agent is not running; start the thread again";
 const NOT_A_TERMINAL: &str =
@@ -111,6 +113,38 @@ async fn stored(
     database.call(move |store| store.conversation(&id)).await
 }
 
+pub(super) async fn option(
+    this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    option: &str,
+    value: &str,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    if !running(this, id, cx)? {
+        return Err(OpError::Failed("the agent is not running".into()));
+    }
+    let offered = last_options(this, id, cx).await?;
+    let chosen = offered
+        .iter()
+        .find(|offered| offered.id == option)
+        .ok_or_else(|| OpError::Invalid(format!("the agent offers no option {option}")))?;
+    if !chosen.offers(value) {
+        return Err(OpError::Invalid(format!(
+            "the agent offers no {value} for {option}"
+        )));
+    }
+    send(
+        this,
+        id,
+        AcpCommand::SetOption {
+            option: option.to_owned(),
+            value: value.to_owned(),
+        },
+        cx,
+    )?;
+    Ok(OpResult::Done)
+}
+
 async fn failed(
     this: &WeakEntity<Workspace>,
     thread: &Entity<Thread>,
@@ -159,7 +193,27 @@ async fn consume(
             AcpEvent::Session {
                 id: session,
                 restored,
-            } => named(this, &id, &session, restored, again, at, cx).await,
+                options,
+            } => {
+                let opened = Opened {
+                    session,
+                    restored,
+                    options,
+                };
+                named(this, &id, opened, again, at, cx).await
+            }
+            AcpEvent::Options(options) => {
+                Workspace::events(this, id.clone(), vec![EventKind::Options { options }], cx).await
+            }
+            AcpEvent::Notice { severity, text } => {
+                Workspace::events(
+                    this,
+                    id.clone(),
+                    vec![EventKind::Notice { severity, text }],
+                    cx,
+                )
+                .await
+            }
             AcpEvent::Chunk {
                 thought: false,
                 text,
@@ -301,18 +355,46 @@ async fn permission(
     tool_event(this, id, call, cx).await
 }
 
+/// What the session answer brought: its id, whether the earlier conversation loaded, and the modes
+/// and options the agent offers.
+struct Opened {
+    session: String,
+    restored: Restored,
+    options: Vec<kg_domain::ThreadOption>,
+}
+
 async fn named(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
-    session: &str,
-    restored: Restored,
+    opened: Opened,
     again: bool,
     at: kg_domain::Timestamp,
     cx: &mut AsyncApp,
 ) -> Result<()> {
+    let Opened {
+        session,
+        restored,
+        options,
+    } = opened;
     let thread = crate::thread::thread(this, id, cx)?;
     Workspace::events_at(this, id.clone(), at, vec![EventKind::Started], cx).await?;
     status(this, &thread, ThreadStatus::Active, cx).await?;
+    let remembered = if again {
+        last_options(this, id, cx).await?
+    } else {
+        Vec::new()
+    };
+    if !options.is_empty() {
+        let kinds = vec![EventKind::Options {
+            options: options.clone(),
+        }];
+        Workspace::events(this, id.clone(), kinds, cx).await?;
+    }
+    // The log keeps the person's last choice; a fresh session comes back in the agent's own first
+    // mode, so Start again asks for what the thread already recorded.
+    for (option, value) in kept(&remembered, &options) {
+        let _ = send(this, id, AcpCommand::SetOption { option, value }, cx);
+    }
     let database = crate::workspace::database(this, cx)?;
     let conversation = match session.parse::<Conversation>() {
         Ok(conversation) => conversation,

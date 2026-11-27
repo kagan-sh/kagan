@@ -13,11 +13,12 @@ use agent_client_protocol::v1::schema::{
 use agent_client_protocol::v1::{ActiveSession, SessionMessage, SessionSetup};
 use agent_client_protocol::{Agent, Channel, Client, Dispatch};
 use gpui_kit::BackgroundExecutor;
-use kg_domain::{ToolStatus, TurnOutcome};
+use kg_domain::{NoticeSeverity, ThreadOption, ToolStatus, TurnOutcome};
 use kg_process::Process;
 use kg_terminal::Exit;
 
 use super::map;
+use super::option::{Options, choose};
 use super::permission::Asking;
 use super::transport::{EXIT_GRACE, Transport, carry, pump, spawn, tail_text};
 
@@ -59,6 +60,13 @@ pub(super) enum AcpEvent {
     Session {
         id: String,
         restored: Restored,
+        options: Vec<ThreadOption>,
+    },
+    /// Every mode and option the agent offers, whole.
+    Options(Vec<ThreadOption>),
+    Notice {
+        severity: NoticeSeverity,
+        text: String,
     },
     Chunk {
         thought: bool,
@@ -90,6 +98,7 @@ pub(super) enum AcpEvent {
 pub(super) enum AcpCommand {
     Prompt(String),
     Cancel,
+    SetOption { option: String, value: String },
 }
 
 #[derive(Debug)]
@@ -229,35 +238,50 @@ async fn talk(
         let resume = resume.filter(|_| initialized.agent_capabilities.load_session);
         let new = async {
             let request = NewSessionRequest::new(&folder).mcp_servers(servers.clone());
-            let SessionSetup { session, .. } = cx
+            let SessionSetup {
+                session, response, ..
+            } = cx
                 .build_session_from(request)
                 .block_task()
                 .start_session()
                 .await?;
-            Ok::<_, AcpError>(session)
+            let options =
+                map::session_options(response.modes.as_ref(), response.config_options.as_deref());
+            Ok::<_, AcpError>((session, options))
         };
-        let (session, restored): (_, Restored) = match resume {
-            Some(conversation) => {
-                let request = LoadSessionRequest::new(conversation.to_string(), &folder)
-                    .mcp_servers(servers.clone());
-                match cx
-                    .load_session_from(request)
-                    .block_task()
-                    .start_session()
-                    .await
-                {
-                    Ok(SessionSetup { mut session, .. }) => {
-                        forget(&mut session);
-                        (session, Restored::Loaded)
-                    }
-                    // A refused load is an agent that cannot continue this conversation after
-                    // all: the person gets a new chat, and the agent's words.
-                    Err(error) => (new.await?, Restored::Refused(error.to_string())),
+        let (session, restored, options): (_, Restored, _) = if let Some(conversation) = resume {
+            let request = LoadSessionRequest::new(conversation.to_string(), &folder)
+                .mcp_servers(servers.clone());
+            match cx
+                .load_session_from(request)
+                .block_task()
+                .start_session()
+                .await
+            {
+                Ok(SessionSetup {
+                    mut session,
+                    response,
+                    ..
+                }) => {
+                    let options = map::session_options(
+                        response.modes.as_ref(),
+                        response.config_options.as_deref(),
+                    );
+                    forget(&mut session);
+                    (session, Restored::Loaded, options)
+                }
+                // A refused load is an agent that cannot continue this conversation after all:
+                // the person gets a new chat, and the agent's words.
+                Err(error) => {
+                    let (session, options) = new.await?;
+                    (session, Restored::Refused(error.to_string()), options)
                 }
             }
-            None => (new.await?, Restored::New),
+        } else {
+            let (session, options) = new.await?;
+            (session, Restored::New, options)
         };
-        Ok::<_, AcpError>((session, restored))
+        Ok::<_, AcpError>((session, restored, options))
     };
     let setup =
         match futures::future::select(Box::pin(handshake), Box::pin(executor.timer(STARTUP))).await
@@ -265,16 +289,20 @@ async fn talk(
             futures::future::Either::Left((result, _)) => result?,
             futures::future::Either::Right(_) => return Err(AcpError::Handshake(STARTUP)),
         };
-    let (mut session, restored) = setup;
+    let (mut session, restored, options) = setup;
     let id = session.session_id().to_string();
     if events
-        .send(AcpEvent::Session { id, restored })
+        .send(AcpEvent::Session {
+            id,
+            restored,
+            options: options.clone(),
+        })
         .await
         .is_err()
     {
         return Err(AcpError::Ended);
     }
-    serve(&mut session, &commands, events).await
+    serve(&mut session, &commands, events, Options(options)).await
 }
 
 // The replay is the conversation kagan already stores; writing it would double the transcript.
@@ -327,6 +355,7 @@ async fn serve(
     session: &mut agent_client_protocol::v1::ActiveSession<'_, Agent>,
     commands: &async_channel::Receiver<AcpCommand>,
     events: &async_channel::Sender<AcpEvent>,
+    mut options: Options,
 ) -> Result<(), AcpError> {
     let mut unread = Unread::default();
     let mut repeats = Repeats::default();
@@ -358,7 +387,15 @@ async fn serve(
         };
         match step {
             Step::Update(Ok(message)) => {
-                heard(*message, events, &mut unread, &mut repeats, &mut asking).await;
+                heard(
+                    *message,
+                    events,
+                    &mut unread,
+                    &mut repeats,
+                    &mut asking,
+                    &mut options,
+                )
+                .await;
             }
             Step::Answer(answer) => asking.answered(answer),
             Step::Command(AcpCommand::Prompt(text)) => session.send_prompt(text)?,
@@ -368,6 +405,9 @@ async fn serve(
                     CancelNotification::new(session.session_id().clone()),
                 )?;
                 asking.cancel();
+            }
+            Step::Command(AcpCommand::SetOption { option, value }) => {
+                choose(session, events, &mut options, option, value).await;
             }
             // The update stream closes when the agent's output ends, and the commands when the
             // thread does. Either way the connection is over, not failed: the exit and the tail
@@ -390,6 +430,7 @@ async fn heard(
     unread: &mut Unread,
     repeats: &mut Repeats,
     asking: &mut Asking,
+    options: &mut Options,
 ) {
     match message {
         SessionMessage::PromptResponse(response) => {
@@ -400,7 +441,15 @@ async fn heard(
             send(events, AcpEvent::TurnDone { outcome, error }).await;
         }
         SessionMessage::Message(dispatch) => {
-            answer(dispatch.into_raw(), events, unread, repeats, asking).await;
+            answer(
+                dispatch.into_raw(),
+                events,
+                unread,
+                repeats,
+                asking,
+                options,
+            )
+            .await;
         }
         // A kind this build does not name, logged once rather than on every chunk.
         _ => unread.once("another kind of message", || {
@@ -415,6 +464,7 @@ async fn answer(
     unread: &mut Unread,
     repeats: &mut Repeats,
     asking: &mut Asking,
+    options: &mut Options,
 ) {
     let dispatch = match dispatch.into_notification::<SessionNotification>() {
         Ok(Ok(notification)) => {
@@ -449,6 +499,11 @@ async fn answer(
                 Some(map::Update::Plan(entries)) => send(events, AcpEvent::Plan(entries)).await,
                 Some(map::Update::Usage { used, size }) => {
                     send(events, AcpEvent::Usage { used, size }).await;
+                }
+                Some(update @ (map::Update::Mode(_) | map::Update::Config(_))) => {
+                    if options.changed(&update) {
+                        send(events, AcpEvent::Options(options.0.clone())).await;
+                    }
                 }
                 None => {
                     let name = map::name(&notification.update);

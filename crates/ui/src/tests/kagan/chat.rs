@@ -2,13 +2,13 @@ use gpui_kit::component::input::Undo;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, TestAppContext};
 use kg_domain::{
     Event, EventKind, InteractionOption, Link, OptionRole, PendingInteraction,
-    PendingInteractionId, Role, Thread, ThreadId, ThreadStatus, Timestamp, ToolCall, ToolKind,
-    ToolStatus,
+    PendingInteractionId, Role, Thread, ThreadId, ThreadOption, ThreadOptionValue, ThreadStatus,
+    Timestamp, ToolCall, ToolKind, ToolStatus,
 };
 
 use super::{
-    click, disabled, focused_of, hint_of, label, open, pending, row_top, run_shell, set_preference,
-    shows, shows_within, thread_record, value_of, wait_until,
+    click, disabled, focused_of, hint_of, label, open, pending, row_top, run_shell, selected_of,
+    set_preference, shows, shows_within, thread_record, value_of, wait_until,
 };
 use crate::tests::sidebar::layout::span;
 
@@ -135,6 +135,49 @@ fn seed_child(
         })
         .unwrap();
     id
+}
+
+fn mode(current: &str, values: &[(&str, &str)]) -> EventKind {
+    EventKind::Options {
+        options: vec![ThreadOption {
+            id: "mode".into(),
+            name: "Mode".into(),
+            category: Some(kg_domain::MODE_CATEGORY.into()),
+            description: None,
+            value: current.into(),
+            values: values
+                .iter()
+                .map(|(value, name)| ThreadOptionValue {
+                    value: (*value).into(),
+                    name: (*name).into(),
+                    description: Some(format!("{name} does things")),
+                })
+                .collect(),
+        }],
+    }
+}
+
+fn seed_running_thread(data: &std::path::Path, events: Vec<EventKind>) -> ThreadId {
+    let id = seed_thread(data, events);
+    let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+    store
+        .set_thread_status(&id, ThreadStatus::Active, Timestamp(2))
+        .unwrap();
+    id
+}
+
+fn show_running_chat(
+    cx: &mut TestAppContext,
+    events: Vec<EventKind>,
+) -> (
+    Entity<crate::kagan::Kagan>,
+    AnyWindowHandle,
+    tempfile::TempDir,
+) {
+    let (kagan, window, data) = open(cx);
+    let id = seed_running_thread(data.path(), events);
+    reveal(cx, window, &id);
+    (kagan, window, data)
 }
 
 fn show_chat(
@@ -1713,4 +1756,107 @@ fn a_card_opens_and_closes_from_the_keyboard(cx: &mut TestAppContext) {
     cx.simulate_keystrokes(window, "space");
     cx.run_until_parked();
     wait_until(cx, |cx| shows(cx, window, "chat-card-plan-body"));
+}
+
+#[gpui_kit::test]
+fn a_chat_with_no_mode_offer_has_no_chip(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_running_chat(cx, Vec::new());
+    wait_until(cx, |cx| shows(cx, window, "chat-prompt"));
+    assert!(
+        !shows(cx, window, "chat-mode"),
+        "no offer, no chip: an agent that names no mode shows none"
+    );
+}
+
+#[gpui_kit::test]
+fn the_chip_names_the_mode_the_agent_runs_in(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_running_chat(
+        cx,
+        vec![mode(
+            "default",
+            &[
+                ("default", "Manual"),
+                ("bypassPermissions", "Bypass permissions"),
+            ],
+        )],
+    );
+    wait_until(cx, |cx| shows(cx, window, "chat-mode"));
+    assert_eq!(
+        value_of(cx, window, "chat-mode").as_deref(),
+        Some("Manual"),
+        "the chip says the agent's own word"
+    );
+    click(cx, window, "chat-mode");
+    wait_until(cx, |cx| shows(cx, window, "chat-mode-mode-default"));
+    assert_eq!(
+        selected_of(cx, window, "chat-mode-mode-default"),
+        Some(true),
+        "the menu marks the mode in force"
+    );
+    assert_eq!(
+        selected_of(cx, window, "chat-mode-mode-bypassPermissions"),
+        Some(false)
+    );
+    assert!(
+        shows(cx, window, "chat-mode-mode-bypassPermissions-risk"),
+        "a mode that asks nothing carries the warning mark"
+    );
+}
+
+#[gpui_kit::test]
+fn a_stopped_chat_offers_no_mode_chip(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) =
+        show_chat_with(cx, vec![mode("default", &[("default", "Manual")])]);
+    wait_until(cx, |cx| shows(cx, window, "chat-prompt"));
+    assert!(
+        !shows(cx, window, "chat-mode"),
+        "the chip belongs to a running agent"
+    );
+}
+
+#[gpui_kit::test]
+fn an_open_question_takes_the_chip_with_the_box(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let id = seed_running_thread(data.path(), vec![mode("default", &[("default", "Manual")])]);
+    let store = kg_store::Store::open(data.path().join("kagan.sqlite3")).unwrap();
+    store
+        .put_pending_interaction(&PendingInteraction {
+            id: PendingInteractionId("ask_mode".into()),
+            thread_id: id.clone(),
+            title: "Bash wants to run the tests".into(),
+            options: vec![InteractionOption {
+                id: "allow".into(),
+                label: "Allow once".into(),
+                role: Some(OptionRole::Primary),
+            }],
+            fields: None,
+            created_at: Timestamp(3),
+        })
+        .unwrap();
+    drop(store);
+    reveal(cx, window, &id);
+    wait_until(cx, |cx| shows(cx, window, "chat-approval-ask_mode"));
+    assert!(
+        !shows(cx, window, "chat-mode"),
+        "the card takes the box's place, so the box's chip goes with it"
+    );
+    let _ = kagan;
+}
+
+#[gpui_kit::test]
+fn choosing_another_mode_sends_it_and_a_refusal_stays_in_the_box(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_running_chat(
+        cx,
+        vec![mode("default", &[("default", "Manual"), ("plan", "Plan")])],
+    );
+    wait_until(cx, |cx| shows(cx, window, "chat-mode"));
+    click(cx, window, "chat-mode");
+    wait_until(cx, |cx| shows(cx, window, "chat-mode-mode-plan"));
+    click(cx, window, "chat-mode-mode-plan");
+    wait_until(cx, |cx| shows(cx, window, "chat-notice"));
+    assert!(
+        value_of(cx, window, "chat-notice")
+            .is_some_and(|text| text.contains("mode") && text.contains("not running")),
+        "a thread with no running agent says why the mode did not change"
+    );
 }

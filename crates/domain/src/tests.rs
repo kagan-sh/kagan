@@ -16,7 +16,7 @@ where
 }
 
 // Every `type` tag an old log may hold.
-const TYPES: [&str; 29] = [
+const TYPES: [&str; 30] = [
     "created",
     "started",
     "exited",
@@ -33,6 +33,7 @@ const TYPES: [&str; 29] = [
     "thought",
     "plan",
     "usage",
+    "options",
     "tool",
     "tool.started",
     "tool.ended",
@@ -857,6 +858,9 @@ fn event_type_names_match_the_wire_tag() {
             entries: Vec::new(),
         },
         EventKind::Usage { used: 1, size: 2 },
+        EventKind::Options {
+            options: Vec::new(),
+        },
         EventKind::Tool(ToolCall {
             id: String::new(),
             name: None,
@@ -1948,4 +1952,28 @@ fn a_conversation_is_a_bounded_plain_string() {
         serde_json::from_value::<crate::Conversation>(json!("")).is_err(),
         "a stored empty id is refused"
     );
+}
+
+#[test]
+fn a_mode_that_asks_nothing_is_risky() {
+    for (id, name) in [
+        ("bypassPermissions", "Bypass permissions"),
+        ("agent-full-access", "Full access"),
+        ("yolo", "YOLO"),
+        ("danger", "Dangerous"),
+        ("skip_permissions", "Skip permissions"),
+        ("none", "No approval"),
+    ] {
+        assert!(crate::ModeRisk::of(id, name), "{id} / {name}");
+    }
+    for (id, name) in [
+        ("default", "Manual"),
+        ("acceptEdits", "Accept edits"),
+        ("plan", "Plan"),
+        ("workspace-write", "Workspace access"),
+        ("agent", "Auto review"),
+        ("read-only", "Read-only"),
+    ] {
+        assert!(!crate::ModeRisk::of(id, name), "{id} / {name}");
+    }
 }

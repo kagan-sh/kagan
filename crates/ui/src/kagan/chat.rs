@@ -27,6 +27,7 @@ mod body;
 mod card;
 mod composer;
 mod kind;
+mod mode;
 mod part;
 mod work;
 

@@ -191,6 +191,15 @@ pub enum ThreadOp {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
     },
+    /// Choose one of the agent's modes or options, as the thread lists them
+    Option {
+        #[arg(env = "KG_THREAD_ID")]
+        id: ThreadId,
+        /// The option to set, such as `mode` or `model`
+        option: String,
+        /// One of the values the agent offers for it
+        value: String,
+    },
     /// Archive a thread
     Archive {
         #[arg(env = "KG_THREAD_ID")]

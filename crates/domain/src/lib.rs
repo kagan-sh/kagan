@@ -21,8 +21,9 @@ pub use diff::{
     DiffNote, DiffSide, DiffStatus, GitDetails, ThreadDetails, format_notes,
 };
 pub use event::{
-    Attachment, Event, EventKind, NoticeSeverity, PlanEntry, PlanStatus, Role, ToolCall, ToolDiff,
-    ToolKind, ToolLocation, ToolOutcome, ToolStatus, TurnOutcome, WorkKind,
+    Attachment, Event, EventKind, MODE_CATEGORY, ModeRisk, NoticeSeverity, PlanEntry, PlanStatus,
+    Role, ThreadOption, ThreadOptionValue, ToolCall, ToolDiff, ToolKind, ToolLocation, ToolOutcome,
+    ToolStatus, TurnOutcome, WorkKind,
 };
 pub use id::{
     AutomationId, CONVERSATION_MAX, Conversation, ConversationError, EnvironmentId,

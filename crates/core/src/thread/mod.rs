@@ -132,6 +132,7 @@ pub(crate) async fn dispatch_thread(
         | ThreadOp::Report { .. }) => terminal_op(this, op, cx).await,
         ThreadOp::Send { id, text } => type_text(this, &id, &text, cx).await,
         ThreadOp::Cancel { id } => acp::cancel(this, &id, cx).await,
+        ThreadOp::Option { id, option, value } => acp::option(this, &id, &option, &value, cx).await,
         ThreadOp::Turn(op) => terminal::turn_hook(this, op, cx).await,
         ThreadOp::Terminal(op) => extra::run(this, op, cx).await,
         ThreadOp::Details { id } => details::read(database, id, cx).await,

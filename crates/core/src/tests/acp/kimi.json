@@ -5,5 +5,232 @@
    "updates": [],
    "stopReason": "end_turn"
   }
- ]
+ ],
+ "answer": {
+  "new": {
+   "sessionId": "session_d58baa24-113d-476d-9ea3-0e6e035e00d2",
+   "configOptions": [
+    {
+     "type": "select",
+     "id": "model",
+     "name": "Model",
+     "category": "model",
+     "currentValue": "kimi-code/k3.1-pro",
+     "options": [
+      {
+       "value": "kimi-code/k3",
+       "name": "K3"
+      },
+      {
+       "value": "kimi-code/k3-256k",
+       "name": "K3-256k"
+      },
+      {
+       "value": "kimi-code/kimi-for-coding",
+       "name": "K2.8 Preview"
+      },
+      {
+       "value": "kimi-code/kimi-for-coding-highspeed",
+       "name": "K2.7 Code Highspeed"
+      },
+      {
+       "value": "kimi-code/k3.1-pro",
+       "name": "K3.1 Pro"
+      },
+      {
+       "value": "kimi-code/k3.1-pro-highspeed",
+       "name": "K3.1 Pro Highspeed 2x Usage Cost"
+      }
+     ]
+    },
+    {
+     "type": "select",
+     "id": "thinking",
+     "name": "Thinking",
+     "category": "thought_level",
+     "currentValue": "high",
+     "options": [
+      {
+       "value": "low",
+       "name": "Thinking Low"
+      },
+      {
+       "value": "high",
+       "name": "Thinking High"
+      },
+      {
+       "value": "max",
+       "name": "Thinking Max"
+      }
+     ]
+    },
+    {
+     "type": "select",
+     "id": "mode",
+     "name": "Mode",
+     "category": "mode",
+     "currentValue": "default",
+     "options": [
+      {
+       "value": "default",
+       "name": "Default",
+       "description": "Manual approvals; tools execute normally."
+      },
+      {
+       "value": "plan",
+       "name": "Plan",
+       "description": "Read-only planning; no tool execution."
+      },
+      {
+       "value": "auto",
+       "name": "Auto",
+       "description": "Auto-approve safe operations."
+      },
+      {
+       "value": "yolo",
+       "name": "YOLO",
+       "description": "Auto-approve everything."
+      }
+     ]
+    }
+   ],
+   "modes": {
+    "currentModeId": "default",
+    "availableModes": [
+     {
+      "id": "default",
+      "name": "Default",
+      "description": "Manual approvals; tools execute normally."
+     },
+     {
+      "id": "plan",
+      "name": "Plan",
+      "description": "Read-only planning; no tool execution."
+     },
+     {
+      "id": "auto",
+      "name": "Auto",
+      "description": "Auto-approve safe operations."
+     },
+     {
+      "id": "yolo",
+      "name": "YOLO",
+      "description": "Auto-approve everything."
+     }
+    ]
+   }
+  },
+  "load": {
+   "configOptions": [
+    {
+     "type": "select",
+     "id": "model",
+     "name": "Model",
+     "category": "model",
+     "currentValue": "kimi-code/k3.1-pro",
+     "options": [
+      {
+       "value": "kimi-code/k3",
+       "name": "K3"
+      },
+      {
+       "value": "kimi-code/k3-256k",
+       "name": "K3-256k"
+      },
+      {
+       "value": "kimi-code/kimi-for-coding",
+       "name": "K2.8 Preview"
+      },
+      {
+       "value": "kimi-code/kimi-for-coding-highspeed",
+       "name": "K2.7 Code Highspeed"
+      },
+      {
+       "value": "kimi-code/k3.1-pro",
+       "name": "K3.1 Pro"
+      },
+      {
+       "value": "kimi-code/k3.1-pro-highspeed",
+       "name": "K3.1 Pro Highspeed 2x Usage Cost"
+      }
+     ]
+    },
+    {
+     "type": "select",
+     "id": "thinking",
+     "name": "Thinking",
+     "category": "thought_level",
+     "currentValue": "high",
+     "options": [
+      {
+       "value": "low",
+       "name": "Thinking Low"
+      },
+      {
+       "value": "high",
+       "name": "Thinking High"
+      },
+      {
+       "value": "max",
+       "name": "Thinking Max"
+      }
+     ]
+    },
+    {
+     "type": "select",
+     "id": "mode",
+     "name": "Mode",
+     "category": "mode",
+     "currentValue": "default",
+     "options": [
+      {
+       "value": "default",
+       "name": "Default",
+       "description": "Manual approvals; tools execute normally."
+      },
+      {
+       "value": "plan",
+       "name": "Plan",
+       "description": "Read-only planning; no tool execution."
+      },
+      {
+       "value": "auto",
+       "name": "Auto",
+       "description": "Auto-approve safe operations."
+      },
+      {
+       "value": "yolo",
+       "name": "YOLO",
+       "description": "Auto-approve everything."
+      }
+     ]
+    }
+   ],
+   "modes": {
+    "currentModeId": "default",
+    "availableModes": [
+     {
+      "id": "default",
+      "name": "Default",
+      "description": "Manual approvals; tools execute normally."
+     },
+     {
+      "id": "plan",
+      "name": "Plan",
+      "description": "Read-only planning; no tool execution."
+     },
+     {
+      "id": "auto",
+      "name": "Auto",
+      "description": "Auto-approve safe operations."
+     },
+     {
+      "id": "yolo",
+      "name": "YOLO",
+      "description": "Auto-approve everything."
+     }
+    ]
+   }
+  }
+ }
 }

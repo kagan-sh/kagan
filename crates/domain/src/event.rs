@@ -69,6 +69,12 @@ pub enum EventKind {
         used: u64,
         size: u64,
     },
+    /// Every mode and option the agent offers, whole; a later event replaces it. `modes` in the
+    /// session answer is the option `mode`, so one event holds what the chip and its menu draw.
+    Options {
+        #[serde(default)]
+        options: Vec<ThreadOption>,
+    },
     /// One tool call; later events with the same `id` update it. Each event carries only what the
     /// agent said this time, so a reader folds the events for one id into one row.
     Tool(ToolCall),
@@ -207,7 +213,7 @@ pub enum NoticeSeverity {
 impl EventKind {
     /// The kinds kagan writes now, and the only names a wait or a subscription accepts. Other
     /// kinds still load from an old log.
-    pub const LIVE_TYPES: [&'static str; 21] = [
+    pub const LIVE_TYPES: [&'static str; 22] = [
         "created",
         "started",
         "exited",
@@ -224,6 +230,7 @@ impl EventKind {
         "thought",
         "plan",
         "usage",
+        "options",
         "notice",
         "answered",
         "tool",
@@ -250,6 +257,7 @@ impl EventKind {
             Self::Thought { .. } => "thought",
             Self::Plan { .. } => "plan",
             Self::Usage { .. } => "usage",
+            Self::Options { .. } => "options",
             Self::Tool { .. } => "tool",
             Self::ToolStarted { .. } => "tool.started",
             Self::ToolEnded { .. } => "tool.ended",
@@ -467,6 +475,85 @@ pub enum PlanStatus {
     InProgress,
     Completed,
 }
+
+/// One thing the agent lets the person choose for this thread, such as its mode or its model, with
+/// every value it offered and the one in force. The agent's own words; kagan keeps no table.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadOption {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub value: String,
+    pub values: Vec<ThreadOptionValue>,
+}
+
+impl ThreadOption {
+    /// Whether this is the mode the chip names: the option ACP calls a mode, or one kagan reads
+    /// from the session answer's `modes`.
+    #[must_use]
+    pub fn is_mode(&self) -> bool {
+        self.category.as_deref() == Some(MODE_CATEGORY) || self.id == MODE_CATEGORY
+    }
+
+    /// The name of the value in force, as the agent wrote it.
+    #[must_use]
+    pub fn current(&self) -> Option<&ThreadOptionValue> {
+        self.values.iter().find(|value| value.value == self.value)
+    }
+
+    /// Whether the agent offered `value` for this option.
+    #[must_use]
+    pub fn offers(&self, value: &str) -> bool {
+        self.values.iter().any(|offered| offered.value == value)
+    }
+}
+
+/// One value an agent offers for a [`ThreadOption`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadOptionValue {
+    pub value: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// The category, and the option id, ACP gives a session's modes.
+pub const MODE_CATEGORY: &str = "mode";
+
+/// The one rule that decides whether an option lets the agent act without asking. ACP carries no
+/// risk flag, so a word in the option's id or name decides, for every agent alike.
+pub struct ModeRisk;
+
+impl ModeRisk {
+    /// Whether this mode is risky. The id and the name are read, with `-` and `_` read as spaces,
+    /// so `full-access` and `full access` agree.
+    #[must_use]
+    pub fn of(id: &str, name: &str) -> bool {
+        let read = |text: &str| {
+            text.to_lowercase()
+                .replace(['-', '_'], " ")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        let haystack = format!("{} {}", read(id), read(name));
+        RISKY_WORDS.iter().any(|word| haystack.contains(word))
+    }
+}
+
+const RISKY_WORDS: &[&str] = &[
+    "bypass",
+    "full access",
+    "yolo",
+    "dangerous",
+    "skip permissions",
+    "no approval",
+];
 
 /// How a tool call kagan served ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

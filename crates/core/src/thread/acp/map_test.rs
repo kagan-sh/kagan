@@ -1,6 +1,64 @@
-use agent_client_protocol::v1::schema::Diff;
+use agent_client_protocol::v1::schema::{
+    Diff, SessionConfigBoolean, SessionConfigOptionCategory, SessionConfigSelectOption, SessionMode,
+};
 
 use super::*;
+
+#[test]
+fn an_answers_modes_and_options_become_one_list() {
+    let modes = SessionModeState::new(
+        "default",
+        vec![
+            SessionMode::new("default", "Manual"),
+            SessionMode::new("yolo", "YOLO").description("Runs anything"),
+        ],
+    );
+    let options = session_options(Some(&modes), None);
+    assert_eq!(options.len(), 1, "{options:?}");
+    assert!(options[0].is_mode());
+    assert_eq!(options[0].id, MODE_CATEGORY);
+    assert_eq!(options[0].value, "default");
+    assert_eq!(
+        options[0].values[1].description.as_deref(),
+        Some("Runs anything")
+    );
+
+    let mut config = SessionConfigOption::select(
+        "model",
+        "Model",
+        "opus",
+        vec![SessionConfigSelectOption::new("opus", "Opus 5.5")],
+    );
+    config.category = Some(SessionConfigOptionCategory::Model);
+    let options = session_options(Some(&modes), Some(std::slice::from_ref(&config)));
+    let ids: Vec<&str> = options.iter().map(|option| option.id.as_str()).collect();
+    assert_eq!(ids, ["mode", "model"], "{options:?}");
+    assert_eq!(options[1].category.as_deref(), Some("model"));
+
+    let mode = SessionConfigOption::select(
+        "mode",
+        "Mode",
+        "yolo",
+        vec![SessionConfigSelectOption::new("yolo", "YOLO")],
+    );
+    let options = session_options(Some(&modes), Some(&[mode]));
+    assert_eq!(
+        options.len(),
+        1,
+        "the option named mode replaces the modes entry: {options:?}"
+    );
+    assert_eq!(options[0].value, "yolo");
+}
+
+#[test]
+fn a_boolean_option_is_left_to_a_later_slice() {
+    let fast = SessionConfigOption::new(
+        "fast",
+        "Fast mode",
+        SessionConfigKind::Boolean(SessionConfigBoolean::new(true)),
+    );
+    assert!(config_options(&[fast]).is_empty(), "no values to name");
+}
 
 #[test]
 fn an_output_that_names_its_text_once_keeps_one_copy() {

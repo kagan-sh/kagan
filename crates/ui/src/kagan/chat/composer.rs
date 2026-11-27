@@ -11,7 +11,7 @@ use gpui_kit::{
     div, px,
 };
 use kg_core::Workspace;
-use kg_domain::{PendingInteraction, ThreadStatus};
+use kg_domain::{Op, PendingInteraction, ThreadOp, ThreadStatus};
 
 use super::ChatView;
 use super::card;
@@ -23,13 +23,50 @@ use crate::ui_registry::Facts;
 
 pub(super) const COLUMN: f32 = 760.;
 
+impl ChatView {
+    // One of the agent's modes or options, from the chip's menu. A refusal stays with the box.
+    pub(super) fn choose(&mut self, option: String, value: String, cx: &mut Context<Self>) {
+        let name = self
+            .transcript
+            .options
+            .iter()
+            .find(|known| known.id == option)
+            .map_or_else(|| option.clone(), |known| known.name.clone());
+        let choose = Workspace::dispatch(
+            Op::Thread(ThreadOp::Option {
+                id: self.thread.clone(),
+                option,
+                value,
+            }),
+            cx,
+        );
+        cx.spawn(async move |this, cx| {
+            let Err(error) = choose.await else {
+                return;
+            };
+            _ = this.update(cx, |this, cx| {
+                this.notice = Some(format!("Could not change {name}: {error}").into());
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+}
+
 const ARCHIVED: &str = "This thread is archived";
 
-struct Shown {
+pub(super) struct Shown {
     turn: Turn,
     ready: bool,
     focused: bool,
     archived: bool,
+}
+
+impl Shown {
+    // The chip belongs to a running agent in a thread that still takes changes.
+    pub(super) fn chip(&self) -> bool {
+        self.turn.running() && !self.archived
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -216,6 +253,7 @@ fn toolbar(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> An
         .gap_2()
         .px_2()
         .pb_2()
+        .children(super::mode::chip(view, shown, cx))
         .children(crate::kagan::header::prompt(cx))
         .children(menu)
         .child(div().flex_1())
