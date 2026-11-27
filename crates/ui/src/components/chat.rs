@@ -75,7 +75,13 @@ impl ComponentMaterializer for ThreadChat {
             });
             Ok(div().size_full().min_h_0().child(chat).into_any_element())
         })?;
-        request.finish(div().size_full().min_h_0().child(body))
+        // The full chat fills its panel; a card keeps its two lines' own height.
+        let frame = if compact {
+            div()
+        } else {
+            div().size_full().min_h_0()
+        };
+        request.finish(frame.child(body))
     }
 }
 
