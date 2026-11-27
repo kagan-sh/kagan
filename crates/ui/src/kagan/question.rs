@@ -245,10 +245,12 @@ fn body(
                     }
                 })
                 .child({
-                    let mut button = Button::new(SharedString::from(option.id.clone()))
-                        .small()
-                        .tab_stop(false)
-                        .label(option.label.clone());
+                    let mut button = Button::new(SharedString::from(
+                        question.element("answer-button", &option.id),
+                    ))
+                    .small()
+                    .tab_stop(false)
+                    .label(option.label.clone());
                     button = match option.role {
                         Some(OptionRole::Destructive) => button.danger(),
                         Some(OptionRole::Primary) => button.primary(),

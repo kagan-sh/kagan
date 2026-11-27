@@ -7,8 +7,8 @@ use kg_domain::{
 };
 
 use super::{
-    click, disabled, focused_of, hint_of, label, open, pending, row_top, run_shell, shows,
-    shows_within, thread_record, value_of, wait_until,
+    click, disabled, focused_of, hint_of, label, open, pending, row_top, run_shell, set_preference,
+    shows, shows_within, thread_record, value_of, wait_until,
 };
 use crate::tests::sidebar::layout::span;
 
@@ -212,7 +212,7 @@ fn an_acp_thread_shows_its_transcript_and_prompt_box(cx: &mut TestAppContext) {
     assert!(!shows(cx, window, "chat-send"));
     assert_eq!(
         hint_of(cx, window, "chat-prompt").as_deref(),
-        Some("The program is not running. Start it again to send."),
+        Some("OpenCode is not running. Start it again to send."),
         "an empty stopped box says how it ended where the draft would be"
     );
     assert!(
@@ -387,6 +387,57 @@ fn a_failure_that_ends_the_turn_reads_expanded(cx: &mut TestAppContext) {
         value_of(cx, window, "chat-work-2").as_deref() == Some("expanded · failed")
     });
     assert!(shows(cx, window, "chat-work-body-2"));
+}
+
+#[gpui_kit::test]
+fn an_old_failed_turn_folds_once_the_next_one_ends(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![
+            EventKind::TurnStarted,
+            tool(
+                "t1",
+                ToolKind::Execute,
+                ToolStatus::Failed,
+                "Run the tests",
+                Some(serde_json::json!({"command": "cargo t"})),
+                Some("one failure"),
+            ),
+            EventKind::TurnEnded {
+                outcome: kg_domain::TurnOutcome::Failed,
+                error: None,
+            },
+            EventKind::TurnStarted,
+            tool(
+                "t2",
+                ToolKind::Read,
+                ToolStatus::Completed,
+                "Read file",
+                Some(serde_json::json!({"file_path": "a.ts"})),
+                Some("one line"),
+            ),
+            EventKind::Message {
+                role: Role::Agent,
+                text: "Done.".into(),
+                message_id: None,
+                attachments: Vec::new(),
+            },
+            EventKind::TurnEnded {
+                outcome: kg_domain::TurnOutcome::Completed,
+                error: None,
+            },
+        ],
+    );
+    wait_until(cx, |cx| shows(cx, window, "chat-turn-7"));
+    assert_eq!(
+        value_of(cx, window, "chat-turn-3").as_deref(),
+        Some("collapsed · failed"),
+        "a failure folds once a later turn is the last row"
+    );
+    assert_eq!(
+        value_of(cx, window, "chat-turn-7").as_deref(),
+        Some("collapsed · done")
+    );
 }
 
 #[gpui_kit::test]
@@ -851,23 +902,25 @@ fn a_pending_permission_takes_the_place_of_the_box_and_gives_it_back(cx: &mut Te
     })
     .unwrap();
     wait_until(cx, |cx| shows(cx, window, "chat-prompt"));
+    click(cx, window, "chat-prompt");
+    wait_until(cx, |cx| focused_of(cx, window, "chat-prompt") == Some(true));
 
-    let asked = cx.update(|cx| {
-        kg_core::Workspace::dispatch(
-            kg_domain::Op::Thread(kg_domain::ThreadOp::Ask {
-                id: id.clone(),
-                title: "OpenCode wants to run a command".into(),
-                options: permission_options(),
-                fields: None,
-            }),
+    let _first = cx.update(|cx| {
+        kg_core::Workspace::ask_for_person(
+            Some(&id),
+            None,
+            "OpenCode wants to run a command".into(),
+            permission_options(),
             cx,
         )
     });
-    let kg_domain::OpResult::Text(asked) = cx.foreground_executor().block_test(asked).unwrap()
-    else {
-        panic!("ask");
-    };
-    let card = format!("chat-approval-{asked}");
+    cx.run_until_parked();
+    let asked = pending(cx, &id)
+        .first()
+        .expect("the question waits")
+        .id
+        .clone();
+    let card = format!("chat-approval-{}", asked.0);
     wait_until(cx, |cx| shows(cx, window, &card));
     assert!(!shows(cx, window, "chat-prompt"), "the box steps aside");
     assert!(
@@ -893,9 +946,14 @@ fn a_pending_permission_takes_the_place_of_the_box_and_gives_it_back(cx: &mut Te
         left(cx, &deny) < left(cx, &allow),
         "the option that grants nothing comes first"
     );
+    assert_eq!(
+        focused_of(cx, window, &deny),
+        Some(false),
+        "the card does not take the keyboard from the draft"
+    );
 
-    // A new question opens the Questions pane over the chat, so the person answers there.
-    click(cx, window, &format!("answer-{asked}-allow-once"));
+    // The card answers through its own button, not the Questions pane's copy.
+    click(cx, window, &allow);
     wait_until(cx, |cx| pending(cx, &id).is_empty());
     wait_until(cx, |cx| shows(cx, window, "chat-prompt"));
     assert_eq!(
@@ -908,6 +966,116 @@ fn a_pending_permission_takes_the_place_of_the_box_and_gives_it_back(cx: &mut Te
         Some(true),
         "the box takes the focus back"
     );
+}
+
+#[gpui_kit::test]
+fn the_approval_card_denies_from_its_own_button(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let id = seed_thread(
+        data.path(),
+        vec![tool(
+            "t1",
+            ToolKind::Execute,
+            ToolStatus::Pending,
+            "Run the tests",
+            Some(serde_json::json!({"command": "cargo t"})),
+            None,
+        )],
+    );
+    reveal(cx, window, &id);
+    wait_until(cx, |cx| shows(cx, window, "chat-prompt"));
+    let _first = cx.update(|cx| {
+        kg_core::Workspace::ask_for_person(
+            Some(&id),
+            None,
+            "OpenCode wants to run a command".into(),
+            permission_options(),
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    let asked = pending(cx, &id)
+        .first()
+        .expect("the question waits")
+        .id
+        .clone();
+    let deny = format!("answer-chat-{}-reject-once", asked.0);
+    wait_until(cx, |cx| shows(cx, window, &deny));
+    click(cx, window, &deny);
+    wait_until(cx, |cx| pending(cx, &id).is_empty());
+    wait_until(cx, |cx| shows(cx, window, "chat-prompt"));
+    assert!(
+        !shows(cx, window, &format!("chat-approval-{}", asked.0)),
+        "the card goes with the question it answered"
+    );
+}
+
+#[gpui_kit::test]
+fn escape_leaves_a_card_it_cannot_cancel(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let id = seed_thread(data.path(), Vec::new());
+    reveal(cx, window, &id);
+    let _first = cx.update(|cx| {
+        kg_core::Workspace::ask_for_person(
+            Some(&id),
+            None,
+            "OpenCode wants to run a command".into(),
+            permission_options(),
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    let asked = pending(cx, &id)
+        .first()
+        .expect("the question waits")
+        .id
+        .clone();
+    let card = format!("chat-approval-{}", asked.0);
+    wait_until(cx, |cx| shows(cx, window, &card));
+    cx.dispatch_action(window, crate::kagan::CancelTurn);
+    cx.run_until_parked();
+    assert!(
+        shows(cx, window, &card),
+        "with no reply to cancel, Escape answers nothing"
+    );
+    assert!(
+        !pending(cx, &id).is_empty(),
+        "the question still waits for the person"
+    );
+}
+
+#[gpui_kit::test]
+fn a_chats_permission_does_not_open_the_questions_pane(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    set_preference(cx, "main.right-sidebar", serde_json::json!(false));
+    let id = seed_thread(data.path(), Vec::new());
+    reveal(cx, window, &id);
+    wait_until(cx, |cx| !shows(cx, window, "right-tab-bar"));
+    let _first = cx.update(|cx| {
+        kg_core::Workspace::ask_for_person(
+            Some(&id),
+            None,
+            "OpenCode wants to run a command".into(),
+            permission_options(),
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    let asked = pending(cx, &id)
+        .first()
+        .expect("the question waits")
+        .id
+        .clone();
+    wait_until(cx, |cx| {
+        shows(cx, window, &format!("chat-approval-{}", asked.0))
+    });
+    // The card in the box's place is the one thing to do; the pane still lists it when opened.
+    assert!(
+        !cx.update(|cx| kagan.read(cx).right_open()),
+        "the permission does not open the pane"
+    );
+    assert!(!shows(cx, window, "needs-you"));
+    assert!(!shows(cx, window, &format!("question-{}", asked.0)));
 }
 
 #[gpui_kit::test]
@@ -1158,7 +1326,7 @@ fn a_chat_that_exited_says_it_once_and_offers_start_again(cx: &mut TestAppContex
     );
     wait_until(cx, |cx| {
         hint_of(cx, window, "chat-prompt").as_deref()
-            == Some("Exited with code 0. Start it again to send.")
+            == Some("OpenCode stopped (exit 0). Start it again to send.")
     });
     assert!(shows(cx, window, "chat-start-again"));
     assert!(!shows(cx, window, "chat-send"), "one action, not two");
@@ -1182,7 +1350,7 @@ fn a_stopped_chat_takes_no_typing_in_its_prompt(cx: &mut TestAppContext) {
     );
     wait_until(cx, |cx| {
         hint_of(cx, window, "chat-prompt")
-            .is_some_and(|hint| hint.starts_with("Exited with code 0."))
+            .is_some_and(|hint| hint.starts_with("OpenCode stopped (exit 0)."))
     });
     assert_eq!(disabled(cx, window, "chat-prompt"), Some(true));
     click(cx, window, "chat-prompt");
@@ -1300,7 +1468,7 @@ fn a_stopped_box_with_a_draft_shows_how_it_ended_under_it(cx: &mut TestAppContex
     wait_until(cx, |cx| shows(cx, window, "chat-stopped"));
     assert_eq!(
         value_of(cx, window, "chat-stopped").as_deref(),
-        Some("Exited with code 1."),
+        Some("OpenCode stopped (exit 1)."),
         "the draft hides the hint, so the line keeps the news"
     );
 }
@@ -1342,6 +1510,34 @@ fn the_plan_card_is_one_line_until_it_is_opened(cx: &mut TestAppContext) {
     assert_eq!(
         value_of(cx, window, "chat-card-plan").as_deref(),
         Some("expanded, 1 of 2 done")
+    );
+}
+
+#[gpui_kit::test]
+fn the_plan_card_draws_its_title_on_one_row(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = show_chat_with(
+        cx,
+        vec![EventKind::Plan {
+            entries: vec![kg_domain::PlanEntry {
+                text: "Fix it".into(),
+                status: kg_domain::PlanStatus::Pending,
+            }],
+        }],
+    );
+    wait_until(cx, |cx| shows(cx, window, "chat-card-plan"));
+    let bounds = |cx: &mut TestAppContext, id: &str| {
+        cx.update_window(window, |_, window, _| {
+            crate::ui_registry::find(window, &ElementId::Name(id.into()))
+                .map(|element| element.bounds)
+        })
+        .unwrap()
+        .unwrap_or_else(|| panic!("{id}"))
+    };
+    let card = bounds(cx, "chat-card-plan");
+    let title = bounds(cx, "chat-card-plan-title");
+    assert!(
+        title.origin.y >= card.origin.y && title.bottom() <= card.bottom(),
+        "the title sits in the card's one row: {title:?} against {card:?}"
     );
 }
 

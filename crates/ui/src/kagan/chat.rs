@@ -9,19 +9,15 @@ use gpui_kit::component::text::TextView;
 use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, ClipboardItem, Context, ElementId, FocusHandle, Focusable,
+    AnyElement, App, AppContext as _, ClipboardItem, Context, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString, Styled as _,
     Subscription, Window, div, px, relative,
 };
 use kg_core::{Workspace, WorkspaceEvent};
-use kg_domain::{
-    Event, Op, PendingInteraction, PendingInteractionId, Role as Speaker, ThreadId, ThreadOp,
-    Timestamp, program_label,
-};
+use kg_domain::{Event, Op, Role as Speaker, ThreadId, ThreadOp, Timestamp, program_label};
 
 use crate::kagan::attention;
 use crate::kagan::controls::control;
-use crate::kagan::question;
 use crate::kagan::{CancelTurn, Kagan};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -55,7 +51,7 @@ pub(crate) struct ChatView {
     sending: Option<gpui_kit::Task<()>>,
     cards: above::Cards,
     children: Vec<(ThreadId, SharedString)>,
-    asking: Option<PendingInteractionId>,
+    asking: bool,
     load_task: Option<gpui_kit::Task<()>>,
     _events: Subscription,
     _prompt: Subscription,
@@ -126,7 +122,7 @@ impl ChatView {
             sending: None,
             cards: above::Cards::default(),
             children: Vec::new(),
-            asking: None,
+            asking: false,
             load_task: None,
             _events: events,
             _prompt: prompt_watch,
@@ -384,98 +380,6 @@ impl ChatView {
                 |thread| program_label(&thread.read(cx).record().provider).into(),
             )
     }
-
-    // The branch a worktree thread writes on; a personal thread has no branch to name.
-    fn branch(&self, cx: &App) -> Option<SharedString> {
-        let workspace = Workspace::global(cx);
-        let worktree = workspace
-            .read(cx)
-            .thread(&self.thread)
-            .is_some_and(|thread| thread.read(cx).record().environment_id.is_some());
-        worktree.then(|| self.folder(cx)).flatten()
-    }
-
-    // Where the run writes: the worktree's branch, or the project's folder name.
-    fn folder(&self, cx: &App) -> Option<SharedString> {
-        let workspace = Workspace::global(cx);
-        let workspace = workspace.read(cx);
-        let thread = workspace.thread(&self.thread)?;
-        let record = thread.read(cx).record();
-        if let Some(id) = record.environment_id.as_ref() {
-            let environment = workspace.environment(id)?;
-            let environment = environment.read(cx).record();
-            let name = environment.branch.clone().or_else(|| {
-                environment
-                    .path
-                    .file_name()
-                    .map(|name| name.to_string_lossy().into_owned())
-            })?;
-            return Some(name.into());
-        }
-        let project = workspace.project(&record.project_id)?;
-        let path = &project.read(cx).record().path;
-        path.file_name()
-            .map(|name| SharedString::from(name.to_string_lossy().into_owned()))
-    }
-
-    fn empty_text(&self, cx: &App) -> String {
-        let who = self.who(cx);
-        if matches!(
-            self.thread_state(cx),
-            Some((kg_domain::ThreadStatus::Starting, _))
-        ) {
-            return format!("Starting {who}…");
-        }
-        self.folder(cx).map_or_else(
-            || format!("{who} is ready."),
-            |folder| format!("{who} is ready in {folder}."),
-        )
-    }
-
-    // The permission this thread waits on, and how many wait behind it, oldest first.
-    fn asked(&self, cx: &App) -> Option<(PendingInteraction, usize)> {
-        let attention = attention::global(cx);
-        let mut waiting = attention.read(cx).questions.iter().filter(|asked| {
-            asked.thread_id == self.thread && asked.fields.as_ref().is_none_or(Vec::is_empty)
-        });
-        let first = waiting.next()?.clone();
-        Some((first, 1 + waiting.count()))
-    }
-
-    // A card never takes the keyboard while the person types; it gives the box back its focus
-    // when it goes, because the box is where the next thing happens.
-    // The card opens on the option that grants nothing, so Enter never approves.
-    fn card_shown(
-        &mut self,
-        asked: &PendingInteraction,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.asking.as_ref() == Some(&asked.id) {
-            return;
-        }
-        self.asking = Some(asked.id.clone());
-        // An embed never takes the keyboard: the person may be typing in another chat.
-        if self.place == embed::Place::Embedded {
-            return;
-        }
-        let Some(option) = question::opening_option(&asked.options, true) else {
-            return;
-        };
-        let key = question::answer_focus(&format!("chat-{}", asked.id.0), &option.id);
-        let focus = crate::kagan::tab_stop(window, cx, ElementId::Name(key.into()));
-        window.focus(&focus, cx);
-    }
-
-    fn question_left(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.asked(cx).is_none() && self.asking.take().is_some() {
-            if self.place == embed::Place::Embedded {
-                return;
-            }
-            let focus = self.prompt.read(cx).focus_handle(cx);
-            cx.defer_in(window, move |_, window, cx| window.focus(&focus, cx));
-        }
-    }
 }
 
 impl Focusable for ChatView {
@@ -525,7 +429,7 @@ impl ChatView {
         let scroller = self.scroller.clone();
         let muted = cx.theme().muted_foreground;
         let empty = self.transcript.rows.is_empty();
-        let empty_text = self.empty_text(cx);
+        let empty_text = composer::empty_text(self, cx);
         let list = MessageScroller::new("chat-rows", scroller, move |index, window, cx| {
             row_at(&weak, index, window, cx)
         })
@@ -595,48 +499,7 @@ fn row_at(
             this.answering(cx) && index + 1 == this.transcript.rows.len()
         })
         .unwrap_or(false);
-    match &row.kind {
-        part::RowKind::Message { role, text, at, .. } => {
-            let who = weak
-                .read_with(cx, ChatView::who)
-                .unwrap_or_else(|_| "Agent".into());
-            message_view(
-                row.id,
-                *role,
-                text,
-                *at,
-                if *role == Speaker::User { "You" } else { &who },
-                cx,
-            )
-        }
-        part::RowKind::Thought(thought) => {
-            work::thought_row(&row, thought, live, open, weak, window, cx)
-        }
-        part::RowKind::Work(tool) => work::work_row(&row, tool, false, open, weak, window, cx),
-        part::RowKind::Bundle(members) => work::bundle_row(&row, members, open, weak, window, cx),
-        part::RowKind::Notice(text) => notice_view(row.id, text, cx),
-        part::RowKind::Turn(turn) => work::turn_row(&row, turn, open, weak, window, cx),
-    }
-}
-
-impl ChatView {
-    fn approval_detail(
-        &self,
-        id: &kg_domain::PendingInteractionId,
-        cx: &App,
-    ) -> (Option<String>, bool) {
-        let Some(tool) = self.transcript.approval(id) else {
-            return (None, false);
-        };
-        let environment = Workspace::global(cx)
-            .read(cx)
-            .thread(&self.thread)
-            .is_some_and(|thread| thread.read(cx).record().environment_id.is_some());
-        (
-            kind::title_of(tool),
-            card::runs_in_worktree(tool.call.kind, environment),
-        )
-    }
+    work::row_element(&row, open, live, false, weak, window, cx)
 }
 
 fn working_row(cx: &mut App) -> AnyElement {

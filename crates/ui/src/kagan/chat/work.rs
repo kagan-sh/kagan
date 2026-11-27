@@ -23,6 +23,38 @@ pub(super) fn named(part: &'static str, id: impl std::fmt::Display) -> gpui_kit:
     gpui_kit::ElementId::Name(format!("chat-{part}-{id}").into())
 }
 
+// One match for a row, wherever it is drawn: the transcript's top level, or inside a fold.
+pub(super) fn row_element(
+    row: &Row,
+    open: bool,
+    live: bool,
+    indented: bool,
+    weak: &WeakEntity<ChatView>,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    match &row.kind {
+        RowKind::Message { role, text, at, .. } => {
+            let who = weak
+                .read_with(cx, ChatView::who)
+                .unwrap_or_else(|_| "Agent".into());
+            super::message_view(
+                row.id,
+                *role,
+                text,
+                *at,
+                if *role == Role::User { "You" } else { &who },
+                cx,
+            )
+        }
+        RowKind::Thought(thought) => thought_row(row, thought, live, open, weak, window, cx),
+        RowKind::Work(tool) => work_row(row, tool, indented, open, weak, window, cx),
+        RowKind::Bundle(members) => bundle_row(row, members, open, weak, window, cx),
+        RowKind::Notice(text) => super::notice_view(row.id, text, cx),
+        RowKind::Turn(turn) => turn_row(row, turn, open, weak, window, cx),
+    }
+}
+
 pub(super) fn work_row(
     row: &Row,
     tool: &ToolRow,
@@ -268,7 +300,7 @@ pub(super) fn turn_row(
         Face {
             id: named("turn", row.id),
             key: row.key(),
-            icon: IconName::Clock,
+            icon: IconName::Footprints,
             label,
             title: None,
             title_mono: false,
@@ -301,7 +333,15 @@ fn members_under(
 ) -> AnyElement {
     let children: Vec<AnyElement> = members
         .iter()
-        .filter_map(|member| member_row(member, failed_turn, weak, window, cx))
+        .map(|member| {
+            let chosen = weak
+                .read_with(cx, |this, _| this.transcript.member_choice(member.key()))
+                .ok()
+                .flatten();
+            let failed = matches!(&member.kind, RowKind::Work(tool) if tool.failed());
+            let open = chosen.unwrap_or(failed_turn && failed);
+            row_element(member, open, false, true, weak, window, cx)
+        })
         .collect();
     div()
         .ml(px(22.))
@@ -310,41 +350,6 @@ fn members_under(
         .border_color(cx.theme().border)
         .children(children)
         .into_any_element()
-}
-
-fn member_row(
-    member: &Row,
-    failed_turn: bool,
-    weak: &WeakEntity<ChatView>,
-    window: &mut Window,
-    cx: &mut App,
-) -> Option<AnyElement> {
-    let chosen = weak
-        .read_with(cx, |this, _| this.transcript.member_choice(member.key()))
-        .ok()
-        .flatten();
-    let failed = matches!(&member.kind, RowKind::Work(tool) if tool.failed());
-    let open = chosen.unwrap_or(failed_turn && failed);
-    Some(match &member.kind {
-        RowKind::Work(tool) => work_row(member, tool, true, open, weak, window, cx),
-        RowKind::Bundle(members) => bundle_row(member, members, open, weak, window, cx),
-        RowKind::Thought(thought) => thought_row(member, thought, false, open, weak, window, cx),
-        RowKind::Notice(text) => super::notice_view(member.id, text, cx),
-        RowKind::Message { role, text, at, .. } => {
-            let who = weak
-                .read_with(cx, ChatView::who)
-                .unwrap_or_else(|_| "Agent".into());
-            super::message_view(
-                member.id,
-                *role,
-                text,
-                *at,
-                if *role == Role::User { "You" } else { &who },
-                cx,
-            )
-        }
-        RowKind::Turn(_) => return None,
-    })
 }
 
 struct Face {

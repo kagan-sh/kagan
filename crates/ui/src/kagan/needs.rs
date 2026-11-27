@@ -11,7 +11,7 @@ use kg_domain::{InteractionOption, PendingInteractionId};
 
 use super::changes::line;
 use super::screen::{Activation, Side};
-use super::{Kagan, question};
+use super::{Kagan, Shown, question};
 
 impl Kagan {
     pub(super) fn render_needs(
@@ -105,11 +105,25 @@ impl Kagan {
     }
 
     pub(super) fn announce_questions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // A chat on screen draws its permission where the box was, so that card is the one place
+        // to answer it: the pane still lists it, but does not open for it.
+        let in_place: BTreeSet<PendingInteractionId> = match self.screen.shown() {
+            Shown::Chat(view) => self
+                .questions
+                .read(cx)
+                .questions
+                .iter()
+                .filter(|asked| asked.thread_id == *view.read(cx).thread())
+                .map(|asked| asked.id.clone())
+                .collect(),
+            _ => BTreeSet::new(),
+        };
         let person: BTreeSet<PendingInteractionId> = {
             let workspace = Workspace::global(cx).read(cx);
             self.waiting(cx)
                 .filter(|(id, _, _)| workspace.needs_a_person(id))
                 .map(|(id, _, _)| id.clone())
+                .filter(|id| !in_place.contains(id))
                 .collect()
         };
         self.announced.retain(|id| person.contains(id));

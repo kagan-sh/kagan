@@ -15,6 +15,11 @@ impl Workspace {
     pub fn end_line(&self, id: &ThreadId) -> Option<String> {
         self.end(id).map(crate::end::End::line)
     }
+    /// The chat's own words for how the run ended, when a Stop, an exit or a signal ended it.
+    #[must_use]
+    pub fn stopped_line(&self, id: &ThreadId) -> Option<String> {
+        self.end(id)?.stopped_line()
+    }
     #[must_use]
     pub fn screen_note(&self, id: &ThreadId) -> Option<&'static str> {
         self.runs.get(id)?.loss.map(crate::end::Loss::note)

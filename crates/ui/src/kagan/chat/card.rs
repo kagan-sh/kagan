@@ -4,16 +4,67 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, WeakEntity, Window, div, px,
+    AnyElement, App, Context, Focusable as _, InteractiveElement as _, IntoElement,
+    ParentElement as _, StatefulInteractiveElement as _, Styled as _, WeakEntity, Window, div, px,
 };
+use kg_core::Workspace;
+use kg_domain::PendingInteraction;
 
+use crate::kagan::attention;
 use crate::kagan::chat::ChatView;
+use crate::kagan::chat::kind;
 use crate::kagan::chat::work;
 use crate::kagan::question;
 use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
+
+impl ChatView {
+    // The permission this thread waits on, and how many wait behind it, oldest first.
+    pub(super) fn asked(&self, cx: &App) -> Option<(PendingInteraction, usize)> {
+        let attention = attention::global(cx);
+        let mut waiting = attention.read(cx).questions.iter().filter(|asked| {
+            asked.thread_id == self.thread && asked.fields.as_ref().is_none_or(Vec::is_empty)
+        });
+        let first = waiting.next()?.clone();
+        Some((first, 1 + waiting.count()))
+    }
+
+    // A card never takes the keyboard from the draft; it gives the box back its focus when it
+    // goes, because the box is where the next thing happens.
+    pub(super) fn card_shown(&mut self) {
+        self.asking = true;
+    }
+
+    pub(super) fn question_left(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.asked(cx).is_none() && std::mem::take(&mut self.asking) {
+            // An embed never takes the keyboard: the person may be typing in another chat.
+            if self.place != super::Place::Center {
+                return;
+            }
+            let focus = self.prompt.read(cx).focus_handle(cx);
+            cx.defer_in(window, move |_, window, cx| window.focus(&focus, cx));
+        }
+    }
+
+    pub(super) fn approval_detail(
+        &self,
+        id: &kg_domain::PendingInteractionId,
+        cx: &App,
+    ) -> (Option<String>, bool) {
+        let Some(tool) = self.transcript.approval(id) else {
+            return (None, false);
+        };
+        let environment = Workspace::global(cx)
+            .read(cx)
+            .thread(&self.thread)
+            .is_some_and(|thread| thread.read(cx).record().environment_id.is_some());
+        (
+            kind::title_of(tool),
+            runs_in_worktree(tool.call.kind, environment),
+        )
+    }
+}
 
 pub(super) fn approval_card(
     asked: &kg_domain::PendingInteraction,
