@@ -1,20 +1,17 @@
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
+use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Disableable as _, Icon, Placement, Sizable as _, h_flex, v_flex};
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, ElementId, Focusable as _, FontWeight, InteractiveElement as _,
-    IntoElement, ParentElement as _, Role, SharedString, StatefulInteractiveElement as _,
-    Styled as _, WeakEntity, Window, div, px,
+    AnyElement, App, Context, Focusable as _, InteractiveElement as _, IntoElement,
+    ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
+    div, px,
 };
 use kg_core::Workspace;
-use kg_domain::{
-    ModeRisk, Op, PendingInteraction, ThreadOp, ThreadOption, ThreadOptionValue, ThreadStatus,
-};
+use kg_domain::{Op, PendingInteraction, ThreadOp, ThreadStatus};
 
 use super::ChatView;
 use super::card;
@@ -29,6 +26,12 @@ pub(super) const COLUMN: f32 = 760.;
 impl ChatView {
     // One of the agent's modes or options, from the chip's menu. A refusal stays with the box.
     pub(super) fn choose(&mut self, option: String, value: String, cx: &mut Context<Self>) {
+        let name = self
+            .transcript
+            .options
+            .iter()
+            .find(|known| known.id == option)
+            .map_or_else(|| option.clone(), |known| known.name.clone());
         let choose = Workspace::dispatch(
             Op::Thread(ThreadOp::Option {
                 id: self.thread.clone(),
@@ -42,7 +45,7 @@ impl ChatView {
                 return;
             };
             _ = this.update(cx, |this, cx| {
-                this.notice = Some(format!("Could not change the mode: {error}").into());
+                this.notice = Some(format!("Could not change {name}: {error}").into());
                 cx.notify();
             });
         })
@@ -52,11 +55,18 @@ impl ChatView {
 
 const ARCHIVED: &str = "This thread is archived";
 
-struct Shown {
+pub(super) struct Shown {
     turn: Turn,
     ready: bool,
     focused: bool,
     archived: bool,
+}
+
+impl Shown {
+    // The chip belongs to a running agent in a thread that still takes changes.
+    pub(super) fn chip(&self) -> bool {
+        self.turn.running() && !self.archived
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -102,10 +112,7 @@ pub(super) fn composer(
     let hint = match (shown.archived, shown.turn.running()) {
         (true, _) => ARCHIVED.to_owned(),
         (false, true) => format!("Ask {}…", view.who(cx)),
-        (false, false) => format!(
-            "{} Start it again to send.",
-            crate::kagan::shown::ended_text(&view.thread, cx)
-        ),
+        (false, false) => format!("{} Start it again to send.", end_line(view, cx)),
     };
     let stale = view.prompt.read(cx).presentation().placeholder().as_ref() != hint.as_str();
     if stale {
@@ -116,7 +123,7 @@ pub(super) fn composer(
     let cards = super::above::stack(view, window, cx);
     let place = match view.asked(cx) {
         Some((asked, total)) => {
-            view.card_shown(&asked, window, cx);
+            view.card_shown();
             asked_card(view, asked, total, window, cx)
         }
         None => boxed(view, &shown, &hint, cx),
@@ -173,7 +180,7 @@ fn boxed(view: &mut ChatView, shown: &Shown, hint: &str, cx: &mut Context<ChatVi
         if shown.archived {
             "This thread is archived.".to_owned()
         } else {
-            crate::kagan::shown::ended_text(&view.thread, cx)
+            end_line(view, cx)
         }
     });
     let notice = view.notice.clone();
@@ -199,7 +206,6 @@ fn boxed(view: &mut ChatView, shown: &Shown, hint: &str, cx: &mut Context<ChatVi
         .children(notice.map(|notice| {
             div()
                 .id("chat-notice")
-                .ui_observe_as(Facts::label("Notice", notice.clone()))
                 .px_3()
                 .pb_1()
                 .type_small(cx)
@@ -247,7 +253,7 @@ fn toolbar(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> An
         .gap_2()
         .px_2()
         .pb_2()
-        .children(mode_chip(view, shown, cx))
+        .children(super::mode::chip(view, shown, cx))
         .children(crate::kagan::header::prompt(cx))
         .children(menu)
         .child(div().flex_1())
@@ -388,144 +394,65 @@ fn action(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> Opt
     )
 }
 
-// The agent's own word for the mode it runs in, first in the bar. The menu holds every option the
-// agent offered, each value with the agent's description and a check on the one in force.
-fn mode_chip(view: &ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> Option<AnyElement> {
-    if !shown.turn.running() || shown.archived {
-        return None;
+impl ChatView {
+    // Where the run writes, and the branch a worktree names: a personal thread has a folder only.
+    fn place(&self, cx: &App) -> Option<(SharedString, Option<SharedString>)> {
+        let workspace = Workspace::global(cx);
+        let workspace = workspace.read(cx);
+        let thread = workspace.thread(&self.thread)?;
+        let record = thread.read(cx).record();
+        let Some(id) = record.environment_id.as_ref() else {
+            let project = workspace.project(&record.project_id)?;
+            let path = &project.read(cx).record().path;
+            return Some((
+                path.file_name()?.to_string_lossy().into_owned().into(),
+                None,
+            ));
+        };
+        let environment = workspace.environment(id)?;
+        let environment = environment.read(cx).record();
+        let name = environment.branch.clone().or_else(|| {
+            environment
+                .path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+        })?;
+        Some((name.clone().into(), Some(name.into())))
     }
-    let mode = view
-        .transcript
-        .options
-        .iter()
-        .find(|option| option.is_mode())?;
-    let current = mode.current()?;
-    let risky = ModeRisk::of(&current.value, &current.name);
-    let label = SharedString::from(current.name.clone());
-    let tooltip = match &current.description {
-        Some(description) => format!("Mode: {}. {description}", current.name),
-        None => format!("Mode: {}", current.name),
-    };
-    let mut button = Button::new("chat-mode-button")
-        .small()
-        .label(label.clone())
-        .accessibility_label(tooltip.clone())
-        .tooltip(tooltip)
-        .when(risky, |button| button.icon(IconName::TriangleAlert));
-    button = if risky {
-        button.custom(ButtonCustomVariant::new(cx).foreground(cx.theme().warning))
-    } else {
-        button.ghost()
-    };
-    let options = view.transcript.options.clone();
-    let weak = cx.weak_entity();
-    Some(
-        control(
-            "chat-mode",
-            Facts {
-                value: Some(label.clone()),
-                ..Facts::button(label)
-            },
-            button.dropdown_menu(move |menu, _, cx| options_menu(menu, &options, &weak, cx)),
-        )
-        .into_any_element(),
+
+    // The branch a worktree thread writes on; a personal thread has no branch to name.
+    fn branch(&self, cx: &App) -> Option<SharedString> {
+        self.place(cx).and_then(|(_, branch)| branch)
+    }
+
+    // Where the run writes: the worktree's branch, or the project's folder name.
+    fn folder(&self, cx: &App) -> Option<SharedString> {
+        self.place(cx).map(|(folder, _)| folder)
+    }
+}
+
+pub(super) fn empty_text(view: &ChatView, cx: &App) -> String {
+    let who = view.who(cx);
+    if matches!(view.thread_state(cx), Some((ThreadStatus::Starting, _))) {
+        return format!("Starting {who}…");
+    }
+    view.folder(cx).map_or_else(
+        || format!("{who} is ready."),
+        |folder| format!("{who} is ready in {folder}."),
     )
 }
 
-fn options_menu(
-    menu: PopupMenu,
-    options: &[ThreadOption],
-    weak: &WeakEntity<ChatView>,
-    cx: &App,
-) -> PopupMenu {
-    let mut menu = menu;
-    for (index, option) in options.iter().enumerate() {
-        if index > 0 {
-            menu = menu.separator();
-        }
-        menu = menu.item(group_title(&option.name));
-        for value in &option.values {
-            let chosen = value.value == option.value;
-            let id = format!("chat-mode-{}-{}", option.id, value.value);
-            let weak = weak.clone();
-            let chosen_option = option.id.clone();
-            let chosen_value = value.value.clone();
-            menu = menu.item(
-                value_item(&id, value, chosen, cx).on_click(move |_, _, cx| {
-                    weak.update(cx, |this, cx| {
-                        this.choose(chosen_option.clone(), chosen_value.clone(), cx);
-                    })
-                    .ok();
-                }),
-            );
-        }
+// How the run ended, in the chat's own words: the agent's name says who stopped.
+fn end_line(view: &ChatView, cx: &App) -> String {
+    let who = view.who(cx);
+    let workspace = Workspace::global(cx);
+    let workspace = workspace.read(cx);
+    match workspace.stopped_line(&view.thread) {
+        Some(line) => format!("{who} {line}"),
+        None => workspace
+            .end_line(&view.thread)
+            .unwrap_or_else(|| format!("{who} is not running.")),
     }
-    menu
-}
-
-// What a group is called: the agent's own name for the option, as a line above its values.
-fn group_title(name: &str) -> PopupMenuItem {
-    let name = name.to_owned();
-    let id = format!("chat-mode-{name}");
-    PopupMenuItem::element(move |_, cx| {
-        div()
-            .id(ElementId::Name(id.clone().into()))
-            .ui_observe_as(Facts::label(name.clone(), name.clone()))
-            .type_caption(cx)
-            .text_color(cx.theme().muted_foreground)
-            .child(name.clone())
-    })
-    .disabled(true)
-}
-
-fn value_item(id: &str, value: &ThreadOptionValue, chosen: bool, cx: &App) -> PopupMenuItem {
-    let name = value.name.clone();
-    let risky = ModeRisk::of(&value.value, &value.name);
-    let color = if risky {
-        cx.theme().warning
-    } else {
-        cx.theme().foreground
-    };
-    let description = value.description.clone();
-    let id = id.to_owned();
-    PopupMenuItem::element(move |_, cx| {
-        let muted = cx.theme().muted_foreground;
-        let description = description.clone();
-        div()
-            .id(ElementId::Name(id.clone().into()))
-            .ui_observe_as(Facts {
-                role: Role::MenuItem,
-                selected: Some(chosen),
-                ..Facts::button(name.clone())
-            })
-            .child(
-                h_flex()
-                    .items_center()
-                    .gap_1()
-                    .when(risky, |row| {
-                        row.child(
-                            div()
-                                .id(ElementId::Name(format!("{id}-risk").into()))
-                                .ui_observe_as(Facts::label("Risk", "asks nothing"))
-                                .child(
-                                    Icon::new(IconName::TriangleAlert)
-                                        .xsmall()
-                                        .text_color(color),
-                                ),
-                        )
-                    })
-                    .child(
-                        div()
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(color)
-                            .child(name.clone()),
-                    ),
-            )
-            .when_some(description, |row, description| {
-                row.child(div().type_caption(cx).text_color(muted).child(description))
-            })
-    })
-    .checked(chosen)
 }
 
 // The facts under the box: where the agent writes, and what its context costs. Nothing here

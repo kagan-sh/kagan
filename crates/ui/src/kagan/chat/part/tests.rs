@@ -263,7 +263,7 @@ fn a_failure_that_ends_the_turn_stays_open() {
 }
 
 #[test]
-fn a_failed_turn_stays_open_until_the_person_closes_it() {
+fn a_failed_turn_stays_open_while_it_is_the_last_row() {
     let mut transcript = Transcript::default();
     transcript.absorb(&event(1, EventKind::TurnStarted));
     transcript.absorb(&call(2, "t1", ToolKind::Execute, ToolStatus::Failed, None));
@@ -279,6 +279,23 @@ fn a_failed_turn_stays_open_until_the_person_closes_it() {
     let key = transcript.rows[0].key();
     assert_eq!(transcript.toggle(key, false), Some(0));
     assert!(!transcript.is_open(0, false), "the person's choice wins");
+}
+
+#[test]
+fn a_new_turn_clears_the_outcome_the_last_one_ended_with() {
+    let mut transcript = Transcript::default();
+    transcript.absorb(&event(1, EventKind::TurnStarted));
+    transcript.absorb(&call(2, "t1", ToolKind::Execute, ToolStatus::Failed, None));
+    transcript.absorb(&event(
+        3,
+        EventKind::TurnEnded {
+            outcome: TurnOutcome::Failed,
+            error: None,
+        },
+    ));
+    assert_eq!(transcript.last_outcome, Some(TurnOutcome::Failed));
+    transcript.absorb(&event(4, EventKind::TurnStarted));
+    assert_eq!(transcript.last_outcome, None, "the new turn starts clean");
 }
 
 #[test]
