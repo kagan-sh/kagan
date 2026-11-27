@@ -153,6 +153,7 @@ fn card(
                     hint: None,
                 })
                 .h(px(control_height(cx)))
+                .flex()
                 .gap_2()
                 .px_2()
                 .items_center()
@@ -164,7 +165,13 @@ fn card(
                     muted
                 })
                 .child(Icon::new(head.icon).xsmall().text_color(muted))
-                .child(div().type_small(cx).child(head.name))
+                .child(
+                    div()
+                        .id(ElementId::Name(format!("{}-title", head.id).into()))
+                        .ui_container()
+                        .type_small(cx)
+                        .child(head.name),
+                )
                 .child(div().flex_1())
                 .child(div().type_caption(cx).text_color(muted).child(head.detail)),
         )

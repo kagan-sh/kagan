@@ -217,7 +217,8 @@ impl Transcript {
     }
 
     // A finished turn folds the rows before its answer into one row, so the answer stays in view.
-    // A failed turn folds the same rows but stays open; a turn with no work draws no row.
+    // A failed turn folds the same rows and stays open while it is the last row; a turn with no
+    // work draws no row.
     fn turn_ended(
         &mut self,
         started: u64,
@@ -463,7 +464,7 @@ impl Transcript {
             RowKind::Work(tool) => {
                 last && ((answering && tool.live_body()) || (failed && tool.failed()))
             }
-            RowKind::Turn(turn) => turn.outcome == TurnOutcome::Failed,
+            RowKind::Turn(turn) => last && turn.outcome == TurnOutcome::Failed,
             _ => false,
         }
     }
@@ -489,16 +490,18 @@ impl Transcript {
     }
 
     pub(super) fn toggle(&mut self, key: RowKey, answering: bool) -> Option<usize> {
-        let (top, member) = self.place(key)?;
-        let open = match member {
-            Some(_) => self.open.get(&key).copied().unwrap_or(false),
-            None => self.is_open(top, answering),
+        let top = self.place(key)?;
+        let open = if self.rows.get(top)?.key() == key {
+            self.is_open(top, answering)
+        } else {
+            self.open.get(&key).copied().unwrap_or(false)
         };
         self.open.insert(key, !open);
         Some(top)
     }
 
-    fn place(&self, key: RowKey) -> Option<(usize, Option<usize>)> {
+    // The top row that holds `key`: the row itself, or the fold it sits in.
+    fn place(&self, key: RowKey) -> Option<usize> {
         fn holds(rows: &[Row], key: RowKey) -> bool {
             rows.iter().any(|row| {
                 row.key() == key
@@ -511,11 +514,11 @@ impl Transcript {
         }
         self.rows.iter().enumerate().find_map(|(top, row)| {
             if row.key() == key {
-                return Some((top, None));
+                return Some(top);
             }
             match &row.kind {
-                RowKind::Bundle(members) => holds(members, key).then_some((top, Some(0))),
-                RowKind::Turn(turn) => holds(&turn.members, key).then_some((top, Some(0))),
+                RowKind::Bundle(members) => holds(members, key).then_some(top),
+                RowKind::Turn(turn) => holds(&turn.members, key).then_some(top),
                 _ => None,
             }
         })

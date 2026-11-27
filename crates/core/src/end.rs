@@ -59,6 +59,16 @@ impl End {
         }
     }
 
+    // A chat names the agent that stopped, so its line says only what happened.
+    pub(crate) fn stopped_line(&self) -> Option<String> {
+        match self {
+            Self::Stopped => Some("stopped.".into()),
+            Self::Exited(code) => Some(format!("stopped (exit {code}).")),
+            Self::Signal(signal) => Some(format!("stopped (signal {signal}).")),
+            Self::Quit | Self::Starting | Self::Failed(_) => None,
+        }
+    }
+
     pub(crate) fn shows_mark(&self) -> bool {
         matches!(self, Self::Stopped | Self::Exited(_))
     }

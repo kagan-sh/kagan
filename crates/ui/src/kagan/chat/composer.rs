@@ -7,7 +7,8 @@ use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Disableable as _, Icon, Placement, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Context, Focusable as _, InteractiveElement as _, IntoElement,
-    ParentElement as _, Role, StatefulInteractiveElement as _, Styled as _, Window, div, px,
+    ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
+    div, px,
 };
 use kg_core::Workspace;
 use kg_domain::{PendingInteraction, ThreadStatus};
@@ -74,10 +75,7 @@ pub(super) fn composer(
     let hint = match (shown.archived, shown.turn.running()) {
         (true, _) => ARCHIVED.to_owned(),
         (false, true) => format!("Ask {}…", view.who(cx)),
-        (false, false) => format!(
-            "{} Start it again to send.",
-            crate::kagan::shown::ended_text(&view.thread, cx)
-        ),
+        (false, false) => format!("{} Start it again to send.", end_line(view, cx)),
     };
     let stale = view.prompt.read(cx).presentation().placeholder().as_ref() != hint.as_str();
     if stale {
@@ -88,7 +86,7 @@ pub(super) fn composer(
     let cards = super::above::stack(view, window, cx);
     let place = match view.asked(cx) {
         Some((asked, total)) => {
-            view.card_shown(&asked, window, cx);
+            view.card_shown();
             asked_card(view, asked, total, window, cx)
         }
         None => boxed(view, &shown, &hint, cx),
@@ -145,7 +143,7 @@ fn boxed(view: &mut ChatView, shown: &Shown, hint: &str, cx: &mut Context<ChatVi
         if shown.archived {
             "This thread is archived.".to_owned()
         } else {
-            crate::kagan::shown::ended_text(&view.thread, cx)
+            end_line(view, cx)
         }
     });
     let notice = view.notice.clone();
@@ -356,6 +354,67 @@ fn action(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> Opt
         )
         .into_any_element(),
     )
+}
+
+impl ChatView {
+    // Where the run writes, and the branch a worktree names: a personal thread has a folder only.
+    fn place(&self, cx: &App) -> Option<(SharedString, Option<SharedString>)> {
+        let workspace = Workspace::global(cx);
+        let workspace = workspace.read(cx);
+        let thread = workspace.thread(&self.thread)?;
+        let record = thread.read(cx).record();
+        let Some(id) = record.environment_id.as_ref() else {
+            let project = workspace.project(&record.project_id)?;
+            let path = &project.read(cx).record().path;
+            return Some((
+                path.file_name()?.to_string_lossy().into_owned().into(),
+                None,
+            ));
+        };
+        let environment = workspace.environment(id)?;
+        let environment = environment.read(cx).record();
+        let name = environment.branch.clone().or_else(|| {
+            environment
+                .path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+        })?;
+        Some((name.clone().into(), Some(name.into())))
+    }
+
+    // The branch a worktree thread writes on; a personal thread has no branch to name.
+    fn branch(&self, cx: &App) -> Option<SharedString> {
+        self.place(cx).and_then(|(_, branch)| branch)
+    }
+
+    // Where the run writes: the worktree's branch, or the project's folder name.
+    fn folder(&self, cx: &App) -> Option<SharedString> {
+        self.place(cx).map(|(folder, _)| folder)
+    }
+}
+
+pub(super) fn empty_text(view: &ChatView, cx: &App) -> String {
+    let who = view.who(cx);
+    if matches!(view.thread_state(cx), Some((ThreadStatus::Starting, _))) {
+        return format!("Starting {who}…");
+    }
+    view.folder(cx).map_or_else(
+        || format!("{who} is ready."),
+        |folder| format!("{who} is ready in {folder}."),
+    )
+}
+
+// How the run ended, in the chat's own words: the agent's name says who stopped.
+fn end_line(view: &ChatView, cx: &App) -> String {
+    let who = view.who(cx);
+    let workspace = Workspace::global(cx);
+    let workspace = workspace.read(cx);
+    match workspace.stopped_line(&view.thread) {
+        Some(line) => format!("{who} {line}"),
+        None => workspace
+            .end_line(&view.thread)
+            .unwrap_or_else(|| format!("{who} is not running.")),
+    }
 }
 
 // The facts under the box: where the agent writes, and what its context costs. Nothing here
