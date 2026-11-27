@@ -64,7 +64,7 @@ pub(super) fn work_row(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let kind = kind::of(tool);
+    let kind = kind::of(&tool.call);
     let stage = tool.stage();
     let body = open
         .then(|| body::work_body(row.id, tool, &kind, weak, cx))
@@ -75,7 +75,7 @@ pub(super) fn work_row(
             key: row.key(),
             icon: kind::icon(&kind),
             label: kind::label(&kind, stage),
-            title: kind::title(&kind, tool),
+            title: kind::title(&kind, &tool.call),
             title_mono: kind::mono_title(&kind),
             badge: kind::badge(&kind),
             meta: kind::meta(&kind, tool),
@@ -103,7 +103,7 @@ pub(super) fn work_row(
 }
 
 fn live_preview(row: u64, tool: &ToolRow, cx: &mut App) -> Option<AnyElement> {
-    if !tool.running() || kind::of(tool) != WorkKind::Execute {
+    if !tool.running() || kind::of(&tool.call) != WorkKind::Execute {
         return None;
     }
     let lines: Vec<&str> = tool.call.output.as_deref()?.lines().rev().take(3).collect();
@@ -192,7 +192,7 @@ pub(super) fn bundle_row(
         let RowKind::Work(tool) = &member.kind else {
             return counts;
         };
-        match kind::of(tool) {
+        match kind::of(&tool.call) {
             WorkKind::Read => (counts.0 + 1, counts.1, counts.2),
             WorkKind::Search => (counts.0, counts.1 + 1, counts.2),
             WorkKind::Fetch => (counts.0, counts.1, counts.2 + 1),
@@ -235,7 +235,7 @@ pub(super) fn bundle_row(
         .iter()
         .filter_map(|member| match &member.kind {
             RowKind::Work(tool) => Some(
-                Icon::new(kind::icon(&kind::of(tool)))
+                Icon::new(kind::icon(&kind::of(&tool.call)))
                     .xsmall()
                     .text_color(cx.theme().muted_foreground)
                     .into_any_element(),

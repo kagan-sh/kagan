@@ -1,8 +1,8 @@
 use super::screen;
 use super::shown::ThreadPick;
 use super::{
-    ArchiveThread, CancelTurn, Kagan, NewThread, RenameThread, RestoreThread, SaveDiagnostics,
-    Shown, StartAgain, StopThread, TogglePinned, toast::Toast,
+    ArchiveThread, Kagan, NewThread, RenameThread, RestoreThread, SaveDiagnostics, Shown,
+    StartAgain, StopThread, TogglePinned, toast::Toast,
 };
 use crate::kagan::dispatch;
 use std::collections::BTreeSet;
@@ -120,8 +120,15 @@ impl Kagan {
             .is_some_and(|thread| thread.link == kg_domain::Link::Acp);
         if chat {
             let entity = cx.entity().downgrade();
-            let view =
-                cx.new(|cx| crate::kagan::chat::ChatView::new(id.clone(), entity, window, cx));
+            let view = cx.new(|cx| {
+                crate::kagan::chat::ChatView::new(
+                    id.clone(),
+                    entity,
+                    crate::kagan::chat::Place::Center,
+                    window,
+                    cx,
+                )
+            });
             self.show_work(Shown::Chat(view), window, cx);
             self.typed_watch = None;
         } else {
@@ -255,26 +262,6 @@ impl Kagan {
         if let Some(id) = self.shown_thread(cx) {
             self.run(Op::Thread(ThreadOp::Stop { id }), "stop the thread", cx);
         }
-    }
-
-    pub(super) fn cancel_turn(&mut self, _: &CancelTurn, _: &mut Window, cx: &mut Context<Self>) {
-        let Some(id) = self.shown_thread(cx) else {
-            cx.propagate();
-            return;
-        };
-        let busy = Workspace::global(cx)
-            .read(cx)
-            .thread(&id)
-            .is_some_and(|thread| thread.read(cx).busy());
-        if !busy {
-            cx.propagate();
-            return;
-        }
-        self.run(
-            Op::Thread(ThreadOp::Cancel { id }),
-            "cancel the agent's reply",
-            cx,
-        );
     }
 
     pub(super) fn save_diagnostics(

@@ -197,9 +197,8 @@ impl Kagan {
     ) -> Result<String, String> {
         let view = match self.screen.current() {
             Center::Work(Shown::Chat(view)) if view.read(cx).thread() == thread => view.clone(),
-            _ => {
-                return Err(format!("the prompt box for {thread} is not on screen"));
-            }
+            _ => crate::kagan::chat::boxed(thread, cx)
+                .ok_or_else(|| format!("the prompt box for {thread} is not on screen"))?,
         };
         if let Some(text) = text {
             view.update(cx, |view, cx| view.set_draft(text.to_owned(), window, cx));

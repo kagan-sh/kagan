@@ -13,7 +13,12 @@ target 35000
 # Cost: the compact ThreadStatus adds 24 product lines on top of main (84175, after #154), in crates/ui/src/components: the shared method helpers and the compact call. The ceiling is set to the branch count, and decision 276 records it.
 # Cost: ACP threads, one PR: product Rust went from main's 84147 to 90274 (+6127). Decision 279 records it.
 # Cost: the chat refinements add 253 product lines on the branch (90274 before them): the fold row and its members, the composer's facts row, and the approval's move into the box's place. The ceiling is the merged count.
-ceiling 90527
+# Cost: the embedded chat adds 576 product lines on top of feat/acp-threads' 90527: the ThreadChat
+# component and its compact card, the embed registry and the reply line, the chat's own CancelTurn
+# and Start again, the chat-slot refusal, and the right panel's body that lets a chat fill it.
+# Decision 287 records it, and the ceiling is set to the branch count.
+ceiling 91103
 allow_expect 9
 crates/plugins/src/runtime/ui_host.rs 630
+crates/ui/src/kagan/chat.rs 610
 crates/ui/src/theme/catalog.rs 642

@@ -77,6 +77,17 @@ impl PluginHost {
     }
 
     #[must_use]
+    pub fn allows_chat(&self, id: &PluginId) -> bool {
+        self.active.get(id).is_some_and(|active| {
+            active
+                .grant
+                .powers
+                .areas
+                .contains(&crate::manifest::Area::Chat)
+        })
+    }
+
+    #[must_use]
     pub fn installing(&self) -> Option<String> {
         self.installing.borrow().clone()
     }

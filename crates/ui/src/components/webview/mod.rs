@@ -25,11 +25,15 @@ pub(crate) const REFUSED_SCHEME: &str = "WebView only opens an http or https pag
 pub(crate) const REFUSED_HOST: &str =
     "WebView only opens 127.0.0.1, localhost, or a host this plugin may fetch.";
 
-// The script's root is a `WebView`, so the panel can sit edge to edge.
+// The script's root fills its panel, so the panel can sit edge to edge: a web page, or a chat
+// that needs the whole frame for its transcript and box.
 pub(crate) fn fills_panel(view: &Entity<ScriptView>, cx: &App) -> bool {
-    view.read(cx)
-        .snapshot()
-        .is_some_and(|snapshot| snapshot.root_component_name() == Some("WebView"))
+    view.read(cx).snapshot().is_some_and(|snapshot| {
+        matches!(
+            snapshot.root_component_name(),
+            Some("WebView" | "ThreadChat")
+        )
+    })
 }
 
 pub(super) fn allowed(url: &str, hosts: &[String]) -> Result<(), &'static str> {

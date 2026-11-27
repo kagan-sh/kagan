@@ -26,7 +26,7 @@ impl Kagan {
         }
     }
 
-    pub(in crate::kagan) fn focus_work(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn focus_work(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(popup) = self.asks.popup.clone()
             && self.terminal_thread(cx).is_some()
         {

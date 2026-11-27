@@ -38,6 +38,10 @@ impl ChatView {
 
     pub(super) fn question_left(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.asked(cx).is_none() && std::mem::take(&mut self.asking) {
+            // An embed never takes the keyboard: the person may be typing in another chat.
+            if self.place != super::Place::Center {
+                return;
+            }
             let focus = self.prompt.read(cx).focus_handle(cx);
             cx.defer_in(window, move |_, window, cx| window.focus(&focus, cx));
         }

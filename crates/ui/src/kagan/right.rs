@@ -87,21 +87,38 @@ pub(super) fn render(
     let body = selected
         .as_ref()
         .and_then(|tab| tab_body(kagan, tab, window, cx));
+    // A view that fills its frame gets the sidebar's whole height: a scroll of its own would
+    // measure it as content, and its flex children would collapse.
+    let whole = selected.as_ref().is_some_and(|tab| match tab {
+        Tab::Plugin(id) => kagan
+            .right
+            .slots
+            .iter()
+            .find(|slot| &slot.id == id)
+            .is_some_and(|slot| fills(slot, cx)),
+        _ => false,
+    });
     v_flex()
         .size_full()
         .ui_container()
         .id("right-sidebar")
         .bg(cx.theme().sidebar)
         .child(tab_bar(kagan, selected.as_ref(), window, cx))
-        .child(
-            div()
+        .child({
+            let body_row = div()
                 .id("right-sidebar-body")
                 .ui_container()
                 .flex_1()
-                .min_h_0()
-                .overflow_y_scrollbar()
-                .children(body),
-        )
+                .min_h_0();
+            if whole {
+                body_row.overflow_hidden().children(body).into_any_element()
+            } else {
+                body_row
+                    .overflow_y_scrollbar()
+                    .children(body)
+                    .into_any_element()
+            }
+        })
 }
 
 pub(super) fn selected_tab(kagan: &Kagan, cx: &App) -> Option<Tab> {
@@ -121,5 +138,6 @@ mod actions;
 mod bar;
 mod plugin;
 
+use super::surface::fills;
 use bar::{tab_bar, tab_body};
 pub(super) use plugin::plugin_body;

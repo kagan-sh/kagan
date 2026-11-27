@@ -1214,7 +1214,15 @@ fn a_load_that_fails_still_draws_the_events_after_it(cx: &mut TestAppContext) {
     let id = seed_acp_thread(data.path());
     let view = kagan.downgrade();
     let window = cx
-        .add_window(|window, cx| crate::kagan::chat::ChatView::new(id.clone(), view, window, cx))
+        .add_window(|window, cx| {
+            crate::kagan::chat::ChatView::new(
+                id.clone(),
+                view,
+                crate::kagan::chat::Place::Center,
+                window,
+                cx,
+            )
+        })
         .into();
     cx.run_until_parked();
     assert!(!shows(cx, window, "chat-message-1"), "nothing was read");
@@ -1230,7 +1238,13 @@ fn a_rewritten_draft_undoes_with_the_normal_key(cx: &mut TestAppContext) {
     // A running thread, so the box takes typing; the view is drawn on its own so it has the key.
     let id = run_shell(cx);
     let handle = cx.add_window(|window, cx| {
-        crate::kagan::chat::ChatView::new(id.clone(), kagan.downgrade(), window, cx)
+        crate::kagan::chat::ChatView::new(
+            id.clone(),
+            kagan.downgrade(),
+            crate::kagan::chat::Place::Center,
+            window,
+            cx,
+        )
     });
     let chat = handle.root(cx).unwrap();
     let window: AnyWindowHandle = handle.into();

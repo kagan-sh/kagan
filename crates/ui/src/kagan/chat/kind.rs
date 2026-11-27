@@ -2,7 +2,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use gpui_kit::assets::IconName;
-use kg_domain::{Timestamp, WorkKind};
+use kg_domain::{Timestamp, ToolCall, ToolStatus, WorkKind};
 
 use crate::kagan::chat::part::{ToolRow, ToolStage};
 
@@ -22,7 +22,7 @@ pub(super) fn icon(kind: &WorkKind) -> IconName {
     }
 }
 
-pub(super) fn label(kind: &WorkKind, stage: ToolStage) -> String {
+pub(crate) fn label(kind: &WorkKind, stage: ToolStage) -> String {
     let word = match kind {
         WorkKind::Read => tell(stage, "Waiting to read file", "Reading file", "Read file"),
         WorkKind::Search => tell(
@@ -97,11 +97,10 @@ pub(super) fn mono_title(kind: &WorkKind) -> bool {
     }
 }
 
-pub(super) fn title(kind: &WorkKind, tool: &ToolRow) -> Option<String> {
+pub(super) fn title(kind: &WorkKind, call: &ToolCall) -> Option<String> {
     let probe = |keys: &[&str]| {
         keys.iter().find_map(|key| {
-            tool.call
-                .input
+            call.input
                 .as_ref()
                 .and_then(|input| input.get(*key))
                 .and_then(serde_json::Value::as_str)
@@ -114,8 +113,7 @@ pub(super) fn title(kind: &WorkKind, tool: &ToolRow) -> Option<String> {
         WorkKind::Execute => probe(&["command", "cmd"]),
         WorkKind::Edit | WorkKind::Delete | WorkKind::Move => probe(&["file_path", "path"])
             .or_else(|| {
-                tool.call
-                    .diff
+                call.diff
                     .first()
                     .map(|diff| file_name(&diff.path).to_owned())
             }),
@@ -124,7 +122,7 @@ pub(super) fn title(kind: &WorkKind, tool: &ToolRow) -> Option<String> {
         WorkKind::Mcp { .. } | WorkKind::Think | WorkKind::Other => None,
     };
     named
-        .or_else(|| tool.call.title.clone())
+        .or_else(|| call.title.clone())
         .map(|title| cut(&title, 120))
 }
 
@@ -160,17 +158,31 @@ pub(super) fn has_body(kind: &WorkKind, tool: &ToolRow) -> bool {
     }
 }
 
-pub(super) fn of(tool: &ToolRow) -> WorkKind {
+pub(super) fn of(call: &ToolCall) -> WorkKind {
     WorkKind::of(
-        tool.call.name.as_deref(),
-        tool.call.title.as_deref(),
-        tool.call.kind,
-        tool.call.input.as_ref(),
+        call.name.as_deref(),
+        call.title.as_deref(),
+        call.kind,
+        call.input.as_ref(),
     )
 }
 
 pub(super) fn title_of(tool: &ToolRow) -> Option<String> {
-    title(&of(tool), tool)
+    title(&of(&tool.call), &tool.call)
+}
+
+// The word and the name a compact chat card shows for the work in progress.
+pub(crate) fn step(call: &ToolCall) -> (String, Option<String>) {
+    let kind = of(call);
+    (label(&kind, stage_of(call.status)), title(&kind, call))
+}
+
+pub(crate) fn stage_of(status: Option<ToolStatus>) -> ToolStage {
+    match status {
+        Some(ToolStatus::Pending) => ToolStage::Waiting,
+        Some(ToolStatus::InProgress) => ToolStage::Running,
+        _ => ToolStage::Settled,
+    }
 }
 
 pub(super) fn pick(done: bool, done_word: &'static str, now_word: &'static str) -> &'static str {
@@ -197,7 +209,7 @@ fn file_name(path: &str) -> &str {
         .unwrap_or(path)
 }
 
-fn cut(text: &str, max: usize) -> String {
+pub(crate) fn cut(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_owned();
     }
