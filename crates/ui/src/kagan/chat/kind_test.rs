@@ -29,7 +29,8 @@ fn an_mcp_name_reads_as_its_server_and_tool() {
             ToolKind::Other,
             "Create issue",
             serde_json::json!({}),
-        )),
+        )
+        .call),
         WorkKind::Mcp {
             server: "github".into(),
             tool: "create_issue".into(),
@@ -45,7 +46,8 @@ fn kagans_own_server_is_recognised_by_its_name() {
             ToolKind::Other,
             "Open PR",
             serde_json::json!({}),
-        )),
+        )
+        .call),
         WorkKind::Mcp {
             server: "kagan".into(),
             tool: "open_pull_request".into(),
@@ -60,7 +62,8 @@ fn a_skill_load_is_named_by_its_input() {
         ToolKind::Other,
         "Load a skill",
         serde_json::json!({"name": "rust-review"}),
-    ));
+    )
+    .call);
     assert_eq!(
         kind,
         WorkKind::Skill {
@@ -72,7 +75,8 @@ fn a_skill_load_is_named_by_its_input() {
         ToolKind::Other,
         "load skill playwright-debugging",
         serde_json::json!({"name": "playwright-debugging"}),
-    ));
+    )
+    .call);
     assert_eq!(
         title_only,
         WorkKind::Skill {
@@ -88,7 +92,8 @@ fn an_unknown_agent_tool_keeps_its_kind_and_title() {
         ToolKind::Read,
         "Read file",
         serde_json::json!({"path": "a.ts"}),
-    ));
+    )
+    .call);
     assert_eq!(kind, WorkKind::Read);
     assert_eq!(
         title(
@@ -99,6 +104,7 @@ fn an_unknown_agent_tool_keeps_its_kind_and_title() {
                 "Read file",
                 serde_json::json!({"path": "a.ts"}),
             )
+            .call
         ),
         Some("a.ts".into())
     );

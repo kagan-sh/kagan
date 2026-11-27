@@ -1,4 +1,5 @@
 mod button;
+mod chat;
 mod component_error;
 mod field;
 #[cfg(test)]
@@ -23,6 +24,7 @@ pub(crate) use webview::{drop_stores, fills_panel, sync_pages};
 pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     button::register(registry)?;
     field::register(registry)?;
+    chat::register(registry)?;
     webview::register(registry)?;
     thread::register(registry)?;
     registry.register(

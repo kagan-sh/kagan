@@ -41,6 +41,7 @@ fn catalog_has_every_component_and_real_typings() {
             "KgButton",
             "KgInput",
             "KgTextarea",
+            "ThreadChat",
             "WebView",
             "ThreadTitle",
             "ThreadStatus",
@@ -52,6 +53,7 @@ fn catalog_has_every_component_and_real_typings() {
     assert!(declarations.contains("url(url: string): WebViewElement"));
     assert!(declarations.contains("store(keep: boolean): WebViewElement"));
     assert!(declarations.contains("compact(): ThreadStatusElement;"));
+    assert!(declarations.contains("compact(): ThreadChatElement;"));
 }
 
 #[test]

@@ -133,6 +133,16 @@ enum Focus {
     Work,
 }
 
+// A panel that draws its own frame: a web page, or a view whose root fills one (a WebView, a
+// chat). It takes no padding and no scroll of its own.
+pub(in crate::kagan) fn fills(slot: &Slot, cx: &App) -> bool {
+    slot.web.is_some()
+        || slot
+            .view
+            .as_ref()
+            .is_some_and(|view| crate::components::fills_panel(view, cx))
+}
+
 pub(crate) fn bindings() -> Vec<KeyBinding> {
     let mut keys = Vec::new();
     for key in ["enter", "space"] {

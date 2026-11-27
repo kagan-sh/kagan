@@ -99,7 +99,6 @@ impl Render for Kagan {
             .on_action(cx.listener(Self::update_all_action))
             .on_action(cx.listener(Self::new_thread))
             .on_action(cx.listener(Self::stop))
-            .on_action(cx.listener(Self::cancel_turn))
             .on_action(cx.listener(Self::new_terminal))
             .on_action(cx.listener(Self::preview_file))
             .on_action(cx.listener(Self::close_terminal))

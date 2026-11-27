@@ -41,6 +41,9 @@ const FLOATING: &[&str] = &[
     "NativeMenuTrigger",
 ];
 
+// A chat's body cannot hold a chat: the embed would draw the transcript it stands in for.
+const NESTED: &str = "ThreadChat";
+
 // Which plugin fills each slot. Only the person's choice fills one; any failure empties it and
 // saves the built-in, so a later install, update, enable or reload never brings the plugin back.
 #[derive(Default)]
@@ -413,6 +416,7 @@ enum Lost {
     Unloaded(String),
     Threw(String),
     Floats(&'static str),
+    Nested,
 }
 
 impl std::fmt::Display for Lost {
@@ -426,6 +430,10 @@ impl std::fmt::Display for Lost {
                 f,
                 "its view uses {name}, which draws outside its frame; a replacement may not"
             ),
+            Self::Nested => write!(
+                f,
+                "its view uses {NESTED}, which draws the chat it stands in for"
+            ),
         }
     }
 }
@@ -436,10 +444,19 @@ fn built(view: &ScriptView) -> Result<(), Lost> {
         return Err(Lost::Threw(first_line(error).to_owned()));
     }
     let tree = view.snapshot().map(gpui_shell::RenderSnapshot::debug_tree);
-    match tree.and_then(|tree| floating(&tree)) {
+    let Some(tree) = tree else {
+        return Ok(());
+    };
+    match floating(&tree) {
         Some(name) => Err(Lost::Floats(name)),
+        None if names(&tree, NESTED) => Err(Lost::Nested),
         None => Ok(()),
     }
+}
+
+fn names(tree: &str, component: &str) -> bool {
+    tree.lines()
+        .any(|line| line.split_whitespace().next() == Some(component))
 }
 
 fn floating(tree: &str) -> Option<&'static str> {

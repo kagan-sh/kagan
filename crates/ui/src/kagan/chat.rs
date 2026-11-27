@@ -19,10 +19,10 @@ use kg_domain::{
     Timestamp, program_label,
 };
 
-use crate::kagan::Kagan;
 use crate::kagan::attention;
 use crate::kagan::controls::control;
 use crate::kagan::question;
+use crate::kagan::{CancelTurn, Kagan};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -30,15 +30,20 @@ mod above;
 mod body;
 mod card;
 mod composer;
+mod embed;
 mod kind;
 mod part;
 mod work;
+
+pub(crate) use embed::{Place, boxed};
+pub(crate) use kind::{cut, step};
 
 pub(crate) const CONTEXT: &str = "Chat";
 
 pub(crate) struct ChatView {
     thread: ThreadId,
     kagan: gpui_kit::WeakEntity<Kagan>,
+    place: embed::Place,
     transcript: part::Transcript,
     loaded: bool,
     pending: Vec<Event>,
@@ -62,6 +67,7 @@ impl ChatView {
     pub(crate) fn new(
         thread: ThreadId,
         kagan: gpui_kit::WeakEntity<Kagan>,
+        place: embed::Place,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -108,6 +114,7 @@ impl ChatView {
         let mut this = Self {
             thread,
             kagan,
+            place,
             transcript: part::Transcript::default(),
             loaded: false,
             pending: Vec::new(),
@@ -126,6 +133,10 @@ impl ChatView {
             _scroller: scroller_watch,
             _questions: questions,
         };
+        if place == embed::Place::Embedded {
+            let chat = cx.weak_entity();
+            embed::register(&this.thread, chat, cx);
+        }
         this.load(cx);
         this
     }
@@ -308,6 +319,38 @@ impl ChatView {
         }));
     }
 
+    // Start again sends its own thread, so an embed starts its thread and not the one on screen.
+    fn start_again(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.sending.is_some() {
+            return;
+        }
+        let start = Workspace::dispatch(
+            Op::Thread(ThreadOp::StartAgain {
+                id: self.thread.clone(),
+            }),
+            cx,
+        );
+        self.sending = Some(cx.spawn_in(window, async move |this, cx| {
+            let result = start.await;
+            _ = this.update_in(cx, |this, _window, cx| {
+                this.sending = None;
+                if let Err(error) = result {
+                    this.notice = Some(format!("Could not start the thread again: {error}").into());
+                }
+                cx.notify();
+            });
+        }));
+    }
+
+    // Escape cancels this chat's reply; with none to cancel it goes on, so a page behind it closes.
+    fn cancel_turn(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.answering(cx) {
+            cx.propagate();
+            return;
+        }
+        self.cancel(window, cx);
+    }
+
     fn answering(&self, cx: &App) -> bool {
         self.thread_state(cx)
             .is_some_and(|(status, busy)| status.running() && busy)
@@ -412,6 +455,10 @@ impl ChatView {
             return;
         }
         self.asking = Some(asked.id.clone());
+        // An embed never takes the keyboard: the person may be typing in another chat.
+        if self.place == embed::Place::Embedded {
+            return;
+        }
         let Some(option) = question::opening_option(&asked.options, true) else {
             return;
         };
@@ -422,6 +469,9 @@ impl ChatView {
 
     fn question_left(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.asked(cx).is_none() && self.asking.take().is_some() {
+            if self.place == embed::Place::Embedded {
+                return;
+            }
             let focus = self.prompt.read(cx).focus_handle(cx);
             cx.defer_in(window, move |_, window, cx| window.focus(&focus, cx));
         }
@@ -453,12 +503,18 @@ impl ChatView {
             Some(transcript) => transcript,
             None => self.transcript(cx).into_any_element(),
         };
+        let below = if embed::answered_elsewhere(self, cx) {
+            embed::reply_in_center(&self.kagan)
+        } else {
+            composer::composer(self, answering, running, window, cx)
+        };
         v_flex()
             .size_full()
             .min_h_0()
             .key_context(CONTEXT)
+            .on_action(cx.listener(|this, _: &CancelTurn, window, cx| this.cancel_turn(window, cx)))
             .child(body)
-            .child(composer::composer(self, answering, running, window, cx))
+            .child(below)
             .into_any_element()
     }
 }

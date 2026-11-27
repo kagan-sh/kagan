@@ -14,9 +14,8 @@ use crate::theme::{SpaceStep, radius_md, space};
 
 use super::tabs::{self, CloseTab};
 use super::{ActivatePanelHeader, BUILT_IN, Fill, Tab, ToggleFill, plugin_body};
-use crate::components::fills_panel;
 use crate::kagan::controls::{control, menu_popup};
-use crate::kagan::surface::{Slot, body_id};
+use crate::kagan::surface::{Slot, body_id, fills};
 use crate::kagan::{Kagan, tab_stop};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -50,7 +49,7 @@ pub(super) fn tab_body(
         );
     }
     let slot = kagan.right.slots.iter().find(|slot| slot.id == id)?;
-    let page = slot.web.is_some() || slot.view.as_ref().is_some_and(|view| fills_panel(view, cx));
+    let page = fills(slot, cx);
     Some(
         div()
             .id(ElementId::Name(body_id(&slot.id).into()))

@@ -72,7 +72,7 @@ pub(super) struct ToolRow {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum ToolStage {
+pub(crate) enum ToolStage {
     Waiting,
     Running,
     Settled,
@@ -80,11 +80,7 @@ pub(super) enum ToolStage {
 
 impl ToolRow {
     pub(super) fn stage(&self) -> ToolStage {
-        match self.call.status {
-            Some(ToolStatus::Pending) => ToolStage::Waiting,
-            Some(ToolStatus::InProgress) => ToolStage::Running,
-            _ => ToolStage::Settled,
-        }
+        kind::stage_of(self.call.status)
     }
 
     pub(super) fn running(&self) -> bool {
@@ -102,7 +98,7 @@ impl ToolRow {
     pub(super) fn folds(&self) -> bool {
         self.call.status == Some(ToolStatus::Completed)
             && matches!(
-                kind::of(self),
+                kind::of(&self.call),
                 WorkKind::Read | WorkKind::Search | WorkKind::Fetch
             )
     }

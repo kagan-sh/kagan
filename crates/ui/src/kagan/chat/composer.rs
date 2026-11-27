@@ -14,8 +14,8 @@ use kg_domain::{PendingInteraction, ThreadStatus};
 
 use super::ChatView;
 use super::card;
+use crate::kagan::SaveDiagnostics;
 use crate::kagan::controls::{control, dispatch, menu_item};
-use crate::kagan::{SaveDiagnostics, StartAgain};
 use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -317,7 +317,6 @@ fn action(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> Opt
         );
     }
     if !shown.turn.running() {
-        let kagan = view.kagan.clone();
         return Some(
             control(
                 "chat-start-again",
@@ -327,11 +326,7 @@ fn action(view: &mut ChatView, shown: &Shown, cx: &mut Context<ChatView>) -> Opt
                     .primary()
                     .label("Start again")
                     .tooltip("Start the agent again in this thread")
-                    .on_click(move |_, window, cx| {
-                        _ = kagan.update(cx, |kagan, cx| {
-                            kagan.start_again(&StartAgain, window, cx);
-                        });
-                    }),
+                    .on_click(cx.listener(|this, _, window, cx| this.start_again(window, cx))),
             )
             .into_any_element(),
         );

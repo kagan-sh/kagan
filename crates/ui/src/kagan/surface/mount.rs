@@ -138,7 +138,14 @@ pub(in crate::kagan) fn tool_region(
 pub(super) fn center_body(slot: &Slot, window: &mut Window, cx: &mut Context<Kagan>) -> AnyElement {
     let id = ElementId::Name(format!("surface-scroll-{}", slot.id).into());
     let body = plugin_body(slot, true, window, cx);
-    if slot.web.is_none() {
+    if super::fills(slot, cx) {
+        div()
+            .size_full()
+            .overflow_hidden()
+            .id(id)
+            .child(body)
+            .into_any_element()
+    } else if slot.web.is_none() {
         div()
             .size_full()
             .p(px(space(SpaceStep::Lg, cx)))
