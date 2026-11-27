@@ -163,6 +163,9 @@ fn boxed(view: &mut ChatView, shown: &Shown, hint: &str, cx: &mut Context<ChatVi
                 .id("chat-stopped")
                 .px_3()
                 .pb_1()
+                .w_full()
+                .min_w_0()
+                .text_ellipsis()
                 .type_small(cx)
                 .text_color(cx.theme().muted_foreground)
                 .ui_observe_as(Facts::label("Stopped", line.clone()))
@@ -173,6 +176,9 @@ fn boxed(view: &mut ChatView, shown: &Shown, hint: &str, cx: &mut Context<ChatVi
                 .id("chat-notice")
                 .px_3()
                 .pb_1()
+                .w_full()
+                .min_w_0()
+                .text_ellipsis()
                 .type_small(cx)
                 .text_color(cx.theme().danger)
                 .child(notice)
@@ -183,7 +189,7 @@ fn boxed(view: &mut ChatView, shown: &Shown, hint: &str, cx: &mut Context<ChatVi
 
 fn area(view: &ChatView, stopped: bool, hint: &str, cx: &App) -> impl IntoElement {
     let value = view.prompt.read(cx).value().to_string();
-    div().relative().child(
+    div().relative().overflow_hidden().child(
         div()
             .id("chat-prompt")
             .ui_observe_as(Facts {
