@@ -12,7 +12,8 @@ use super::{
 };
 use crate::kagan::{
     DeleteSavedProgram, Kagan, PinSavedProgram, RenameSavedProgram, RetryBranches, RetryPrograms,
-    SaveSavedProgram, Shown, ToggleCustomCommand, UseProjectFolder, UseWorktreeFolder,
+    SaveSavedProgram, Shown, ToggleCustomCommand, UseChatLink, UseProjectFolder, UseTerminalLink,
+    UseWorktreeFolder,
 };
 impl Kagan {
     pub(in crate::kagan) fn load_branches(&mut self, project: ProjectId, cx: &mut Context<Self>) {
@@ -303,6 +304,26 @@ impl Kagan {
         self.choose_folder(StartFolder::Worktree, cx);
     }
 
+    pub(in crate::kagan) fn use_terminal_link(
+        &mut self,
+        _: &UseTerminalLink,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.start.link = Some(kg_domain::Link::Terminal);
+        cx.notify();
+    }
+
+    pub(in crate::kagan) fn use_chat_link(
+        &mut self,
+        _: &UseChatLink,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.start.link = Some(kg_domain::Link::Acp);
+        cx.notify();
+    }
+
     pub(in crate::kagan) fn start(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Shown::Start(project) = self.screen.shown() else {
             return;
@@ -325,7 +346,9 @@ impl Kagan {
         let Some(environment) = self.start_environment(kind) else {
             return;
         };
+        let link = self.start.link(&program);
         let run = ThreadOp::Run(Run {
+            link,
             project_id,
             program,
             title: None,

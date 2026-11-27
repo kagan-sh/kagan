@@ -3,20 +3,22 @@ use std::path::{Path, PathBuf};
 
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{
-    EventKind, NoticeSeverity, OpError, OpResult, Run, ThreadId, ThreadStatus, split_program,
+    EventKind, Link, NoticeSeverity, OpError, OpResult, Run, ThreadId, ThreadStatus, program_label,
 };
 use kg_process::pathext;
 
 use super::clean_title;
 use crate::Workspace;
 use crate::host::database::{Database, Result};
-use crate::host::program::{label_of, locate};
+use crate::host::program::locate;
 use crate::workspace::{Request, RunOutcome, closed, id, missing, time};
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub(crate) enum ResolveError {
     #[error("{0}")]
     Line(kg_domain::SplitProgramError),
+    #[error("{0} has no ACP command")]
+    NoCommand(String),
     #[error("program {0} was not found")]
     NotFound(String),
 }
@@ -48,6 +50,26 @@ pub(crate) fn resolve_program(
     Ok(ResolvedProgram {
         path: found,
         args: args.into_iter().map(OsString::from).collect(),
+    })
+}
+
+pub(crate) fn resolve_acp(
+    line: &str,
+    environment: Option<&crate::host::program::ProgramEnvironment>,
+    home: Option<&Path>,
+) -> std::result::Result<ResolvedProgram, ResolveError> {
+    let (name, person_args) = kg_domain::split_program(line).map_err(ResolveError::Line)?;
+    let (program, args) =
+        kg_domain::acp_command(line).ok_or_else(|| ResolveError::NoCommand(name.clone()))?;
+    let own = Path::new(&name).file_stem() == Path::new(program).file_stem();
+    let found = resolve_program(if own { line } else { program }, environment, home)?;
+    let mut args: Vec<OsString> = args.iter().map(OsString::from).collect();
+    if own {
+        args.extend(person_args.into_iter().map(OsString::from));
+    }
+    Ok(ResolvedProgram {
+        path: found.path,
+        args,
     })
 }
 
@@ -91,6 +113,7 @@ pub(crate) struct PreparedRun {
     title: String,
     title_locked: bool,
     program: String,
+    link: kg_domain::Link,
     visibility: kg_domain::Visibility,
     parent_thread_id: Option<ThreadId>,
     quiet: bool,
@@ -128,6 +151,10 @@ pub(crate) async fn prepare(
     let home = crate::host::program::program_home_of(this, cx);
     resolve_program(&run.program, environment.as_ref(), home.as_deref())
         .map_err(|error| OpError::Invalid(error.to_string()))?;
+    if run.link == Link::Acp {
+        resolve_acp(&run.program, environment.as_ref(), home.as_deref())
+            .map_err(|error| OpError::Invalid(error.to_string()))?;
+    }
     let program = run.program.clone();
     let project_id = run.project_id.clone();
     let database = crate::workspace::database(this, cx)?;
@@ -142,9 +169,7 @@ pub(crate) async fn prepare(
     } else if let Some(name) = saved_name(&database, &run.program).await? {
         clean_title(&name)?
     } else {
-        let name =
-            split_program(&run.program).map_or_else(|_| run.program.clone(), |(name, _)| name);
-        clean_title(&label_of(&name)).unwrap_or_else(|_| "Thread".into())
+        clean_title(&program_label(&run.program)).unwrap_or_else(|_| "Thread".into())
     };
     let prefix = database
         .call(|store| store.setting(kg_domain::prefs::BRANCH_PREFIX))
@@ -163,6 +188,7 @@ pub(crate) async fn prepare(
         title,
         title_locked,
         program,
+        link: run.link,
         visibility: run.visibility.unwrap_or_default(),
         parent_thread_id: run.parent_thread_id,
         quiet: run.quiet,
@@ -205,6 +231,7 @@ pub(crate) async fn commit(
         title,
         title_locked,
         program,
+        link,
         visibility,
         parent_thread_id,
         quiet,
@@ -234,6 +261,7 @@ pub(crate) async fn commit(
         title,
         title_locked,
         provider: program,
+        link,
         status: ThreadStatus::Starting,
         visibility,
         parent_thread_id,
@@ -256,7 +284,7 @@ pub(crate) async fn commit(
     this.update(cx, |_, cx| {
         for event in events {
             cx.emit(crate::WorkspaceEvent::Event {
-                event,
+                event: Box::new(event),
                 project_id: record.project_id.clone(),
             });
         }
@@ -265,7 +293,7 @@ pub(crate) async fn commit(
     .map_err(crate::workspace::closed)?;
     Workspace::refresh(this, cx).await?;
     let entity = super::thread(this, &record.id, cx)?;
-    super::start_terminal(this, &entity, super::agent::Start::First, cx).await?;
+    super::start_program(this, &entity, super::agent::Start::First, cx).await?;
     Ok(OpResult::Thread(
         entity.read_with(cx, |thread, _| thread.record.clone()),
     ))

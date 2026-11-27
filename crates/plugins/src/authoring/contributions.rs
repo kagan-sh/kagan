@@ -33,8 +33,8 @@ pub(crate) enum Error {
     PlainTitle(String),
     #[error("panel {0} replaces threads, so it must be placed left")]
     ReplacesThreads(String),
-    #[error("panel {0} replaces review, so it must be placed center")]
-    ReplacesReview(String),
+    #[error("panel {0} replaces {1}, so it must be placed center")]
+    ReplacesCenter(String, &'static str),
     #[error("only one panel may replace {0}")]
     OneReplacement(&'static str),
     #[error(
@@ -148,14 +148,13 @@ impl Contributions {
                 return Err(Error::PlainTitle(panel.id.clone()));
             }
             match (panel.replaces, panel.placement) {
-                (Some(Slot::Threads), Placement::Left)
-                | (Some(Slot::Review), Placement::Center)
-                | (None, _) => {}
+                (None, _) | (Some(Slot::Threads), Placement::Left) => {}
+                (Some(slot), Placement::Center) if slot != Slot::Threads => {}
                 (Some(Slot::Threads), _) => {
                     return Err(Error::ReplacesThreads(panel.id.clone()));
                 }
-                (Some(Slot::Review), _) => {
-                    return Err(Error::ReplacesReview(panel.id.clone()));
+                (Some(slot), _) => {
+                    return Err(Error::ReplacesCenter(panel.id.clone(), slot.id()));
                 }
             }
         }

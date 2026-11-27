@@ -26,7 +26,7 @@ use crate::ui_registry::Facts;
 
 const WELCOME_MARK_FADE: f32 = 0.3;
 
-fn ended_text(id: &ThreadId, cx: &gpui_kit::App) -> String {
+pub(in crate::kagan) fn ended_text(id: &ThreadId, cx: &gpui_kit::App) -> String {
     let workspace = Workspace::global(cx);
     let workspace = workspace.read(cx);
     let mut line = workspace
@@ -339,7 +339,7 @@ impl Kagan {
         let line = ended_text(id, cx);
         let recovery = Workspace::global(cx).read(cx).recovery(id);
         // Offered only where the new-thread screen can run in the folder, by the same test.
-        let reusable = !archived && crate::kagan::start::Reuse::of(id, cx).is_some();
+        let reusable = crate::kagan::start::Reuse::of(id, cx).is_some();
         h_flex()
             .id("ended")
             .w_full()
@@ -349,11 +349,7 @@ impl Kagan {
             .h_9()
             .type_body(cx)
             .text_color(cx.theme().foreground)
-            .ui_observe_as(Facts {
-                role: Role::Label,
-                value: Some(line.clone().into()),
-                ..Facts::button("Ended")
-            })
+            .ui_observe_as(Facts::label("Ended", line.clone()))
             .child(div().min_w_0().flex_1().text_ellipsis().child(line))
             .when(!archived, |row| {
                 row.child(control(
@@ -448,6 +444,26 @@ impl Kagan {
             .children(strip)
             .child(div().flex_1().min_h_0().child(view.clone()))
             .children(ended)
+            .into_any_element()
+    }
+
+    pub(super) fn render_chat(
+        &self,
+        view: &Entity<super::chat::ChatView>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let id = view.read(cx).thread().clone();
+        if self.record(&id, cx).is_none() {
+            return Self::render_empty("This thread is gone.", cx);
+        }
+        let strip = self.render_strip(cx);
+        let body = self.replaced_body(kg_domain::Slot::Chat, window, cx);
+        let chat = view.update(cx, |view, cx| view.render_with(body, window, cx));
+        v_flex()
+            .size_full()
+            .children(strip)
+            .child(div().flex_1().min_h_0().child(chat))
             .into_any_element()
     }
 

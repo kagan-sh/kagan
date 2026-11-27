@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use gpui_kit::Context;
 use kg_domain::{Event, EventKind, NotifyReason, OpResult, ThreadId, TurnOutcome, WaitOutcome};
 
-use super::terminal::{self, Shown};
+use super::terminal::Shown;
 use crate::{Workspace, WorkspaceEvent};
 
 // A parent that just got a line may still be starting its turn; hold the next line this long.
@@ -214,7 +214,7 @@ fn schedule(workspace: &mut Workspace, parent: &ThreadId, cx: &mut Context<Works
     run.held_until = Some(now + SETTLE);
     let parent = parent.clone();
     cx.spawn(async move |this, cx| {
-        if let Err(error) = terminal::send(&this, parent, &text, cx).await {
+        if let Err(error) = crate::thread::type_text(&this, &parent, &text, cx).await {
             eprintln!("kg: could not tell a parent about its child: {error}");
         }
     })

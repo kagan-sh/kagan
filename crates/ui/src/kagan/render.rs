@@ -99,6 +99,7 @@ impl Render for Kagan {
             .on_action(cx.listener(Self::update_all_action))
             .on_action(cx.listener(Self::new_thread))
             .on_action(cx.listener(Self::stop))
+            .on_action(cx.listener(Self::cancel_turn))
             .on_action(cx.listener(Self::new_terminal))
             .on_action(cx.listener(Self::preview_file))
             .on_action(cx.listener(Self::close_terminal))
@@ -118,6 +119,7 @@ impl Render for Kagan {
             .on_action(cx.listener(Self::actual_size))
             .on_action(cx.listener(Self::use_built_in_sidebar))
             .on_action(cx.listener(Self::use_built_in_review))
+            .on_action(cx.listener(Self::use_built_in_chat))
             .on_action(cx.listener(|_, _: &NewTheme, window, cx| {
                 let id = crate::theme::copy_id(cx);
                 Self::open_answer(Op::Theme(ThemeOp::New { id, from: None }), window, cx);
@@ -140,6 +142,8 @@ impl Render for Kagan {
                 usage.update(cx, super::usage::Usage::toggle);
             }))
             .on_action(cx.listener(Self::use_project_folder))
+            .on_action(cx.listener(Self::use_terminal_link))
+            .on_action(cx.listener(Self::use_chat_link))
             .on_action(cx.listener(Self::use_worktree_folder))
             .on_action(cx.listener(Self::retry_branches_action))
             .on_action(cx.listener(Self::retry_programs))
@@ -275,6 +279,9 @@ impl Kagan {
             screen::Center::Project(page) => page.clone().into_any_element(),
             screen::Center::Work(Shown::Thread(view)) => {
                 self.render_thread(view, cx).into_any_element()
+            }
+            screen::Center::Work(Shown::Chat(view)) => {
+                self.render_chat(view, window, cx).into_any_element()
             }
             screen::Center::Work(Shown::Start(project)) => {
                 self.render_start(project, window, cx).into_any_element()

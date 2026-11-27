@@ -11,6 +11,7 @@ use crate::{Thread, Workspace, WorkspaceEvent};
 
 use super::agent::{self, Start};
 use super::extra::Extras;
+use super::finish::StopReason;
 use super::halt::status;
 use super::resolve_program;
 use crate::end::{End, Loss};
@@ -19,12 +20,11 @@ mod exit;
 mod screen;
 mod turn;
 
-pub(crate) use exit::StopReason;
-pub(crate) use exit::{exited, request_stop, start_again};
+pub(crate) use exit::{exit_end, exited, request_stop, start_again};
 pub(crate) use screen::follow_terminals;
 #[cfg(test)]
 pub(crate) use screen::remember;
-pub(crate) use turn::hook as turn_hook;
+pub(crate) use turn::{begin_run, done, hook as turn_hook, waiting};
 
 #[cfg(test)]
 pub(super) use turn::{Spin, busy, follow};
@@ -98,9 +98,14 @@ async fn spawn(
     let home = crate::host::program::program_home_of(this, cx);
     let program = resolve_program(&record.provider, environment.as_ref(), home.as_deref())
         .map_err(|error| OpError::Invalid(error.to_string()))?;
-    let integration = agent::integrate(this, record, &program, &folder, start, cx).await?;
+    let integration = agent::integrate(this, record, &folder, start, cx).await?;
     this.update(cx, |workspace, cx| {
-        turn::begin_run(workspace, &record.id, integration.hooks, cx);
+        let source = if integration.hooks {
+            crate::thread::turn_state::Source::Hook
+        } else {
+            crate::thread::turn_state::Source::Undecided
+        };
+        turn::begin_run(workspace, &record.id, source, cx);
     })
     .map_err(closed)?;
     let args = integration.args.into_iter().chain(program.args).collect();
@@ -185,16 +190,6 @@ pub(crate) async fn submit(
     text: &str,
     cx: &mut AsyncApp,
 ) -> Result<String> {
-    if text.is_empty() {
-        return Err(OpError::Invalid("send needs text".into()));
-    }
-    if text.len() > kg_domain::TEXT_MAX {
-        return Err(OpError::Invalid(format!(
-            "send is {} bytes; the cap is {} MiB",
-            text.len(),
-            kg_domain::TEXT_MAX >> 20
-        )));
-    }
     let (typed, written) = this
         .update(cx, |workspace, _| match workspace.shown(id) {
             Some(Shown::Running(terminal)) => {
@@ -254,55 +249,45 @@ pub(crate) async fn send(
 
 pub(crate) fn run(
     this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    number: Option<u32>,
     op: ThreadOp,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    let (ThreadOp::Input { id, terminal, .. }
-    | ThreadOp::Resize { id, terminal, .. }
-    | ThreadOp::Screen { id, terminal, .. }
-    | ThreadOp::Scroll { id, terminal, .. }
-    | ThreadOp::Select { id, terminal, .. }
-    | ThreadOp::Copy { id, terminal }
-    | ThreadOp::Paste { id, terminal, .. }
-    | ThreadOp::Report { id, terminal, .. }) = &op
-    else {
-        return Err(OpError::Invalid("not a terminal operation".into()));
-    };
-    let (id, number) = (id.clone(), *terminal);
     // Scrolling and selecting move the view, so the window redraws even when nothing else changed.
     let moves_view = matches!(op, ThreadOp::Scroll { .. } | ThreadOp::Select { .. });
     this.update(cx, |workspace, cx| {
         if number.is_none()
             && let ThreadOp::Resize { cols, rows, .. } = &op
         {
-            workspace.run_mut(&id).size = Some((*cols, *rows));
+            workspace.run_mut(id).size = Some((*cols, *rows));
         }
         if number.is_none() {
             let now = cx.background_executor().now();
             match &op {
                 ThreadOp::Input { text, .. } => {
-                    super::notify::typed(workspace, &id, text, now);
+                    super::notify::typed(workspace, id, text, now);
                     if text.ends_with('\r') {
-                        turn::note_submit(workspace, &id, now, cx);
+                        turn::note_submit(workspace, id, now, cx);
                     }
                 }
-                ThreadOp::Paste { .. } => super::notify::typed(workspace, &id, "", now),
+                ThreadOp::Paste { .. } => super::notify::typed(workspace, id, "", now),
                 _ => {}
             }
         }
         let result = if let Some(number) = number {
-            super::extra::find(workspace, &id, number)
+            super::extra::find(workspace, id, number)
                 .ok_or_else(|| missing("terminal", &number))
                 .map(|terminal| act(Some(terminal), terminal.view(), op))
         } else {
             workspace
-                .shown(&id)
-                .ok_or_else(|| missing("thread", &id))
+                .shown(id)
+                .ok_or_else(|| missing("thread", id))
                 .map(|shown| act(shown.running(), shown.view(), op))
         }?
         .map_err(|error| refused(&error));
         if moves_view {
-            cx.emit(WorkspaceEvent::Screen(id.clone(), number));
+            cx.emit(WorkspaceEvent::Screen((*id).clone(), number));
         }
         result
     })
@@ -313,6 +298,8 @@ pub(crate) fn run(
 #[derive(Default)]
 pub(crate) struct Run {
     pub(crate) shown: Option<Shown>,
+    pub(crate) acp: Option<crate::thread::acp::Acp>,
+    pub(crate) acp_task: Option<gpui_kit::Task<()>>,
     pub(crate) extras: Extras,
     pub(crate) size: Option<(u16, u16)>,
     pub(crate) started_seq: Option<u64>,

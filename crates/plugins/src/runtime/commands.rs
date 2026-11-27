@@ -34,6 +34,8 @@ impl RunCommand {
 
 pub(crate) const BINDINGS: &str = "$hotkeys";
 
+pub(crate) const DESCRIPTION_CAP: usize = 200;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CommandWhen {
@@ -49,6 +51,8 @@ pub(crate) struct Command {
     pub(crate) id: String,
     pub(crate) title: String,
     #[serde(default)]
+    pub(crate) description: Option<String>,
+    #[serde(default)]
     pub(crate) key: Option<String>,
     #[serde(default)]
     pub(crate) when: CommandWhen,
@@ -56,6 +60,8 @@ pub(crate) struct Command {
     pub(crate) header: bool,
     #[serde(default)]
     pub(crate) menu: bool,
+    #[serde(default)]
+    pub(crate) prompt: bool,
 }
 
 /// Where a command's key comes from. A key the person saved is bound before any manifest's.
@@ -70,10 +76,12 @@ pub struct CommandContribution {
     pub plugin: PluginId,
     pub id: String,
     pub title: String,
+    pub description: Option<String>,
     pub key: Option<String>,
     pub when: CommandWhen,
     pub header: bool,
     pub menu: bool,
+    pub prompt: bool,
     pub source: KeySource,
 }
 
@@ -97,10 +105,12 @@ impl CommandContribution {
             plugin: plugin.clone(),
             id: command.id.clone(),
             title: command.title.clone(),
+            description: command.description.clone(),
             key,
             when: command.when,
             header: command.header,
             menu: command.menu,
+            prompt: command.prompt,
             source,
         }
     }

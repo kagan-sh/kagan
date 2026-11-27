@@ -73,11 +73,14 @@ pub(super) struct Reuse {
 }
 
 impl Reuse {
-    // The ended thread's folder, when core would run a new thread in it: the folder must exist,
-    // belong to the thread's project, and be ready.
+    // The ended thread's folder, when core would run a new thread in it: the thread is not
+    // archived, and the folder must exist, belong to the thread's project, and be ready.
     pub(super) fn of(thread: &ThreadId, cx: &App) -> Option<Self> {
         let workspace = Workspace::global(cx).read(cx);
         let record = workspace.thread(thread)?.read(cx).record().clone();
+        if record.archived_at.is_some() {
+            return None;
+        }
         let environment_id = record.environment_id.clone()?;
         let environment = workspace.environment(&environment_id)?.read(cx).record();
         if environment.project_id != record.project_id
@@ -122,6 +125,7 @@ impl FolderUse {
 #[derive(Default)]
 pub(super) struct StartState {
     reuse: Option<Reuse>,
+    pub(super) link: Option<kg_domain::Link>,
     // The data folder's worktrees, as the line under "Runs in" shows it. Set once when the screen opens.
     pub(super) worktree_root: String,
     folder: Option<StartFolder>,
@@ -153,8 +157,16 @@ pub(super) struct StartState {
 }
 
 impl StartState {
+    pub(super) fn link(&self, program: &str) -> kg_domain::Link {
+        if kg_domain::acp_command(program).is_none() {
+            return kg_domain::Link::Terminal;
+        }
+        self.link.unwrap_or(kg_domain::Link::Acp)
+    }
+
     pub(super) fn reset(&mut self) {
         self.reuse = None;
+        self.link = None;
         self.folder = None;
         self.pick = BranchPick::Current;
         self.intent = ProjectIntent::Current;

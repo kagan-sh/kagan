@@ -246,12 +246,12 @@ fn open_git_form(cx: &mut TestAppContext) -> (Entity<Kagan>, AnyWindowHandle, te
     (kagan, window, data)
 }
 
-// A plain folder with a fake Claude installed. Its program runs in a plain folder, and the first
-// installed program is the one Start runs, so Start is ready.
+// A plain folder with a fake terminal agent installed. Its program runs in a plain folder, and the
+// first installed program is the one Start runs, so Start is ready.
 #[cfg(unix)]
 fn open_plain_form(cx: &mut TestAppContext) -> (Entity<Kagan>, AnyWindowHandle, tempfile::TempDir) {
     let (kagan, window, data) = open(cx);
-    fixture_programs(cx, data.path(), &["claude"]);
+    fixture_programs(cx, data.path(), &["aider"]);
     start_in_plain_folder(cx, window, data.path());
     wait_until(cx, |cx| disabled(cx, window, "start") == Some(false));
     (kagan, window, data)
@@ -312,6 +312,27 @@ fn enter_in_the_branch_search_picks_a_branch_and_starts_nothing(cx: &mut TestApp
         cx.update(|cx| screen_read::start_project(kagan.read(cx)))
             .is_some()
     );
+}
+
+#[gpui_kit::test]
+fn an_agent_that_answers_acp_is_started_as_a_chat_by_default(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let (_repo, project) = committed_repo(cx, data.path());
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "program-search"));
+    // A program with no ACP command only has a terminal, so the choice is not offered.
+    set_program(cx, window, &kagan, shell());
+    assert!(!shows(cx, window, "run-as-chat"));
+    set_program(cx, window, &kagan, "opencode");
+    // The custom command's fields make the form taller than the window, so Run as is below the fold.
+    scroll_form_to_end(cx, window);
+    wait_until(cx, |cx| shows(cx, window, "run-as-chat"));
+    assert_eq!(label(cx, window, "run-as-caption"), "Run as");
+    assert_eq!(selected_of(cx, window, "run-as-chat"), Some(true));
+    assert_eq!(selected_of(cx, window, "run-as-terminal"), Some(false));
+    click(cx, window, "run-as-terminal");
+    assert_eq!(selected_of(cx, window, "run-as-terminal"), Some(true));
+    assert_eq!(selected_of(cx, window, "run-as-chat"), Some(false));
 }
 
 #[gpui_kit::test]

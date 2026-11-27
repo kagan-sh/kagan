@@ -4,6 +4,7 @@
     reason = "a test stops at the first broken step"
 )]
 
+mod acp;
 mod agent;
 mod automation;
 #[cfg(unix)]
@@ -126,8 +127,17 @@ impl Fixture {
         }
     }
 
+    fn run_acp(&self, program: &str) -> Op {
+        let Op::Thread(ThreadOp::Run(mut run)) = self.run(program) else {
+            panic!("a run")
+        };
+        run.link = Link::Acp;
+        Op::Thread(ThreadOp::Run(run))
+    }
+
     fn run(&self, program: &str) -> Op {
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: self.project.clone(),
             program: program.into(),
             title: None,
@@ -314,11 +324,18 @@ fn plant_old_turn(db: &Path, id: &ThreadId) {
                     message_id: None,
                     attachments: Vec::new(),
                 },
-                EventKind::Tool {
+                EventKind::Tool(ToolCall {
                     id: "tool-1".into(),
                     name: Some("read".into()),
-                    status: ToolStatus::Completed,
-                },
+                    kind: None,
+                    title: None,
+                    status: Some(ToolStatus::Completed),
+                    input: None,
+                    output: None,
+                    diff: Vec::new(),
+                    locations: Vec::new(),
+                    approval: None,
+                }),
             ],
         )
         .unwrap();
@@ -374,6 +391,7 @@ async fn diff_paths(id: &ThreadId, scope: DiffScope, cx: &mut TestAppContext) ->
 
 fn personal_run(fixture: &Fixture, title: &str, environment: EnvironmentSpec) -> Op {
     Op::Thread(ThreadOp::Run(Run {
+        link: kg_domain::Link::Terminal,
         project_id: fixture.project.clone(),
         program: program().into(),
         title: Some(title.into()),
@@ -595,7 +613,6 @@ async fn kinds_of(id: &ThreadId, cx: &mut TestAppContext) -> Vec<EventKind> {
         .collect()
 }
 
-#[cfg(unix)]
 fn busy_of(fixture: &Fixture, id: &ThreadId, cx: &mut TestAppContext) -> bool {
     cx.read(|cx| fixture.workspace.read(cx).thread(id).unwrap().read(cx).busy)
 }
@@ -634,7 +651,6 @@ fn turn_counts(kinds: &[EventKind]) -> (usize, usize) {
     (started, ended)
 }
 
-#[cfg(unix)]
 async fn finish_quit(cx: &mut TestAppContext, id: &ThreadId, quitting: gpui_kit::Task<Result<()>>) {
     // stop_for_quit's test-clock deadline is 3s; past that it fails with
     // "timed out stopping programs" while a slow kill is still finishing.
@@ -655,7 +671,6 @@ async fn finish_quit(cx: &mut TestAppContext, id: &ThreadId, quitting: gpui_kit:
     quitting.await.unwrap();
 }
 
-#[cfg(unix)]
 fn assert_quit_leaves_the_turn(kinds: &[EventKind]) {
     assert_eq!(
         kinds
@@ -791,7 +806,6 @@ fn ask_op(id: ThreadId, title: &str, options: Vec<InteractionOption>) -> Op {
     })
 }
 
-#[cfg(unix)]
 async fn pending(id: &ThreadId, cx: &mut TestAppContext) -> Vec<PendingInteraction> {
     let OpResult::Interactions(pending) =
         op(Op::Thread(ThreadOp::Interactions { id: id.clone() }), cx)
@@ -1525,6 +1539,7 @@ fn fake_program(dir: &std::path::Path, name: &str, body: &str) {
 
 fn idle_thread(id: &str, project: ProjectId) -> Thread {
     Thread {
+        link: kg_domain::Link::Terminal,
         id: ThreadId(id.into()),
         project_id: project,
         environment_id: None,
@@ -1680,6 +1695,7 @@ fn assert_diagnostics_keeps_secrets_out(text: &str) {
 #[cfg(unix)]
 fn worktree_run(fixture: &Fixture, title: Option<&str>, base: Option<&str>) -> Op {
     Op::Thread(ThreadOp::Run(Run {
+        link: kg_domain::Link::Terminal,
         project_id: fixture.project.clone(),
         program: program().into(),
         title: title.map(str::to_owned),

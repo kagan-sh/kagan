@@ -54,3 +54,5 @@ Use a fresh thread for each test, so earlier context does not help the agent.
 3. Do the same task with the skill, then without it or with the old version. Keep the version that does better, and say why in one line.
 
 A bundled, plugin, user, or project skill also reaches Claude, Cursor, Codex, Kimi, OpenCode, and Pi natively: Claude and Cursor as a plugin catalog, Codex from `.agents/skills`, OpenCode from `.opencode/skills`, and Kimi and Pi with a skills-dir or skill flag.
+
+Never answer an approval; never approve powers; a chat plugin draws, the host types and answers.

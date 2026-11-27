@@ -88,29 +88,79 @@ fn plain_identifier(value: &str) -> bool {
         })
 }
 
-/// The id kagan gives an agent's conversation at its first start, so Start again can resume it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// The longest conversation id an agent may have, in bytes.
+pub const CONVERSATION_MAX: usize = 256;
+
+/// Why a conversation id is refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ConversationError {
+    #[error("a conversation id is empty")]
+    Empty,
+    #[error("a conversation id is longer than {CONVERSATION_MAX} bytes")]
+    TooLong,
+    #[error("a conversation id has a control character")]
+    Control,
+    #[error("a conversation id starts with a flag")]
+    Flag,
+    #[error("a conversation id reads as a path")]
+    Path,
+}
+
+/// A conversation's id: the one kagan gives an agent at its first start, or the id an agent gives
+/// its own session.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
-pub struct Conversation(uuid::Uuid);
+pub struct Conversation(String);
 
 impl Conversation {
     #[must_use]
     pub fn fresh() -> Self {
-        Self(uuid::Uuid::new_v4())
+        Self(uuid::Uuid::new_v4().hyphenated().to_string())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
 impl FromStr for Conversation {
-    type Err = uuid::Error;
+    type Err = ConversationError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse().map(Self)
+        if s.is_empty() {
+            return Err(ConversationError::Empty);
+        }
+        if s.len() > CONVERSATION_MAX {
+            return Err(ConversationError::TooLong);
+        }
+        if s.chars().any(char::is_control) {
+            return Err(ConversationError::Control);
+        }
+        if s.starts_with('-') {
+            return Err(ConversationError::Flag);
+        }
+        if s.contains(['/', '\\']) || s.contains("..") {
+            return Err(ConversationError::Path);
+        }
+        Ok(Self(s.to_owned()))
+    }
+}
+
+impl<'de> Deserialize<'de> for Conversation {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(serde::de::Error::custom)
     }
 }
 
 impl fmt::Display for Conversation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.hyphenated().fmt(f)
+        f.write_str(&self.0)
     }
 }
 

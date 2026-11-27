@@ -220,7 +220,7 @@ fn a_thread_idle_event_reaches_only_a_subscribed_plugin(cx: &mut TestAppContext)
         Workspace::global(cx).update(cx, |_, cx| {
             for event in persisted {
                 cx.emit(kg_core::WorkspaceEvent::Event {
-                    event,
+                    event: Box::new(event),
                     project_id: ProjectId("prj_test".into()),
                 });
             }
@@ -309,7 +309,7 @@ export default class Plugin extends View {{
         Workspace::global(cx).update(cx, |_, cx| {
             for event in persisted {
                 cx.emit(kg_core::WorkspaceEvent::Event {
-                    event,
+                    event: Box::new(event),
                     project_id: ProjectId("prj_test".into()),
                 });
             }
@@ -340,6 +340,7 @@ fn created_and_deleted_events_carry_the_project(cx: &mut TestAppContext) {
     let OpResult::Thread(forked) = run(
         cx,
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: ProjectId("prj_test".into()),
             program: if cfg!(windows) { "cmd.exe" } else { "/bin/sh" }.into(),
             title: None,

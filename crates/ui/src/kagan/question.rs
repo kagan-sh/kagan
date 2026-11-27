@@ -25,6 +25,7 @@ pub(super) struct Question {
     title: String,
     options: Vec<InteractionOption>,
     asked: Option<PendingInteraction>,
+    region: &'static str,
 }
 
 impl Question {
@@ -35,6 +36,7 @@ impl Question {
             title: asked.title.clone(),
             options: asked.options.clone(),
             asked: Some(asked.clone()),
+            region: "",
         }
     }
 
@@ -45,6 +47,14 @@ impl Question {
             title: approval.title.clone(),
             options: approval.options.clone(),
             asked: None,
+            region: "",
+        }
+    }
+
+    fn in_the_transcript(asked: &PendingInteraction) -> Self {
+        Self {
+            region: "chat-",
+            ..Self::thread(asked)
         }
     }
 }
@@ -64,7 +74,33 @@ pub(super) fn card(
         let draft = draft?;
         Some(ask_form::fields(asked, draft, entity, window, cx).into_any_element())
     });
-    body(question, form, kagan, window, cx)
+    body(
+        question,
+        form,
+        None,
+        Some(kagan),
+        &failed(kagan),
+        window,
+        cx,
+    )
+}
+
+pub(super) fn permission_card(
+    asked: &PendingInteraction,
+    detail: Option<AnyElement>,
+    failed: &Failed,
+    window: &mut Window,
+    cx: &mut App,
+) -> impl IntoElement {
+    body(
+        Question::in_the_transcript(asked),
+        None,
+        detail,
+        None,
+        failed,
+        window,
+        cx,
+    )
 }
 
 pub(super) fn form_card(
@@ -80,50 +116,118 @@ pub(super) fn form_card(
         .as_ref()
         .is_some_and(|fields| !fields.is_empty())
         .then(|| ask_form::fields(asked, draft, entity, window, cx).into_any_element());
-    body(Question::thread(asked), form, kagan, window, cx)
+    body(
+        Question::thread(asked),
+        form,
+        None,
+        Some(kagan),
+        &failed(kagan),
+        window,
+        cx,
+    )
+}
+
+pub(super) type Failed = Rc<dyn Fn(&mut App, String)>;
+
+fn failed(kagan: &WeakEntity<Kagan>) -> Failed {
+    let kagan = kagan.clone();
+    Rc::new(move |cx, text| {
+        _ = kagan.update(cx, |kagan, cx| {
+            kagan.note = Some(text.into());
+            cx.notify();
+        });
+    })
 }
 
 pub(super) fn answer_focus(question: &str, option: &str) -> String {
     format!("answer-focus-{question}-{option}")
 }
 
+// The option a card opens on: for a permission, the one that grants nothing.
+pub(super) fn opening_option(
+    options: &[InteractionOption],
+    permission: bool,
+) -> Option<&InteractionOption> {
+    if permission {
+        return options
+            .iter()
+            .find(|option| option.role == Some(OptionRole::Safe))
+            .or_else(|| {
+                options
+                    .iter()
+                    .find(|option| option.role == Some(OptionRole::Destructive))
+            });
+    }
+    options
+        .iter()
+        .find(|option| option.role == Some(OptionRole::Primary))
+        .or_else(|| {
+            options
+                .iter()
+                .find(|option| option.role == Some(OptionRole::Safe))
+        })
+        .or_else(|| options.first())
+}
+
+impl Question {
+    fn focus_key(&self, option: &str) -> String {
+        answer_focus(&format!("{}{}", self.region, self.id.0), option)
+    }
+
+    fn element(&self, kind: &str, option: &str) -> String {
+        format!("{kind}-{}{}-{option}", self.region, self.id.0)
+    }
+
+    fn asks_permission(&self) -> bool {
+        self.asked
+            .as_ref()
+            .is_none_or(|asked| asked.fields.is_none())
+    }
+}
+
 fn body(
     question: Question,
     form: Option<AnyElement>,
-    kagan: &WeakEntity<Kagan>,
+    detail: Option<AnyElement>,
+    kagan: Option<&WeakEntity<Kagan>>,
+    failed: &Failed,
     window: &mut Window,
     cx: &mut App,
-) -> impl IntoElement {
+) -> impl IntoElement + use<> {
+    let failed = Rc::clone(failed);
     let mut buttons: Vec<AnyElement> = Vec::new();
-    for option in &question.options {
+    for option in &ordered(&question.options, question.asks_permission()) {
         let focus = super::tab_stop(
             window,
             cx,
-            ElementId::Name(answer_focus(&question.id.0, &option.id).into()),
+            ElementId::Name(question.focus_key(&option.id).into()),
         );
-        let answer_now: Rc<dyn Fn(&mut App)> =
-            match (question.asked.clone(), question.thread.clone()) {
-                (Some(asked), Some(thread)) if asked.fields.is_some() => {
-                    ask_form::answer_callback(thread, asked, option.id.clone(), kagan.clone())
-                }
-                _ => {
-                    let (thread, id, choice, kagan) = (
-                        question.thread.clone(),
-                        question.id.clone(),
-                        option.id.clone(),
-                        kagan.clone(),
-                    );
-                    Rc::new(move |cx| {
-                        answer(thread.clone(), id.clone(), choice.clone(), &kagan, cx);
-                    })
-                }
-            };
+        let answer_now: Rc<dyn Fn(&mut App)> = match (
+            question.asked.clone(),
+            question.thread.clone(),
+            kagan.cloned(),
+        ) {
+            (Some(asked), Some(thread), Some(kagan)) if asked.fields.is_some() => {
+                ask_form::answer_callback(thread, asked, option.id.clone(), kagan)
+            }
+            _ => {
+                let (thread, id, choice) = (
+                    question.thread.clone(),
+                    question.id.clone(),
+                    option.id.clone(),
+                );
+                let failed = Rc::clone(&failed);
+                Rc::new(move |cx| {
+                    answer(thread.clone(), id.clone(), choice.clone(), cx, &failed);
+                })
+            }
+        };
         let (on_key, on_click) = (answer_now.clone(), answer_now);
         let focused = focus.is_focused(window);
         buttons.push(
             div()
                 .id(ElementId::Name(
-                    format!("answer-{}-{}", question.id.0, option.id).into(),
+                    question.element("answer", &option.id).into(),
                 ))
                 .ui_observe_as(Facts {
                     focus: Some(focus.clone()),
@@ -141,14 +245,16 @@ fn body(
                     }
                 })
                 .child({
-                    let mut button = Button::new(SharedString::from(option.id.clone()))
-                        .small()
-                        .tab_stop(false)
-                        .label(option.label.clone());
-                    button = if option.role == Some(OptionRole::Destructive) {
-                        button.danger()
-                    } else {
-                        button.outline()
+                    let mut button = Button::new(SharedString::from(
+                        question.element("answer-button", &option.id),
+                    ))
+                    .small()
+                    .tab_stop(false)
+                    .label(option.label.clone());
+                    button = match option.role {
+                        Some(OptionRole::Destructive) => button.danger(),
+                        Some(OptionRole::Primary) => button.primary(),
+                        _ => button.outline(),
                     };
                     button.on_click(move |_, _, cx| on_click(cx))
                 })
@@ -157,7 +263,7 @@ fn body(
     }
     v_flex()
         .id(ElementId::Name(
-            format!("question-{}", question.id.0).into(),
+            format!("question-{}{}", question.region, question.id.0).into(),
         ))
         .ui_container()
         .p(px(space(SpaceStep::Md, cx)))
@@ -166,17 +272,40 @@ fn body(
         .border_1()
         .border_color(cx.theme().warning)
         .bg(cx.theme().muted)
-        .child(div().type_body(cx).child(question.title))
+        .child(
+            div()
+                .id(ElementId::Name(
+                    format!("question-title-{}{}", question.region, question.id.0).into(),
+                ))
+                .ui_observe_as(Facts::label("Question", question.title.clone()))
+                .type_body(cx)
+                .child(question.title),
+        )
+        .children(detail)
         .children(form)
         .child(h_flex().gap(px(space(SpaceStep::Sm, cx))).children(buttons))
+}
+
+fn ordered(options: &[InteractionOption], permission: bool) -> Vec<InteractionOption> {
+    if !permission {
+        return options.to_vec();
+    }
+    let rank = |role: Option<OptionRole>| match role {
+        Some(OptionRole::Destructive) => 0,
+        Some(OptionRole::Primary) => 2,
+        _ => 1,
+    };
+    let mut ordered = options.to_vec();
+    ordered.sort_by_key(|option| rank(option.role));
+    ordered
 }
 
 fn answer(
     thread: Option<ThreadId>,
     id: PendingInteractionId,
     option: String,
-    kagan: &WeakEntity<Kagan>,
     cx: &mut App,
+    failed: &Failed,
 ) {
     if crate::synthetic::refuse_for_person() {
         return;
@@ -185,14 +314,15 @@ fn answer(
         Some(thread) => Workspace::answer(&thread, id, option, cx),
         None => Workspace::answer_standalone(id, option, cx),
     };
-    let kagan = kagan.clone();
+    let failed = Rc::clone(failed);
     cx.spawn(async move |cx| {
         if let Err(error) = answered.await {
-            _ = kagan.update(cx, |kagan, cx| {
-                kagan.note = Some(format!("Could not answer: {error}").into());
-                cx.notify();
-            });
+            cx.update(|cx| failed(cx, format!("Could not answer: {error}")));
         }
     })
     .detach();
 }
+
+#[cfg(test)]
+#[path = "question_test.rs"]
+mod tests;

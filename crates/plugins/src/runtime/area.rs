@@ -109,6 +109,7 @@ pub(crate) fn modules(
         ),
         (Gate::Area(Area::Process), process),
         (Gate::Area(Area::Threads), crate::threads::module(id)),
+        (Gate::Area(Area::Chat), crate::chat::module()),
         (
             Gate::Area(Area::Database),
             crate::database::module(&data.join("database.sqlite3")),

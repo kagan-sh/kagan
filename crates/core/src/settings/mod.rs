@@ -93,6 +93,7 @@ const PREFERENCES: &[(&str, Kind)] = &[
     (prefs::FONT_TERMINAL, Kind::FontName),
     (Slot::Threads.preference(), Kind::Slot),
     (Slot::Review.preference(), Kind::Slot),
+    (Slot::Chat.preference(), Kind::Slot),
     (prefs::REVIEW_VIEWED, Kind::Map),
     (prefs::RAIL_HIDDEN, Kind::PluginIds),
 ];

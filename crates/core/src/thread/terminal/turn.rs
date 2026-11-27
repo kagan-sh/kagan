@@ -7,11 +7,10 @@ use kg_domain::{EventKind, KNOWN_PROGRAMS, OpResult, ThreadId, TurnOp, TurnOutco
 use kg_terminal::Grid;
 
 use crate::host::database::Result;
+use crate::thread::finish::StopReason;
 use crate::thread::turn_state::{Change, Signal, Source, TurnState};
 use crate::workspace::closed;
 use crate::{Thread, Workspace, WorkspaceEvent};
-
-use super::StopReason;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Spin {
@@ -81,6 +80,9 @@ pub(crate) async fn hook(
     let thread = crate::thread::thread(this, &id, cx)?;
     let now = cx.background_executor().now();
     let change = thread.update(cx, |thread, cx| {
+        if thread.record.link != kg_domain::Link::Terminal {
+            return None;
+        }
         if signal == Signal::HookStart && !thread.running() {
             return None;
         }
@@ -92,7 +94,12 @@ pub(crate) async fn hook(
         Some(Change::Opened) => {
             Workspace::events(this, id, vec![EventKind::TurnStarted], cx).await?;
         }
-        Some(Change::Closed) => waiting(this, id, cx).await?,
+        Some(Change::Closed) => {
+            let turn = this
+                .update(cx, |workspace, _| ended_turn(workspace, &id))
+                .map_err(closed)?;
+            waiting(this, id, turn, cx).await?;
+        }
         None => {}
     }
     Ok(OpResult::Done)
@@ -104,19 +111,16 @@ fn step(thread: &mut Thread, signal: Signal, now: Instant) -> Option<Change> {
     change
 }
 
-pub(crate) fn begin_run(workspace: &Workspace, id: &ThreadId, hooks: bool, cx: &mut App) {
+pub(crate) fn begin_run(workspace: &mut Workspace, id: &ThreadId, source: Source, cx: &mut App) {
     let Some(thread) = workspace.threads.get(id) else {
         return;
-    };
-    let source = if hooks {
-        Source::Hook
-    } else {
-        Source::Undecided
     };
     thread.update(cx, |thread, _| {
         thread.turn = TurnState::new(source);
         thread.busy = false;
     });
+    // A fresh start is not the stop that ended the last one.
+    workspace.run_mut(id).stopping = None;
 }
 
 // Only a known agent's line can start a quiet turn, so a shell never reports one.
@@ -153,31 +157,29 @@ pub(crate) fn busy(title: &str) -> bool {
         .is_some_and(|first| matches!(first, '\u{2800}'..='\u{28FF}' | '\u{25D0}'..='\u{25D3}'))
 }
 
-pub(super) async fn waiting(
+pub(super) fn ended_turn(
+    workspace: &Workspace,
+    id: &ThreadId,
+) -> Option<(TurnOutcome, Option<String>)> {
+    let outcome = match workspace.runs.get(id).and_then(|run| run.stopping) {
+        Some(StopReason::Quit) => return None,
+        Some(StopReason::Stop) => TurnOutcome::Interrupted,
+        None => TurnOutcome::Completed,
+    };
+    Some((outcome, None))
+}
+
+pub(crate) async fn waiting(
     this: &WeakEntity<Workspace>,
     id: ThreadId,
+    turn: Option<(TurnOutcome, Option<String>)>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    let reason = this
-        .update(cx, |workspace, _| {
-            workspace.runs.get(&id).and_then(|run| run.stopping)
-        })
-        .map_err(closed)?;
     let thread = crate::thread::thread(this, &id, cx)?;
     done(this, &thread, cx).await?;
     let mut kinds = vec![EventKind::Waiting];
-    if reason != Some(StopReason::Quit) {
-        kinds.insert(
-            0,
-            EventKind::TurnEnded {
-                outcome: if reason.is_some() {
-                    TurnOutcome::Interrupted
-                } else {
-                    TurnOutcome::Completed
-                },
-                error: None,
-            },
-        );
+    if let Some((outcome, error)) = turn {
+        kinds.insert(0, EventKind::TurnEnded { outcome, error });
     }
     Workspace::events(this, id.clone(), kinds, cx).await?;
     this.update(cx, |_, cx| {
@@ -190,7 +192,7 @@ pub(super) async fn waiting(
     .map_err(closed)
 }
 
-pub(super) async fn done(
+pub(crate) async fn done(
     this: &WeakEntity<Workspace>,
     thread: &Entity<Thread>,
     cx: &mut AsyncApp,

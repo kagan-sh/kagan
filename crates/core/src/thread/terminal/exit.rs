@@ -6,21 +6,14 @@ use kg_terminal::Exit;
 
 use crate::Workspace;
 use crate::host::database::Result;
+use crate::thread::finish::{End, StopReason, ended, stopped};
 use crate::workspace::closed;
 
+use super::Run;
+use super::Shown;
 use super::agent::Start;
 use super::screen::keep_screen;
-use super::turn::done;
-use super::{Shown, start};
 use crate::thread::halt::status;
-use crate::thread::turn_state::Signal;
-
-/// Why a program was asked to stop. Quit still records `stopped` and `idle`, and skips `turn.ended`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum StopReason {
-    Stop,
-    Quit,
-}
 
 /// Asks a running program to end and marks the thread stopping. Its exit records the stop and keeps
 /// the screen. Returns whether there was a program to end.
@@ -28,11 +21,22 @@ pub(crate) fn request_stop(workspace: &mut Workspace, id: &ThreadId) -> bool {
     let Some(run) = workspace.runs.get_mut(id) else {
         return false;
     };
+    if !release(run) {
+        return false;
+    }
+    run.stopping.get_or_insert(StopReason::Stop);
+    true
+}
+
+fn release(run: &mut Run) -> bool {
+    if run.acp.take().is_some() {
+        run.acp_task = None;
+        return true;
+    }
     let Some(Shown::Running(terminal)) = &run.shown else {
         return false;
     };
     terminal.stop();
-    run.stopping.get_or_insert(StopReason::Stop);
     true
 }
 /// Runs a stopped or recovered thread's program again, in the folder it had.
@@ -70,7 +74,7 @@ pub(crate) async fn start_again(
         ));
     }
     status(this, &thread, ThreadStatus::Starting, cx).await?;
-    start(this, &thread, Start::Again, cx).await?;
+    crate::thread::start_program(this, &thread, Start::Again, cx).await?;
     Ok(OpResult::Thread(
         thread.read_with(cx, |thread, _| thread.record.clone()),
     ))
@@ -91,94 +95,49 @@ pub(crate) async fn exited(
             })
         })
         .map_err(closed)?;
-    let Ok(thread) = crate::thread::thread(this, &id, cx) else {
-        return Ok(OpResult::Done);
-    };
-    let (current, turn_open) =
-        thread.read_with(cx, |thread, _| (thread.record.status, thread.turn.open()));
-    if !matches!(current, ThreadStatus::Active | ThreadStatus::Stopping) {
-        return Ok(OpResult::Done);
-    }
-    let now = cx.background_executor().now();
-    thread.update(cx, |thread, _| thread.turn.apply(Signal::Ended, now));
-    crate::thread::halt::settle(this, &thread, cx).await?;
     this.update(cx, |workspace, cx| keep_screen(workspace, &id, cx))
         .map_err(closed)?;
-    if let Some(reason) = reason {
-        Workspace::events(
-            this,
-            id,
-            close_turn(
-                turn_open && reason != StopReason::Quit,
-                TurnOutcome::Interrupted,
-                None,
-                vec![EventKind::Stopped, EventKind::Idle],
-            ),
-            cx,
-        )
-        .await?;
-        status(this, &thread, ThreadStatus::Idle, cx).await?;
-        return Ok(OpResult::Done);
-    }
-    let (events, next) = match exit {
-        Exit::Code(0) => (
-            close_turn(
-                turn_open,
-                TurnOutcome::Completed,
-                None,
-                vec![
-                    EventKind::Exited {
-                        code: Some(0),
-                        signal: None,
-                    },
-                    EventKind::Idle,
-                ],
-            ),
-            ThreadStatus::Idle,
-        ),
-        Exit::Code(code) => {
-            let error = format!("the program exited with code {code}");
-            (
-                close_turn(
-                    turn_open,
-                    TurnOutcome::Failed,
-                    Some(error.clone()),
-                    vec![
-                        EventKind::Exited {
-                            code: Some(code),
-                            signal: None,
-                        },
-                        EventKind::Failed { error: Some(error) },
-                    ],
-                ),
-                ThreadStatus::Error,
-            )
-        }
-        Exit::Signal(signal) => {
-            let error = format!("the program was ended by signal {signal}");
-            (
-                close_turn(
-                    turn_open,
-                    TurnOutcome::Failed,
-                    Some(error.clone()),
-                    vec![
-                        EventKind::Exited {
-                            code: None,
-                            signal: Some(signal),
-                        },
-                        EventKind::Failed { error: Some(error) },
-                    ],
-                ),
-                ThreadStatus::Error,
-            )
-        }
+    let end = match reason {
+        Some(reason) => stopped(reason),
+        None => exit_end(Some(exit), None),
     };
-    Workspace::events(this, id, events, cx).await?;
-    status(this, &thread, next, cx).await?;
-    if next == ThreadStatus::Idle {
-        done(this, &thread, cx).await?;
+    ended(this, id, end, cx).await
+}
+
+pub(crate) fn exit_end(exit: Option<Exit>, reason: Option<String>) -> End {
+    let Some(exit) = exit else {
+        let error = reason.unwrap_or_else(|| "the program ended without an exit code".into());
+        return End {
+            turn: Some((TurnOutcome::Failed, Some(error.clone()))),
+            events: vec![EventKind::Failed { error: Some(error) }],
+            status: ThreadStatus::Error,
+        };
+    };
+    let (code, signal) = match exit {
+        Exit::Code(code) => (Some(code), None),
+        Exit::Signal(signal) => (None, Some(signal)),
+    };
+    let exited = EventKind::Exited { code, signal };
+    if exit == Exit::Code(0) && reason.is_none() {
+        return End {
+            turn: Some((TurnOutcome::Completed, None)),
+            events: vec![exited, EventKind::Idle],
+            status: ThreadStatus::Idle,
+        };
     }
-    Ok(OpResult::Done)
+    let default = match exit {
+        Exit::Code(code) => format!("the program exited with code {code}"),
+        Exit::Signal(signal) => format!("the program was ended by signal {signal}"),
+    };
+    let error = match reason {
+        Some(reason) => format!("{default}\n{reason}"),
+        None => default,
+    };
+    End {
+        turn: Some((TurnOutcome::Failed, Some(error.clone()))),
+        events: vec![exited, EventKind::Failed { error: Some(error) }],
+        status: ThreadStatus::Error,
+    }
 }
 // A recovered thread has the status of a running program and no terminal in this process.
 fn program_is_live(workspace: &Workspace, id: &ThreadId, cx: &gpui_kit::App) -> bool {
@@ -186,21 +145,12 @@ fn program_is_live(workspace: &Workspace, id: &ThreadId, cx: &gpui_kit::App) -> 
     if matches!(shown, Some(Shown::Running(_))) {
         return true;
     }
+    if workspace.runs.get(id).is_some_and(|run| run.acp.is_some()) {
+        return true;
+    }
     let status = workspace
         .threads
         .get(id)
         .map(|thread| thread.read(cx).record.status);
     status.is_some_and(ThreadStatus::running) && shown.is_some()
-}
-
-fn close_turn(
-    open: bool,
-    outcome: TurnOutcome,
-    error: Option<String>,
-    mut kinds: Vec<EventKind>,
-) -> Vec<EventKind> {
-    if open {
-        kinds.insert(0, EventKind::TurnEnded { outcome, error });
-    }
-    kinds
 }

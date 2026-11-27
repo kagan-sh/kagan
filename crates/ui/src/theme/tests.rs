@@ -1,5 +1,9 @@
 use gpui_kit::component::highlighter::HighlightTheme;
 use kg_core::Ansi;
+use kg_domain::{
+    Link, ProjectId, Thread, ThreadId, ThreadMark, ThreadNotify, ThreadStatus, Timestamp,
+    Visibility,
+};
 
 use super::colors::{Families, highlight};
 use super::*;
@@ -192,6 +196,51 @@ fn a_theme_picks_its_own_highlight_for_each_mode() {
         *highlight(&file, ThemeMode::Light),
         *HighlightTheme::default_light(),
         "a mode without its own syntax keeps the default"
+    );
+}
+
+fn thread(status: ThreadStatus, read: bool) -> Thread {
+    Thread {
+        id: ThreadId("thr".into()),
+        project_id: ProjectId("prj".into()),
+        environment_id: None,
+        title: "Thread".into(),
+        title_locked: false,
+        provider: "opencode".into(),
+        link: Link::Acp,
+        status,
+        visibility: Visibility::Visible,
+        parent_thread_id: None,
+        quiet: false,
+        notify: ThreadNotify::Default,
+        lifecycle_owner_thread_id: None,
+        section_id: None,
+        pinned: false,
+        last_read_at: read.then_some(Timestamp(1)),
+        latest_attention_at: Timestamp(1),
+        mark: ThreadMark::None,
+        archived_at: None,
+        created_at: Timestamp(0),
+        updated_at: Timestamp(0),
+    }
+}
+
+#[test]
+fn a_turn_held_on_a_permission_request_is_needs_you_while_its_turn_is_busy() {
+    assert_eq!(
+        Tone::of(&thread(ThreadStatus::Active, false), true, false, false),
+        Tone::Busy,
+        "an unread busy turn nobody is waiting on is working"
+    );
+    assert_eq!(
+        Tone::of(&thread(ThreadStatus::Active, true), true, false, true),
+        Tone::Needs,
+        "a busy turn held open on a permission request needs the person"
+    );
+    assert_eq!(
+        Tone::of(&thread(ThreadStatus::Active, true), true, false, false),
+        Tone::Busy,
+        "a busy turn nobody is waiting on is working"
     );
 }
 

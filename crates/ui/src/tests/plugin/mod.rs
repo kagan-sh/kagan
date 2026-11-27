@@ -1,3 +1,4 @@
+mod chat;
 mod drag;
 pub(super) mod panels;
 mod replace;

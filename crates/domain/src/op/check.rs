@@ -10,7 +10,7 @@ use super::{
     SEARCH_LIMIT, SEARCH_TEXT_MAX, SavedPromptOp, SectionOp, SurfaceOp, TERMINAL_COLS,
     TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThreadOp, TurnOp, WindowOp,
 };
-use crate::{saved_name, split_program, unsafe_char};
+use crate::{ACP_COMMANDS, Link, acp_command, saved_name, split_program, unsafe_char};
 
 /// Rejects an op a client must not send.
 ///
@@ -33,6 +33,7 @@ pub fn check(op: &Op) -> Result<(), String> {
             .and_then(|()| terminal_size(op))
             .and_then(|()| search(op))
             .and_then(|()| match op {
+                ThreadOp::Run(run) if run.link == Link::Acp => acp_link(&run.program),
                 ThreadOp::Paste { text, file, .. } => carried_text(text.as_ref(), file.as_ref()),
                 ThreadOp::Input { text, .. } if text.len() > TEXT_MAX => Err(over_cap()),
                 ThreadOp::Report { bytes, .. } if bytes.len() > TEXT_MAX => Err(over_cap()),
@@ -181,6 +182,20 @@ fn search(op: &ThreadOp) -> Result<(), String> {
     }
 }
 
+// An ACP thread spawns the agent's ACP subcommand, so the link needs one kagan knows. The names
+// come from the one per-agent table, so a new agent is listed the day it is added.
+fn acp_link(program: &str) -> Result<(), String> {
+    if acp_command(program).is_some() {
+        return Ok(());
+    }
+    let known: Vec<_> = ACP_COMMANDS.iter().map(|(name, _, _)| *name).collect();
+    Err(format!(
+        "{} cannot be an ACP thread; kagan knows {}",
+        split_program(program).map_or_else(|_| program.to_owned(), |(name, _)| name),
+        known.join(", ")
+    ))
+}
+
 fn plain(id: &ThreadId) -> Result<(), String> {
     if id.plain() {
         Ok(())
@@ -211,6 +226,7 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
             .collect(),
         ThreadOp::Get { id, .. }
         | ThreadOp::Stop { id, .. }
+        | ThreadOp::Cancel { id }
         | ThreadOp::Input { id, .. }
         | ThreadOp::Resize { id, .. }
         | ThreadOp::Screen { id, .. }

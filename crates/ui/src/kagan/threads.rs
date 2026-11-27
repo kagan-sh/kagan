@@ -1,8 +1,8 @@
 use super::screen;
 use super::shown::ThreadPick;
 use super::{
-    ArchiveThread, Kagan, NewThread, RenameThread, RestoreThread, SaveDiagnostics, Shown,
-    StartAgain, StopThread, TogglePinned, toast::Toast,
+    ArchiveThread, CancelTurn, Kagan, NewThread, RenameThread, RestoreThread, SaveDiagnostics,
+    Shown, StartAgain, StopThread, TogglePinned, toast::Toast,
 };
 use crate::kagan::dispatch;
 use std::collections::BTreeSet;
@@ -29,7 +29,8 @@ impl Kagan {
     pub(crate) fn shown_thread(&self, cx: &App) -> Option<ThreadId> {
         match self.screen.shown() {
             Shown::Thread(view) if !self.in_settings() => Some(view.read(cx).thread().clone()),
-            Shown::Thread(_) | Shown::Nothing | Shown::Start(_) => None,
+            Shown::Chat(view) if !self.in_settings() => Some(view.read(cx).thread().clone()),
+            Shown::Thread(_) | Shown::Chat(_) | Shown::Nothing | Shown::Start(_) => None,
         }
     }
 
@@ -40,10 +41,13 @@ impl Kagan {
         match (self.shown_thread(cx), self.screen.shown()) {
             (Some(id), _) => self.record(&id, cx).map(|thread| thread.project_id.clone()),
             (None, Shown::Start(project)) => Some(project.clone()),
-            (None, Shown::Nothing | Shown::Thread(_)) => None,
+            (None, Shown::Nothing | Shown::Thread(_) | Shown::Chat(_)) => None,
         }
     }
     pub(super) fn record<'a>(&'a self, id: &ThreadId, cx: &'a App) -> Option<&'a Thread> {
+        // An archived thread is in no list, so its record comes from the workspace.
+        let workspace = Workspace::global(cx);
+        let workspace = workspace.read(cx);
         self.sidebar
             .read(cx)
             .listing
@@ -51,6 +55,7 @@ impl Kagan {
             .iter()
             .find(|thread| thread.id == *id)
             .or(self.open_thread.as_ref().filter(|thread| thread.id == *id))
+            .or_else(|| workspace.thread(id).map(|t| t.read(cx).record()))
     }
 
     pub(super) fn note_shown(&mut self, cx: &App) {
@@ -78,6 +83,7 @@ impl Kagan {
 
     pub(super) fn waited(&mut self, id: &ThreadId, window: &mut Window, cx: &mut Context<Self>) {
         if matches!(self.screen.current(), screen::Center::Work(Shown::Thread(view)) if view.read(cx).thread() == id)
+            || matches!(self.screen.current(), screen::Center::Work(Shown::Chat(view)) if view.read(cx).thread() == id)
         {
             dispatch::logged(Op::Thread(ThreadOp::MarkRead { id: id.clone() }), cx);
         } else {
@@ -86,15 +92,18 @@ impl Kagan {
     }
 
     pub(super) fn read_shown(&self, cx: &mut Context<Self>) {
-        if let screen::Center::Work(Shown::Thread(view)) = self.screen.current() {
-            let id = view.read(cx).thread().clone();
-            if Workspace::global(cx)
+        let shown = match self.screen.current() {
+            screen::Center::Work(Shown::Thread(view)) => Some(view.read(cx).thread().clone()),
+            screen::Center::Work(Shown::Chat(view)) => Some(view.read(cx).thread().clone()),
+            _ => None,
+        };
+        if let Some(id) = shown
+            && Workspace::global(cx)
                 .read(cx)
                 .thread(&id)
                 .is_some_and(|thread| thread.read(cx).record().mark == kg_domain::ThreadMark::Done)
-            {
-                dispatch::logged(Op::Thread(ThreadOp::MarkRead { id }), cx);
-            }
+        {
+            dispatch::logged(Op::Thread(ThreadOp::MarkRead { id }), cx);
         }
     }
 
@@ -106,10 +115,22 @@ impl Kagan {
         if self.start.plugin_thread.as_ref() != Some(&id) {
             self.cancel_plugin_start();
         }
-        let view = cx.new(|cx| TerminalView::new(id.clone(), None, self.terminal_font_size, cx));
-        self.show_work(Shown::Thread(view.clone()), window, cx);
+        let chat = self
+            .record(&id, cx)
+            .is_some_and(|thread| thread.link == kg_domain::Link::Acp);
+        if chat {
+            let entity = cx.entity().downgrade();
+            let view =
+                cx.new(|cx| crate::kagan::chat::ChatView::new(id.clone(), entity, window, cx));
+            self.show_work(Shown::Chat(view), window, cx);
+            self.typed_watch = None;
+        } else {
+            let view =
+                cx.new(|cx| TerminalView::new(id.clone(), None, self.terminal_font_size, cx));
+            self.show_work(Shown::Thread(view.clone()), window, cx);
+            self.typed_watch = Some(cx.subscribe(&view, |this, _, _: &Typed, cx| this.typed(cx)));
+        }
         self.focus_work(window, cx);
-        self.typed_watch = Some(cx.subscribe(&view, |this, _, _: &Typed, cx| this.typed(cx)));
         self.sidebar.update(cx, |sidebar, _| sidebar.choose(None));
         self.shown_changed(window, cx);
         self.note_shown(cx);
@@ -122,6 +143,7 @@ impl Kagan {
         self.load_details(cx);
         self.sync_tabs(window, cx);
         self.tell_host(window, cx);
+        self.sync_replaced(window, cx);
     }
 
     pub(super) fn show_start(
@@ -233,6 +255,26 @@ impl Kagan {
         if let Some(id) = self.shown_thread(cx) {
             self.run(Op::Thread(ThreadOp::Stop { id }), "stop the thread", cx);
         }
+    }
+
+    pub(super) fn cancel_turn(&mut self, _: &CancelTurn, _: &mut Window, cx: &mut Context<Self>) {
+        let Some(id) = self.shown_thread(cx) else {
+            cx.propagate();
+            return;
+        };
+        let busy = Workspace::global(cx)
+            .read(cx)
+            .thread(&id)
+            .is_some_and(|thread| thread.read(cx).busy());
+        if !busy {
+            cx.propagate();
+            return;
+        }
+        self.run(
+            Op::Thread(ThreadOp::Cancel { id }),
+            "cancel the agent's reply",
+            cx,
+        );
     }
 
     pub(super) fn save_diagnostics(

@@ -2,8 +2,8 @@ use crate::{
     AgentTool, Attachment, ConfigOp, DiffNote, DiffScope, DiffSide, EnvironmentSpec, Event,
     EventKind, InstructionsOp, InteractionOption, Op, OpError, OpResult, PendingInteraction,
     PendingInteractionId, PluginId, PluginOp, ProjectBranch, Thread, ThreadId, ThreadOp,
-    ThreadStatus, Timestamp, TurnOutcome, UpdateState, Visibility, WaitOutcome, branch_slug,
-    format_notes, invalid_json,
+    ThreadStatus, Timestamp, ToolCall, TurnOutcome, UpdateState, Visibility, WaitOutcome,
+    branch_slug, format_notes, invalid_json,
 };
 use serde_json::{Value, json};
 
@@ -16,7 +16,7 @@ where
 }
 
 // Every `type` tag an old log may hold.
-const TYPES: [&str; 26] = [
+const TYPES: [&str; 29] = [
     "created",
     "started",
     "exited",
@@ -30,6 +30,9 @@ const TYPES: [&str; 26] = [
     "turn.started",
     "turn.ended",
     "message",
+    "thought",
+    "plan",
+    "usage",
     "tool",
     "tool.started",
     "tool.ended",
@@ -48,6 +51,7 @@ const TYPES: [&str; 26] = [
 #[test]
 fn run_op() {
     let op = Op::Thread(ThreadOp::Run(crate::Run {
+        link: crate::Link::Terminal,
         project_id: crate::ProjectId("proj".into()),
         program: "claude".into(),
         title: None,
@@ -169,7 +173,7 @@ fn a_branch_slug_comes_from_the_title() {
 fn thread_unread_when_attention_is_newer_than_read() {
     let wire = json!({
         "id": "thr_1", "projectId": "prj_1", "environmentId": null, "title": "t", "titleLocked": false, "quiet": false, "notify": "default",
-        "provider": "claude-code", "status": "idle", "visibility": "visible",
+        "provider": "claude-code", "link": "terminal", "status": "idle", "visibility": "visible",
         "parentThreadId": null, "lifecycleOwnerThreadId": null, "sectionId": null,
         "pinned": false, "lastReadAt": 5, "latestAttentionAt": 5, "mark": "none", "archivedAt": null,
         "createdAt": 1, "updatedAt": 5,
@@ -819,7 +823,7 @@ fn a_plugin_theme_is_named_by_its_plugin() {
 
 #[test]
 fn event_type_names_match_the_wire_tag() {
-    use crate::{Role, ToolStatus};
+    use crate::Role;
     let kinds = [
         EventKind::Created,
         EventKind::Started,
@@ -845,11 +849,26 @@ fn event_type_names_match_the_wire_tag() {
             message_id: None,
             attachments: Vec::new(),
         },
-        EventKind::Tool {
+        EventKind::Thought {
+            text: String::new(),
+            message_id: None,
+        },
+        EventKind::Plan {
+            entries: Vec::new(),
+        },
+        EventKind::Usage { used: 1, size: 2 },
+        EventKind::Tool(ToolCall {
             id: String::new(),
             name: None,
-            status: ToolStatus::Completed,
-        },
+            kind: None,
+            title: None,
+            status: None,
+            input: None,
+            output: None,
+            diff: Vec::new(),
+            locations: Vec::new(),
+            approval: None,
+        }),
         EventKind::ToolStarted {
             id: String::new(),
             name: String::new(),
@@ -905,11 +924,104 @@ fn live_event_types_are_all_known_types() {
 }
 
 #[test]
+fn a_tool_delta_plan_and_usage_read_from_the_wire() {
+    round_trip(
+        &EventKind::Tool(ToolCall {
+            id: "call-1".into(),
+            name: Some("read_file".into()),
+            kind: Some(crate::ToolKind::Read),
+            title: Some("Read file auth.spec.ts".into()),
+            status: Some(crate::ToolStatus::Completed),
+            input: Some(json!({ "file_path": "auth.spec.ts" })),
+            output: Some("line one\nline two".into()),
+            diff: vec![crate::ToolDiff {
+                path: "auth.spec.ts".into(),
+                old: None,
+                new: "+ one".into(),
+            }],
+            locations: vec![crate::ToolLocation {
+                path: "auth.spec.ts".into(),
+                line: Some(41),
+            }],
+            approval: None,
+        }),
+        &json!({"type": "tool", "data": {
+            "id": "call-1",
+            "name": "read_file",
+            "kind": "read",
+            "title": "Read file auth.spec.ts",
+            "status": "completed",
+            "input": { "file_path": "auth.spec.ts" },
+            "output": "line one\nline two",
+            "diff": [{ "path": "auth.spec.ts", "old": null, "new": "+ one" }],
+            "locations": [{ "path": "auth.spec.ts", "line": 41 }]
+        }}),
+    );
+    round_trip(
+        &EventKind::Thought {
+            text: "look first".into(),
+            message_id: Some("m1".into()),
+        },
+        &json!({"type": "thought", "data": { "text": "look first", "messageId": "m1" }}),
+    );
+    round_trip(
+        &EventKind::Plan {
+            entries: vec![
+                crate::PlanEntry {
+                    text: "Read the test".into(),
+                    status: crate::PlanStatus::Completed,
+                },
+                crate::PlanEntry {
+                    text: "Find the race".into(),
+                    status: crate::PlanStatus::InProgress,
+                },
+                crate::PlanEntry {
+                    text: "Fix it".into(),
+                    status: crate::PlanStatus::Pending,
+                },
+            ],
+        },
+        &json!({"type": "plan", "data": { "entries": [
+            { "text": "Read the test", "status": "completed" },
+            { "text": "Find the race", "status": "in_progress" },
+            { "text": "Fix it", "status": "pending" }
+        ]}}),
+    );
+    round_trip(
+        &EventKind::Usage {
+            used: 12_000,
+            size: 200_000,
+        },
+        &json!({"type": "usage", "data": { "used": 12000, "size": 200_000 }}),
+    );
+}
+
+#[test]
+fn a_tool_delta_writes_only_the_field_it_names() {
+    let wire = serde_json::to_value(EventKind::Tool(ToolCall {
+        id: "call-1".into(),
+        name: None,
+        kind: None,
+        title: None,
+        status: Some(crate::ToolStatus::InProgress),
+        input: None,
+        output: None,
+        diff: Vec::new(),
+        locations: Vec::new(),
+        approval: None,
+    }))
+    .unwrap();
+    assert_eq!(
+        wire,
+        json!({"type": "tool", "data": { "id": "call-1", "status": "in_progress" }})
+    );
+}
+
+#[test]
 fn tool_events_are_live_and_an_old_tool_row_still_reads() {
-    for live in ["tool.started", "tool.ended"] {
+    for live in ["tool", "tool.started", "tool.ended"] {
         assert!(EventKind::LIVE_TYPES.contains(&live), "{live}");
     }
-    assert!(!EventKind::LIVE_TYPES.contains(&"tool"));
     let old: EventKind = serde_json::from_value(json!({
         "type": "tool",
         "data": { "id": "tool_1", "status": "completed" }
@@ -917,11 +1029,18 @@ fn tool_events_are_live_and_an_old_tool_row_still_reads() {
     .unwrap();
     assert_eq!(
         old,
-        EventKind::Tool {
+        EventKind::Tool(ToolCall {
             id: "tool_1".into(),
             name: None,
-            status: crate::ToolStatus::Completed,
-        }
+            kind: None,
+            title: None,
+            status: Some(crate::ToolStatus::Completed),
+            input: None,
+            output: None,
+            diff: Vec::new(),
+            locations: Vec::new(),
+            approval: None,
+        })
     );
     let started: EventKind = serde_json::from_value(json!({
         "type": "tool.started",
@@ -1091,6 +1210,7 @@ fn sample(
     archived_at: Option<Timestamp>,
 ) -> Thread {
     Thread {
+        link: crate::Link::Terminal,
         id: ThreadId(id.into()),
         project_id: crate::ProjectId("proj".into()),
         environment_id: None,
@@ -1124,6 +1244,7 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
         Err("thread id must be a plain identifier".into())
     );
     let run = Op::Thread(ThreadOp::Run(crate::Run {
+        link: crate::Link::Terminal,
         project_id: crate::ProjectId("project".into()),
         program: "sh".into(),
         title: None,
@@ -1138,6 +1259,108 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
         metadata: None,
     }));
     assert_eq!(crate::check(&run), Ok(()));
+}
+
+#[test]
+fn an_acp_run_needs_an_agent_kagan_knows() {
+    let acp = |program: &str| {
+        Op::Thread(ThreadOp::Run(crate::Run {
+            link: crate::Link::Acp,
+            project_id: crate::ProjectId("project".into()),
+            program: program.into(),
+            title: None,
+            environment: EnvironmentSpec::Worktree {
+                base_branch: None,
+                branch: None,
+            },
+            visibility: None,
+            parent_thread_id: None,
+            quiet: false,
+            lifecycle_owner_thread_id: None,
+            metadata: None,
+        }))
+    };
+    assert_eq!(crate::check(&acp("opencode")), Ok(()));
+    assert_eq!(crate::check(&acp("/opt/bin/opencode --model fast")), Ok(()));
+    assert_eq!(
+        crate::check(&acp("bash")),
+        Err(
+            "bash cannot be an ACP thread; kagan knows claude, codex, gemini, kimi, opencode"
+                .into()
+        )
+    );
+    assert_eq!(
+        crate::acp_command("opencode"),
+        Some(("opencode", &["acp"][..]))
+    );
+    assert_eq!(
+        crate::acp_command("/usr/local/bin/opencode --model x"),
+        Some(("opencode", &["acp"][..]))
+    );
+    assert_eq!(
+        crate::acp_command("claude --model sonnet"),
+        Some((
+            "npx",
+            &["-y", "@agentclientprotocol/claude-agent-acp@0.110.1"][..]
+        ))
+    );
+    assert_eq!(
+        crate::acp_command("gemini"),
+        Some(("gemini", &["--acp"][..]))
+    );
+    assert_eq!(crate::acp_command("kimi"), Some(("kimi", &["acp"][..])));
+    assert_eq!(crate::acp_command("bash"), None);
+    assert_eq!(crate::acp_command("'opencode"), None);
+}
+
+#[test]
+fn every_agent_that_answers_acp_is_a_known_program() {
+    assert!(crate::ACP_COMMANDS.iter().all(|(agent, _, _)| {
+        crate::KNOWN_PROGRAMS
+            .iter()
+            .any(|(known, _)| known == agent)
+    }));
+}
+
+#[test]
+fn a_thread_and_a_run_carry_their_link_on_the_wire() {
+    let thread = crate::Thread {
+        link: crate::Link::Acp,
+        ..sample("thr_1", None, Visibility::Visible, None)
+    };
+    let wire = serde_json::to_value(&thread).unwrap();
+    assert_eq!(wire["link"], "acp");
+    assert_eq!(
+        serde_json::from_value::<crate::Thread>(wire).unwrap(),
+        thread
+    );
+    let run = crate::Run {
+        link: crate::Link::Acp,
+        project_id: crate::ProjectId("proj".into()),
+        program: "opencode".into(),
+        title: None,
+        environment: EnvironmentSpec::Personal,
+        visibility: None,
+        parent_thread_id: None,
+        quiet: false,
+        lifecycle_owner_thread_id: None,
+        metadata: None,
+    };
+    round_trip(
+        &run,
+        &json!({
+            "projectId": "proj",
+            "program": "opencode",
+            "link": "acp",
+            "title": null,
+            "environment": {"kind": "personal"},
+            "visibility": null,
+            "parentThreadId": null,
+            "quiet": false,
+            "lifecycleOwnerThreadId": null,
+            "metadata": null,
+        }),
+    );
 }
 
 #[test]
@@ -1691,4 +1914,38 @@ fn a_reset_reads_in_days_hours_or_minutes() {
     assert_eq!(crate::resets_in(now + 2 * 3_600 + 10 * 60, now), "2h 10m");
     assert_eq!(crate::resets_in(now + 5 * 60, now), "5m");
     assert_eq!(crate::resets_in(now - 60, now), "0m");
+}
+
+#[test]
+fn a_conversation_is_a_bounded_plain_string() {
+    let fresh = crate::Conversation::fresh();
+    assert_eq!(
+        fresh.to_string().parse::<crate::Conversation>(),
+        Ok(fresh.clone())
+    );
+    assert_eq!(fresh.as_str().len(), 36);
+    let agent = "ses_df2cebee2fferjx3uhBjrWUUjk";
+    assert_eq!(
+        agent.parse::<crate::Conversation>().unwrap().as_str(),
+        agent
+    );
+    for (text, error) in [
+        ("", crate::ConversationError::Empty),
+        ("a\tb", crate::ConversationError::Control),
+        ("-x", crate::ConversationError::Flag),
+        ("a/b", crate::ConversationError::Path),
+        (r"a\b", crate::ConversationError::Path),
+        ("../a", crate::ConversationError::Path),
+    ] {
+        assert_eq!(text.parse::<crate::Conversation>(), Err(error), "{text:?}");
+    }
+    let long = "x".repeat(crate::CONVERSATION_MAX + 1);
+    assert_eq!(
+        long.parse::<crate::Conversation>(),
+        Err(crate::ConversationError::TooLong)
+    );
+    assert!(
+        serde_json::from_value::<crate::Conversation>(json!("")).is_err(),
+        "a stored empty id is refused"
+    );
 }

@@ -179,7 +179,7 @@ pub enum WorkspaceEvent {
     NewPlugin,
     Window(kg_domain::WindowOp),
     Event {
-        event: Event,
+        event: Box<Event>,
         project_id: ProjectId,
     },
     Changed,

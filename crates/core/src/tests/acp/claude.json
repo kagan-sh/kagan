@@ -1,0 +1,37 @@
+{
+ "session": "80058738-fce5-4799-a975-87722f7b13a5",
+ "turns": [
+  {
+   "updates": [
+    {
+     "sessionUpdate": "usage_update",
+     "used": 31971,
+     "size": 1000000
+    },
+    {
+     "sessionUpdate": "agent_message_chunk",
+     "content": {
+      "type": "text",
+      "text": "ready"
+     },
+     "messageId": "msg_011ChLkBfm4PSRbgnLEfKQWt"
+    },
+    {
+     "sessionUpdate": "usage_update",
+     "used": 31971,
+     "size": 1000000
+    },
+    {
+     "sessionUpdate": "usage_update",
+     "used": 31971,
+     "size": 1000000,
+     "cost": {
+      "amount": 0.5117394,
+      "currency": "USD"
+     }
+    }
+   ],
+   "stopReason": "end_turn"
+  }
+ ]
+}

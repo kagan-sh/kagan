@@ -25,7 +25,7 @@ use crate::runtime::preview::{self, Running};
 use kg_core::NO_ONE_HERE;
 
 #[cfg(unix)]
-use super::alive;
+use super::gone;
 #[cfg(unix)]
 use super::run;
 use super::{
@@ -277,10 +277,7 @@ fn stop_ends_the_preview_and_its_app(cx: &mut TestAppContext) {
     );
 
     assert!(!folder.exists(), "stop left the folder");
-    assert!(
-        !alive(&pid.to_string()),
-        "the preview's app is still running"
-    );
+    assert!(gone(&pid.to_string()), "the preview's app is still running");
 }
 
 #[gpui_kit::test]
@@ -417,7 +414,7 @@ fn archiving_a_thread_ends_its_previews(cx: &mut TestAppContext) {
     );
     assert!(!folder.exists(), "archiving left the folder");
     assert!(
-        !alive(&pid.to_string()),
+        gone(&pid.to_string()),
         "the preview's app outlived its thread"
     );
 }

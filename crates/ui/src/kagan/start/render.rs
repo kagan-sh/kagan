@@ -6,16 +6,17 @@ use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::{Disableable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, AppContext as _, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, Window, div, rems,
+    Action, AnyElement, AppContext as _, Context, InteractiveElement as _, IntoElement,
+    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
+    rems,
 };
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, ProjectId, ProjectKind, ProjectOp};
 use std::path::PathBuf;
 
 use super::{CONTROLS_CONTEXT, LeaveStart, START_CONTEXT, StartThread, project_kind};
-use crate::kagan::Kagan;
-use crate::kagan::controls::{bound_strokes, control, keys_text, note};
+use crate::kagan::controls::{Selected, bound_strokes, control, keys_text, note};
+use crate::kagan::{Kagan, UseChatLink, UseTerminalLink};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 impl Kagan {
@@ -99,6 +100,7 @@ impl Kagan {
                                             ),
                                     )
                                     .children(kind.map(|kind| self.render_folder(kind, window, cx)))
+                                    .children(self.run_as(window, cx))
                                     .children(self.start.prompt.is_some().then(|| {
                                         div()
                                             .id("start-fork-note")
@@ -116,6 +118,78 @@ impl Kagan {
                     .child(self.start_actions(kind, ready, cx)),
             )
             .into_any_element()
+    }
+
+    // Run as: Terminal or Chat, for an agent that answers ACP. Anything else only has a terminal.
+    fn run_as(&self, window: &Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let program = self.picker.read(cx).command(cx).ok()?;
+        kg_domain::acp_command(&program)?;
+        let chat = self.start.link(&program) == kg_domain::Link::Acp;
+        let starting = self.start.starting;
+        let focus = self.start.segments_focus.clone();
+        let focused = window.last_input_was_keyboard()
+            && focus
+                .as_ref()
+                .is_some_and(|focus| focus.contains_focused(window, cx));
+        let toggle =
+            |id: &'static str, name: SharedString, selected: bool, action: Box<dyn Action>| {
+                let mark = if selected {
+                    Selected::Yes
+                } else {
+                    Selected::No
+                };
+                crate::kagan::controls::segment(format!("{id}-segment"), mark, cx)
+                    .type_body(cx)
+                    .disabled(starting)
+                    .child(control(
+                        id,
+                        Facts {
+                            role: Role::RadioButton,
+                            disabled: starting,
+                            selected: Some(selected),
+                            ..Facts::button(name.clone())
+                        },
+                        name,
+                    ))
+                    .on_click(move |_, window, cx| window.dispatch_action(action.boxed_clone(), cx))
+            };
+        let row = crate::kagan::controls::segments(cx)
+            .when_some(focus, |row, focus| row.track_focus(&focus).tab_stop(false))
+            .when(focused, |row| row.border_color(cx.theme().ring))
+            .child(toggle(
+                "run-as-terminal",
+                "Terminal".into(),
+                !chat,
+                Box::new(UseTerminalLink),
+            ))
+            .child(toggle(
+                "run-as-chat",
+                "Chat".into(),
+                chat,
+                Box::new(UseChatLink),
+            ));
+        Some(
+            v_flex()
+                .gap_2()
+                .child(
+                    div()
+                        .id("run-as-caption")
+                        .ui_container()
+                        .type_caption(cx)
+                        .text_color(cx.theme().muted_foreground)
+                        .aria_label("Run as")
+                        .child("Run as"),
+                )
+                .child(h_flex().gap_2().items_center().child(row))
+                .children(chat.then(|| {
+                    div()
+                        .id("run-as-chat-note")
+                        .type_caption(cx)
+                        .text_color(cx.theme().muted_foreground)
+                        .child("This agent answers in the thread’s transcript. You type prompts here; there is no terminal.")
+                }))
+                .into_any_element(),
+        )
     }
 
     // Cancel leaves the screen the way Escape does. Start is the default commit, so it keeps its key.

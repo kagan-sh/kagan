@@ -415,6 +415,7 @@ pub(in crate::tests) fn repo_thread(
     let (repo, project) = committed_repo(cx, data);
     std::fs::write(repo.join("notes.txt"), "one\ntwo\n").unwrap();
     let run = Run {
+        link: kg_domain::Link::Terminal,
         project_id: project.id,
         program: shell().into(),
         title: None,
@@ -437,6 +438,7 @@ pub(in crate::tests) fn repo_thread(
 /// A running shell thread that no sidebar row lists.
 pub(in crate::tests) fn run_hidden_shell(cx: &mut TestAppContext) -> ThreadId {
     let run = Run {
+        link: kg_domain::Link::Terminal,
         project_id: ProjectId("prj_kagan".into()),
         program: shell().into(),
         title: None,

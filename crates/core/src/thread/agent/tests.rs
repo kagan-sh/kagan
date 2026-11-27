@@ -42,8 +42,8 @@ fn cursor_rule_names_the_variable_and_not_a_thread_id() {
     assert!(!cursor_rule("", "").contains("Call me Ada."));
 }
 
-fn line(items: &[&str]) -> Vec<OsString> {
-    items.iter().map(OsString::from).collect()
+fn line(items: &[&str]) -> Vec<String> {
+    items.iter().map(|item| (*item).to_owned()).collect()
 }
 
 #[test]

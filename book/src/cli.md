@@ -32,7 +32,7 @@ Commands:
   window        The application menu and the window
   surface       Plugin surfaces in the window
   keymap        Keyboard shortcuts: built-in ones and plugin commands
-  preference    Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, usage-limits, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+  preference    Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, usage-limits, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads, slot.review and slot.chat (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
   instructions  Agent rules: the global rules, or one project's, that a thread's program is told
   ui            Native window for QA and agents
   notify        System notifications
@@ -356,6 +356,7 @@ Commands:
   list          List threads
   run           Start a thread that runs a program in its folder
   stop          Stop the program
+  cancel        Cancel the agent's reply; an ACP thread's agent keeps running
   input         Type into the program's terminal
   resize        Resize the program's terminal
   screen        The program's screen as ANSI escape sequences; use `--scrollback` for plain text
@@ -450,6 +451,15 @@ Options:
       --program <PROGRAM>
           The program to run, such as `claude`, `codex`, or a command the person types. Words split on spaces; single or double quotes keep spaces together
 
+      --link <LINK>
+          What runs the program: a terminal, or the agent's own ACP connection on its stdin and stdout
+
+          Possible values:
+          - terminal: A pty: the program draws its own screen
+          - acp:      The agent protocol on the program's stdin and stdout; the center shows the transcript
+          
+          [default: terminal]
+
       --title <TITLE>
           
 
@@ -477,7 +487,7 @@ Options:
           The metadata as JSON
 
   -h, --help
-          Print help
+          Print help (see a summary with '-h')
 ```
 
 ## `kg thread stop`
@@ -486,6 +496,22 @@ Options:
 Stop the program
 
 Usage: kg thread stop <ID>
+
+Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg thread cancel`
+
+```text
+Cancel the agent's reply; an ACP thread's agent keeps running
+
+Usage: kg thread cancel <ID>
 
 Arguments:
   <ID>
@@ -2350,7 +2376,7 @@ Usage: kg plugin use [OPTIONS] <SLOT> <ID>
 
 Arguments:
   <SLOT>
-          [possible values: threads, review]
+          [possible values: threads, review, chat]
 
   <ID>
           A plugin id, or `kagan`
@@ -3205,7 +3231,7 @@ Options:
 ## `kg preference`
 
 ```text
-Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, usage-limits, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, usage-limits, branch-prefix, font-ui, font-terminal, terminal-copy-on-select, terminal-links-browser, density, setup-guide, sidebar-order, sidebar-hide-empty-projects, sidebar-unread-first, terminal-font-size, review-viewed, rail-hidden, slot.threads, slot.review and slot.chat (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
 
 Usage: kg preference [OPTIONS] <COMMAND>
 

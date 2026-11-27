@@ -36,6 +36,11 @@ fn conflicting_schema_five_keeps_threads_and_accepts_new_ones() {
 
     let store = Store::open(&path).unwrap();
     assert!(store.thread(&id("thr_1")).unwrap().is_some());
+    assert_eq!(
+        store.thread(&id("thr_1")).unwrap().unwrap().link,
+        kg_domain::Link::Terminal,
+        "a thread from before the link column is a terminal thread"
+    );
     store.put_thread(&thread("thr_2", 2)).unwrap();
     assert!(store.thread(&id("thr_2")).unwrap().is_some());
     drop(store);

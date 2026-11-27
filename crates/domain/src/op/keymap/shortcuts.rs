@@ -2,6 +2,8 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShortcutScope {
     Window,
+    /// Inside a chat, where Escape means the agent's reply and nothing else.
+    Chat,
     Review,
     ReviewSend,
 }
@@ -88,6 +90,7 @@ pub const SHORTCUTS: &[Shortcut] = &[
     bind("ActualSize", "kagan::ActualSize", "secondary-0", "Actual terminal text size", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Window, ShortcutGroup::Window)),
     bind("NewThread", "kagan::NewThread", "secondary-n", "New thread", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Threads, ShortcutGroup::Window)),
     bind("StopThread", "kagan::StopThread", "secondary-.", "Stop thread", (ShortcutScope::Window, ShortcutWhen::Thread, CommandGroup::Threads, ShortcutGroup::Thread)),
+    bind("CancelTurn", "kagan::CancelTurn", "escape", "Cancel the agent's reply", (ShortcutScope::Chat, ShortcutWhen::Thread, CommandGroup::Threads, ShortcutGroup::Thread)),
     bind("ArchiveThread", "kagan::ArchiveThread", "secondary-shift-backspace", "Archive thread", (ShortcutScope::Window, ShortcutWhen::Thread, CommandGroup::Threads, ShortcutGroup::Thread)),
     bind("TogglePinned", "kagan::TogglePinned", "secondary-shift-p", "Pin or unpin thread", (ShortcutScope::Window, ShortcutWhen::Thread, CommandGroup::Threads, ShortcutGroup::Thread)),
     bind("NextThread", "kagan::NextThread", "secondary-shift-]", "Next thread", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Threads, ShortcutGroup::Window)),
@@ -131,6 +134,7 @@ pub const SHORTCUTS: &[Shortcut] = &[
     bind("RestoreThread", "kagan::RestoreThread", "secondary-shift-r", "Restore thread", (ShortcutScope::Window, ShortcutWhen::Thread, CommandGroup::Threads, ShortcutGroup::Thread)),
     bind("UseBuiltInSidebar", "kagan::UseBuiltInSidebar", "secondary-alt-b", "Use built-in sidebar", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Settings, ShortcutGroup::Window)),
     bind("UseBuiltInReview", "kagan::UseBuiltInReview", "secondary-alt-v", "Use built-in review", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Settings, ShortcutGroup::Window)),
+    bind("UseBuiltInChat", "kagan::UseBuiltInChat", "secondary-alt-n", "Use built-in chat", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Settings, ShortcutGroup::Window)),
     bind("OpenCommandList", "kagan::OpenCommandList", "secondary-shift-a", "Command list", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Threads, ShortcutGroup::Window)),
     bind("SearchThreads", "kagan::SearchThreads", "secondary-alt-f", "Search threads…", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Threads, ShortcutGroup::Window)),
     bind("OpenSavedPrompts", "kagan::OpenSavedPrompts", "secondary-shift-i", "Saved prompts", (ShortcutScope::Window, ShortcutWhen::Always, CommandGroup::Threads, ShortcutGroup::Window)),

@@ -85,6 +85,23 @@ pub(in crate::tests) fn shows(
     .unwrap()
 }
 
+pub(in crate::tests) fn shows_within(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    name: &str,
+    within: &str,
+) -> bool {
+    cx.update_window(window, |_, window, _| {
+        let id = ElementId::Name(name.to_owned().into());
+        let scope = ElementId::Name(within.to_owned().into());
+        matches!(
+            crate::ui_registry::locate(window, &id, Some(&scope)),
+            crate::ui_registry::Located::One(element) if element.visible
+        )
+    })
+    .unwrap()
+}
+
 /// The value `kg ui` reports for an element, if it has one.
 pub(in crate::tests) fn value_of(
     cx: &mut TestAppContext,
@@ -94,6 +111,19 @@ pub(in crate::tests) fn value_of(
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
             .and_then(|element| element.value.as_deref().map(str::to_owned))
+    })
+    .unwrap()
+}
+
+/// The hint `kg ui` reports for an element, if it has one.
+pub(in crate::tests) fn hint_of(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    name: &str,
+) -> Option<String> {
+    cx.update_window(window, |_, window, _| {
+        crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
+            .and_then(|element| element.hint.as_deref().map(str::to_owned))
     })
     .unwrap()
 }

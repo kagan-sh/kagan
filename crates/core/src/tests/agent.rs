@@ -151,6 +151,7 @@ async fn started_on(
 ) -> (ThreadId, super::Reap) {
     let OpResult::Thread(started) = op(
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: project.clone(),
             program: program.into(),
             title: None,
@@ -1003,6 +1004,7 @@ async fn a_second_project_keeps_the_first_catalog_and_its_links(cx: &mut TestApp
     let second_program = fake_agent(&second_run, "codex");
     let OpResult::Thread(second_thread) = op(
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: second.id.clone(),
             program: second_program.display().to_string(),
             title: None,

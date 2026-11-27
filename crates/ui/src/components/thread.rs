@@ -27,6 +27,7 @@ struct ThreadComponent {
     part: Part,
     compact: bool,
     _changes: Subscription,
+    _attention: Subscription,
 }
 
 impl Render for ThreadComponent {
@@ -40,9 +41,9 @@ impl Render for ThreadComponent {
                 .text_ellipsis()
                 .child(thread.title.clone()),
             Part::Status => {
-                let ended = Workspace::global(cx).read(cx).program_ended(&thread.id);
-                let tone =
-                    crate::theme::Tone::of(thread, self.thread.read(cx).busy(), ended, false);
+                let tone = crate::kagan::attention::global(cx)
+                    .read(cx)
+                    .tone(thread, cx);
                 div()
                     .id("thread-status")
                     .ui_container()
@@ -89,6 +90,7 @@ impl ComponentMaterializer for Part {
                 Part::Title => "title",
                 Part::Status => "status",
             };
+            let attention = crate::kagan::attention::global(cx);
             let view = window
                 .use_keyed_state(
                     gpui_kit::SharedString::from(format!(
@@ -98,6 +100,7 @@ impl ComponentMaterializer for Part {
                     cx,
                     |_, cx| ThreadComponent {
                         _changes: cx.observe(&thread, |_, _, cx| cx.notify()),
+                        _attention: cx.observe(&attention, |_, _, cx| cx.notify()),
                         thread,
                         part,
                         compact,

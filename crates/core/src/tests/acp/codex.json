@@ -1,0 +1,24 @@
+{
+ "session": "01a20ac9-ae86-72b0-94ac-7a6123b6fd6b",
+ "turns": [
+  {
+   "updates": [
+    {
+     "sessionUpdate": "agent_message_chunk",
+     "content": {
+      "type": "text",
+      "text": "Warning: Model metadata for `gpt-6.1-sol` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\n\n"
+     }
+    },
+    {
+     "sessionUpdate": "agent_message_chunk",
+     "content": {
+      "type": "text",
+      "text": "The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.\n\n"
+     }
+    }
+   ],
+   "stopReason": "end_turn"
+  }
+ ]
+}

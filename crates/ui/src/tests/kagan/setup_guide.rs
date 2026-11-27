@@ -94,6 +94,7 @@ fn starting_a_thread_marks_step_three_done(cx: &mut TestAppContext) {
     std::fs::create_dir_all(&folder).unwrap();
     let project = add_project(cx, &folder);
     let run = kg_domain::Run {
+        link: kg_domain::Link::Terminal,
         project_id: project.id,
         program: shell().into(),
         title: None,

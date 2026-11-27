@@ -6,6 +6,7 @@ use crate::workspace::{closed, time};
 use crate::{Thread, Workspace};
 
 use super::interaction::{clear_interactions, take_thread_replies};
+use super::link;
 
 pub(crate) async fn status(
     this: &WeakEntity<Workspace>,
@@ -36,14 +37,22 @@ pub(super) async fn settle(
     thread: &Entity<Thread>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    let thread_id = thread.read_with(cx, |thread, _| thread.record.id.clone());
     thread.update(cx, |thread, _| thread.busy = false);
+    drop_questions(this, thread, cx).await?;
+    crate::workspace::changed(this, cx)
+}
+
+async fn drop_questions(
+    this: &WeakEntity<Workspace>,
+    thread: &Entity<Thread>,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    let thread_id = thread.read_with(cx, |thread, _| thread.record.id.clone());
     this.update(cx, |workspace, _| {
         take_thread_replies(workspace, &thread_id)
     })
     .map_err(closed)?;
-    clear_interactions(this, thread, cx).await?;
-    crate::workspace::changed(this, cx)
+    clear_interactions(this, thread, cx).await
 }
 
 pub(crate) async fn stop(
@@ -66,6 +75,8 @@ pub(crate) async fn stop(
     if starting {
         this.update(cx, |workspace, _| {
             workspace.tasks.remove(&thread_id);
+            // The program is running even though the thread is not: Stop ends it here too.
+            super::terminal::request_stop(workspace, &thread_id);
         })
         .map_err(closed)?;
         close_open_turn(this, thread, &thread_id, turn_open, cx).await?;
@@ -77,6 +88,22 @@ pub(crate) async fn stop(
         })
         .map_err(closed)?;
     if ending {
+        let acp = link(this, &thread_id, cx)? == kg_domain::Link::Acp;
+        if acp {
+            let reason = this
+                .update(cx, |workspace, _| {
+                    workspace
+                        .runs
+                        .get_mut(&thread_id)
+                        .and_then(|run| run.stopping.take())
+                })
+                .map_err(closed)?
+                .unwrap_or(super::StopReason::Stop);
+            // An ACP thread has no watcher to report the end, so the stop records it here.
+            crate::thread::finish::ended(this, thread_id, super::finish::stopped(reason), cx)
+                .await?;
+            return Ok(());
+        }
         // The program is ending now. Its exit records the stop and sets the thread idle.
         return status(this, thread, ThreadStatus::Stopping, cx).await;
     }

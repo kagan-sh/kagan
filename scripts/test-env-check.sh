@@ -14,6 +14,7 @@ import sys
 REVIEWED = {
     "KG_TEST_DEFAULTS": "a test starts itself again as a child with this set",
     "KG_TEST_ID_HINT": "a test starts itself again as a child with this set",
+    "KG_FAKE_ACP_DIR": "a test starts itself again as a fake ACP agent with this set",
     "KAGAN_FETCH_CASE": "a test starts itself again as a child with this set",
     "KAGAN_FETCH_SOURCE": "a test starts itself again as a child with this set",
     "KAGAN_LOCALE_TEST": "a test starts itself again as a child with this set",

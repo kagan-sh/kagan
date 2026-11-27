@@ -34,12 +34,28 @@ _Avoid_: Environment type, backend
 ## Threads
 
 **Thread**:
-One program running in one environment, with a status (`pending`, `idle`, `starting`, `active`, `stopping`, `error`) and an append-only event log.
-_Avoid_: Session, chat, task
+One program running in one environment, with a status (`pending`, `idle`, `starting`, `active`, `stopping`, `error`) and an append-only event log. Its link is how the program is reached: a terminal, or the agent's own ACP connection, fixed when the thread starts.
+_Avoid_: task
 
 **Turn**:
-The stretch a program's title shows a spinner, until that title stays plain, or the program stops or exits while the spinner is up. `turn.started` and `turn.ended` record it.
+The stretch a program's title shows a spinner, until that title stays plain, or the program stops or exits while the spinner is up. `turn.started` and `turn.ended` record it. An ACP thread's turn is one prompt, from sending it to the agent's stop reason.
 _Avoid_: Run, step
+
+**Session**:
+A chat agent's own record of the thread, which the agent names with an id. Kagan stores that id as the thread's conversation.
+_Avoid_: Chat, thread
+
+**Chat**:
+The center of an ACP thread: the thread's events as a transcript, and one prompt box. The agent answers here instead of in a terminal.
+_Avoid_: Terminal, session view
+
+**Work**:
+A chat row for something the agent did rather than said: a tool call, an MCP call, a skill load, or its thinking. One compact row, collapsed until the person opens it or it is the live last row. The row is a `ToolRow` and the event under it stays a `tool` event.
+_Avoid_: Step
+
+**Bundle**:
+One chat row holding a run of consecutive finished looking work, such as reads, searches and fetches, labelled by what they did. Editing, commands, MCP calls, skill loads and failures never fold.
+_Avoid_: Group, cluster
 
 **Event**:
 One immutable record in a thread's log, such as a message, tool call, file change or status change, numbered by sequence.
@@ -142,8 +158,8 @@ What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_
 _Avoid_: Injection, agent setup, wrapper
 
 **Conversation**:
-What an agent remembers of a thread's program: what was said and done. Kagan gives `claude`, `cursor-agent`, and `agent` an id for it at the first start, and finds the id `codex` picked, so Start again resumes it.
-_Avoid_: Session, chat
+What an agent remembers of a thread's program: what was said and done. Kagan gives `claude`, `cursor-agent`, and `agent` an id for it at the first start, and finds the id `codex` picked, so Start again resumes it. An ACP thread's conversation is the agent's session id.
+_Avoid_: Chat
 
 **Browser**:
 A tab of the right sidebar that shows one web page. On Linux the page is WebKitGTK and needs an X11 window. A thread's agent can drive it with `kg browser`. A plugin can drive that same page when the Browser area is on its install card. The row has Back, Forward, Reload, and Open in external browser.
@@ -177,7 +193,7 @@ A plugin view drawn over the center that takes no input. The sidebars drawn over
 _Avoid_: Layer, HUD
 
 **Slot**:
-A part of the window a plugin panel may replace: `threads`, the body of the thread list, or `review`, the body of the file review. The person picks Built-in or one plugin per slot. The host keeps the rail, the questions, the counts and the review footer.
+A part of the window a plugin panel may replace: `threads`, the body of the thread list, `review`, the body of the file review, or `chat`, the body of an ACP thread's transcript. The person picks Built-in or one plugin per slot. The host keeps the rail, the questions, the counts, the review footer, the prompt box and Send.
 _Avoid_: Spot (that word is for what kagan refuses), takeover, override
 
 **Command list**:
@@ -228,8 +244,6 @@ _Avoid_: Channel, distribution
 Add-on	Plugin
 Sandbox	Environment
 Scratch	Personal project
-Session	Thread
-Chat	Thread
 Backend	Provider
 ```
 
@@ -241,19 +255,4 @@ Sandbox	picker.rs	sandbox	Provider permission sandbox wording
 Sandbox	tests/app/commands.rs	sandbox	Provider permission test copy
 Sandbox	plugins/src/runtime/files.rs	sandbox	tempdir variable in path tests
 Sandbox	thread/agent.rs	--sandbox	Cursor Agent's own flag name
-Session	thread/conversation	"--	Claude Code's own flag names
-Session	*	--session-id	Claude Code's own flag name
-Session	*	--session	OpenCode, Pi, and Kimi Code's own flag name
-Session	*	--new-session-id	Cursor Agent's own flag name
-Session	usage/claude	--no-session-persistence	Claude Code's own flag name
-Session	usage/claude	"session":	Claude Code's own usage reply field name
-Session	tests/usage	--no-session-persistence	Claude Code's own flag name
-Session	docs/behaviour.md	browser session	browser session is the CONTEXT term for the page a thread drives
-Session	book/src/window.md	browser session	browser session is the CONTEXT term for the page a thread drives
-Session	crates/ui/src/kagan/browser/agent	browser session	browser session is the CONTEXT term for the page a thread drives
-Session	thread/agent.rs	--session	another program's own flag name
-Session	thread/agent.rs	"session"	another program's own subcommand name
-Session	book/src/skills.md	session opened	another program's own session
-Session	docs/self-extend.md	session of the same program	another program's own session
-Chat	thread/agent.rs	create-chat	Cursor Agent's own subcommand
 ```

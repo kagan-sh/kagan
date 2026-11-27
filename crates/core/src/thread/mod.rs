@@ -1,8 +1,10 @@
+mod acp;
 pub(crate) mod agent;
 pub(crate) mod archive;
 mod conversation;
 mod details;
 mod extra;
+pub(crate) mod finish;
 mod halt;
 mod interaction;
 pub(crate) mod notify;
@@ -15,18 +17,20 @@ pub(crate) mod turn_state;
 pub(crate) use agent::note_with;
 
 pub(crate) use extra::Extras;
+pub(crate) use finish::StopReason;
 pub(crate) use halt::{retire, stop};
+pub(crate) use interaction::Raised;
 pub(crate) use interaction::{answer, clear_pending, raise, withdraw};
 pub(crate) use read::{wait, wait_event};
+pub(crate) use run::resolve_acp;
 pub(crate) use run::resolve_program;
 pub(crate) use run::{PreparedRun, commit as commit_run, start_run};
 pub(crate) use search::search;
-pub(crate) use terminal::StopReason;
 pub(crate) use terminal::exited;
 #[cfg(test)]
 pub(crate) use terminal::remember;
 pub(crate) use terminal::send;
-pub(crate) use terminal::start as start_terminal;
+
 pub(crate) use terminal::start_again;
 pub(crate) use terminal::{Run, Shown};
 
@@ -95,6 +99,10 @@ async fn set_metadata(
     Ok(OpResult::Done)
 }
 
+#[expect(
+    clippy::cognitive_complexity,
+    reason = "one arm per ThreadOp variant; the router is a flat table"
+)]
 pub(crate) async fn dispatch_thread(
     this: &WeakEntity<Workspace>,
     database: Database,
@@ -121,8 +129,9 @@ pub(crate) async fn dispatch_thread(
         | ThreadOp::Select { .. }
         | ThreadOp::Copy { .. }
         | ThreadOp::Paste { .. }
-        | ThreadOp::Report { .. }) => terminal::run(this, op, cx),
-        ThreadOp::Send { id, text } => terminal::send(this, id, &text, cx).await,
+        | ThreadOp::Report { .. }) => terminal_op(this, op, cx).await,
+        ThreadOp::Send { id, text } => type_text(this, &id, &text, cx).await,
+        ThreadOp::Cancel { id } => acp::cancel(this, &id, cx).await,
         ThreadOp::Turn(op) => terminal::turn_hook(this, op, cx).await,
         ThreadOp::Terminal(op) => extra::run(this, op, cx).await,
         ThreadOp::Details { id } => details::read(database, id, cx).await,
@@ -225,6 +234,74 @@ async fn rename(
     Ok(OpResult::Thread(
         thread(this, &id, cx)?.read_with(cx, |thread, _| thread.record.clone()),
     ))
+}
+
+pub(crate) fn link(
+    this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    cx: &mut AsyncApp,
+) -> Result<kg_domain::Link> {
+    Ok(thread(this, id, cx)?.read_with(cx, |thread, _| thread.record.link))
+}
+
+pub(crate) async fn type_text(
+    this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    text: &str,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    if text.is_empty() {
+        return Err(OpError::Invalid("send needs text".into()));
+    }
+    if text.len() > kg_domain::TEXT_MAX {
+        return Err(OpError::Invalid(format!(
+            "send is {} bytes; the cap is {} MiB",
+            text.len(),
+            kg_domain::TEXT_MAX >> 20
+        )));
+    }
+    if link(this, id, cx)? == kg_domain::Link::Acp {
+        return acp::prompt(this, id, text, cx).await;
+    }
+    terminal::send(this, id.clone(), text, cx).await
+}
+
+async fn terminal_op(
+    this: &WeakEntity<Workspace>,
+    op: ThreadOp,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let (id, terminal) = match &op {
+        ThreadOp::Input { id, terminal, .. }
+        | ThreadOp::Resize { id, terminal, .. }
+        | ThreadOp::Screen { id, terminal, .. }
+        | ThreadOp::Scroll { id, terminal, .. }
+        | ThreadOp::Select { id, terminal, .. }
+        | ThreadOp::Copy { id, terminal }
+        | ThreadOp::Paste { id, terminal, .. }
+        | ThreadOp::Report { id, terminal, .. } => (id.clone(), *terminal),
+        _ => return Err(OpError::Invalid("not a terminal operation".into())),
+    };
+    if terminal.is_none() && link(this, &id, cx)? == kg_domain::Link::Acp {
+        return match &op {
+            ThreadOp::Input { text, .. } => acp::prompt(this, &id, text, cx).await,
+            _ => Err(acp::not_a_terminal()),
+        };
+    }
+    terminal::run(this, &id, terminal, op, cx)
+}
+
+pub(crate) async fn start_program(
+    this: &WeakEntity<Workspace>,
+    thread: &Entity<Thread>,
+    start: agent::Start,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    let id = thread.read_with(cx, |thread, _| thread.record.id.clone());
+    if link(this, &id, cx)? == kg_domain::Link::Acp {
+        return acp::start(this, thread, start, cx).await;
+    }
+    terminal::start(this, thread, start, cx).await
 }
 
 pub(crate) fn thread(

@@ -26,6 +26,7 @@ fn a_stop_waits_in_the_queue_and_a_run_does_not() {
     })));
     assert!(!crate::dispatch::serialized(&Op::Thread(ThreadOp::Run(
         Run {
+            link: kg_domain::Link::Terminal,
             project_id: ProjectId("project".into()),
             program: "sh".into(),
             title: None,

@@ -44,6 +44,39 @@ fn commands_need_an_id_a_title_and_a_unique_id() {
 }
 
 #[test]
+fn a_command_description_is_optional_and_one_short_line() {
+    let ok = parsed(&json!({
+        "commands": [{ "id": "improve", "title": "Improve", "description": "Rewrites the draft in place" }]
+    }));
+    assert!(ok.check_commands().is_ok());
+    assert_eq!(
+        ok.commands[0].description.as_deref(),
+        Some("Rewrites the draft in place")
+    );
+    let longest = "a".repeat(crate::commands::DESCRIPTION_CAP);
+    let longest = parsed(&json!({
+        "commands": [{ "id": "improve", "title": "Improve", "description": longest }]
+    }));
+    assert!(longest.check_commands().is_ok());
+    for description in [
+        " ".to_owned(),
+        "two\nlines".to_owned(),
+        "a".repeat(crate::commands::DESCRIPTION_CAP + 1),
+    ] {
+        let manifest = parsed(&json!({
+            "commands": [{ "id": "improve", "title": "Improve", "description": description }]
+        }));
+        assert!(
+            matches!(
+                manifest.check_commands(),
+                Err(Error::CommandDescription(id)) if id == "improve"
+            ),
+            "{description:?}"
+        );
+    }
+}
+
+#[test]
 fn hotkey_bindings_are_reserved() {
     let manifest = parsed(&json!({
         "settings": { "$hotkeys": { "type": "boolean", "title": "Keys" } }

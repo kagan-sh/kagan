@@ -1134,6 +1134,7 @@ fn threads_output_reads_scrollback_plain_text(cx: &mut TestAppContext) {
     let OpResult::Thread(started) = run(
         cx,
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: ProjectId("prj_test".into()),
             program,
             title: Some("Output".into()),

@@ -42,16 +42,69 @@ pub const AGENT_MARKS: &[(&str, &str)] = &[
     ("kimi", "agents/kimi.svg"),
 ];
 
+/// The command that starts each agent over the agent protocol: the agent, the program to run, and
+/// that program's arguments. An agent whose protocol comes from an npm package names `npx` there,
+/// so the adapter runs without the person installing anything.
+pub const ACP_COMMANDS: &[(&str, &str, &[&str])] = &[
+    (
+        "claude",
+        "npx",
+        &["-y", "@agentclientprotocol/claude-agent-acp@0.110.1"],
+    ),
+    (
+        "codex",
+        "npx",
+        &["-y", "@agentclientprotocol/codex-acp@2.10.0"],
+    ),
+    ("gemini", "gemini", &["--acp"]),
+    ("kimi", "kimi", &["acp"]),
+    ("opencode", "opencode", &["acp"]),
+];
+
+fn stem(line: &str) -> Option<String> {
+    let (command, _) = split_program(line).ok()?;
+    Some(
+        Path::new(&command)
+            .file_stem()?
+            .to_string_lossy()
+            .into_owned(),
+    )
+}
+
+/// The ACP command of the agent `line` runs: the program to run and its arguments. A path or a
+/// file extension on the command is dropped; the arguments are never read.
+#[must_use]
+pub fn acp_command(line: &str) -> Option<(&'static str, &'static [&'static str])> {
+    let stem = stem(line)?;
+    ACP_COMMANDS
+        .iter()
+        .find(|(known, _, _)| *known == stem)
+        .map(|(_, program, args)| (*program, *args))
+}
+
 /// The [`AGENT_MARKS`] entry, command name and mark path, of the agent `line` runs. A path or a
 /// file extension on the command is dropped; the arguments are never read.
 #[must_use]
 pub fn agent_mark(line: &str) -> Option<(&'static str, &'static str)> {
-    let (command, _) = split_program(line).ok()?;
-    let stem = Path::new(&command).file_stem()?.to_str()?;
+    let stem = stem(line)?;
     AGENT_MARKS
         .iter()
         .copied()
         .find(|(known, _)| *known == stem)
+}
+
+/// The short name a person knows a program by: its known label, else its file name. A path or
+/// the arguments on the line are dropped; the arguments are never read.
+#[must_use]
+pub fn program_label(line: &str) -> String {
+    let Some(stem) = stem(line).or_else(|| split_program(line).ok().map(|(command, _)| command))
+    else {
+        return line.to_owned();
+    };
+    KNOWN_PROGRAMS
+        .iter()
+        .find(|(known, _)| *known == stem)
+        .map_or(stem, |(_, label)| (*label).into())
 }
 
 /// The known programs the picker lists even when they are not installed.

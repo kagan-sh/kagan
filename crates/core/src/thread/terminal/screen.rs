@@ -5,7 +5,7 @@ use kg_terminal::Finished;
 use crate::workspace::Request;
 use crate::{Workspace, WorkspaceEvent};
 
-use super::turn::{Spin, follow, screen_hash, waiting};
+use super::turn::{Spin, ended_turn, follow, screen_hash, waiting};
 use super::{Shown, TICK};
 
 pub(super) async fn persist(
@@ -125,7 +125,9 @@ fn watch(cx: &mut Context<Workspace>) {
                                 started.push(id.clone());
                             }
                             Some(Spin::Resumed) => cx.emit(WorkspaceEvent::Changed),
-                            Some(Spin::Closed) => waited.push(id.clone()),
+                            Some(Spin::Closed) => {
+                                waited.push((id.clone(), ended_turn(workspace, id)));
+                            }
                             None => {}
                         }
                     }
@@ -151,8 +153,8 @@ fn watch(cx: &mut Context<Workspace>) {
                     eprintln!("kg: could not record that a turn started: {error}");
                 }
             }
-            for id in waited {
-                if let Err(error) = waiting(&this, id, cx).await {
+            for (id, turn) in waited {
+                if let Err(error) = waiting(&this, id, turn, cx).await {
                     eprintln!("kg: could not record that a thread is waiting: {error}");
                 }
             }

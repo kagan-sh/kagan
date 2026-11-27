@@ -9,6 +9,8 @@ The binary that talks to the open app is `cli` from `kg status --json`. Outside 
 
 Leave `KG_DATA_DIR` unset, so `kg` reaches the open app. In a thread, `KG_SOCKET` is already that app's socket. Outside a thread, leave `KG_SOCKET` unset. If nothing answers, the command starts a second app. If a new `--headless` process appears, stop it. The socket paths and the macOS binary are in `kg guide json`.
 
-`kg status --json` returns `{"status":{"threadId","projectId","environmentId","cli","dataDir","warnings"}}`. `kg project list --json` returns `{"projects":[{"id","kind","name","path","gitRemoteUrl"}]}`. `kg program list --json` returns `{"programs":{"programs":[{"command","label","source","path","version"}],"default"}}`; pass a `command` to `kg thread run --program`.
+`kg status --json` returns `{"status":{"threadId","projectId","environmentId","cli","dataDir","warnings"}}`. `kg project list --json` returns `{"projects":[{"id","kind","name","path","gitRemoteUrl"}]}`. `kg program list --json` returns `{"programs":{"programs":[{"command","label","source","path","version"}],"default"}}`; pass a `command` to `kg thread run --program`. `kg thread get --json` is the thread's row, and its `link` is `terminal` or `acp`: a chat thread has no terminal.
 
-Plugin install and powers approval are kg-plugin-authoring. Driving the open window is kg-ui. Creating and operating a thread is kg-threads. To change the look, keys, preferences, agent rules, or skill folders, read `kg guide customize`.
+Plugin install and powers approval are kg-plugin-authoring. Driving the open window is kg-ui. Creating and operating a thread, a chat included, is kg-threads. To change the look, keys, preferences, agent rules, or skill folders, read `kg guide customize`.
+
+Never answer an approval; never approve powers; a chat plugin draws, the host types and answers.

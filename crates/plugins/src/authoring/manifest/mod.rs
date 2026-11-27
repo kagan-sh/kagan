@@ -46,6 +46,11 @@ pub(crate) enum Error {
     #[error("commands need unique nonempty ids and titles")]
     Commands,
     #[error(
+        "command {0:?} description must be one plain line of at most {cap} characters",
+        cap = crate::commands::DESCRIPTION_CAP
+    )]
+    CommandDescription(String),
+    #[error(
         "ui.status command {0:?} must name one of this plugin's commands, with \"when\": \"always\""
     )]
     StatusCommand(String),
@@ -53,6 +58,10 @@ pub(crate) enum Error {
     HeaderCommand,
     #[error("a menu command needs when thread")]
     MenuCommand,
+    #[error("a prompt command needs when thread")]
+    PromptCommand,
+    #[error("at most 4 prompt commands; give the others a key")]
+    PromptCommands,
     #[error("{0}")]
     Schedule(String),
     #[error("{0}")]
@@ -339,6 +348,25 @@ impl Manifest {
             if command.menu && command.when != crate::commands::CommandWhen::Thread {
                 return Err(Error::MenuCommand);
             }
+            if command.prompt && command.when != crate::commands::CommandWhen::Thread {
+                return Err(Error::PromptCommand);
+            }
+            if command.description.as_ref().is_some_and(|description| {
+                description.trim().is_empty()
+                    || description.chars().count() > crate::commands::DESCRIPTION_CAP
+                    || description.chars().any(kg_domain::unsafe_char)
+            }) {
+                return Err(Error::CommandDescription(command.id.clone()));
+            }
+        }
+        if self
+            .commands
+            .iter()
+            .filter(|command| command.prompt)
+            .count()
+            > 4
+        {
+            return Err(Error::PromptCommands);
         }
         Ok(())
     }

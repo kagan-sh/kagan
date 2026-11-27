@@ -1,0 +1,67 @@
+{
+ "session": "ses_df2cebee2fferjx3uhBjrWUUjk",
+ "initialize": {
+  "loadSession": true,
+  "mcpCapabilities": {
+   "http": true,
+   "sse": false
+  },
+  "promptCapabilities": {
+   "embeddedContext": true,
+   "image": true
+  },
+  "sessionCapabilities": {
+   "additionalDirectories": {},
+   "close": {},
+   "delete": {},
+   "fork": {},
+   "list": {},
+   "resume": {}
+  },
+  "_meta": {
+   "opencode/child-session-updates": true
+  }
+ },
+ "turns": [
+  {
+   "updates": [
+    {
+     "sessionUpdate": "agent_message_chunk",
+     "messageId": "msg_20d3142c7001YKarzp5JleOFZP",
+     "content": {
+      "type": "text",
+      "text": "ready"
+     }
+    },
+    {
+     "sessionUpdate": "usage_update",
+     "used": 27477,
+     "size": 1000000,
+     "cost": {
+      "amount": 0,
+      "currency": "USD"
+     }
+    }
+   ],
+   "stopReason": "end_turn"
+  }
+ ],
+ "replay": [
+  {
+   "sessionUpdate": "user_message_chunk",
+   "messageId": "msg_20d314123001RCGUX4gHPuj09b",
+   "content": {
+    "type": "text",
+    "text": "Reply with the single word: ready"
+   }
+  },
+  {
+   "sessionUpdate": "agent_message_chunk",
+   "messageId": "msg_20d3142c7001YKarzp5JleOFZP",
+   "content": {
+    "type": "text",
+    "text": "ready"
+   }
+  }
+ ]
+}

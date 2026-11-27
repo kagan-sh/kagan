@@ -147,6 +147,7 @@ fn stop_a_failed_start_and_a_plain_title_do_not_notify(cx: &mut TestAppContext) 
     let missing = cx.update(|cx| {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Run(Run {
+                link: kg_domain::Link::Terminal,
                 project_id: ProjectId("prj_kagan".into()),
                 program: "definitely-missing-kg-bin".into(),
                 title: None,
@@ -336,6 +337,7 @@ fn start(cx: &mut TestAppContext, program: &str) -> ThreadId {
     let task = cx.update(|cx| {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Run(Run {
+                link: kg_domain::Link::Terminal,
                 project_id: ProjectId("prj_kagan".into()),
                 program: program.into(),
                 title: None,

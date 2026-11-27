@@ -1087,6 +1087,7 @@ fn clean_repo(fixture: &Fixture) -> std::path::PathBuf {
 #[cfg(unix)]
 fn project_on(fixture: &Fixture, title: Option<&str>, branch: ProjectBranch) -> Op {
     Op::Thread(ThreadOp::Run(Run {
+        link: kg_domain::Link::Terminal,
         project_id: fixture.project.clone(),
         program: super::program().into(),
         title: title.map(str::to_owned),

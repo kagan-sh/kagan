@@ -1,5 +1,6 @@
 mod browser;
 mod call;
+mod chat;
 mod contributions;
 mod diagnostics;
 mod files;
@@ -179,6 +180,7 @@ fn open_kept(cx: &mut TestAppContext, data: &Path, keep: TempDir, plugins: &[Plu
     store.put_project(&project).unwrap();
     store
         .put_thread(&Thread {
+            link: kg_domain::Link::Terminal,
             id: ThreadId(THREAD.into()),
             project_id: project.id,
             environment_id: None,
@@ -1046,6 +1048,19 @@ fn alive(pid: &str) -> bool {
         .is_ok_and(|status| status.success())
 }
 
+// A killed process answers `kill -0` until it is reaped, so a killed program is waited for.
+#[cfg(unix)]
+fn gone(pid: &str) -> bool {
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while alive(pid) {
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    true
+}
+
 #[cfg(unix)]
 fn start_tree(
     cx: &mut TestAppContext,
@@ -1100,6 +1115,7 @@ fn bundled_examples_pass_check() {
     assert_eq!(
         names,
         [
+            "chat",
             "cli",
             "header",
             "instruct",

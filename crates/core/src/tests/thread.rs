@@ -91,6 +91,7 @@ async fn run_starts_a_thread_in_a_worktree(cx: &mut TestAppContext) {
     empty_repo(fixture.dir.path());
     let OpResult::Thread(started) = op(
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: fixture.project.clone(),
             program: program().into(),
             title: Some("notes".into()),
@@ -135,6 +136,7 @@ async fn a_socket_rename_locks_once_and_the_window_can_rename_again(cx: &mut Tes
     empty_repo(fixture.dir.path());
     let OpResult::Thread(started) = op(
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: fixture.project.clone(),
             program: program().into(),
             title: None,
@@ -228,6 +230,7 @@ async fn a_title_set_at_run_rejects_a_socket_rename(cx: &mut TestAppContext) {
     empty_repo(fixture.dir.path());
     let OpResult::Thread(started) = op(
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: fixture.project.clone(),
             program: program().into(),
             title: Some("Notes".into()),
@@ -453,6 +456,7 @@ async fn deleting_a_thread_waits_for_a_person(cx: &mut TestAppContext) {
     };
     let OpResult::Thread(victim) = op(
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: fixture.project.clone(),
             program: program().into(),
             title: Some("victim".into()),
@@ -606,6 +610,7 @@ async fn a_saved_thread_opens_after_a_restart(cx: &mut TestAppContext) {
     };
     let OpResult::Thread(child) = op(
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: fixture.project.clone(),
             program: program().into(),
             title: Some("child".into()),
@@ -642,12 +647,9 @@ async fn a_saved_thread_opens_after_a_restart(cx: &mut TestAppContext) {
     assert!(events(&child.id, cx).await.iter().any(|event| {
         matches!(&event.kind, EventKind::Message { text, .. } if text == "still here")
     }));
-    assert!(
-        events(&child.id, cx)
-            .await
-            .iter()
-            .any(|event| { matches!(&event.kind, EventKind::Tool { id, .. } if id == "tool-1") })
-    );
+    assert!(events(&child.id, cx).await.iter().any(|event| {
+        matches!(&event.kind, EventKind::Tool(ToolCall { id, .. }) if id == "tool-1")
+    }));
     assert!(
         events(&child.id, cx)
             .await
@@ -730,6 +732,7 @@ async fn an_archived_parent_cannot_own_a_new_thread(cx: &mut TestAppContext) {
     .unwrap();
     let error = op(
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: fixture.project.clone(),
             program: program().into(),
             title: None,
@@ -753,6 +756,7 @@ async fn sweep_stops_a_running_thread_after_archive_grace(cx: &mut TestAppContex
     empty_repo(fixture.dir.path());
     let OpResult::Thread(started) = op(
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: fixture.project.clone(),
             program: program().into(),
             title: Some("notes".into()),
@@ -1178,6 +1182,7 @@ async fn a_program_that_vanishes_before_start_refuses_the_thread(cx: &mut TestAp
         }
     });
     let run = Op::Thread(ThreadOp::Run(Run {
+        link: kg_domain::Link::Terminal,
         project_id: fixture.project.clone(),
         program,
         title: None,
@@ -1271,6 +1276,7 @@ async fn unarchive_waits_for_an_archived_lifecycle_owner(cx: &mut TestAppContext
     };
     let OpResult::Thread(dependent) = op(
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: fixture.project.clone(),
             program: program().into(),
             title: None,
@@ -1326,6 +1332,7 @@ async fn a_rename_for_a_requester_locks_the_title_after_one(cx: &mut TestAppCont
     empty_repo(fixture.dir.path());
     let OpResult::Thread(started) = op(
         Op::Thread(ThreadOp::Run(Run {
+            link: kg_domain::Link::Terminal,
             project_id: fixture.project.clone(),
             program: program().into(),
             title: None,

@@ -7,18 +7,11 @@ use gpui_kit::{
     AnyElement, App, Context, IntoElement, ParentElement as _, Styled as _, Window, div,
 };
 use kg_core::{Approval, Workspace};
-use kg_domain::{InteractionOption, OptionRole, PendingInteractionId};
+use kg_domain::{InteractionOption, PendingInteractionId};
 
 use super::changes::line;
 use super::screen::{Activation, Side};
-use super::{Kagan, question};
-
-fn opening_option(options: &[InteractionOption]) -> Option<&InteractionOption> {
-    options
-        .iter()
-        .find(|option| option.role == Some(OptionRole::Safe))
-        .or_else(|| options.first())
-}
+use super::{Kagan, Shown, question};
 
 impl Kagan {
     pub(super) fn render_needs(
@@ -112,11 +105,25 @@ impl Kagan {
     }
 
     pub(super) fn announce_questions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // A chat on screen draws its permission where the box was, so that card is the one place
+        // to answer it: the pane still lists it, but does not open for it.
+        let in_place: BTreeSet<PendingInteractionId> = match self.screen.shown() {
+            Shown::Chat(view) => self
+                .questions
+                .read(cx)
+                .questions
+                .iter()
+                .filter(|asked| asked.thread_id == *view.read(cx).thread())
+                .map(|asked| asked.id.clone())
+                .collect(),
+            _ => BTreeSet::new(),
+        };
         let person: BTreeSet<PendingInteractionId> = {
             let workspace = Workspace::global(cx).read(cx);
             self.waiting(cx)
-                .filter(|(id, _)| workspace.needs_a_person(id))
-                .map(|(id, _)| id.clone())
+                .filter(|(id, _, _)| workspace.needs_a_person(id))
+                .map(|(id, _, _)| id.clone())
+                .filter(|id| !in_place.contains(id))
                 .collect()
         };
         self.announced.retain(|id| person.contains(id));
@@ -142,9 +149,10 @@ impl Kagan {
 
     pub(super) fn overlay_focus(&self, cx: &App) -> String {
         self.waiting(cx)
-            .filter(|(id, _)| !self.holds(id))
-            .find_map(|(id, options)| {
-                opening_option(options).map(|option| question::answer_focus(&id.0, &option.id))
+            .filter(|(id, _, _)| !self.holds(id))
+            .find_map(|(id, options, permission)| {
+                question::opening_option(options, permission)
+                    .map(|option| question::answer_focus(&id.0, &option.id))
             })
             .unwrap_or_else(|| {
                 if self.waiting_count(cx) == 0 && self.thread_visible(cx) {
@@ -158,22 +166,22 @@ impl Kagan {
     fn waiting<'a>(
         &'a self,
         cx: &'a App,
-    ) -> impl Iterator<Item = (&'a PendingInteractionId, &'a [InteractionOption])> {
+    ) -> impl Iterator<Item = (&'a PendingInteractionId, &'a [InteractionOption], bool)> {
         Workspace::global(cx)
             .read(cx)
             .approvals()
-            .map(|approval| (&approval.id, approval.options.as_slice()))
+            .map(|approval| (&approval.id, approval.options.as_slice(), true))
             .chain(
                 self.questions
                     .read(cx)
                     .questions
                     .iter()
-                    .map(|asked| (&asked.id, asked.options.as_slice())),
+                    .map(|asked| (&asked.id, asked.options.as_slice(), asked.fields.is_none())),
             )
     }
 
     fn waiting_ids(&self, cx: &App) -> BTreeSet<PendingInteractionId> {
-        self.waiting(cx).map(|(id, _)| id.clone()).collect()
+        self.waiting(cx).map(|(id, _, _)| id.clone()).collect()
     }
 
     pub(super) fn typed(&mut self, cx: &mut Context<Self>) {

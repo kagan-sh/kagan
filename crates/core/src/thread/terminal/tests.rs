@@ -123,6 +123,7 @@ fn running() -> kg_domain::Thread {
     use kg_domain::{ProjectId, Thread, ThreadId, ThreadStatus, Timestamp, Visibility};
     let at = Timestamp(0);
     Thread {
+        link: kg_domain::Link::Terminal,
         id: ThreadId("thr_quiet".into()),
         project_id: ProjectId("prj".into()),
         environment_id: None,

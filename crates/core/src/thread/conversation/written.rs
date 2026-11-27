@@ -52,13 +52,14 @@ pub(super) fn note_when_written(
                 return;
             };
             let folder = folder.clone();
+            let kept = stored.clone();
             let look = cx
                 .background_spawn(async move {
                     if kimi {
                         let Some(root) = root else {
                             return Look::Missing;
                         };
-                        if stored.is_some_and(|conversation| kimi_kept(&root, conversation)) {
+                        if kept.is_some_and(|conversation| kimi_kept(&root, &conversation)) {
                             return Look::Kept;
                         }
                         Look::Files(kimi_matches(&root, &folder, since))
@@ -67,7 +68,7 @@ pub(super) fn note_when_written(
                             return Look::Missing;
                         };
                         let sessions = root.join("sessions");
-                        if stored.is_some_and(|conversation| codex_kept(&sessions, conversation)) {
+                        if kept.is_some_and(|conversation| codex_kept(&sessions, &conversation)) {
                             return Look::Kept;
                         }
                         Look::Files(codex_matches(&sessions, &folder, since))
@@ -93,8 +94,9 @@ pub(super) fn note_when_written(
                 continue;
             }
             let thread = id.clone();
+            let claim = conversation.clone();
             if database
-                .call(move |store| store.claim_conversation(&thread, conversation, stored, since))
+                .call(move |store| store.claim_conversation(&thread, &claim, stored, since))
                 .await
                 == Ok(true)
             {

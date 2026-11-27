@@ -150,12 +150,12 @@ struct ListOptions {
     before: Option<Timestamp>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct EventsOptions {
-    after_seq: Option<u64>,
-    limit: Option<u32>,
-    order: Option<Order>,
+pub(super) struct EventsOptions {
+    pub(super) after_seq: Option<u64>,
+    pub(super) limit: Option<u32>,
+    pub(super) order: Option<Order>,
 }
 
 #[derive(Deserialize)]
@@ -222,6 +222,7 @@ struct PluginSpawn {
 fn spawn_thread(args: &HostArguments, plugin: &PluginId) -> Result<Op, HostError> {
     let spawn: PluginSpawn = argument(args, 0)?;
     Ok(Op::Thread(ThreadOp::Run(Run {
+        link: kg_domain::Link::Terminal,
         project_id: spawn.project_id,
         program: spawn.program,
         title: spawn.title,
@@ -238,23 +239,27 @@ fn spawn_thread(args: &HostArguments, plugin: &PluginId) -> Result<Op, HostError
 }
 
 // A plugin reads the changes of a thread kagan lists, never of a hidden or archived one.
+pub(crate) fn shown_thread(id: &ThreadId, cx: &gpui_kit::App) -> Result<(), HostError> {
+    let listed = Workspace::global(cx)
+        .read(cx)
+        .thread(id)
+        .is_some_and(|thread| {
+            let record = thread.read(cx).record();
+            record.visibility == Visibility::Visible && record.archived_at.is_none()
+        });
+    if listed {
+        Ok(())
+    } else {
+        Err(HostError::new(format!(
+            "thread {id} is not in kagan's thread list"
+        )))
+    }
+}
+
 fn shown_diff(args: &HostArguments, path: Option<String>) -> Result<Op, HostError> {
     let thread_id = ThreadId(args.string(0)?.to_owned());
     let scope: DiffScope = argument(args, 1)?;
-    let listed = with_app(|cx| {
-        Workspace::global(cx)
-            .read(cx)
-            .thread(&thread_id)
-            .is_some_and(|thread| {
-                let record = thread.read(cx).record();
-                record.visibility == Visibility::Visible && record.archived_at.is_none()
-            })
-    })?;
-    if !listed {
-        return Err(HostError::new(format!(
-            "thread {thread_id} is not in kagan's thread list"
-        )));
-    }
+    with_app(|cx| shown_thread(&thread_id, cx))??;
     let query = DiffQuery {
         thread_id,
         scope,
@@ -282,7 +287,7 @@ fn ask_person(args: &HostArguments) -> Result<Op, HostError> {
     }))
 }
 
-fn optional<T: serde::de::DeserializeOwned + Default>(
+pub(super) fn optional<T: serde::de::DeserializeOwned + Default>(
     args: &HostArguments,
     ix: usize,
 ) -> Result<T, HostError> {
@@ -338,6 +343,7 @@ impl<'a> From<&'a kg_domain::Thread> for PluginThread<'a> {
             title,
             title_locked: _,
             provider,
+            link: _,
             status,
             visibility,
             parent_thread_id,
@@ -416,7 +422,7 @@ mod tests {
     fn running(provider: &str) -> kg_domain::Thread {
         serde_json::from_value(json!({
             "id": "thr_1", "projectId": "prj_1", "environmentId": null, "title": "T",
-            "provider": provider, "status": "idle", "visibility": "visible",
+            "provider": provider, "link": "terminal", "status": "idle", "visibility": "visible",
             "parentThreadId": null, "lifecycleOwnerThreadId": null, "sectionId": null,
             "pinned": false, "lastReadAt": null, "latestAttentionAt": 0, "archivedAt": null,
             "createdAt": 0, "updatedAt": 0
